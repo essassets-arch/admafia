@@ -190,9 +190,9 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
   const totalCount = customers.length;
   const paidCount = customers.filter((c) => c.paymentStatus === 'paid').length;
   const pendingPaymentCount = customers.filter((c) => c.paymentStatus !== 'paid').length;
-  const profileCompleteCount = customers.filter((c) => c.profileStatus === 'complete').length;
-  const profileIncompleteCount = customers.filter((c) => c.profileStatus !== 'complete').length;
-  const kycCompleteCount = customers.filter((c) => c.kycPercent === 100).length;
+  const profileCompleteCount = customers.filter((c) => c.profileStatus === 'complete' || (c.kycPercent || 0) >= 100 || c.verified).length;
+  const profileIncompleteCount = customers.filter((c) => c.profileStatus !== 'complete' && (c.kycPercent || 0) < 100 && !c.verified).length;
+  const kycCompleteCount = profileCompleteCount;
 
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase();
@@ -207,8 +207,8 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
     if (!matchSearch) return false;
     if (filter === 'payment_pending') return c.paymentStatus !== 'paid';
     if (filter === 'payment_paid') return c.paymentStatus === 'paid';
-    if (filter === 'profile_incomplete') return c.profileStatus !== 'complete';
-    if (filter === 'profile_complete') return c.profileStatus === 'complete';
+    if (filter === 'profile_incomplete') return c.profileStatus !== 'complete' && (c.kycPercent || 0) < 100 && !c.verified;
+    if (filter === 'profile_complete') return c.profileStatus === 'complete' || (c.kycPercent || 0) >= 100 || c.verified;
     if (filter === 'active') return c.status === 'active';
     if (filter === 'suspended') return c.status === 'suspended';
     return true;
@@ -483,11 +483,11 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
           <button type="button" className={`desk-tab ${filter === 'payment_paid' ? 'active' : ''}`} onClick={() => setFilter('payment_paid')}>
             ✓ Payment Done ({paidCount})
           </button>
-          <button type="button" className={`desk-tab ${filter === 'profile_incomplete' ? 'active' : ''}`} onClick={() => setFilter('profile_incomplete')}>
-            Profile Incomplete ({profileIncompleteCount})
-          </button>
           <button type="button" className={`desk-tab ${filter === 'profile_complete' ? 'active' : ''}`} onClick={() => setFilter('profile_complete')}>
-            Profile Complete ({profileCompleteCount})
+            ✓ Profile Complete ({profileCompleteCount})
+          </button>
+          <button type="button" className={`desk-tab ${filter === 'profile_incomplete' ? 'active' : ''}`} onClick={() => setFilter('profile_incomplete')}>
+            ⏳ Profile Incomplete ({profileIncompleteCount})
           </button>
         </div>
         <div className="desk-search-wrap">
@@ -511,7 +511,6 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
               <th>Mobile Number (10 Digits)</th>
               <th>Work Email Address</th>
               <th>Profile Status</th>
-              <th>KYC Audit Progress</th>
               <th>Payment Status</th>
               <th>Wallet / Runway</th>
               <th>Status</th>
@@ -521,7 +520,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
                   No customer registrations match your filter. Register a new user at{' '}
                   <a href="#register" style={{ color: '#4f46e5', fontWeight: 700 }}>
                     http://localhost:5173/#register
@@ -586,47 +585,32 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{c.contact || c.username}</div>
                   </td>
 
-                  {/* 5. Profile Status */}
+                  {/* 4. Profile Status (Single Column - 100% Automatic) */}
                   <td>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleProfile(c.id)}
-                      className={`desk-pill ${c.profileStatus === 'complete' ? 'pill-emerald' : 'pill-amber'}`}
-                      style={{ border: 'none', cursor: 'pointer' }}
-                      title="Click to toggle Complete/Incomplete"
-                    >
-                      {c.profileStatus === 'complete' ? '✓ Complete' : '⏳ Incomplete'}
-                    </button>
-                    <div style={{ fontSize: '0.7rem', color: c.profileStatus === 'complete' ? '#059669' : '#64748b', fontWeight: c.profileStatus === 'complete' ? 700 : 500, marginTop: 2 }}>
-                      {c.profileStatus === 'complete' ? 'Completed ✓' : 'Click to complete'}
-                    </div>
-                  </td>
-
-                  {/* 6. KYC Audit Progress */}
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div className="desk-progress-bar" style={{ width: 70 }}>
-                        <div
-                          className={`desk-progress-fill ${c.profileStatus === 'complete' || (c.kycPercent || 0) === 100 ? 'bg-emerald' : (c.kycPercent || 25) >= 50 ? 'bg-amber' : 'bg-rose'}`}
-                          style={{ width: `${c.profileStatus === 'complete' ? 100 : (c.kycPercent || 25)}%` }}
-                        />
-                      </div>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a' }}>
-                        {c.profileStatus === 'complete' ? 100 : (c.kycPercent || 25)}%
-                      </span>
-                    </div>
-                    {c.profileStatus === 'complete' || (c.kycPercent || 0) >= 100 ? (
-                      <div style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 700, marginTop: 2 }}>
-                        ✓ 100% Verified
+                    {c.profileStatus === 'complete' || (c.kycPercent || 0) >= 100 || c.verified ? (
+                      <div>
+                        <span
+                          className="desk-pill pill-emerald"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800 }}
+                        >
+                          ✓ Complete
+                        </span>
+                        <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, marginTop: 3 }}>
+                          100% KYC Verified
+                        </div>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleAdvanceKyc(c.id)}
-                        style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', padding: 0, marginTop: 2 }}
-                      >
-                        +25% Audit Step
-                      </button>
+                      <div>
+                        <span
+                          className="desk-pill pill-amber"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800 }}
+                        >
+                          ⏳ Incomplete
+                        </span>
+                        <div style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 600, marginTop: 3 }}>
+                          Registration Pending
+                        </div>
+                      </div>
                     )}
                   </td>
 
