@@ -5,7 +5,7 @@
 # =============================================================================
 set -e
 
-echo "🚀 Installing & Configuring pgAdmin 4 Web DB Browser..."
+echo "🚀 Starting pgAdmin 4 installation & Nginx configuration..."
 
 # 1. Stop any existing container
 docker rm -f admafia-pgadmin 2>/dev/null || true
@@ -27,11 +27,10 @@ cat > /home/stzk/admafia/pgadmin/servers.json << 'EOF'
   }
 }
 EOF
-
-# Fix permissions for pgadmin user (UID 5050 in container)
 chmod 644 /home/stzk/admafia/pgadmin/servers.json
 
-# 3. Run pgAdmin 4 Web Container on Port 5055
+# 3. Pull & Run pgAdmin 4 Container on Port 5055
+echo "📦 Pulling and starting pgAdmin 4 container..."
 docker run -d \
   --name admafia-pgadmin \
   --restart always \
@@ -43,15 +42,10 @@ docker run -d \
   -v /home/stzk/admafia/pgadmin/servers.json:/pgadmin4/servers.json:ro \
   dpage/pgadmin4:latest
 
-# 4. Configure Nginx for /dbadmin/ on both HTTP (80) and HTTPS (443)
+# 4. Configure Nginx for /dbadmin in ALL relevant Nginx config files (HTTP & HTTPS)
+echo "⚙️ Configuring Nginx reverse proxy for /dbadmin/..."
 python3 - << 'PYEOF'
-import re
-
-with open('/etc/nginx/sites-available/admafia', 'r') as f:
-    text = f.read()
-
-# Strip any existing /dbadmin blocks to prevent duplication
-text = re.sub(r'\s*location\s*=?\s*/dbadmin[^{]*\{[^}]*\}', '', text)
+import glob, re, os
 
 dbadmin_nginx = """
     location = /dbadmin {
@@ -71,22 +65,46 @@ dbadmin_nginx = """
     }
 """
 
-# Place /dbadmin before every "location / {" block (for both port 80 and port 443)
-new_text = text.replace('location / {', dbadmin_nginx + '\n    location / {')
+# Check all site config files in sites-available and sites-enabled
+files = set(glob.glob('/etc/nginx/sites-available/*admafia*') + glob.glob('/etc/nginx/sites-enabled/*admafia*'))
 
-with open('/etc/nginx/sites-available/admafia', 'w') as f:
-    f.write(new_text)
+for filepath in files:
+    if os.path.islink(filepath):
+        continue  # skip symlinks to avoid duplicate writes
+    try:
+        with open(filepath, 'r') as f:
+            text = f.read()
 
-print("Nginx configuration updated with /dbadmin/ proxy block.")
+        # Clean old /dbadmin blocks
+        text = re.sub(r'\s*location\s*=?\s*/dbadmin[^{]*\{[^}]*\}', '', text)
+
+        # Insert before every "location / {"
+        if 'location / {' in text:
+            new_text = text.replace('location / {', dbadmin_nginx + '\n    location / {')
+            with open(filepath, 'w') as f:
+                f.write(new_text)
+            print(f"  ✓ Updated {filepath}")
+    except Exception as e:
+        print(f"  ! Error updating {filepath}: {e}")
 PYEOF
 
-# 5. Test and reload Nginx
+# 5. Reload Nginx
 nginx -t
 systemctl reload nginx
 
+# 6. Wait for pgAdmin container to initialize
+echo "⏳ Waiting for pgAdmin to initialize (approx 10-15 seconds)..."
+for i in {1..20}; do
+  if curl -s http://127.0.0.1:5055/dbadmin/misc/ping >/dev/null 2>&1 || curl -s http://127.0.0.1:5055/dbadmin/ >/dev/null 2>&1; then
+    echo "  ✓ pgAdmin is responding on port 5055!"
+    break
+  fi
+  sleep 2
+done
+
 echo ""
 echo "======================================================================"
-echo "✅ pgAdmin 4 is successfully installed and configured!"
+echo "✅ pgAdmin 4 is LIVE!"
 echo "🌐 URL:      https://admafia.marketing/dbadmin/browser/"
 echo "📧 Email:    admin@admafia.marketing"
 echo "🔑 Password: AdMafiaAdmin2026!"
