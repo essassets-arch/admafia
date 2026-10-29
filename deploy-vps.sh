@@ -3,11 +3,11 @@
 # ADMAFIA MARKETING CRM — VPS DEPLOYMENT SCRIPT FOR /home/stzk/admafia
 # Usage on VPS (root@vmi3189237:/home/stzk/admafia):
 #   chmod +x deploy-vps.sh
-#   ./deploy-vps.sh yourdomain.com
+#   ./deploy-vps.sh
 # =============================================================================
 set -e
 
-DOMAIN="${1:-yourdomain.com}"
+DOMAIN="${1:-admafia.marketing}"
 APP_DIR="/home/stzk/admafia"
 PORT="5050"
 DB_NAME="admafia_crm"

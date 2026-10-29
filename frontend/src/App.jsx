@@ -31,8 +31,8 @@ try {
 // ---------- CONFIG (yahan apni details daalo) ----------
 const site = {
   name: 'AdMafia Marketing',
-  url: 'https://www.yourdomain.com/',       // canonical (trailing slash ke saath)
-  email: 'hello@yourdomain.com',               // lead form yahin aayega
+  url: 'https://admafia.marketing/',       // canonical (trailing slash ke saath)
+  email: 'hello@admafia.marketing',        // lead form yahin aayega
   phone: '+91XXXXXXXXXX',
   title: 'Facebook & Instagram Lead Generation Ads from ₹300/Day | AdMafia Marketing',
   desc: 'Get customer enquiries with names and phone numbers through targeted Meta Ads. Start Facebook & Instagram lead generation campaigns from ₹300/day with AdMafia Marketing.',
