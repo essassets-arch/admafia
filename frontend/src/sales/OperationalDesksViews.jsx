@@ -614,19 +614,13 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                     )}
                   </td>
 
-                  {/* 7. Payment Status */}
+                  {/* 5. Payment Status (Automatic - Zero Manual Buttons) */}
                   <td>
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePayment(c.id)}
-                      className={`desk-pill ${c.paymentStatus === 'paid' ? 'pill-emerald' : 'pill-rose'}`}
-                      style={{ border: 'none', cursor: 'pointer' }}
-                      title="Click to toggle Paid/Pending"
-                    >
-                      {c.paymentStatus === 'paid' ? '✓ Paid' : '⏳ Pending'}
-                    </button>
-                    <div style={{ fontSize: '0.72rem', color: c.paymentStatus === 'paid' ? '#059669' : '#d97706', fontWeight: 700, marginTop: 2 }}>
-                      {c.paymentStatus === 'paid' ? `Settled (${formatINR(c.amountPaid || c.balance || 0)})` : 'Awaiting Payment'}
+                    <span className={`desk-pill ${c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? 'pill-emerald' : 'pill-rose'}`}>
+                      {c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? '✓ Paid' : '⏳ Pending'}
+                    </span>
+                    <div style={{ fontSize: '0.72rem', color: c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? '#059669' : '#d97706', fontWeight: 700, marginTop: 3 }}>
+                      {c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? `Settled (${formatINR(c.amountPaid || c.balance || 0)})` : 'Awaiting Payment'}
                     </div>
                   </td>
 
@@ -728,62 +722,29 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
             </div>
 
             {/* Profile & Payment Dual Gate Status */}
+            {/* Profile & Payment Dual Gate Status (Pure Automatic Badges - Zero Toggles) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 14 }}>
               <div className="desk-modal-box">
                 <div className="desk-box-label">Profile Status</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                  <span className={`desk-pill ${selectedCust.profileStatus === 'complete' ? 'pill-emerald' : 'pill-amber'}`}>
-                    {selectedCust.profileStatus === 'complete' ? '✓ Profile Complete' : '⏳ Profile Incomplete'}
+                  <span className={`desk-pill ${selectedCust.profileStatus === 'complete' || (selectedCust.kycPercent || 0) >= 100 || selectedCust.verified ? 'pill-emerald' : 'pill-amber'}`}>
+                    {selectedCust.profileStatus === 'complete' || (selectedCust.kycPercent || 0) >= 100 || selectedCust.verified ? '✓ Profile Complete' : '⏳ Profile Incomplete'}
                   </span>
-                  <button
-                    type="button"
-                    className="desk-action-btn"
-                    style={{ fontSize: '0.72rem', padding: '3px 8px' }}
-                    onClick={() => {
-                      handleToggleProfile(selectedCust.id);
-                      setSelectedCust((prev) => ({
-                        ...prev,
-                        profileStatus: prev.profileStatus === 'complete' ? 'incomplete' : 'complete',
-                        kycPercent: prev.profileStatus === 'complete' ? 25 : 100,
-                      }));
-                    }}
-                  >
-                    Toggle
-                  </button>
                 </div>
-                <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 4 }}>
-                  KYC Audit Score: <b>{selectedCust.kycPercent || 25}%</b>
+                <div style={{ fontSize: '0.76rem', color: selectedCust.profileStatus === 'complete' || (selectedCust.kycPercent || 0) >= 100 ? '#059669' : '#64748b', fontWeight: 700, marginTop: 6 }}>
+                  KYC Audit Score: <b>{selectedCust.profileStatus === 'complete' ? 100 : (selectedCust.kycPercent || 25)}%</b> (Auto-Verified)
                 </div>
               </div>
 
               <div className="desk-modal-box">
                 <div className="desk-box-label">Payment Status</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                  <span className={`desk-pill ${selectedCust.paymentStatus === 'paid' ? 'pill-emerald' : 'pill-rose'}`}>
-                    {selectedCust.paymentStatus === 'paid' ? '✓ Payment Done' : '⏳ Payment Pending'}
+                  <span className={`desk-pill ${selectedCust.paymentStatus === 'paid' || (selectedCust.balance || 0) > 0 ? 'pill-emerald' : 'pill-rose'}`}>
+                    {selectedCust.paymentStatus === 'paid' || (selectedCust.balance || 0) > 0 ? '✓ Payment Done' : '⏳ Payment Pending'}
                   </span>
-                  <button
-                    type="button"
-                    className="desk-action-btn"
-                    style={{ fontSize: '0.72rem', padding: '3px 8px' }}
-                    onClick={() => {
-                      handleTogglePayment(selectedCust.id);
-                      setSelectedCust((prev) => {
-                        const isP = prev.paymentStatus === 'paid';
-                        return {
-                          ...prev,
-                          paymentStatus: isP ? 'pending' : 'paid',
-                          balance: isP ? 0 : 3000,
-                          runwayDays: isP ? 0 : 10,
-                        };
-                      });
-                    }}
-                  >
-                    Toggle
-                  </button>
                 </div>
-                <div style={{ fontSize: '0.76rem', color: '#059669', fontWeight: 700, marginTop: 4 }}>
-                  Wallet Balance: {formatINR(selectedCust.balance || 0)} ({selectedCust.runwayDays || 0}d)
+                <div style={{ fontSize: '0.76rem', color: selectedCust.paymentStatus === 'paid' || (selectedCust.balance || 0) > 0 ? '#059669' : '#d97706', fontWeight: 700, marginTop: 6 }}>
+                  Wallet Balance: {formatINR(selectedCust.balance || 0)} ({selectedCust.runwayDays || 0}d runway)
                 </div>
               </div>
             </div>
