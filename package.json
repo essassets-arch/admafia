@@ -1,0 +1,14 @@
+{
+  "name": "admafia-growthline-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Growthline B2B Lead Generation CRM — Separated Frontend (React/Vite) & Backend (Node/Express/PostgreSQL)",
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "dev:backend": "npm --prefix backend run dev",
+    "start:backend": "npm --prefix backend start",
+    "db:init": "npm --prefix backend run db:init",
+    "test": "npm --prefix backend test"
+  }
+}

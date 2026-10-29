@@ -1,0 +1,21 @@
+{
+  "name": "admafia-backend",
+  "version": "1.0.0",
+  "description": "Growthline / AdMafia CRM PostgreSQL Backend API",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "db:init": "node initDb.js",
+    "test": "node test-e2e.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.3"
+  }
+}
+
