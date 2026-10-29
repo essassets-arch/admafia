@@ -3674,7 +3674,7 @@ export function FollowupTasksDesk({ tasks, setTasks }) {
                 <Phone size={14} /> Call
               </a>
               <a
-                href={`https://wa.me/91${t.phone}?text=Hello%20${encodeURIComponent(t.contact)},%20Growthline%20Support%20follow-up%20regarding%20${encodeURIComponent(t.type)}.`}
+                href={`https://wa.me/91${t.phone}?text=Hello%20${encodeURIComponent(t.contact)},%20AdMafia%20Support%20follow-up%20regarding%20${encodeURIComponent(t.type)}.`}
                 target="_blank"
                 rel="noreferrer"
                 className="desk-action-btn"

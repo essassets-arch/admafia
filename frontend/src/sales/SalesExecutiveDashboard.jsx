@@ -80,7 +80,6 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       if (h.includes('payment') || p.includes('payment')) return 'payments';
       if (h.includes('wallet') || p.includes('wallet')) return 'wallets';
       if (h.includes('quer') || h.includes('support') || p.includes('quer') || p.includes('support')) return 'queries';
-      if (h.includes('task') || p.includes('task')) return 'tasks';
       if (h.includes('group') || p.includes('group')) return 'groups';
       if (h.includes('customer') || h.includes('registration')) return 'customers';
       if (h.includes('overview') || h.includes('dashboard') || h === '#overview' || h === '#dashboard' || h === '#sales' || h === '' || h === '#') return 'overview';
@@ -438,28 +437,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             <span>Query &amp; Support</span>
           </button>
 
-          {/* 8. Follow-up & Tasks (Badge: 3) */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'tasks' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('tasks', '#tasks')}
-          >
-            <Calendar size={18} strokeWidth={2.2} />
-            <span>Follow-up &amp; Tasks</span>
-            <span
-              className="sales-nav-badge"
-              style={{
-                background: '#ecfdf5',
-                color: '#059669',
-                borderColor: '#a7f3d0',
-                fontWeight: 800,
-              }}
-            >
-              {todayTasksBadge}
-            </span>
-          </button>
-
-          {/* 9. Customer Groups */}
+          {/* 8. Customer Groups */}
           <button
             type="button"
             className={`sales-nav-btn ${activeTab === 'groups' ? 'active' : ''}`}

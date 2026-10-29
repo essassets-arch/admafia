@@ -210,11 +210,11 @@ export default function AllDesksOverviewDashboard({
         </div>
       </div>
 
-      {/* 2. THE 9 OPERATIONAL DESKS SUMMARY GRID */}
+      {/* 2. THE AUTHORIZED OPERATIONAL DESKS SUMMARY GRID */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
-            The 9 Authorized Operations Desks
+            Authorized Operations Desks
           </h2>
           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
             Click any desk card to jump directly to its dedicated operational workbench
@@ -808,100 +808,7 @@ export default function AllDesksOverviewDashboard({
             </div>
           </div>
 
-          {/* Card 8: Follow-up & Tasks */}
-          <div
-            onClick={() => navigateToDesk('tasks', '#tasks')}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #a7f3d0',
-              borderRadius: 12,
-              padding: '16px 18px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#059669';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(5, 150, 105, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#a7f3d0';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: '#ecfdf5',
-                      color: '#059669',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <Calendar size={18} strokeWidth={2.2} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 08
-                    </div>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Follow-up &amp; Tasks
-                    </div>
-                  </div>
-                </div>
-                <span
-                  style={{
-                    background: '#ecfdf5',
-                    color: '#059669',
-                    border: '1px solid #a7f3d0',
-                    fontSize: '0.78rem',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: 9999,
-                  }}
-                >
-                  {todayTasksBadge} Due Today
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>
-                  {todayTasks.length}
-                </span>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Scheduled for today</span>
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: 4, fontWeight: 600 }}>
-                📅 Complete daily calls &amp; WhatsApps
-              </div>
-            </div>
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: '1px solid #f1f5f9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#059669',
-              }}
-            >
-              <span>View Tasks Pipeline</span>
-              <ArrowRight size={14} />
-            </div>
-          </div>
-
-          {/* Card 9: Customer Groups */}
+          {/* Card 8: Customer Groups */}
           <div
             onClick={() => navigateToDesk('groups', '#groups')}
             style={{
@@ -944,8 +851,8 @@ export default function AllDesksOverviewDashboard({
                     <FolderTree size={18} strokeWidth={2.2} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 09
+                    <div style={{ fontSize: '0.7rem', color: '#db2777', fontWeight: 800, textTransform: 'uppercase' }}>
+                      DESK 08
                     </div>
                     <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
                       Customer Groups
@@ -1666,7 +1573,7 @@ export default function AllDesksOverviewDashboard({
         </div>
       </div>
 
-      {/* 6. IN-DEPTH OPERATIONAL SECTION: ROW 4 (Desk 7 Queries, Desk 8 Tasks, Desk 9 Groups) */}
+      {/* 6. IN-DEPTH OPERATIONAL SECTION: ROW 4 (Desk 7 Queries, Desk 8 Groups) */}
       <div
         style={{
           display: 'grid',
@@ -1749,89 +1656,7 @@ export default function AllDesksOverviewDashboard({
           </div>
         </div>
 
-        {/* Middle: Desk 8 Follow-up & Tasks */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #a7f3d0',
-            borderRadius: 14,
-            padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  background: '#ecfdf5',
-                  color: '#059669',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <Calendar size={15} />
-              </div>
-              <h3 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                Tasks Today (Desk 08)
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('tasks', '#tasks')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.74rem', padding: '4px 10px', color: '#059669' }}
-            >
-              Tasks ({tasks.length}) →
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {tasks.slice(0, 3).map((t) => {
-              const isDone = t.status === 'completed';
-              return (
-                <div
-                  key={t.id}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    background: isDone ? '#f1f5f9' : '#f8fafc',
-                    border: '1px solid #f1f5f9',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isDone}
-                    onChange={() => handleToggleTask(t.id)}
-                    style={{ cursor: 'pointer', width: 16, height: 16 }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 700,
-                        fontSize: '0.82rem',
-                        color: isDone ? '#94a3b8' : '#0f172a',
-                        textDecoration: isDone ? 'line-through' : 'none',
-                      }}
-                    >
-                      {t.title || t.task}
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                      👤 {t.customerName || t.assignedTo || 'Ad Client'}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right: Desk 9 Customer Groups */}
+        {/* Right: Desk 8 Customer Groups */}
         <div
           style={{
             background: '#ffffff',
@@ -1857,7 +1682,7 @@ export default function AllDesksOverviewDashboard({
                 <FolderTree size={15} />
               </div>
               <h3 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                Customer Groups (Desk 09)
+                Customer Groups (Desk 08)
               </h3>
             </div>
             <button
