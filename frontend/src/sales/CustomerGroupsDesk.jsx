@@ -1657,14 +1657,14 @@ export default function CustomerGroupsDesk({ customers = [], setCustomers }) {
                                 rec.responseInterest === 'Interested'
                                   ? '#ecfdf5'
                                   : rec.responseInterest === 'In Follow-up'
-                                  ? '#eff6ff'
-                                  : '#fffbeb',
+                                    ? '#eff6ff'
+                                    : '#fffbeb',
                               color:
                                 rec.responseInterest === 'Interested'
                                   ? '#059669'
                                   : rec.responseInterest === 'In Follow-up'
-                                  ? '#1d4ed8'
-                                  : '#b45309',
+                                    ? '#1d4ed8'
+                                    : '#b45309',
                             }}
                           >
                             {rec.responseInterest}
@@ -1702,3 +1702,4 @@ export default function CustomerGroupsDesk({ customers = [], setCustomers }) {
     </div>
   );
 }
+

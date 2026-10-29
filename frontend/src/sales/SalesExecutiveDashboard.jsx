@@ -83,7 +83,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       if (h.includes('quer') || h.includes('support') || p.includes('quer') || p.includes('support')) return 'queries';
       if (h.includes('customer') || h.includes('registration')) return 'customers';
       if (h.includes('overview') || h.includes('dashboard') || h === '#overview' || h === '#dashboard' || h === '#sales' || h === '' || h === '#') return 'overview';
-    } catch (e) {}
+    } catch (e) { }
     return 'overview';
   };
 
@@ -95,7 +95,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       if (window.location.hash !== targetHash) {
         window.location.hash = targetHash;
       }
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // Shared Authoritative State across Desks (synced with #register)

@@ -51,8 +51,8 @@ async function runTests() {
   const phoneB = '9333344444';
 
   // Ensure any leftover test records are removed before starting
-  await api(`/customers/${phoneA}`, { method: 'DELETE' }).catch(() => {});
-  await api(`/customers/${phoneB}`, { method: 'DELETE' }).catch(() => {});
+  await api(`/customers/${phoneA}`, { method: 'DELETE' }).catch(() => { });
+  await api(`/customers/${phoneB}`, { method: 'DELETE' }).catch(() => { });
 
   // -------------------------------------------------------------------------
   // TEST 1: Health Check & Zero Static Data Baseline
