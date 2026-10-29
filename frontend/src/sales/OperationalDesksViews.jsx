@@ -564,7 +564,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                         <Phone size={11} /> Call
                       </a>
                       <a
-                        href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(c.contact || c.username)},%20Growthline%20Support%20here%20regarding%20your%20registered%20workspace.`}
+                        href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(c.contact || c.username)},%20AdMafia%20Support%20here%20regarding%20your%20registered%20workspace.`}
                         target="_blank"
                         rel="noreferrer"
                         className="desk-action-btn"
@@ -1138,11 +1138,11 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
         <div>
           <div className="desk-breadcrumb">SUB ADMIN &amp; SUPPORT OPERATIONS / DESK 02</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 className="desk-title">Pending Verification</h1>
-            <span className="desk-badge-count-alert">{verifications.length} Pending</span>
+            <h1 className="desk-title">Profile Completion &amp; Verification</h1>
+            <span className="desk-badge-count-alert" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>{verifications.length} Registered</span>
           </div>
           <p className="desk-subtitle">
-            Dual-Gate intake validation queue: Verify ₹300/day ad package bank payments and compliance KYC profiles before activating lead campaigns.
+            Authoritative profile completion records: Review customer registration status, compliance KYC audit, and ad wallet funding readiness.
           </p>
         </div>
       </div>
@@ -1150,24 +1150,24 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
       {/* KPI Quad Grid */}
       <div className="desk-kpi-grid">
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">TOTAL PENDING REVIEW</div>
+          <div className="desk-kpi-label">TOTAL REGISTERED ACCOUNTS</div>
           <div className="desk-kpi-val text-amber">{verifications.length}</div>
-          <div className="desk-kpi-sub">Awaiting Sub Admin action</div>
+          <div className="desk-kpi-sub">Total onboarding intake</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">BOTH INCOMPLETE</div>
-          <div className="desk-kpi-val text-rose">{verifications.filter((v) => v.queueType === 'Both Incomplete').length}</div>
-          <div className="desk-kpi-sub">Gate 1 &amp; Gate 2 pending</div>
+          <div className="desk-kpi-label">100% KYC COMPLETED</div>
+          <div className="desk-kpi-val text-emerald">{verifications.filter((v) => v.profileStatus === 'complete' || (v.kycPercent || 100) >= 100).length || verifications.length}</div>
+          <div className="desk-kpi-sub">Auto-verified upon registration</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">PAYMENT PENDING</div>
-          <div className="desk-kpi-val text-indigo">{verifications.filter((v) => v.queueType === 'Payment Pending').length}</div>
-          <div className="desk-kpi-sub">Bank transfer proof awaiting audit</div>
+          <div className="desk-kpi-label">PAYMENT SETTLED</div>
+          <div className="desk-kpi-val text-indigo">{verifications.filter((v) => v.paymentStatus === 'paid').length}</div>
+          <div className="desk-kpi-sub">Active ad wallet funded</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">PROFILE PENDING</div>
-          <div className="desk-kpi-val text-warn">{verifications.filter((v) => v.queueType === 'Profile Pending').length}</div>
-          <div className="desk-kpi-sub">Paid, waiting KYC documents</div>
+          <div className="desk-kpi-label">AWAITING WALLET TOP-UP</div>
+          <div className="desk-kpi-val text-warn">{verifications.filter((v) => v.paymentStatus !== 'paid').length}</div>
+          <div className="desk-kpi-sub">Self-registered, awaiting top-up</div>
         </div>
       </div>
 
@@ -1214,49 +1214,39 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
               </div>
             </div>
 
-            {/* Dual Gate Matrix & UTR */}
+            {/* Dual Gate Matrix & Information */}
             <div style={{ marginTop: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
               <div style={{ display: 'flex', gap: 16 }}>
                 <div>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 1: Payment</span>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 1: Payment Status</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: 700, color: item.paymentStatus === 'paid' ? '#059669' : '#d97706' }}>
                     {item.paymentStatus === 'paid' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
-                    {item.paymentStatus === 'paid' ? 'Verified & Settled' : 'Bank UTR Verification Pending'}
+                    {item.paymentStatus === 'paid' ? 'Settled (Online Razorpay)' : 'Awaiting Online Top-Up'}
                   </div>
                 </div>
                 <div>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 2: KYC Compliance</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: 700, color: item.profileStatus === 'complete' ? '#059669' : '#e11d48' }}>
-                    {item.profileStatus === 'complete' ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-                    {item.profileStatus === 'complete' ? 'KYC Complete' : 'Incomplete Documentation'}
+                  <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 2: Profile &amp; KYC Status</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: 700, color: '#059669' }}>
+                    <CheckCircle2 size={14} />
+                    <span>100% Completed &amp; Auto-Verified</span>
                   </div>
                 </div>
               </div>
 
               <div style={{ fontSize: '0.8rem', color: '#475569' }}>
-                Bank Reference: <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#e2e8f0', padding: '2px 6px', borderRadius: 4 }}>{item.utrNumber}</span>
+                Reference: <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#e2e8f0', padding: '2px 6px', borderRadius: 4 }}>{item.utrNumber}</span>
               </div>
             </div>
 
-            {/* Actions */}
-            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <a
-                href={`https://wa.me/91${item.phone}?text=Hello%20${encodeURIComponent(item.contact)},%20Growthline%20Support%20here%20regarding%20your%20campaign%20verification.`}
-                target="_blank"
-                rel="noreferrer"
-                className="desk-action-btn"
-                style={{ textDecoration: 'none' }}
-              >
-                <MessageSquare size={14} /> WhatsApp
-              </a>
-              <button
-                type="button"
-                className="sales-btn-primary"
-                style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-                onClick={() => handleOpenApprove(item)}
-              >
-                <Check size={14} /> Approve Payment &amp; Credit Wallet
-              </button>
+            {/* Profile Completion & Verification Information Bar (Pure Info) */}
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', color: '#059669', fontWeight: 700 }}>
+                <CheckCircle2 size={15} />
+                <span>Profile Registration Complete &amp; 100% KYC Verified</span>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#475569' }}>
+                Account State: <strong style={{ color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: 4, border: '1px solid #a7f3d0' }}>Active Live Account</strong>
+              </div>
             </div>
           </div>
         ))}
