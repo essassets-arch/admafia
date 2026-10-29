@@ -556,6 +556,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
               verifications={verifications}
               setVerifications={setVerifications}
               onApproveSuccess={handleVerificationApprove}
+              customers={customers}
             />
           )}
 

@@ -1102,11 +1102,9 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
 /* ==========================================================================
    DESK 2: PENDING VERIFICATION (Badge: 7)
    ========================================================================== */
-export function PendingVerificationDesk({ verifications, setVerifications, onApproveSuccess }) {
+export function PendingVerificationDesk({ verifications, setVerifications, onApproveSuccess, customers = [] }) {
   const [filter, setFilter] = useState('all');
-  const [activeItem, setActiveItem] = useState(null);
-  const [confirmedUtr, setConfirmedUtr] = useState('');
-  const [isSuccessModal, setIsSuccessModal] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState(null);
 
   const filtered = verifications.filter((v) => {
     if (filter === 'both') return v.queueType === 'Both Incomplete';
@@ -1115,21 +1113,6 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
     return true;
   });
 
-  const handleOpenApprove = (item) => {
-    setActiveItem(item);
-    setConfirmedUtr(item.utrNumber.startsWith('UTR-') ? item.utrNumber : `UTR-HDFC-${Math.floor(100000 + Math.random() * 900000)}`);
-  };
-
-  const handleExecuteApproval = () => {
-    if (!activeItem) return;
-    setVerifications((prev) => prev.filter((v) => v.id !== activeItem.id));
-    setIsSuccessModal(true);
-    setTimeout(() => {
-      setIsSuccessModal(false);
-      setActiveItem(null);
-      if (onApproveSuccess) onApproveSuccess(activeItem);
-    }, 1500);
-  };
 
   return (
     <div className="desk-page-container">
@@ -1206,11 +1189,35 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
                 </div>
               </div>
 
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>{formatINR(item.amount)}</div>
-                <div style={{ fontSize: '0.76rem', color: '#059669', fontWeight: 700 }}>
-                  {item.runwayDays} Days Runway @ ₹300/day
+              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                <div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>{formatINR(item.amount)}</div>
+                  <div style={{ fontSize: '0.76rem', color: '#059669', fontWeight: 700 }}>
+                    {item.runwayDays} Days Runway @ ₹300/day
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetail(item)}
+                  className="sales-btn-primary"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 14px',
+                    fontSize: '0.8rem',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    background: '#4f46e5',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 700
+                  }}
+                  title="View full payment and profile completion information"
+                >
+                  <Eye size={14} />
+                  <span>Detail</span>
+                </button>
               </div>
             </div>
 
@@ -1244,87 +1251,169 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
                 <CheckCircle2 size={15} />
                 <span>Profile Registration Complete &amp; 100% KYC Verified</span>
               </div>
-              <div style={{ fontSize: '0.78rem', color: '#475569' }}>
-                Account State: <strong style={{ color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: 4, border: '1px solid #a7f3d0' }}>Active Live Account</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ fontSize: '0.78rem', color: '#475569' }}>
+                  Account State: <strong style={{ color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: 4, border: '1px solid #a7f3d0' }}>Active Live Account</strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetail(item)}
+                  className="desk-action-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                    color: '#4f46e5',
+                    fontWeight: 700
+                  }}
+                >
+                  <FileText size={13} /> View Audit Details
+                </button>
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Approve Modal */}
-      {activeItem && !isSuccessModal && (
-        <div className="sales-modal-overlay" onClick={() => setActiveItem(null)}>
-          <div className="sales-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div>
-                <span className="sales-dept-badge">Dual-Gate Settlement</span>
-                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.2rem', fontWeight: 800 }}>Approve Payment &amp; Credit Wallet</h3>
-              </div>
-              <button type="button" className="desk-close-btn" onClick={() => setActiveItem(null)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="desk-modal-box" style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>{activeItem.company}</div>
-              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Package: {activeItem.packageTier}</div>
-              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* Customer 360 Detail Modal */}
+      {selectedDetail && (() => {
+        const cust = (customers || []).find((c) => c.phone === selectedDetail.phone || c.id === selectedDetail.customerId || c.id === selectedDetail.id) || selectedDetail;
+        return (
+          <div className="sales-modal-overlay" onClick={() => setSelectedDetail(null)}>
+            <div className="sales-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 660, maxHeight: '90vh', overflowY: 'auto' }}>
+              {/* Modal Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                 <div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Credit Amount</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>{formatINR(activeItem.amount)}</div>
+                  <span className="sales-dept-badge">Customer Profile &amp; Payment Audit Details</span>
+                  <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                    {cust.companyName || cust.name || selectedDetail.company}
+                  </h3>
+                  <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 2 }}>
+                    Contact Person: <strong style={{ color: '#0f172a' }}>{cust.contactPerson || cust.contact || selectedDetail.contact}</strong> • Phone: <strong style={{ color: '#4f46e5' }}>+91 {selectedDetail.phone}</strong>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Daily Burn</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#4f46e5' }}>₹{activeItem.dailyRate}/day</div>
+                <button type="button" className="desk-close-btn" onClick={() => setSelectedDetail(null)}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Section 1: Complete Profile & Onboarding Information */}
+              <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f8fafc', borderColor: '#e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div className="desk-box-label" style={{ color: '#0f172a', fontWeight: 800, margin: 0 }}>
+                    1. Profile &amp; KYC Verification Completion
+                  </div>
+                  <span className="desk-pill pill-emerald" style={{ fontSize: '0.74rem' }}>
+                    ✓ 100% Profile Complete
+                  </span>
                 </div>
-                <div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Runway Added</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>+{activeItem.runwayDays} Days</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Company / Registered Business</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.companyName || cust.name || selectedDetail.company}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Authorized Contact Person</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.contactPerson || cust.contact || selectedDetail.contact}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Direct Indian Mobile Number</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>+91 {selectedDetail.phone}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Work Email Address</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.email || 'Registered via Web Intake'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Business Category</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.category || 'Meta Ads Lead Generation'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Target Geography / City</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.city || 'India'}, {cust.state || 'Maharashtra'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Intake Submission Time</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{selectedDetail.submittedAt || cust.registeredAt || 'Today'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>KYC Audit Progress</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#059669' }}>100% Verified (Gate 2 Passed)</div>
+                  </div>
+                  {cust.website && (
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Business Website / Landing Page</div>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#4f46e5' }}>
+                        <a href={cust.website.startsWith('http') ? cust.website : `https://${cust.website}`} target="_blank" rel="noreferrer" style={{ color: '#4f46e5', textDecoration: 'none' }}>
+                          {cust.website} ↗
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label className="desk-form-label">Verified Bank UTR / RTGS Settlement Reference</label>
-              <input
-                type="text"
-                className="desk-form-input"
-                value={confirmedUtr}
-                onChange={(e) => setConfirmedUtr(e.target.value)}
-                placeholder="Enter verified bank transaction reference"
-              />
-              <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 4 }}>
-                This will automatically reconcile the ledger and credit the client's ad spend wallet.
+              {/* Section 2: Payment & Ad Wallet Details */}
+              <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f8fafc', borderColor: '#e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div className="desk-box-label" style={{ color: '#0f172a', fontWeight: 800, margin: 0 }}>
+                    2. Payment &amp; Ad Wallet Settlement (Gate 1)
+                  </div>
+                  <span className={`desk-pill ${selectedDetail.paymentStatus === 'paid' ? 'pill-emerald' : 'pill-amber'}`} style={{ fontSize: '0.74rem' }}>
+                    {selectedDetail.paymentStatus === 'paid' ? '✓ Payment Settled' : '⏳ Awaiting Online Top-Up'}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Current Available Balance</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#059669' }}>
+                      {formatINR(cust.balance || selectedDetail.amount || 0)}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Daily Campaign Ad Spend</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
+                      {formatINR(cust.dailyPacing || selectedDetail.dailyRate || 300)} / day
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Active Funded Runway</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
+                      {cust.runwayDays || selectedDetail.runwayDays || 0} Days @ ₹300/day
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Payment Mode</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
+                      Razorpay UPI / Online Netbanking
+                    </div>
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Settlement / UTR Reference</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', fontFamily: 'monospace', background: '#e2e8f0', padding: '4px 10px', borderRadius: 4, display: 'inline-block', marginTop: 3 }}>
+                      {selectedDetail.utrNumber || 'Auto-Allocated Online Settlement'}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button type="button" className="sales-btn-secondary" onClick={() => setActiveItem(null)}>
-                Cancel
-              </button>
-              <button type="button" className="sales-btn-primary" onClick={handleExecuteApproval}>
-                Confirm &amp; Credit Wallet
-              </button>
+              {/* Modal Footer */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                <button
+                  type="button"
+                  className="sales-btn-secondary"
+                  onClick={() => setSelectedDetail(null)}
+                  style={{ padding: '8px 22px', borderRadius: 8, fontWeight: 700 }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Success Modal */}
-      {isSuccessModal && (
-        <div className="sales-modal-overlay">
-          <div className="sales-modal-card" style={{ textAlign: 'center', padding: '36px 24px' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#ecfdf5', color: '#059669', display: 'grid', placeItems: 'center', margin: '0 auto 16px' }}>
-              <Check size={32} />
-            </div>
-            <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800 }}>Payment Approved &amp; Wallet Credited!</h3>
-            <p style={{ fontSize: '0.86rem', color: '#64748b', marginTop: 6 }}>
-              ₹{activeItem?.amount?.toLocaleString('en-IN')} added. {activeItem?.runwayDays} days runway activated. Verification queue count updated!
-            </p>
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
