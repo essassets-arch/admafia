@@ -831,15 +831,14 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           </svg>
         </button>
 
-        <div className="mobile-brand-title" onClick={() => handleSwitchTab('dashboard')} style={{ cursor: 'pointer' }}>
-          <div className="portal-logo-icon" style={{ width: '32px', height: '32px' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M4 19L9 14L13 18L20 7" stroke="#ffb800" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="20" cy="7" r="2.5" fill="#ffb800" />
-            </svg>
-          </div>
-          <span className="portal-logo-text" style={{ fontSize: '1.08rem' }}>
-            Growth<b>line</b>
+        <div className="mobile-brand-title" onClick={() => handleSwitchTab('dashboard')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <img
+            src="/AdMafia-Logo.png"
+            alt="AdMafia Marketing"
+            style={{ height: '34px', width: 'auto', objectFit: 'contain', background: '#ffffff', padding: '3px 6px', borderRadius: '6px' }}
+          />
+          <span className="portal-logo-text" style={{ fontSize: '1.04rem' }}>
+            Ad<b>Mafia</b>
           </span>
         </div>
 
@@ -865,16 +864,22 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       {/* SIDEBAR NAVIGATION */}
       <aside className={`portal-sidebar ${isMobileDrawerOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-top">
-          <div className="portal-logo-wrap" onClick={() => handleSwitchTab('dashboard')} style={{ cursor: 'pointer' }}>
-            <div className="portal-logo-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <path d="M4 19L9 14L13 18L20 7" stroke="#ffb800" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx="20" cy="7" r="2.5" fill="#ffb800" />
-              </svg>
-            </div>
+          <div className="portal-logo-wrap" onClick={() => handleSwitchTab('dashboard')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
+              style={{
+                height: isSidebarCollapsed ? '34px' : '40px',
+                width: 'auto',
+                objectFit: 'contain',
+                background: '#ffffff',
+                padding: '4px 7px',
+                borderRadius: '8px',
+              }}
+            />
             {!isSidebarCollapsed && (
               <span className="portal-logo-text">
-                Growth<b>line</b> <span>CRM</span>
+                Ad<b>Mafia</b> <span>CRM</span>
               </span>
             )}
           </div>

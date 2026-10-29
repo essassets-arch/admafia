@@ -275,20 +275,19 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       <aside className="sales-sidebar">
         <div className="sales-sidebar-top">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
-                display: 'grid',
-                placeItems: 'center',
-                color: '#fff',
-                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+                height: 42,
+                width: 'auto',
+                objectFit: 'contain',
+                borderRadius: 8,
+                background: '#ffffff',
+                padding: '3px 6px',
+                border: '1px solid #e2e8f0',
               }}
-            >
-              <Shield size={20} strokeWidth={2.5} />
-            </div>
+            />
             <div>
               <div
                 style={{
@@ -299,7 +298,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
                   lineHeight: 1.1,
                 }}
               >
-                Growth<b>line</b>
+                Ad<b>Mafia</b>
               </div>
               <div
                 style={{

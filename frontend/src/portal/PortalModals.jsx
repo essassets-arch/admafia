@@ -1209,11 +1209,18 @@ export function GstTaxInvoiceModal({ isOpen, onClose, invoice, customer }) {
     <div className="portal-modal-backdrop" onClick={onClose}>
       <div className="portal-modal-box" style={{ maxWidth: '640px', background: '#ffffff', color: '#111827' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e5e7eb', paddingBottom: '14px', marginBottom: '18px' }}>
-          <div>
-            <span style={{ background: '#10b981', color: '#fff', fontSize: '0.72rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
-              OFFICIAL GST TAX INVOICE
-            </span>
-            <h3 style={{ margin: '4px 0 0', color: '#111827', fontSize: '1.25rem' }}>Invoice #{invoice.invoiceNo}</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
+              style={{ height: '46px', width: 'auto', objectFit: 'contain' }}
+            />
+            <div>
+              <span style={{ background: '#10b981', color: '#fff', fontSize: '0.72rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
+                OFFICIAL GST TAX INVOICE
+              </span>
+              <h3 style={{ margin: '4px 0 0', color: '#111827', fontSize: '1.25rem' }}>Invoice #{invoice.invoiceNo}</h3>
+            </div>
           </div>
           <button type="button" className="btn-close-drawer" onClick={onClose} style={{ color: '#374151' }}>&times;</button>
         </div>
@@ -1222,7 +1229,7 @@ export function GstTaxInvoiceModal({ isOpen, onClose, invoice, customer }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', fontSize: '0.85rem', marginBottom: '18px', lineHeight: '1.5' }}>
           <div>
             <strong style={{ color: '#171347' }}>Issued By:</strong>
-            <div>Growthline Media Solutions Pvt Ltd</div>
+            <div>AdMafia Marketing Solutions Pvt Ltd</div>
             <div>CIN: U74999MH2022PTC384910</div>
             <div>GSTIN: 27AABCE1234F1Z5</div>
             <div>Mumbai, Maharashtra - 400069</div>

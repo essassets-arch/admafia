@@ -393,8 +393,17 @@ export default function App() {
     <>
       <header>
         <div className="wrap nav">
-          <a className="logo" href={site.url} aria-label="AdMafia Marketing home">
-            Ad<b>Mafia</b>
+          <a
+            className="logo"
+            href={site.url}
+            aria-label="AdMafia Marketing home"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}
+          >
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
+              style={{ height: '48px', width: 'auto', objectFit: 'contain', display: 'block' }}
+            />
           </a>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             {currentUser ? (
@@ -773,8 +782,16 @@ export default function App() {
       </main>
 
       <footer>
-        <div className="wrap">
-          &copy; {new Date().getFullYear()} {site.name}. Facebook and Instagram are trademarks of Meta Platforms, Inc. AdMafia Marketing is not affiliated with Meta.
+        <div className="wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
+              style={{ height: '36px', width: 'auto', objectFit: 'contain', background: '#ffffff', padding: '4px 8px', borderRadius: '8px' }}
+            />
+            <span>&copy; {new Date().getFullYear()} {site.name}.</span>
+          </div>
+          <span>Facebook and Instagram are trademarks of Meta Platforms, Inc. AdMafia Marketing is not affiliated with Meta.</span>
         </div>
       </footer>
     </>

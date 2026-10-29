@@ -171,6 +171,22 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         {/* LEFT COLUMN: Enterprise Showcase & Value Proposition */}
         <section className="auth-fullpage-showcase">
           <div className="auth-showcase-inner">
+            <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <img
+                src="/AdMafia-Logo.png"
+                alt="AdMafia Marketing"
+                style={{
+                  height: '58px',
+                  width: 'auto',
+                  objectFit: 'contain',
+                  background: '#ffffff',
+                  padding: '6px 12px',
+                  borderRadius: '12px',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+                }}
+              />
+            </div>
+
             <div className="auth-showcase-pill">
               <Sparkles size={14} />
               <span>SELF-SERVE BUSINESS WORKSPACE ONBOARDING</span>
@@ -564,6 +580,22 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
         {/* LEFT COLUMN: Customer Portal Command Center Showcase */}
         <section className="auth-fullpage-showcase">
           <div className="auth-showcase-inner">
+            <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <img
+                src="/AdMafia-Logo.png"
+                alt="AdMafia Marketing"
+                style={{
+                  height: '58px',
+                  width: 'auto',
+                  objectFit: 'contain',
+                  background: '#ffffff',
+                  padding: '6px 12px',
+                  borderRadius: '12px',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+                }}
+              />
+            </div>
+
             <div className="auth-showcase-pill">
               <Sparkles size={14} />
               <span>CUSTOMER LEAD COMMAND CENTER</span>
