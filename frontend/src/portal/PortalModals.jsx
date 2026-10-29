@@ -1,5 +1,5 @@
 import { TrendingUp, Zap, Calendar, X, ArrowRight, ShieldCheck, Sparkles, Building2, Briefcase, MapPin, Mail, Phone, Globe, User, CheckCircle2, Layers, Check, Shield } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // Reusable SweetAlert2-Style Popup Dialog
 export function SweetAlertModal({
