@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, query, getDbStatus } from './db.js';
@@ -1028,6 +1029,18 @@ app.post('/api/tasks', async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// =============================================================================
+// 7. PRODUCTION STATIC FRONTEND SERVING (When frontend/dist is built on VPS)
+// =============================================================================
+const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   initDatabase()

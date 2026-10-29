@@ -3,10 +3,16 @@
  * Connects the React Frontend (Customer CRM & Sales Desks) to http://localhost:5000/api
  */
 
-const API_BASE = import.meta.env?.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const isLocalhost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const API_BASE =
+  import.meta.env?.VITE_API_BASE_URL ||
+  (isLocalhost ? 'http://localhost:5000/api' : '/api');
 
 async function apiRequest(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;
+  const url = `${API_BASE}${endpoint}`;localStorage
   const response = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',
