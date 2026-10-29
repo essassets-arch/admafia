@@ -1,0 +1,4 @@
+node_modules
+pgdata
+.env
+npm-debug.log*

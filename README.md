@@ -29,7 +29,23 @@ d:\admafia\
     └── package.json
 ```
 
-## Running the Project
+## Running with Docker (Recommended)
+
+Start the entire stack (PostgreSQL + Express Backend + React/Vite Frontend + pgAdmin 4 Web DB) in a single command:
+
+```bash
+docker compose up -d --build
+```
+
+### Services Started:
+- **Frontend SPA**: `http://localhost:5050`
+- **Backend API**: `http://localhost:5000/api`
+- **PostgreSQL 16**: `localhost:5432` (`admafia_crm`)
+- **pgAdmin 4 Web**: `http://localhost:5055/dbadmin/browser/` (Login: `admin@admafia.marketing` / `AdMafiaAdmin2026!`)
+
+---
+
+## Running Locally Without Docker
 
 ### 1. Start the Backend API Server (`http://localhost:5000`)
 ```bash

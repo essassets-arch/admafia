@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "AdMafia CRM Database",
+      "Group": "Servers",
+      "Host": "db",
+      "Port": 5432,
+      "MaintenanceDB": "admafia_crm",
+      "Username": "admafia_user",
+      "SSLMode": "prefer"
+    }
+  }
+}
