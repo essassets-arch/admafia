@@ -76,11 +76,13 @@ function mapLeadRow(row) {
   return {
     id: row.id,
     customerId: row.customer_id,
+    masterLeadId: row.master_lead_id || null,
     customerPhone: (row.customer_phone || '').trim(),
     customerUsername: row.customer_username,
     company: row.company_name,
     assignedCompany: row.company_name,
     customerCompanyName: row.company_name,
+    category: row.category || 'Other',
     phone: cleanPhone,
     displayPhone,
     maskedPhone: displayPhone,
@@ -183,6 +185,53 @@ function mapPaymentRecordRow(row) {
   };
 }
 
+function mapGroupRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category || 'Other',
+    icon: row.icon || '🏢',
+    description: row.description || '',
+    status: row.status || 'active',
+    customerCount: Number(row.customer_count ?? 0),
+    leadsReceived: Number(row.leads_received ?? 0),
+    leadsDistributed: Number(row.leads_distributed ?? 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapMasterLeadRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || '',
+    category: row.category,
+    groupId: row.group_id,
+    groupName: row.group_name || '',
+    groupIcon: row.group_icon || '🏢',
+    buyerName: row.buyer_name,
+    buyerPhone: (row.buyer_phone || '').trim(),
+    displayPhone: `+91 ${(row.buyer_phone || '').trim()}`,
+    buyerEmail: row.buyer_email || '',
+    city: row.city || '',
+    requirement: row.requirement,
+    budget: row.budget || '₹1.5L – ₹3.5L',
+    location: row.location || '',
+    priority: row.priority || 'Urgent',
+    source: row.source || 'Direct Intake',
+    deadlineDate: row.deadline_date,
+    createdBy: row.created_by,
+    totalRecipients: Number(row.recipients_count ?? 0),
+    interestedCount: Number(row.interested_count ?? 0),
+    convertedCount: Number(row.converted_count ?? 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 // =============================================================================
 // 1. HEALTH & FULL SYSTEM STATE
 // =============================================================================
@@ -193,7 +242,10 @@ app.get('/api/health', async (req, res) => {
         (SELECT COUNT(*) FROM customers) AS customers_count,
         (SELECT COUNT(*) FROM leads) AS leads_count,
         (SELECT COUNT(*) FROM wallets) AS wallets_count,
-        (SELECT COUNT(*) FROM payment_records) AS payments_count
+        (SELECT COUNT(*) FROM payment_records) AS payments_count,
+        (SELECT COUNT(*) FROM customer_groups) AS groups_count,
+        (SELECT COUNT(*) FROM master_leads) AS master_leads_count,
+        (SELECT COUNT(*) FROM lead_assignments) AS lead_assignments_count
     `);
     res.json({
       ok: true,
@@ -207,14 +259,34 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/api/state', async (req, res) => {
   try {
-    const [custRes, leadsRes, payRes, pvRes, qRes, tRes, grpRes] = await Promise.all([
+    const [custRes, leadsRes, payRes, pvRes, qRes, tRes, grpRes, mLeadsRes] = await Promise.all([
       query('SELECT * FROM vw_sales_customer_accounts ORDER BY registered_at DESC'),
       query('SELECT * FROM leads ORDER BY created_at DESC'),
       query('SELECT * FROM payment_records ORDER BY paid_at DESC'),
       query('SELECT * FROM pending_verifications ORDER BY submitted_at DESC'),
       query('SELECT * FROM support_queries ORDER BY created_at DESC'),
       query('SELECT * FROM sales_tasks ORDER BY created_at DESC'),
-      query('SELECT * FROM customer_groups ORDER BY created_at ASC'),
+      query(`
+        SELECT 
+          cg.*,
+          (SELECT COUNT(*) FROM customer_group_memberships cgm WHERE cgm.group_id = cg.id) AS customer_count,
+          (SELECT COUNT(*) FROM master_leads ml WHERE ml.group_id = cg.id) AS leads_received,
+          (SELECT COUNT(*) FROM lead_assignments la WHERE la.group_id = cg.id) AS leads_distributed
+        FROM customer_groups cg
+        ORDER BY cg.created_at ASC
+      `),
+      query(`
+        SELECT 
+          ml.*,
+          cg.name AS group_name,
+          cg.icon AS group_icon,
+          (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id) AS recipients_count,
+          (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id AND la.response_interest = 'Interested') AS interested_count,
+          (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id AND la.status IN ('Converted', 'Won')) AS converted_count
+        FROM master_leads ml
+        LEFT JOIN customer_groups cg ON cg.id = ml.group_id
+        ORDER BY ml.created_at DESC
+      `),
     ]);
 
     res.json({
@@ -241,7 +313,8 @@ app.get('/api/state', async (req, res) => {
       })),
       queries: qRes.rows,
       tasks: tRes.rows,
-      groups: grpRes.rows,
+      groups: grpRes.rows.map(mapGroupRow),
+      masterLeads: mLeadsRes.rows.map(mapMasterLeadRow),
     });
   } catch (err) {
     console.error('[GET /api/state]', err);
@@ -954,6 +1027,29 @@ app.patch('/api/leads/:id', async (req, res) => {
       `UPDATE leads SET status = $1, is_read = $2, notes = $3, updated_at = NOW() WHERE id = $4 RETURNING *`,
       [nextStatus, nextRead, nextNotes, leadId]
     );
+
+    // Sync corresponding lead_assignments record if distributed
+    let interest = null;
+    if (nextStatus === 'Interested') interest = 'Interested';
+    else if (nextStatus === 'In Follow-up' || nextStatus === 'Callback') interest = 'In Follow-up';
+    else if (nextStatus === 'Converted' || nextStatus === 'Won') interest = 'Converted';
+    else if (nextStatus === 'Dropped' || nextStatus === 'Not Interested') interest = 'Not Interested';
+
+    try {
+      await query(
+        `UPDATE lead_assignments 
+         SET status = $1,
+             is_read = $2,
+             response_notes = $3,
+             response_interest = COALESCE($4, response_interest),
+             responded_at = NOW()
+         WHERE customer_lead_id = $5 OR (master_lead_id = $6 AND customer_id = $7)`,
+        [nextStatus, nextRead, nextNotes, interest, leadId, row.master_lead_id || '', row.customer_id || '']
+      );
+    } catch (assignErr) {
+      console.warn('[lead_assignments sync warning]', assignErr.message);
+    }
+
     res.json({ ok: true, lead: mapLeadRow(updated.rows[0]) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1031,6 +1127,592 @@ app.post('/api/tasks', async (req, res) => {
       [id, customerId, company, contact || company, cleanPhone, taskType, priority, dueStatus, dueTime, notes]
     );
     res.status(201).json({ ok: true, task: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// =============================================================================
+// 7. CUSTOMER GROUPS & CATEGORY-BASED LEAD DISTRIBUTION
+// =============================================================================
+
+// List all Customer Groups with dynamic counts
+app.get('/api/groups', async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT 
+        cg.*,
+        (SELECT COUNT(*) FROM customer_group_memberships cgm WHERE cgm.group_id = cg.id) AS customer_count,
+        (SELECT COUNT(*) FROM master_leads ml WHERE ml.group_id = cg.id) AS leads_received,
+        (SELECT COUNT(*) FROM lead_assignments la WHERE la.group_id = cg.id) AS leads_distributed
+      FROM customer_groups cg
+      ORDER BY cg.created_at ASC
+    `);
+    res.json({ ok: true, groups: result.rows.map(mapGroupRow) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Create a new Customer Group
+app.post('/api/groups', async (req, res) => {
+  try {
+    const { name, category = 'Other', icon = '🏢', description = '', status = 'active' } = req.body || {};
+    if (!name || !name.trim()) {
+      return res.status(400).json({ ok: false, error: 'Group name is required' });
+    }
+    const cleanName = name.trim();
+    const id = req.body.id || `grp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const result = await query(
+      `INSERT INTO customer_groups (id, name, category, icon, description, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+       RETURNING *`,
+      [id, cleanName, category || 'Other', icon || '🏢', description || '', status || 'active']
+    );
+    const row = result.rows[0];
+    res.status(201).json({ ok: true, group: mapGroupRow({ ...row, customer_count: 0, leads_received: 0, leads_distributed: 0 }) });
+  } catch (err) {
+    if (err.message && (err.message.includes('unique') || err.message.includes('duplicate'))) {
+      return res.status(409).json({ ok: false, error: 'A customer group with this name already exists.' });
+    }
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Update an existing Customer Group
+app.put('/api/groups/:id', async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const { name, category, icon, description, status } = req.body || {};
+    const existing = await query('SELECT * FROM customer_groups WHERE id = $1', [groupId]);
+    if (existing.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer group not found' });
+    }
+    const curr = existing.rows[0];
+    const nextName = name !== undefined ? name.trim() : curr.name;
+    const nextCategory = category !== undefined ? category : curr.category;
+    const nextIcon = icon !== undefined ? icon : curr.icon;
+    const nextDesc = description !== undefined ? description : curr.description;
+    const nextStatus = status !== undefined ? status : curr.status;
+
+    const result = await query(
+      `UPDATE customer_groups
+       SET name = $1, category = $2, icon = $3, description = $4, status = $5, updated_at = NOW()
+       WHERE id = $6
+       RETURNING *`,
+      [nextName, nextCategory, nextIcon, nextDesc, nextStatus, groupId]
+    );
+
+    const counts = await query(`
+      SELECT 
+        (SELECT COUNT(*) FROM customer_group_memberships WHERE group_id = $1) AS customer_count,
+        (SELECT COUNT(*) FROM master_leads WHERE group_id = $1) AS leads_received,
+        (SELECT COUNT(*) FROM lead_assignments WHERE group_id = $1) AS leads_distributed
+    `, [groupId]);
+
+    res.json({ ok: true, group: mapGroupRow({ ...result.rows[0], ...counts.rows[0] }) });
+  } catch (err) {
+    if (err.message && (err.message.includes('unique') || err.message.includes('duplicate'))) {
+      return res.status(409).json({ ok: false, error: 'A customer group with this name already exists.' });
+    }
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Delete a Customer Group
+app.delete('/api/groups/:id', async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    await query('DELETE FROM customer_groups WHERE id = $1', [groupId]);
+    res.json({ ok: true, message: 'Group deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// List members of a Customer Group
+app.get('/api/groups/:id/members', async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const membersRes = await query(
+      `SELECT 
+         c.id, c.username, c.company_name, c.contact_person, c.phone, c.email,
+         c.category, c.city, c.state, c.status, c.profile_status, c.payment_status,
+         COALESCE(w.available_balance, 0) AS balance,
+         cgm.assigned_at
+       FROM customer_group_memberships cgm
+       JOIN customers c ON c.id = cgm.customer_id
+       LEFT JOIN wallets w ON w.customer_id = c.id
+       WHERE cgm.group_id = $1
+       ORDER BY cgm.assigned_at DESC`,
+      [groupId]
+    );
+
+    res.json({
+      ok: true,
+      members: membersRes.rows.map((r) => ({
+        id: r.id,
+        customerId: r.id,
+        username: r.username,
+        companyName: r.company_name,
+        contactPerson: r.contact_person,
+        phone: (r.phone || '').trim(),
+        email: r.email || '',
+        category: r.category || 'Other',
+        city: r.city || '',
+        state: r.state || '',
+        status: r.status,
+        balance: Number(r.balance || 0),
+        assignedAt: r.assigned_at,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Assign customers to a Customer Group (Batch assignment)
+app.post('/api/groups/:id/members', async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const { customerIds = [] } = req.body || {};
+    if (!Array.isArray(customerIds) || customerIds.length === 0) {
+      return res.status(400).json({ ok: false, error: 'customerIds array is required' });
+    }
+
+    // Verify group exists
+    const grpRes = await query('SELECT * FROM customer_groups WHERE id = $1', [groupId]);
+    if (grpRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer group not found' });
+    }
+
+    let assignedCount = 0;
+    for (const cId of customerIds) {
+      const memId = `cgm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const insRes = await query(
+        `INSERT INTO customer_group_memberships (id, group_id, customer_id, assigned_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (group_id, customer_id) DO NOTHING`,
+        [memId, groupId, cId]
+      );
+      if (insRes.rowCount > 0) assignedCount++;
+    }
+
+    const updatedMembers = await query(
+      `SELECT c.id, c.company_name, c.phone, c.status
+       FROM customer_group_memberships cgm
+       JOIN customers c ON c.id = cgm.customer_id
+       WHERE cgm.group_id = $1`,
+      [groupId]
+    );
+
+    res.json({
+      ok: true,
+      message: `Successfully assigned ${assignedCount} customer(s) to ${grpRes.rows[0].name}.`,
+      assignedCount,
+      totalGroupMembers: updatedMembers.rowCount,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Remove customer from a Customer Group
+app.delete('/api/groups/:id/members/:customerId', async (req, res) => {
+  try {
+    const { id: groupId, customerId } = req.params;
+    await query(
+      'DELETE FROM customer_group_memberships WHERE group_id = $1 AND customer_id = $2',
+      [groupId, customerId]
+    );
+    res.json({ ok: true, message: 'Customer removed from group successfully' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Preview distribution recipients for a group
+app.get('/api/groups/:id/preview-recipients', async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const grpRes = await query('SELECT * FROM customer_groups WHERE id = $1', [groupId]);
+    if (grpRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer group not found' });
+    }
+    const group = grpRes.rows[0];
+
+    const membersRes = await query(
+      `SELECT 
+         c.id, c.username, c.company_name, c.contact_person, c.phone, c.email,
+         c.category, c.city, c.state, c.status, c.profile_status, c.payment_status,
+         COALESCE(w.available_balance, 0) AS balance
+       FROM customer_group_memberships cgm
+       JOIN customers c ON c.id = cgm.customer_id
+       LEFT JOIN wallets w ON w.customer_id = c.id
+       WHERE cgm.group_id = $1
+       ORDER BY c.company_name ASC`,
+      [groupId]
+    );
+
+    const eligible = [];
+    const excluded = [];
+
+    for (const row of membersRes.rows) {
+      const item = {
+        customerId: row.id,
+        companyName: row.company_name,
+        contactPerson: row.contact_person,
+        phone: (row.phone || '').trim(),
+        email: row.email || '',
+        category: row.category,
+        city: row.city || '',
+        status: row.status,
+        balance: Number(row.balance || 0),
+        notificationStatus: 'Ready to Dispatch',
+      };
+      if (row.status === 'active') {
+        eligible.push(item);
+      } else {
+        excluded.push({ ...item, reason: `Account status is '${row.status}'` });
+      }
+    }
+
+    res.json({
+      ok: true,
+      group: mapGroupRow(group),
+      totalMembers: membersRes.rowCount,
+      eligibleCount: eligible.length,
+      excludedCount: excluded.length,
+      eligibleRecipients: eligible,
+      excludedRecipients: excluded,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// CORE ACTION: Distribute One Lead to All Customers in Target Group
+app.post('/api/leads/distribute', async (req, res) => {
+  try {
+    const {
+      groupId,
+      title,
+      description = '',
+      category = 'IT & Software',
+      requirement = 'Inbound Meta Ads Enquiry',
+      budget = '₹1.5L – ₹3.5L',
+      location = '',
+      priority = 'Urgent',
+      source = 'Direct Intake',
+      deadlineDate = null,
+      buyerName = 'Verified Buyer',
+      buyerPhone,
+      buyerEmail = '',
+      city = '',
+    } = req.body || {};
+
+    if (!groupId) {
+      return res.status(400).json({ ok: false, error: 'Target customer group (groupId) is required' });
+    }
+    if (!title || !title.trim()) {
+      return res.status(400).json({ ok: false, error: 'Lead title is required' });
+    }
+    if (!requirement || !requirement.trim()) {
+      return res.status(400).json({ ok: false, error: 'Customer requirement details are required' });
+    }
+
+    const cleanBuyerDigits = String(buyerPhone || '9876543210').replace(/\D/g, '').slice(-10);
+    if (cleanBuyerDigits.length !== 10 || !['6', '7', '8', '9'].includes(cleanBuyerDigits[0])) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Buyer phone number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.',
+      });
+    }
+
+    // Verify group
+    const grpRes = await query('SELECT * FROM customer_groups WHERE id = $1', [groupId]);
+    if (grpRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer group not found' });
+    }
+    const group = grpRes.rows[0];
+
+    // Get active eligible customers in this group
+    const eligibleRes = await query(
+      `SELECT c.*, COALESCE(w.available_balance, 0) AS balance
+       FROM customer_group_memberships cgm
+       JOIN customers c ON c.id = cgm.customer_id
+       LEFT JOIN wallets w ON w.customer_id = c.id
+       WHERE cgm.group_id = $1 AND c.status = 'active'
+       ORDER BY c.company_name ASC`,
+      [groupId]
+    );
+
+    if (eligibleRes.rowCount === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: `Group "${group.name}" currently has 0 active customer accounts assigned. Assign customers to the group first.`,
+      });
+    }
+
+    const eligibleCustomers = eligibleRes.rows;
+    const masterLeadId = req.body.id || `mlead_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const displayPhone = `+91 ${cleanBuyerDigits}`;
+
+    // 1. Insert Master Lead
+    const mLeadInsert = await query(
+      `INSERT INTO master_leads (
+         id, title, description, category, group_id, buyer_name, buyer_phone,
+         buyer_email, city, requirement, budget, location, priority, source,
+         deadline_date, created_by, created_at, updated_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7,
+         $8, $9, $10, $11, $12, $13, $14,
+         $15, 'Admin Operations', NOW(), NOW()
+       )
+       ON CONFLICT (id) DO NOTHING
+       RETURNING *`,
+      [
+        masterLeadId,
+        title.trim(),
+        description || '',
+        category || group.category || 'Other',
+        groupId,
+        buyerName || displayPhone,
+        cleanBuyerDigits,
+        buyerEmail || `lead_${cleanBuyerDigits.slice(-4)}@example.com`,
+        city || location || '',
+        requirement,
+        budget || '₹1.5L – ₹3.5L',
+        location || city || '',
+        priority || 'Urgent',
+        source || 'Direct Intake',
+        deadlineDate || null,
+      ]
+    );
+
+    const savedMasterLead = mLeadInsert.rows[0] || (await query('SELECT * FROM master_leads WHERE id = $1', [masterLeadId])).rows[0];
+
+    // 2. Create customer lead in leads and assignment in lead_assignments for each customer
+    const createdAssignments = [];
+    for (const cust of eligibleCustomers) {
+      const custLeadId = `lead_${masterLeadId}_${cust.id}`.slice(0, 64);
+      const assignId = `asgn_${masterLeadId}_${cust.id}`.slice(0, 64);
+
+      // Insert customer-specific lead so it shows in /app/lead inbox
+      await query(
+        `INSERT INTO leads (
+           id, customer_id, master_lead_id, customer_phone, customer_username,
+           company_name, category, buyer_phone, display_phone, buyer_name, buyer_email,
+           city, requirement, budget, source, priority, status, is_hot, is_read, notes,
+           created_at, updated_at
+         ) VALUES (
+           $1, $2, $3, $4, $5,
+           $6, $7, $8, $9, $10, $11,
+           $12, $13, $14, $15, $16, 'new', TRUE, FALSE, $17,
+           NOW(), NOW()
+         )
+         ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`,
+        [
+          custLeadId,
+          cust.id,
+          masterLeadId,
+          cust.phone,
+          cust.username,
+          cust.company_name,
+          category || group.category || 'Other',
+          cleanBuyerDigits,
+          displayPhone,
+          buyerName || displayPhone,
+          buyerEmail || `lead_${cleanBuyerDigits.slice(-4)}@example.com`,
+          city || cust.city || '',
+          requirement,
+          budget || '₹1.5L – ₹3.5L',
+          source || 'Direct Intake',
+          priority || 'Urgent',
+          description || `Category lead dispatched for ${group.name}`,
+        ]
+      );
+
+      // Insert recipient assignment record with idempotency
+      await query(
+        `INSERT INTO lead_assignments (
+           id, master_lead_id, customer_id, group_id, customer_lead_id,
+           status, response_interest, response_notes, is_read, notification_status,
+           assigned_at
+         ) VALUES (
+           $1, $2, $3, $4, $5,
+           'new', 'Pending', '', FALSE, 'Delivered',
+           NOW()
+         )
+         ON CONFLICT (master_lead_id, customer_id) DO UPDATE SET assigned_at = NOW()
+         RETURNING *`,
+        [assignId, masterLeadId, cust.id, groupId, custLeadId]
+      );
+
+      createdAssignments.push({
+        id: assignId,
+        customerId: cust.id,
+        companyName: cust.company_name,
+        contactPerson: cust.contact_person,
+        phone: cust.phone,
+        status: 'new',
+        responseInterest: 'Pending',
+        notificationStatus: 'Delivered',
+      });
+    }
+
+    res.status(201).json({
+      ok: true,
+      message: `Lead "${title}" successfully distributed to all ${eligibleCustomers.length} active customer(s) in group "${group.name}".`,
+      masterLead: mapMasterLeadRow({
+        ...savedMasterLead,
+        group_name: group.name,
+        recipients_count: eligibleCustomers.length,
+        interested_count: 0,
+      }),
+      recipientCount: eligibleCustomers.length,
+      assignments: createdAssignments,
+    });
+  } catch (err) {
+    console.error('[POST /api/leads/distribute]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Lead Distribution History & Tracking
+app.get('/api/leads/distribution-history', async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT 
+        ml.*,
+        cg.name AS group_name,
+        cg.icon AS group_icon,
+        (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id) AS recipients_count,
+        (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id AND la.response_interest = 'Interested') AS interested_count,
+        (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id AND la.status IN ('Converted', 'Won')) AS converted_count
+      FROM master_leads ml
+      LEFT JOIN customer_groups cg ON cg.id = ml.group_id
+      ORDER BY ml.created_at DESC
+    `);
+
+    res.json({
+      ok: true,
+      history: result.rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        category: r.category,
+        groupId: r.group_id,
+        groupName: r.group_name || 'All Groups',
+        groupIcon: r.group_icon || '🏢',
+        buyerName: r.buyer_name,
+        buyerPhone: r.buyer_phone,
+        displayPhone: `+91 ${r.buyer_phone}`,
+        city: r.city,
+        priority: r.priority,
+        source: r.source,
+        budget: r.budget,
+        requirement: r.requirement,
+        createdBy: r.created_by,
+        totalRecipients: Number(r.recipients_count || 0),
+        interestedCount: Number(r.interested_count || 0),
+        convertedCount: Number(r.converted_count || 0),
+        createdAt: r.created_at,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Inspect a specific distribution's recipient-level status
+app.get('/api/leads/distribution-history/:id', async (req, res) => {
+  try {
+    const masterLeadId = req.params.id;
+    const mLeadRes = await query(
+      `SELECT ml.*, cg.name AS group_name
+       FROM master_leads ml
+       LEFT JOIN customer_groups cg ON cg.id = ml.group_id
+       WHERE ml.id = $1`,
+      [masterLeadId]
+    );
+
+    if (mLeadRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Master lead distribution not found' });
+    }
+
+    const assignmentsRes = await query(
+      `SELECT 
+         la.*,
+         c.company_name, c.contact_person, c.phone AS customer_phone, c.email AS customer_email,
+         c.city AS customer_city, c.status AS customer_status
+       FROM lead_assignments la
+       JOIN customers c ON c.id = la.customer_id
+       WHERE la.master_lead_id = $1
+       ORDER BY la.assigned_at ASC`,
+      [masterLeadId]
+    );
+
+    res.json({
+      ok: true,
+      distribution: mapMasterLeadRow(mLeadRes.rows[0]),
+      recipients: assignmentsRes.rows.map((r) => ({
+        id: r.id,
+        customerId: r.customer_id,
+        companyName: r.company_name,
+        contactPerson: r.contact_person,
+        phone: (r.customer_phone || '').trim(),
+        email: r.customer_email || '',
+        city: r.customer_city || '',
+        status: r.status,
+        responseInterest: r.response_interest,
+        responseNotes: r.response_notes,
+        isRead: Boolean(r.is_read),
+        notificationStatus: r.notification_status,
+        assignedAt: r.assigned_at,
+        respondedAt: r.responded_at,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Update recipient status / response (from customer or admin)
+app.patch('/api/lead-assignments/:id', async (req, res) => {
+  try {
+    const assignmentId = req.params.id;
+    const { status, responseInterest, responseNotes, isRead } = req.body || {};
+
+    const existing = await query('SELECT * FROM lead_assignments WHERE id = $1', [assignmentId]);
+    if (existing.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Lead assignment not found' });
+    }
+    const curr = existing.rows[0];
+
+    const nextStatus = status !== undefined ? status : curr.status;
+    const nextInterest = responseInterest !== undefined ? responseInterest : curr.response_interest;
+    const nextNotes = responseNotes !== undefined ? responseNotes : curr.response_notes;
+    const nextRead = isRead !== undefined ? Boolean(isRead) : curr.is_read;
+
+    const updated = await query(
+      `UPDATE lead_assignments
+       SET status = $1, response_interest = $2, response_notes = $3, is_read = $4,
+           responded_at = CASE WHEN $2 <> 'Pending' THEN NOW() ELSE responded_at END
+       WHERE id = $5
+       RETURNING *`,
+      [nextStatus, nextInterest, nextNotes, nextRead, assignmentId]
+    );
+
+    // Also sync the customer's corresponding leads record
+    if (curr.customer_lead_id) {
+      await query(
+        `UPDATE leads SET status = $1, is_read = $2, notes = $3, updated_at = NOW() WHERE id = $4`,
+        [nextStatus, nextRead, nextNotes, curr.customer_lead_id]
+      );
+    }
+
+    res.json({ ok: true, assignment: updated.rows[0] });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

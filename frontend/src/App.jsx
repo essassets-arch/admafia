@@ -109,7 +109,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState(() => {
     const h = window.location.hash.toLowerCase();
     const p = window.location.pathname.toLowerCase();
-    if (p.startsWith('/sales') || h.startsWith('#sales')) {
+    if (p.startsWith('/sales') || h.startsWith('#sales') || p.startsWith('/admin') || h.startsWith('#admin')) {
       if (h.includes('login') || h === '#sales/login') return 'sales-login';
       return 'sales-portal';
     }
@@ -164,7 +164,7 @@ export default function App() {
     const handleHashChange = () => {
       const h = window.location.hash.toLowerCase();
       const p = window.location.pathname.toLowerCase();
-      if (p.startsWith('/sales') || h.startsWith('#sales')) {
+      if (p.startsWith('/sales') || h.startsWith('#sales') || p.startsWith('/admin') || h.startsWith('#admin')) {
         if (h.includes('login') || h === '#sales/login') setCurrentView('sales-login');
         else setCurrentView('sales-portal');
       }

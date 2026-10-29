@@ -250,7 +250,180 @@ async function runTests() {
   assert(stateRes.data.verifications.some((v) => v.phone === phoneB && v.queueType === 'Payment Pending'), 'Sales Desk 02 (Verifications) shows Account B as Payment Pending\n');
 
   // -------------------------------------------------------------------------
-  // TEST 11: Clean Teardown & Zero-Static-Data Verification
+  // TEST 11: Customer Groups & Category-Based Lead Distribution (Master Prompt)
+  // -------------------------------------------------------------------------
+  console.log('1️⃣1️⃣ Testing Customer Groups & Category-Based Lead Distribution System...');
+
+  // Step A: Create Target IT Group & Separate Hardware Group
+  const itGroupRes = await api('/groups', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: 'grp_test_it',
+      name: 'Enterprise IT & Software Solutions',
+      category: 'IT & Software',
+      icon: '💻',
+      description: 'Corporate software developers and cloud architects.',
+      status: 'active',
+    }),
+  });
+  assert(itGroupRes.status === 201 && itGroupRes.data.ok === true, 'Created Customer Group "Enterprise IT & Software Solutions"');
+
+  const hwGroupRes = await api('/groups', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: 'grp_test_hw',
+      name: 'Hardware & Networking Equipment',
+      category: 'Hardware',
+      icon: '🖥️',
+      description: 'Hardware distributors and server suppliers.',
+      status: 'active',
+    }),
+  });
+  assert(hwGroupRes.status === 201 && hwGroupRes.data.ok === true, 'Created separate Hardware Customer Group');
+
+  // Step B: Register 5 IT Customers and 1 Hardware Customer
+  const itPhones = ['9600011111', '9600022222', '9600033333', '9600044444', '9600055555'];
+  const hwPhone = '9700099999';
+  const itCustIds = [];
+
+  for (let i = 0; i < itPhones.length; i++) {
+    const reg = await api('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: `it_cust_${i + 1}`,
+        phone: itPhones[i],
+        email: `it${i + 1}@itsoftware.in`,
+        companyName: `IT Solutions Corp 0${i + 1}`,
+        contactPerson: `Engineer ${i + 1}`,
+        password: 'Password123!',
+      }),
+    });
+    itCustIds.push(reg.data.customer.id);
+  }
+  assert(itCustIds.length === 5, '5 separate IT customer accounts registered in database');
+
+  const hwReg = await api('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: 'hw_vendor_01',
+      phone: hwPhone,
+      email: 'vendor@hardwaretech.in',
+      companyName: 'Apex Hardware Supplies Ltd',
+      contactPerson: 'Karan Sharma',
+      password: 'Password123!',
+    }),
+  });
+  const hwCustId = hwReg.data.customer.id;
+  assert(Boolean(hwCustId), '1 Hardware customer account registered in database');
+
+  // Step C: Batch Assign 5 IT Customers to IT Group, and Hardware Customer to HW Group
+  const assignItRes = await api('/groups/grp_test_it/members', {
+    method: 'POST',
+    body: JSON.stringify({ customerIds: itCustIds }),
+  });
+  assert(assignItRes.status === 200 && assignItRes.data.assignedCount === 5, 'Assigned all 5 IT customers to IT Group in one action');
+
+  const assignHwRes = await api('/groups/grp_test_hw/members', {
+    method: 'POST',
+    body: JSON.stringify({ customerIds: [hwCustId] }),
+  });
+  assert(assignHwRes.status === 200 && assignHwRes.data.assignedCount === 1, 'Assigned Hardware customer to Hardware Group');
+
+  // Step D: Prevent Duplicate Group Memberships on Retry
+  const retryAssign = await api('/groups/grp_test_it/members', {
+    method: 'POST',
+    body: JSON.stringify({ customerIds: itCustIds }),
+  });
+  assert(retryAssign.data.assignedCount === 0, 'Duplicate group membership safely prevented (idempotent ON CONFLICT)');
+
+  // Step E: Preview Distribution Recipients for IT Group
+  const previewRes = await api('/groups/grp_test_it/preview-recipients');
+  assert(previewRes.status === 200 && previewRes.data.eligibleCount === 5, 'Preview confirmed exactly 5 eligible IT recipients in database');
+
+  // Step F: CORE ACTION — Distribute 1 Master Lead to IT Group
+  const distRes = await api('/leads/distribute', {
+    method: 'POST',
+    body: JSON.stringify({
+      groupId: 'grp_test_it',
+      title: 'Cloud Infrastructure & Kubernetes Modernization Project',
+      description: 'Client requires enterprise AWS/Azure migration and containerization.',
+      category: 'IT & Software',
+      requirement: 'Full-stack cloud migration for 40 microservices, 24/7 SLA monitoring.',
+      budget: '₹4.5L – ₹8.0L',
+      location: 'Mumbai, Maharashtra',
+      priority: 'Urgent',
+      source: 'Direct Intake',
+      buyerName: 'Vikram Joshi (CTO)',
+      buyerPhone: '9820012345',
+      buyerEmail: 'v.joshi@techbuyer.com',
+      city: 'Mumbai',
+    }),
+  });
+
+  assert(distRes.status === 201 && distRes.data.ok === true, 'Master lead distribution API returned HTTP 201');
+  assert(distRes.data.recipientCount === 5, 'One master lead created -> exactly 5 customer assignments generated');
+  assert(distRes.data.assignments.length === 5, 'Backend returned 5 assignment confirmation records');
+  const masterLeadId = distRes.data.masterLead.id;
+
+  // Step G: Cross-Category Isolation Verification
+  const hwLeads = await api(`/leads?customerId=${hwCustId}`);
+  assert(
+    hwLeads.data.leads.length === 0,
+    'Strict Category Isolation: Hardware customer received 0 IT leads'
+  );
+
+  // Step H: Customer Lead Inbox Verification (Each IT customer sees the lead)
+  for (let i = 0; i < itCustIds.length; i++) {
+    const custLeads = await api(`/leads?customerId=${itCustIds[i]}`);
+    assert(
+      custLeads.data.leads.length === 1 && custLeads.data.leads[0].masterLeadId === masterLeadId,
+      `Customer IT-${i + 1} (${itPhones[i]}) received the lead in their individual CRM inbox`
+    );
+  }
+
+  // Step I: Independent Recipient Responses
+  const it1Lead = (await api(`/leads?customerId=${itCustIds[0]}`)).data.leads[0];
+  const patchIt1 = await api(`/leads/${it1Lead.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status: 'Interested',
+      notes: 'Available to deploy DevOps engineers immediately',
+    }),
+  });
+  assert(patchIt1.status === 200 && patchIt1.data.lead.status === 'Interested', 'Customer IT-01 responded: Marked status as "Interested"');
+
+  const it2Lead = (await api(`/leads?customerId=${itCustIds[1]}`)).data.leads[0];
+  await api(`/leads/${it2Lead.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status: 'In Follow-up',
+      notes: 'Follow-up call scheduled tomorrow at 11 AM',
+    }),
+  });
+
+  // Step J: Verify Inspection & Distribution Tracking
+  const distDetail = await api(`/leads/distribution-history/${masterLeadId}`);
+  assert(distDetail.status === 200 && distDetail.data.ok === true, 'GET /api/leads/distribution-history/:id succeeded');
+  assert(distDetail.data.recipients.length === 5, 'Inspector shows all 5 recipient customers');
+  const rec1 = distDetail.data.recipients.find((r) => r.customerId === itCustIds[0]);
+  const rec2 = distDetail.data.recipients.find((r) => r.customerId === itCustIds[1]);
+  const rec3 = distDetail.data.recipients.find((r) => r.customerId === itCustIds[2]);
+
+  assert(rec1 && rec1.responseInterest === 'Interested', 'Recipient 1 response stored independently as "Interested"');
+  assert(rec2 && rec2.responseInterest === 'In Follow-up', 'Recipient 2 response stored independently as "In Follow-up"');
+  assert(rec3 && rec3.responseInterest === 'Pending', 'Recipient 3 response remains untouched as "Pending" (Strict Isolation)\n');
+
+  // Step K: Clean up Test Groups & Customers
+  for (const p of itPhones) {
+    await api(`/customers/${p}`, { method: 'DELETE' });
+  }
+  await api(`/customers/${hwPhone}`, { method: 'DELETE' });
+  await api('/groups/grp_test_it', { method: 'DELETE' });
+  await api('/groups/grp_test_hw', { method: 'DELETE' });
+  console.log('   ✓ Test customer groups & accounts cleaned up successfully.\n');
+
+  // -------------------------------------------------------------------------
+  // TEST 12: Clean Teardown & Zero-Static-Data Verification
   // -------------------------------------------------------------------------
   console.log('🧹 Cleaning Up Test Records & Verifying Clean Database State...');
   const delA = await api(`/customers/${phoneA}`, { method: 'DELETE' });

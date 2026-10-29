@@ -79,8 +79,8 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       if (h.includes('profile') || p.includes('profile')) return 'profiles';
       if (h.includes('payment') || p.includes('payment')) return 'payments';
       if (h.includes('wallet') || p.includes('wallet')) return 'wallets';
+      if (h.includes('group') || p.includes('group') || h.includes('admin/support') || p.includes('/admin/support') || h.includes('admin') || p.includes('/admin')) return 'groups';
       if (h.includes('quer') || h.includes('support') || p.includes('quer') || p.includes('support')) return 'queries';
-      if (h.includes('group') || p.includes('group')) return 'groups';
       if (h.includes('customer') || h.includes('registration')) return 'customers';
       if (h.includes('overview') || h.includes('dashboard') || h === '#overview' || h === '#dashboard' || h === '#sales' || h === '' || h === '#') return 'overview';
     } catch (e) {}

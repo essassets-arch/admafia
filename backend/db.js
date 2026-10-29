@@ -84,21 +84,80 @@ export async function initDatabase() {
     const rawSql = fs.readFileSync(schemaPath, 'utf8');
     // Remove pgcrypto extension if not needed so both standard PG and PGlite execute cleanly
     const cleanSql = rawSql.replace(/CREATE EXTENSION IF NOT EXISTS "pgcrypto";/gi, '');
+
+    const safeExec = async (sql) => {
+      try {
+        if (dbMode === 'postgres-server') {
+          await activePool.query(sql);
+        } else {
+          await pgliteInstance.exec(sql);
+        }
+      } catch (e) {
+        // Ignored if table not yet created
+      }
+    };
+
+    // Pre-upgrade existing tables if present before schema indexes run
+    await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other'`);
+    await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active'`);
+    await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+    await safeExec(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64)`);
+    await safeExec(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software'`);
+
     if (dbMode === 'postgres-server') {
       await activePool.query(cleanSql);
       // Auto-complete registered customers
       await activePool.query(`
         UPDATE customers SET profile_status = 'complete', kyc_percent = 100, verified = TRUE WHERE profile_status = 'incomplete';
         UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
+        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other';
+        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active';
+        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64);
+        ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software';
       `);
     } else {
       await pgliteInstance.exec(cleanSql);
       await pgliteInstance.exec(`
         UPDATE customers SET profile_status = 'complete', kyc_percent = 100, verified = TRUE WHERE profile_status = 'incomplete';
         UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
+        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other';
+        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active';
+        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64);
+        ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software';
       `);
     }
-    console.log('[PostgreSQL] Relational schema & views verified (11 tables + vw_sales_customer_accounts)');
+    console.log('[PostgreSQL] Relational schema & views verified (14 tables + vw_sales_customer_accounts)');
+
+    // Seed default customer groups if empty
+    try {
+      const grpCheck = await query('SELECT COUNT(*) as count FROM customer_groups');
+      const count = Number(grpCheck.rows[0]?.count || 0);
+      if (count === 0) {
+        const defaultGroups = [
+          ['grp_it', 'IT & Software', 'IT & Software', '💻', 'Web development, SaaS, cloud infrastructure & IT services.'],
+          ['grp_hardware', 'Hardware & Computer Accessories', 'Hardware', '🖥️', 'Computer hardware, networking devices, peripherals & electronic accessories.'],
+          ['grp_construction', 'Construction & Building Materials', 'Construction', '🏗️', 'Commercial & residential builders, cement, steel, tiles & architectural materials.'],
+          ['grp_manufacturing', 'Manufacturing', 'Manufacturing', '🏭', 'Chemicals, plastics, polymers, industrial machinery & B2B fabricators.'],
+          ['grp_marketing', 'Digital Marketing', 'Digital Marketing', '📈', 'Performance marketing agencies, social media management & SEO specialists.'],
+          ['grp_electrical', 'Electrical Products', 'Electrical', '⚡', 'Industrial cables, switchgear, solar components & lighting manufacturers.'],
+          ['grp_healthcare', 'Healthcare', 'Healthcare', '🏥', 'Hospitals, diagnostic clinics, pharmaceuticals & medical devices.'],
+          ['grp_other', 'Other', 'Other', '🏢', 'General commerce, business consulting & specialized industries.']
+        ];
+        for (const [id, name, cat, icon, desc] of defaultGroups) {
+          await query(
+            `INSERT INTO customer_groups (id, name, category, icon, description, status)
+             VALUES ($1, $2, $3, $4, $5, 'active')
+             ON CONFLICT (name) DO UPDATE SET category = EXCLUDED.category, icon = EXCLUDED.icon, description = EXCLUDED.description`,
+            [id, name, cat, icon, desc]
+          );
+        }
+        console.log('[PostgreSQL] Seeded 8 default customer groups');
+      }
+    } catch (grpErr) {
+      console.warn('[PostgreSQL] Group seeding warning:', grpErr.message);
+    }
   }
 
   return { mode: dbMode };

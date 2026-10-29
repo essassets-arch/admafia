@@ -10,15 +10,22 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =============================================================================
--- 1. INDUSTRY & CUSTOMER GROUPS (Sales Desk 09: /sales#groups)
+-- 1. INDUSTRY & CUSTOMER GROUPS (Sales Desk 08: /sales#groups)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS customer_groups (
     id              VARCHAR(64) PRIMARY KEY,
     name            VARCHAR(120) NOT NULL UNIQUE,
+    category        VARCHAR(100) NOT NULL DEFAULT 'Other',
     icon            VARCHAR(16) DEFAULT '🏢',
-    description     TEXT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    description     TEXT DEFAULT '',
+    status          VARCHAR(24) NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('active', 'inactive')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_customer_groups_category ON customer_groups(category);
+CREATE INDEX IF NOT EXISTS idx_customer_groups_status ON customer_groups(status);
 
 -- =============================================================================
 -- 2. CUSTOMERS / REGISTERED ACCOUNTS (Auth /#register, /#login & Desk 01 / Desk 04)
@@ -67,6 +74,22 @@ CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
 CREATE INDEX IF NOT EXISTS idx_customers_profile_status ON customers(profile_status);
 CREATE INDEX IF NOT EXISTS idx_customers_payment_status ON customers(payment_status);
 CREATE INDEX IF NOT EXISTS idx_customers_category ON customers(category);
+
+-- =============================================================================
+-- 2B. CUSTOMER GROUP MEMBERSHIPS (Many-to-Many Group Assignment)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS customer_group_memberships (
+    id              VARCHAR(64) PRIMARY KEY,
+    group_id        VARCHAR(64) NOT NULL
+                    REFERENCES customer_groups(id) ON DELETE CASCADE,
+    customer_id     VARCHAR(64) NOT NULL
+                    REFERENCES customers(id) ON DELETE CASCADE,
+    assigned_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_group_customer UNIQUE (group_id, customer_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cgm_group ON customer_group_memberships(group_id);
+CREATE INDEX IF NOT EXISTS idx_cgm_customer ON customer_group_memberships(customer_id);
 
 -- =============================================================================
 -- 3. CUSTOMER MARKETING WALLETS (Portal /app/lead#app/wallet & Sales Desk 06)
@@ -199,15 +222,47 @@ CREATE TABLE IF NOT EXISTS pending_verifications (
 CREATE INDEX IF NOT EXISTS idx_pending_verifications_queue ON pending_verifications(queue_type);
 
 -- =============================================================================
+-- 7B. MASTER LEADS (Group & Category-Based Lead Distribution)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS master_leads (
+    id                  VARCHAR(64) PRIMARY KEY,
+    title               VARCHAR(200) NOT NULL,
+    description         TEXT DEFAULT '',
+    category            VARCHAR(100) NOT NULL,
+    group_id            VARCHAR(64) REFERENCES customer_groups(id) ON DELETE SET NULL,
+    buyer_name          VARCHAR(140) NOT NULL,
+    buyer_phone         CHAR(10) NOT NULL
+                        CHECK (buyer_phone ~ '^[6-9][0-9]{9}$'),
+    buyer_email         VARCHAR(160) DEFAULT '',
+    city                VARCHAR(100) DEFAULT '',
+    requirement         TEXT NOT NULL,
+    budget              VARCHAR(80) DEFAULT '₹1.5L – ₹3.5L',
+    location            VARCHAR(120) DEFAULT '',
+    priority            VARCHAR(24) NOT NULL DEFAULT 'Urgent'
+                        CHECK (priority IN ('Urgent', 'High', 'Normal')),
+    source              VARCHAR(64) NOT NULL DEFAULT 'Direct Intake',
+    deadline_date       DATE,
+    created_by          VARCHAR(80) NOT NULL DEFAULT 'Admin Operations',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_master_leads_group ON master_leads(group_id);
+CREATE INDEX IF NOT EXISTS idx_master_leads_category ON master_leads(category);
+CREATE INDEX IF NOT EXISTS idx_master_leads_created_at ON master_leads(created_at DESC);
+
+-- =============================================================================
 -- 8. BUYER LEADS PIPELINE (Sales Desk 03 -> Isolated Customer CRM /app/lead)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS leads (
     id                  VARCHAR(64) PRIMARY KEY,
     customer_id         VARCHAR(64) NOT NULL
                         REFERENCES customers(id) ON DELETE CASCADE,
+    master_lead_id      VARCHAR(64) REFERENCES master_leads(id) ON DELETE SET NULL,
     customer_phone      CHAR(10) NOT NULL,
     customer_username   VARCHAR(80) NOT NULL,
     company_name        VARCHAR(180) NOT NULL,
+    category            VARCHAR(100) DEFAULT 'IT & Software',
     -- Direct Unmasked Buyer Contact Details
     buyer_phone         CHAR(10) NOT NULL
                         CHECK (buyer_phone ~ '^[6-9][0-9]{9}$'),
@@ -232,6 +287,36 @@ CREATE TABLE IF NOT EXISTS leads (
 CREATE INDEX IF NOT EXISTS idx_leads_customer_id ON leads(customer_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_customer_phone ON leads(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(customer_id, status);
+CREATE INDEX IF NOT EXISTS idx_leads_master_lead_id ON leads(master_lead_id);
+
+-- =============================================================================
+-- 8B. LEAD RECIPIENT ASSIGNMENTS (Independent Per-Customer Status & Interest Tracking)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lead_assignments (
+    id                  VARCHAR(64) PRIMARY KEY,
+    master_lead_id      VARCHAR(64) NOT NULL
+                        REFERENCES master_leads(id) ON DELETE CASCADE,
+    customer_id         VARCHAR(64) NOT NULL
+                        REFERENCES customers(id) ON DELETE CASCADE,
+    group_id            VARCHAR(64) REFERENCES customer_groups(id) ON DELETE SET NULL,
+    customer_lead_id    VARCHAR(64) REFERENCES leads(id) ON DELETE CASCADE,
+    status              VARCHAR(32) NOT NULL DEFAULT 'new'
+                        CHECK (status IN ('new', 'New', 'Interested', 'In Follow-up', 'Callback', 'Converted', 'Won', 'Dropped', 'Not Interested', 'qualified')),
+    response_interest   VARCHAR(32) NOT NULL DEFAULT 'Pending'
+                        CHECK (response_interest IN ('Pending', 'Interested', 'In Follow-up', 'Converted', 'Not Interested')),
+    response_notes      TEXT DEFAULT '',
+    is_read             BOOLEAN NOT NULL DEFAULT FALSE,
+    notification_status VARCHAR(32) NOT NULL DEFAULT 'Delivered'
+                        CHECK (notification_status IN ('Queued', 'Delivered', 'Sent', 'Failed')),
+    assigned_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    responded_at        TIMESTAMPTZ,
+    CONSTRAINT uq_assignment_master_customer UNIQUE (master_lead_id, customer_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_assign_master ON lead_assignments(master_lead_id);
+CREATE INDEX IF NOT EXISTS idx_lead_assign_customer ON lead_assignments(customer_id);
+CREATE INDEX IF NOT EXISTS idx_lead_assign_status ON lead_assignments(status);
+CREATE INDEX IF NOT EXISTS idx_lead_assign_interest ON lead_assignments(response_interest);
 
 -- =============================================================================
 -- 9. CUSTOMER LEAD FOLLOW-UPS QUEUE (Isolated Per-Customer /app/lead#app/follow-ups)

@@ -84,6 +84,12 @@ export const crmApi = {
       if (Array.isArray(fresh.verifications)) {
         localStorage.setItem('growthline_pending_verifications', JSON.stringify(fresh.verifications));
       }
+      if (Array.isArray(fresh.groups)) {
+        localStorage.setItem('growthline_customer_groups', JSON.stringify(fresh.groups));
+      }
+      if (Array.isArray(fresh.masterLeads)) {
+        localStorage.setItem('growthline_master_leads', JSON.stringify(fresh.masterLeads));
+      }
 
       window.dispatchEvent(new CustomEvent('growthline_postgres_synced', { detail: fresh }));
       return fresh;
@@ -183,6 +189,82 @@ export const crmApi = {
       body: JSON.stringify(updates),
     });
     return res.lead;
+  },
+
+  /**
+   * Customer Groups & Category-Based Lead Distribution APIs
+   */
+  async getGroups() {
+    const res = await apiRequest('/groups');
+    return res.groups || [];
+  },
+
+  async createGroup(payload) {
+    const res = await apiRequest('/groups', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return res.group;
+  },
+
+  async updateGroup(groupId, updates) {
+    const res = await apiRequest(`/groups/${encodeURIComponent(groupId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    return res.group;
+  },
+
+  async deleteGroup(groupId) {
+    return apiRequest(`/groups/${encodeURIComponent(groupId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getGroupMembers(groupId) {
+    const res = await apiRequest(`/groups/${encodeURIComponent(groupId)}/members`);
+    return res.members || [];
+  },
+
+  async assignCustomersToGroup(groupId, customerIds) {
+    return apiRequest(`/groups/${encodeURIComponent(groupId)}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ customerIds }),
+    });
+  },
+
+  async removeCustomerFromGroup(groupId, customerId) {
+    return apiRequest(`/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(customerId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async previewDistributionRecipients(groupId) {
+    return apiRequest(`/groups/${encodeURIComponent(groupId)}/preview-recipients`);
+  },
+
+  async distributeLead(payload) {
+    return apiRequest('/leads/distribute', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getDistributionHistory() {
+    const res = await apiRequest('/leads/distribution-history');
+    return res.history || [];
+  },
+
+  async getDistributionDetails(masterLeadId) {
+    return apiRequest(`/leads/distribution-history/${encodeURIComponent(masterLeadId)}`);
+  },
+
+  async updateLeadAssignment(assignmentId, updates) {
+    const res = await apiRequest(`/lead-assignments/${encodeURIComponent(assignmentId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+    return res.assignment;
   },
 };
 
