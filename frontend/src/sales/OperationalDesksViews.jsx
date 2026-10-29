@@ -232,7 +232,10 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         const isComp = c.profileStatus === 'complete';
         const nextProfile = isComp ? 'incomplete' : 'complete';
         const nextKyc = isComp ? 25 : 100;
-        return { ...c, profileStatus: nextProfile, kycPercent: nextKyc };
+        try {
+          crmApi.patchCustomer(c.id, { profileStatus: nextProfile, kycPercent: nextKyc });
+        } catch (e) {}
+        return { ...c, profileStatus: nextProfile, kycPercent: nextKyc, verified: nextProfile === 'complete' };
       })
     );
   };
@@ -244,6 +247,9 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         const isPaid = c.paymentStatus === 'paid';
         const nextPayment = isPaid ? 'pending' : 'paid';
         const nextBal = isPaid ? 0 : (c.balance > 0 ? c.balance : 3000);
+        try {
+          crmApi.patchCustomer(c.id, { paymentStatus: nextPayment, balance: nextBal });
+        } catch (e) {}
         return {
           ...c,
           paymentStatus: nextPayment,
@@ -261,7 +267,10 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         if (c.id !== id) return c;
         const nextKyc = Math.min(100, (c.kycPercent || 0) + 25);
         const nextProfile = nextKyc >= 75 ? 'complete' : c.profileStatus;
-        return { ...c, kycPercent: nextKyc, profileStatus: nextProfile };
+        try {
+          crmApi.patchCustomer(c.id, { profileStatus: nextProfile, kycPercent: nextKyc });
+        } catch (e) {}
+        return { ...c, kycPercent: nextKyc, profileStatus: nextProfile, verified: nextProfile === 'complete' };
       })
     );
   };
@@ -588,7 +597,9 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                     >
                       {c.profileStatus === 'complete' ? '✓ Complete' : '⏳ Incomplete'}
                     </button>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2 }}>Click to toggle</div>
+                    <div style={{ fontSize: '0.7rem', color: c.profileStatus === 'complete' ? '#059669' : '#64748b', fontWeight: c.profileStatus === 'complete' ? 700 : 500, marginTop: 2 }}>
+                      {c.profileStatus === 'complete' ? 'Completed ✓' : 'Click to complete'}
+                    </div>
                   </td>
 
                   {/* 6. KYC Audit Progress */}
@@ -596,19 +607,27 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <div className="desk-progress-bar" style={{ width: 70 }}>
                         <div
-                          className={`desk-progress-fill ${c.kycPercent === 100 ? 'bg-emerald' : c.kycPercent >= 50 ? 'bg-amber' : 'bg-rose'}`}
-                          style={{ width: `${c.kycPercent || 25}%` }}
+                          className={`desk-progress-fill ${c.profileStatus === 'complete' || (c.kycPercent || 0) === 100 ? 'bg-emerald' : (c.kycPercent || 25) >= 50 ? 'bg-amber' : 'bg-rose'}`}
+                          style={{ width: `${c.profileStatus === 'complete' ? 100 : (c.kycPercent || 25)}%` }}
                         />
                       </div>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a' }}>{c.kycPercent || 25}%</span>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a' }}>
+                        {c.profileStatus === 'complete' ? 100 : (c.kycPercent || 25)}%
+                      </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleAdvanceKyc(c.id)}
-                      style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', padding: 0, marginTop: 2 }}
-                    >
-                      +25% Audit Step
-                    </button>
+                    {c.profileStatus === 'complete' || (c.kycPercent || 0) >= 100 ? (
+                      <div style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 700, marginTop: 2 }}>
+                        ✓ 100% Verified
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleAdvanceKyc(c.id)}
+                        style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', padding: 0, marginTop: 2 }}
+                      >
+                        +25% Audit Step
+                      </button>
+                    )}
                   </td>
 
                   {/* 7. Payment Status */}
@@ -1942,6 +1961,9 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
         if (c.id !== custId) return c;
         const newPercent = Math.min(100, (c.kycPercent || 0) + 25);
         const newProfileStatus = newPercent === 100 ? 'complete' : c.profileStatus;
+        try {
+          crmApi.patchCustomer(c.id, { profileStatus: newProfileStatus, kycPercent: newPercent });
+        } catch (e) {}
         return { ...c, kycPercent: newPercent, profileStatus: newProfileStatus, verified: newPercent === 100 };
       })
     );

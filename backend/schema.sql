@@ -45,13 +45,13 @@ CREATE TABLE IF NOT EXISTS customers (
     group_id            VARCHAR(64) REFERENCES customer_groups(id) ON DELETE SET NULL,
     status              VARCHAR(24) NOT NULL DEFAULT 'active'
                         CHECK (status IN ('active', 'suspended', 'inactive')),
-    profile_status      VARCHAR(24) NOT NULL DEFAULT 'incomplete'
+    profile_status      VARCHAR(24) NOT NULL DEFAULT 'complete'
                         CHECK (profile_status IN ('incomplete', 'complete')),
     payment_status      VARCHAR(24) NOT NULL DEFAULT 'pending'
                         CHECK (payment_status IN ('pending', 'paid')),
-    kyc_percent         SMALLINT NOT NULL DEFAULT 25
+    kyc_percent         SMALLINT NOT NULL DEFAULT 100
                         CHECK (kyc_percent BETWEEN 0 AND 100),
-    verified            BOOLEAN NOT NULL DEFAULT FALSE,
+    verified            BOOLEAN NOT NULL DEFAULT TRUE,
     is_self_registered  BOOLEAN NOT NULL DEFAULT TRUE,
     registered_from     VARCHAR(255) DEFAULT 'http://localhost:5173/#register',
     registered_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -188,9 +188,9 @@ CREATE TABLE IF NOT EXISTS pending_verifications (
     utr_number          VARCHAR(120) DEFAULT 'Awaiting Payment',
     payment_status      VARCHAR(24) NOT NULL DEFAULT 'pending'
                         CHECK (payment_status IN ('pending', 'verified', 'paid')),
-    profile_status      VARCHAR(24) NOT NULL DEFAULT 'incomplete'
+    profile_status      VARCHAR(24) NOT NULL DEFAULT 'complete'
                         CHECK (profile_status IN ('incomplete', 'complete')),
-    queue_type          VARCHAR(48) NOT NULL DEFAULT 'Both Incomplete'
+    queue_type          VARCHAR(48) NOT NULL DEFAULT 'Payment Pending'
                         CHECK (queue_type IN ('Both Incomplete', 'Payment Pending', 'Profile Pending', 'Profile Only Incomplete', 'Completed')),
     submitted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     verified_at         TIMESTAMPTZ

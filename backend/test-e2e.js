@@ -80,7 +80,7 @@ async function runTests() {
   assert(regA.status === 201 && regA.data.ok === true, 'Account A registered with HTTP 201');
   assert(regA.data.customer.phone === phoneA, `Account A phone stored as ${phoneA}`);
   assert(regA.data.customer.balance === 0, 'Account A starts with ₹0 wallet balance');
-  assert(regA.data.customer.profileStatus === 'incomplete', 'Account A starts with incomplete profile (Step 1 pending)');
+  assert(regA.data.customer.profileStatus === 'complete', 'Account A registration marked complete (100% KYC)');
 
   const regB = await api('/auth/register', {
     method: 'POST',

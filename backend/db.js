@@ -86,8 +86,17 @@ export async function initDatabase() {
     const cleanSql = rawSql.replace(/CREATE EXTENSION IF NOT EXISTS "pgcrypto";/gi, '');
     if (dbMode === 'postgres-server') {
       await activePool.query(cleanSql);
+      // Auto-complete registered customers
+      await activePool.query(`
+        UPDATE customers SET profile_status = 'complete', kyc_percent = 100, verified = TRUE WHERE profile_status = 'incomplete';
+        UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
+      `);
     } else {
       await pgliteInstance.exec(cleanSql);
+      await pgliteInstance.exec(`
+        UPDATE customers SET profile_status = 'complete', kyc_percent = 100, verified = TRUE WHERE profile_status = 'incomplete';
+        UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
+      `);
     }
     console.log('[PostgreSQL] Relational schema & views verified (11 tables + vw_sales_customer_accounts)');
   }

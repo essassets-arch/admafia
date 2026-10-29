@@ -289,13 +289,17 @@ app.post('/api/auth/register', async (req, res) => {
       `INSERT INTO customers (
         id, username, phone, email, password_hash,
         company_name, category, contact_person, city, state,
-        status, profile_status, payment_status, kyc_percent, verified
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', 'incomplete', $11, 25, FALSE)
+        status, profile_status, payment_status, kyc_percent, verified, completed_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', 'complete', $11, 100, TRUE, NOW())
       ON CONFLICT (phone) DO UPDATE SET
         username = EXCLUDED.username,
         email = EXCLUDED.email,
         password_hash = EXCLUDED.password_hash,
         company_name = EXCLUDED.company_name,
+        profile_status = 'complete',
+        kyc_percent = 100,
+        verified = TRUE,
+        completed_at = COALESCE(customers.completed_at, NOW()),
         updated_at = NOW()`,
       [
         custId,
@@ -324,8 +328,10 @@ app.post('/api/auth/register', async (req, res) => {
       `INSERT INTO pending_verifications (
         id, customer_id, company_name, contact_person, phone,
         amount, payment_status, profile_status, queue_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'incomplete', $8)
-      ON CONFLICT (customer_id) DO NOTHING`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'complete', $8)
+      ON CONFLICT (customer_id) DO UPDATE SET
+        profile_status = 'complete',
+        queue_type = EXCLUDED.queue_type`,
       [
         pvId,
         custId,
@@ -334,7 +340,7 @@ app.post('/api/auth/register', async (req, res) => {
         cleanPhone,
         initialDeposit,
         payStatus,
-        initialDeposit >= 300 ? 'Profile Pending' : 'Both Incomplete',
+        initialDeposit >= 300 ? 'Completed' : 'Payment Pending',
       ]
     );
 
