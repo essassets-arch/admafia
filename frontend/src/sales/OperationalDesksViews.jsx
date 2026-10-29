@@ -3348,8 +3348,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
               <th>Available Balance</th>
               <th>Daily Burn</th>
               <th>Campaign Runway</th>
-              <th>Placement Delivery</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
+              <th style={{ textAlign: 'right' }}>Placement Delivery</th>
             </tr>
           </thead>
           <tbody>
@@ -3370,20 +3369,10 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
                     {c.runwayDays} Days
                   </span>
                 </td>
-                <td>
+                <td style={{ textAlign: 'right' }}>
                   <span style={{ fontSize: '0.78rem', fontWeight: 700, color: c.balance > 0 ? '#059669' : '#e11d48' }}>
                     {c.balance > 0 ? '🟢 Active Lead Ingestion' : '🔴 Delivery Paused (Recharge Req.)'}
                   </span>
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <button
-                    type="button"
-                    className="sales-btn-primary"
-                    style={{ padding: '5px 12px', fontSize: '0.75rem' }}
-                    onClick={() => setTopupCust(c)}
-                  >
-                    + Quick Top-Up
-                  </button>
                 </td>
               </tr>
             ))}
