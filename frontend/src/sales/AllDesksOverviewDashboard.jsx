@@ -10,22 +10,15 @@ import {
   Calendar,
   FolderTree,
   CheckCircle2,
-  AlertTriangle,
   Clock,
   Phone,
   MessageSquare,
   ArrowRight,
-  ExternalLink,
   Sparkles,
-  Shield,
-  Activity,
-  Plus,
-  Check,
-  DollarSign,
-  TrendingUp,
-  AlertCircle,
-  Eye,
   RefreshCw,
+  Send,
+  Eye,
+  TrendingUp,
 } from 'lucide-react';
 import { DEFAULT_DESK_LEADS } from './OperationalDesksViews';
 
@@ -60,6 +53,14 @@ export default function AllDesksOverviewDashboard({
       }
     } catch (e) {}
     return DEFAULT_DESK_LEADS || [];
+  });
+
+  const [paymentRecords, setPaymentRecords] = useState(() => {
+    try {
+      const raw = localStorage.getItem('growthline_payment_records');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return [];
   });
 
   useEffect(() => {
@@ -101,45 +102,157 @@ export default function AllDesksOverviewDashboard({
     };
   }, []);
 
-  const [paymentRecords, setPaymentRecords] = useState(() => {
-    try {
-      const raw = localStorage.getItem('growthline_payment_records');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return [];
-  });
-
-  // Quick Inline Actions
-  const handleToggleTask = (taskId) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status: t.status === 'completed' ? 'pending' : 'completed' } : t))
-    );
-  };
-
   // Metrics Calculations across all 9 Desks
   const totalRegistered = customers.length;
-  const pendingVerificationsCount = verifications.length; // e.g. 8
   const totalLeadsCount = leads.length;
   const urgentLeadsCount = leads.filter((l) => l.priority === 'Urgent').length;
 
   const completedProfiles = customers.filter(
     (c) => c.profileStatus === 'complete' || c.profile_status === 'complete' || (c.kycPercent || 0) >= 90
   ).length;
-  const profileCompletionRate = totalRegistered > 0 ? Math.round((completedProfiles / totalRegistered) * 100) : 0;
+  const profileCompletionRate = totalRegistered > 0 ? Math.round((completedProfiles / totalRegistered) * 100) : 100;
 
-  const totalCollectedRevenue = paymentRecords.length > 0
-    ? paymentRecords.filter((r) => r.status === 'paid').reduce((sum, r) => sum + (r.amount || 0), 0)
-    : invoices.filter((inv) => inv.status === 'paid').reduce((sum, inv) => sum + (inv.amount || 0), 0);
+  const totalCollectedRevenue =
+    paymentRecords.length > 0
+      ? paymentRecords.filter((r) => r.status === 'paid').reduce((sum, r) => sum + (r.amount || 0), 0)
+      : invoices.filter((inv) => inv.status === 'paid').reduce((sum, inv) => sum + (inv.amount || 0), 0);
 
   const totalWalletReserves = customers.reduce((sum, c) => sum + (c.balance || c.walletBalance || 0), 0);
-  const lowBalanceCustomers = customers.filter(
-    (c) => (c.balance || 0) < 1000 || (c.runwayDays || 0) <= 2
-  );
-  const walletsAlertBadge = lowBalanceCustomers.length;
+  const activeFundedCount = customers.filter((c) => (c.balance || 0) > 0).length;
 
   const openQueries = queries.filter((q) => q.status === 'open' || q.status === 'pending');
   const todayTasks = tasks.filter((t) => t.dueStatus === 'today' && t.status !== 'completed');
   const todayTasksBadge = todayTasks.length;
+
+  // 9 Desks Master Definition for the Clean Navigation Hub
+  const DESKS = [
+    {
+      id: 'customers',
+      num: '01',
+      title: 'Customer Registrations',
+      badge: `${totalRegistered} Enrolled`,
+      pillClass: 'pill-indigo',
+      metric: `${totalRegistered}`,
+      sub: 'Authoritative client database & onboarding profiles',
+      action: 'Manage Registrations →',
+      icon: Users,
+      color: '#4f46e5',
+      bg: '#eef2ff',
+      target: '#customers',
+    },
+    {
+      id: 'pending_verification',
+      num: '02',
+      title: 'Verification & Intake',
+      badge: 'Auto-Verified ✓',
+      pillClass: 'pill-emerald',
+      metric: `${verifications.length}`,
+      sub: '100% self-serve intake • Zero manual admin approval needed',
+      action: 'View Intake Audit →',
+      icon: ShieldCheck,
+      color: '#059669',
+      bg: '#ecfdf5',
+      target: '#verification',
+    },
+    {
+      id: 'leads',
+      num: '03',
+      title: 'Lead Management',
+      badge: urgentLeadsCount > 0 ? `${urgentLeadsCount} Urgent SLA` : `${totalLeadsCount} Total`,
+      pillClass: urgentLeadsCount > 0 ? 'pill-rose' : 'pill-indigo',
+      metric: `${totalLeadsCount}`,
+      sub: 'Speed-to-lead queue with direct Call & WhatsApp channels',
+      action: 'Dispatch Leads →',
+      icon: Layers,
+      color: '#0284c7',
+      bg: '#f0f9ff',
+      target: '#leads',
+    },
+    {
+      id: 'profiles',
+      num: '04',
+      title: 'Profile Completion',
+      badge: `${profileCompletionRate}% KYC`,
+      pillClass: 'pill-emerald',
+      metric: `${profileCompletionRate}%`,
+      sub: 'KYC compliance, GST verification & corporate entity details',
+      action: 'Complete Profiles →',
+      icon: FileCheck2,
+      color: '#d97706',
+      bg: '#fffbeb',
+      target: '#profiles',
+    },
+    {
+      id: 'payments',
+      num: '05',
+      title: 'Payment Collection',
+      badge: '100% Reconciled',
+      pillClass: 'pill-emerald',
+      metric: formatINR(totalCollectedRevenue),
+      sub: 'Official GST tax invoices, Razorpay receipts & ledger',
+      action: 'View Billing Ledger →',
+      icon: CreditCard,
+      color: '#16a34a',
+      bg: '#f0fdf4',
+      target: '#payments',
+    },
+    {
+      id: 'wallets',
+      num: '06',
+      title: 'Wallets & Balances',
+      badge: '₹300/day pacing',
+      pillClass: 'pill-indigo',
+      metric: formatINR(totalWalletReserves),
+      sub: 'Client ad wallet balances, auto-cut tracking & runway health',
+      action: 'Manage Wallets →',
+      icon: Wallet,
+      color: '#4f46e5',
+      bg: '#eef2ff',
+      target: '#wallets',
+    },
+    {
+      id: 'queries',
+      num: '07',
+      title: 'Query & Support',
+      badge: `${openQueries.length} Open`,
+      pillClass: openQueries.length > 0 ? 'pill-amber' : 'pill-emerald',
+      metric: `${openQueries.length}`,
+      sub: 'Client helpdesk, technical inquiries & WhatsApp routing',
+      action: 'Open Support Desk →',
+      icon: Headphones,
+      color: '#8b5cf6',
+      bg: '#f5f3ff',
+      target: '#queries',
+    },
+    {
+      id: 'groups',
+      num: '08',
+      title: 'Customer Groups',
+      badge: 'Lead Distribution',
+      pillClass: 'pill-indigo',
+      metric: `${groups.length || 6} Categories`,
+      sub: 'Instant 1-click lead distribution to matching industry categories',
+      action: 'Distribute Leads →',
+      icon: FolderTree,
+      color: '#0891b2',
+      bg: '#ecfeff',
+      target: '#groups',
+    },
+    {
+      id: 'tasks',
+      num: '09',
+      title: 'Tasks & Follow-ups',
+      badge: `${todayTasksBadge} Due Today`,
+      pillClass: todayTasksBadge > 0 ? 'pill-rose' : 'pill-indigo',
+      metric: `${tasks.length}`,
+      sub: 'Executive follow-up reminders, lead callbacks & action items',
+      action: 'Open Action Tasks →',
+      icon: Calendar,
+      color: '#e11d48',
+      bg: '#fff1f2',
+      target: '#tasks',
+    },
+  ];
 
   return (
     <div className="desk-page-container" style={{ paddingBottom: 60 }}>
@@ -150,7 +263,7 @@ export default function AllDesksOverviewDashboard({
             SUB ADMIN &amp; SUPPORT OPERATIONS / ALL-IN-ONE COMMAND CENTER
           </div>
           <h1 className="desk-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span>Operations Desk Overview</span>
+            <span>Operations Executive Dashboard</span>
             <span
               style={{
                 fontSize: '0.75rem',
@@ -171,8 +284,8 @@ export default function AllDesksOverviewDashboard({
             </span>
           </h1>
           <p className="desk-subtitle">
-            Central dashboard monitoring all 9 operational desks in real time — customer intake, verification queue,
-            lead distribution, balances, and executive follow-ups.
+            Central real-time monitoring across client intake, automated verification, category lead distribution,
+            ad wallet runway, and financial reconciliation.
           </p>
         </div>
 
@@ -185,9 +298,10 @@ export default function AllDesksOverviewDashboard({
           >
             <RefreshCw size={14} /> Refresh Data
           </button>
-          <a
-            href="#register"
+          <button
+            type="button"
             className="sales-btn-primary"
+            onClick={() => navigateToDesk('groups', '#groups')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -197,1543 +311,508 @@ export default function AllDesksOverviewDashboard({
               background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
             }}
           >
-            <Plus size={15} strokeWidth={2.5} /> Register New Client
-          </a>
+            <Send size={14} strokeWidth={2.5} /> Create &amp; Distribute Lead
+          </button>
         </div>
       </div>
 
-      {/* 2. THE AUTHORIZED OPERATIONAL DESKS SUMMARY GRID */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
-            Authorized Operations Desks
-          </h2>
-          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-            Click any desk card to jump directly to its dedicated operational workbench
-          </span>
+      {/* 2. EXECUTIVE KPI RIBBON */}
+      <div className="desk-kpi-grid" style={{ marginBottom: 28 }}>
+        <div className="desk-kpi-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="desk-kpi-label">TOTAL MANAGED ACCOUNTS</div>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#eef2ff', color: '#4f46e5', display: 'grid', placeItems: 'center' }}>
+              <Users size={15} />
+            </div>
+          </div>
+          <div className="desk-kpi-val text-indigo">{totalRegistered}</div>
+          <div className="desk-kpi-sub">
+            <span style={{ color: '#059669', fontWeight: 700 }}>{profileCompletionRate}% Verified</span> • {activeFundedCount} active ad campaigns
+          </div>
+        </div>
+
+        <div className="desk-kpi-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="desk-kpi-label">INBOUND LEAD FLOW</div>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#f0f9ff', color: '#0284c7', display: 'grid', placeItems: 'center' }}>
+              <Layers size={15} />
+            </div>
+          </div>
+          <div className="desk-kpi-val text-emerald">{totalLeadsCount} Leads</div>
+          <div className="desk-kpi-sub">
+            <span style={{ color: urgentLeadsCount > 0 ? '#dc2626' : '#059669', fontWeight: 700 }}>
+              {urgentLeadsCount} Urgent SLA (&lt;5m)
+            </span> • Real-time distribution
+          </div>
+        </div>
+
+        <div className="desk-kpi-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="desk-kpi-label">ACTIVE WALLET RESERVES</div>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#f0fdf4', color: '#16a34a', display: 'grid', placeItems: 'center' }}>
+              <Wallet size={15} />
+            </div>
+          </div>
+          <div className="desk-kpi-val text-emerald">{formatINR(totalWalletReserves)}</div>
+          <div className="desk-kpi-sub">
+            <span style={{ color: '#4f46e5', fontWeight: 700 }}>₹300/day</span> daily auto-cut campaign pacing
+          </div>
+        </div>
+
+        <div className="desk-kpi-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="desk-kpi-label">GROSS SETTLED REVENUE</div>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#eff6ff', color: '#2563eb', display: 'grid', placeItems: 'center' }}>
+              <CreditCard size={15} />
+            </div>
+          </div>
+          <div className="desk-kpi-val text-indigo">{formatINR(totalCollectedRevenue)}</div>
+          <div className="desk-kpi-sub">
+            <span style={{ color: '#059669', fontWeight: 700 }}>{paymentRecords.length || invoices.length} settled receipts</span> • 100% online reconciliation
+          </div>
+        </div>
+      </div>
+
+      {/* 3. AUTHORIZED OPERATIONS DESKS HUB (Sleek High-Density 9-Desk Control Grid) */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div>
+            <h2 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+              Authorized Operations Desks (01 – 09)
+            </h2>
+            <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+              Click any operational desk card to open its dedicated workbench
+            </div>
+          </div>
         </div>
 
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
             gap: 14,
           }}
         >
-          {/* Card 1: Customer Registrations */}
-          <div
-            onClick={() => navigateToDesk('customers', '#customers')}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: 12,
-              padding: '16px 18px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#4f46e5';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(79, 70, 229, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#e2e8f0';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: '#eef2ff',
-                      color: '#4f46e5',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <Users size={18} strokeWidth={2.2} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 01
-                    </div>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Customer Registrations
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{totalRegistered}</span>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Accounts enrolled</span>
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: 4, fontWeight: 600 }}>
-                ✓ Synced with #register intake
-              </div>
-            </div>
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: '1px solid #f1f5f9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#4f46e5',
-              }}
-            >
-              <span>Manage Registrations</span>
-              <ArrowRight size={14} />
-            </div>
-          </div>
-
-          {/* Card 2: Verification Audit */}
-          <div
-            onClick={() => navigateToDesk('pending_verification', '#verification')}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #bbf7d0',
-              borderRadius: 12,
-              padding: '16px 18px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#10b981';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#bbf7d0';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: '#ecfdf5',
-                      color: '#059669',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <ShieldCheck size={18} strokeWidth={2.2} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 02
-                    </div>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Verification &amp; Intake
-                    </div>
-                  </div>
-                </div>
-                <span
-                  style={{
-                    background: '#ecfdf5',
-                    color: '#059669',
-                    border: '1px solid #a7f3d0',
-                    fontSize: '0.78rem',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: 9999,
-                  }}
-                >
-                  Auto-Verified ✓
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#059669' }}>
-                  {verifications.length}
-                </span>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Accounts registered &amp; auto-verified</span>
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: 4, fontWeight: 600 }}>
-                ✓ Instant self-serve • Zero manual approval needed
-              </div>
-            </div>
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: '1px solid #f1f5f9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#059669',
-              }}
-            >
-              <span>View Verification Records</span>
-              <ArrowRight size={14} />
-            </div>
-          </div>
-
-          {/* Card 3: Lead Management */}
-          <div
-            onClick={() => navigateToDesk('leads', '#leads')}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: 12,
-              padding: '16px 18px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#059669';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(5, 150, 105, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#e2e8f0';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: '#ecfdf5',
-                      color: '#059669',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <Layers size={18} strokeWidth={2.2} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 03
-                    </div>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Lead Management
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{totalLeadsCount}</span>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Total inbound leads</span>
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: 4, fontWeight: 600 }}>
-                ⚡ {urgentLeadsCount} Urgent SLA (&lt;5 min response)
-              </div>
-            </div>
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: '1px solid #f1f5f9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#059669',
-              }}
-            >
-              <span>Manage Inbound Leads</span>
-              <ArrowRight size={14} />
-            </div>
-          </div>
-
-          {/* Card 4: Profile Completion */}
-          <div
-            onClick={() => navigateToDesk('profiles', '#profiles')}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: 12,
-              padding: '16px 18px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#d97706';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(217, 119, 6, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#e2e8f0';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: '#fffbeb',
-                      color: '#d97706',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <FileCheck2 size={18} strokeWidth={2.2} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 04
-                    </div>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Profile Completion
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>
-                  {profileCompletionRate}%
-                </span>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Platform KYC Rate</span>
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#b45309', marginTop: 4, fontWeight: 600 }}>
-                📋 {totalRegistered - completedProfiles} accounts need GST / KYC
-              </div>
-            </div>
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: '1px solid #f1f5f9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#d97706',
-              }}
-            >
-              <span>Complete Client Profiles</span>
-              <ArrowRight size={14} />
-            </div>
-          </div>
-
-          {/* Card 5: Payment Collection */}
-          <div
-            onClick={() => navigateToDesk('payments', '#payments')}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: 12,
-              padding: '16px 18px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#2563eb';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#e2e8f0';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: '#eff6ff',
-                      color: '#2563eb',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <CreditCard size={18} strokeWidth={2.2} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 05
-                    </div>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Payment Collection
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0f172a' }}>
-                  {formatINR(totalCollectedRevenue)}
-                </span>
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#2563eb', marginTop: 4, fontWeight: 600 }}>
-                💳 {paymentRecords.filter((r) => r.status === 'paid').length} Payments Settled
-              </div>
-            </div>
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: '1px solid #f1f5f9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#2563eb',
-              }}
-            >
-              <span>View Invoices &amp; Billing</span>
-              <ArrowRight size={14} />
-            </div>
-          </div>
-
-          {/* Card 6: Wallets & Balances */}
-          <div
-            onClick={() => navigateToDesk('wallets', '#wallets')}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #c7d2fe',
-              borderRadius: 12,
-              padding: '16px 18px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#4338ca';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(67, 56, 202, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#c7d2fe';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: '#eef2ff',
-                      color: '#4338ca',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <Wallet size={18} strokeWidth={2.2} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#4338ca', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 06
-                    </div>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Wallets &amp; Balances
-                    </div>
-                  </div>
-                </div>
-                <span
-                  style={{
-                    background: '#eef2ff',
-                    color: '#4338ca',
-                    border: '1px solid #c7d2fe',
-                    fontSize: '0.78rem',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: 9999,
-                  }}
-                >
-                  {walletsAlertBadge} Low Alert
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0f172a' }}>
-                  {formatINR(totalWalletReserves)}
-                </span>
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#4338ca', marginTop: 4, fontWeight: 600 }}>
-                📊 ₹300/day daily burn pacing active
-              </div>
-            </div>
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: '1px solid #f1f5f9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#4338ca',
-              }}
-            >
-              <span>Manage Client Wallets</span>
-              <ArrowRight size={14} />
-            </div>
-          </div>
-
-          {/* Card 7: Query & Support */}
-          <div
-            onClick={() => navigateToDesk('queries', '#queries')}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: 12,
-              padding: '16px 18px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#0891b2';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(8, 145, 178, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#e2e8f0';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: '#ecfeff',
-                      color: '#0891b2',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <Headphones size={18} strokeWidth={2.2} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 07
-                    </div>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Query &amp; Support
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>
-                  {openQueries.length}
-                </span>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Active tickets</span>
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#0891b2', marginTop: 4, fontWeight: 600 }}>
-                ⏱️ SLA avg response: 18 mins
-              </div>
-            </div>
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: '1px solid #f1f5f9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#0891b2',
-              }}
-            >
-              <span>Open Support Desk</span>
-              <ArrowRight size={14} />
-            </div>
-          </div>
-
-          {/* Card 8: Customer Groups */}
-          <div
-            onClick={() => navigateToDesk('groups', '#groups')}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: 12,
-              padding: '16px 18px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#db2777';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(219, 39, 119, 0.12)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#e2e8f0';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: '#fdf2f8',
-                      color: '#db2777',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <FolderTree size={18} strokeWidth={2.2} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#db2777', fontWeight: 800, textTransform: 'uppercase' }}>
-                      DESK 08
-                    </div>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Customer Groups
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>
-                  {groups.length || 4}
-                </span>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Active tiers</span>
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#db2777', marginTop: 4, fontWeight: 600 }}>
-                👥 VIP Retainers, High-Growth &amp; Trials
-              </div>
-            </div>
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: '1px solid #f1f5f9',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                color: '#db2777',
-              }}
-            >
-              <span>Manage Segment Groups</span>
-              <ArrowRight size={14} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. IN-DEPTH OPERATIONAL SECTION: ROW 1 (Desk 1 Registrations & Desk 2 Verifications) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
-          gap: 20,
-          marginBottom: 24,
-        }}
-      >
-        {/* Left: Desk 1 Recent Customer Registrations */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: 14,
-            padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {DESKS.map((d) => {
+            const Icon = d.icon;
+            return (
               <div
+                key={d.id}
+                onClick={() => navigateToDesk(d.id, d.target)}
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: '#eef2ff',
-                  color: '#4f46e5',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <Users size={16} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                  Customer Registrations (Desk 01)
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  Recently registered client ad accounts
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('customers', '#customers')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '5px 12px' }}
-            >
-              View All ({totalRegistered}) →
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>
-            {customers.length === 0 ? (
-              <div style={{ padding: '24px 14px', textAlign: 'center', color: '#64748b', fontSize: '0.84rem' }}>
-                No customer accounts registered yet. Register at <a href="#register" style={{ color: '#4f46e5', fontWeight: 700 }}>#register</a>.
-              </div>
-            ) : (
-              customers.map((c) => (
-                <div
-                  key={c.id}
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: 10,
-                    background: '#f8fafc',
-                    border: '1px solid #f1f5f9',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
-                      @{c.username || 'user'} • {c.companyName || c.name}
-                    </div>
-                    <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
-                      👤 {c.contactPerson || c.contact || c.username} • 📞 +91 {c.phone} • ✉️ {c.email || 'No email'} • 📍 {c.city || 'India'}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#059669' }}>
-                      {formatINR(c.balance || c.walletBalance || 0)}
-                    </div>
-                    <span
-                      style={{
-                        fontSize: '0.68rem',
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: 9999,
-                        background: c.profileStatus === 'complete' ? '#ecfdf5' : '#fffbeb',
-                        color: c.profileStatus === 'complete' ? '#059669' : '#d97706',
-                        border: `1px solid ${c.profileStatus === 'complete' ? '#a7f3d0' : '#fde68a'}`,
-                        display: 'inline-block',
-                        marginTop: 2,
-                      }}
-                    >
-                      {c.profileStatus === 'complete' ? 'Active Verified' : 'Setup Pending'}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Right: Desk 2 Automated Verification Priority Queue */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #bbf7d0',
-            borderRadius: 14,
-            padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: '#ecfdf5',
-                  color: '#059669',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <ShieldCheck size={16} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                    Customer Verification &amp; Intake Audit (Desk 02)
-                  </h3>
-                  <span
-                    style={{
-                      background: '#ecfdf5',
-                      color: '#059669',
-                      border: '1px solid #a7f3d0',
-                      fontSize: '0.72rem',
-                      fontWeight: 800,
-                      padding: '1px 7px',
-                      borderRadius: 9999,
-                    }}
-                  >
-                    {verifications.length} Auto-Verified
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  Auto-verified upon customer submission • Zero manual approval gating
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('pending_verification', '#verification')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '5px 12px', color: '#059669', borderColor: '#a7f3d0' }}
-            >
-              Open Audit Log ({verifications.length}) →
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>
-            {verifications.map((v) => (
-              <div
-                key={v.id}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 10,
-                  background: '#f8fafc',
+                  background: '#ffffff',
                   border: '1px solid #e2e8f0',
+                  borderRadius: 12,
+                  padding: '16px 18px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
                   display: 'flex',
+                  flexDirection: 'column',
                   justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 12,
                 }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
-                      {v.company || v.name}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '0.68rem',
-                        fontWeight: 700,
-                        color: '#059669',
-                        background: '#ecfdf5',
-                        border: '1px solid #a7f3d0',
-                        padding: '1px 6px',
-                        borderRadius: 4,
-                      }}
-                    >
-                      ✓ Auto-Verified
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
-                    👤 {v.contact} • +91 {v.phone} • Ref: <span style={{ fontFamily: 'monospace' }}>{v.utr || v.utrNumber || 'AUTO-VERIFIED'}</span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <span style={{ fontWeight: 900, color: '#0f172a', fontSize: '0.94rem' }}>
-                    {formatINR(v.amount)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => navigateToDesk('pending_verification', '#verification')}
-                    className="sales-btn-secondary"
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '0.74rem',
-                      fontWeight: 700,
-                      color: '#4f46e5',
-                      borderColor: '#c7d2fe',
-                      background: '#ffffff',
-                    }}
-                    title="View full audit record"
-                  >
-                    View Detail
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 4. IN-DEPTH OPERATIONAL SECTION: ROW 2 (Desk 3 Leads & Desk 4 Profiles) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
-          gap: 20,
-          marginBottom: 24,
-        }}
-      >
-        {/* Left: Desk 3 Lead Management Feed */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: 14,
-            padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: '#ecfdf5',
-                  color: '#059669',
-                  display: 'grid',
-                  placeItems: 'center',
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = d.color;
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = `0 6px 16px rgba(0, 0, 0, 0.07)`;
                 }}
-              >
-                <Layers size={16} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                  Live Inbound Leads (Desk 03)
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  Real-time enquiries with direct contact channels
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('leads', '#leads')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '5px 12px' }}
-            >
-              All Leads ({totalLeadsCount}) →
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {leads.slice(0, 4).map((l) => {
-              const rawDigits = (l.phone || l.name || '').replace(/\D/g, '').slice(-10);
-              const cleanPhone = rawDigits.length === 10 ? `+91 ${rawDigits}` : l.name;
-              return (
-                <div
-                  key={l.id}
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: 10,
-                    background: '#f8fafc',
-                    border: '1px solid #f1f5f9',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 12,
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.96rem', color: '#0f172a' }}>
-                        {cleanPhone}
-                      </span>
-                      {l.priority === 'Urgent' && (
-                        <span
-                          style={{
-                            background: '#fef2f2',
-                            color: '#dc2626',
-                            border: '1px solid #fecaca',
-                            fontSize: '0.66rem',
-                            fontWeight: 800,
-                            padding: '1px 6px',
-                            borderRadius: 4,
-                          }}
-                        >
-                          Urgent SLA
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '0.76rem', color: '#1e40af', marginTop: 2, fontWeight: 600 }}>
-                      🏢 {l.company || 'Client Workspace'}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <a
-                      href={`tel:${rawDigits}`}
-                      className="desk-action-btn"
-                      style={{
-                        padding: '6px 10px',
-                        fontSize: '0.75rem',
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <Phone size={13} /> Call
-                    </a>
-                    <a
-                      href={`https://wa.me/91${rawDigits}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="desk-action-btn"
-                      style={{
-                        padding: '6px 10px',
-                        fontSize: '0.75rem',
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <MessageSquare size={13} /> WhatsApp
-                    </a>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right: Desk 4 Profile Completion Radar */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: 14,
-            padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: '#fffbeb',
-                  color: '#d97706',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <FileCheck2 size={16} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                  Profile Completion Health (Desk 04)
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  KYC compliance, GST details &amp; setup status
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('profiles', '#profiles')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '5px 12px' }}
-            >
-              Open Desk →
-            </button>
-          </div>
-
-          {/* Progress bar */}
-          <div style={{ marginBottom: 16, padding: '12px 14px', background: '#f8fafc', borderRadius: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: 6 }}>
-              <span style={{ fontWeight: 700, color: '#334155' }}>Platform Profile Health</span>
-              <span style={{ fontWeight: 900, color: '#d97706' }}>{profileCompletionRate}% Complete</span>
-            </div>
-            <div style={{ height: 8, background: '#e2e8f0', borderRadius: 9999, overflow: 'hidden' }}>
-              <div
-                style={{
-                  height: '100%',
-                  width: `${profileCompletionRate}%`,
-                  background: 'linear-gradient(90deg, #d97706 0%, #10b981 100%)',
-                  borderRadius: 9999,
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 360, overflowY: 'auto' }}>
-            {customers.map((c) => {
-              const isComp = c.profileStatus === 'complete' || (c.kycPercent || 0) >= 90;
-              return (
-                <div
-                  key={c.id}
-                  style={{
-                    padding: '10px 14px',
-                    borderRadius: 8,
-                    background: '#ffffff',
-                    border: '1px solid #f1f5f9',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a' }}>
-                      @{c.username || 'user'} • {c.companyName || c.name}
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      Category: {c.category || c.industry || 'General Business'} • +91 {c.phone}
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 800,
-                      padding: '3px 9px',
-                      borderRadius: 9999,
-                      background: isComp ? '#ecfdf5' : '#fffbeb',
-                      color: isComp ? '#059669' : '#d97706',
-                      border: `1px solid ${isComp ? '#a7f3d0' : '#fde68a'}`,
-                    }}
-                  >
-                    {isComp ? '100% KYC' : 'Setup Pending'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* 5. IN-DEPTH OPERATIONAL SECTION: ROW 3 (Desk 5 Payments & Desk 6 Wallets) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
-          gap: 20,
-          marginBottom: 24,
-        }}
-      >
-        {/* Left: Desk 5 Payment Collection */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: 14,
-            padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: '#eff6ff',
-                  color: '#2563eb',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <CreditCard size={16} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                  Payment Collection &amp; Ledger (Desk 05)
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  Client subscription and ad budget collections
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('payments', '#payments')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '5px 12px' }}
-            >
-              Ledger ({paymentRecords.length}) →
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 360, overflowY: 'auto' }}>
-            {paymentRecords.map((inv) => (
-              <div
-                key={inv.id}
-                style={{
-                  padding: '11px 14px',
-                  borderRadius: 10,
-                  background: '#f8fafc',
-                  border: '1px solid #f1f5f9',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.86rem', color: '#0f172a' }}>
-                    {inv.company || inv.customerName}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 9,
+                          background: d.bg,
+                          color: d.color,
+                          display: 'grid',
+                          placeItems: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Icon size={18} strokeWidth={2.2} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: d.color, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          DESK {d.num}
+                        </div>
+                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+                          {d.title}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`desk-pill ${d.pillClass}`} style={{ fontSize: '0.72rem' }}>
+                      {d.badge}
+                    </span>
                   </div>
-                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
-                    Ref: <span style={{ fontFamily: 'monospace' }}>{inv.receiptNumber || inv.invoiceNumber || inv.id}</span> • {inv.date || 'Recent'}
+
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
+                    <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0f172a' }}>
+                      {d.metric}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+                    {d.sub}
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 900, fontSize: '0.94rem', color: '#0f172a' }}>
-                    {formatINR(inv.amount)}
-                  </div>
-                  <span
-                    style={{
-                      fontSize: '0.68rem',
-                      fontWeight: 800,
-                      padding: '2px 8px',
-                      borderRadius: 9999,
-                      background: inv.status === 'paid' ? '#ecfdf5' : '#fffbeb',
-                      color: inv.status === 'paid' ? '#059669' : '#d97706',
-                      border: `1px solid ${inv.status === 'paid' ? '#a7f3d0' : '#fde68a'}`,
-                      display: 'inline-block',
-                      marginTop: 2,
-                    }}
-                  >
-                    {inv.status ? inv.status.toUpperCase() : 'PAID'}
-                  </span>
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    paddingTop: 10,
+                    borderTop: '1px solid #f1f5f9',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    color: d.color,
+                  }}
+                >
+                  <span>{d.action}</span>
+                  <ArrowRight size={14} />
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
+      </div>
 
-        {/* Right: Desk 6 Wallets & Balances Alerts */}
+      {/* 4. MAIN OPERATIONAL INTELLIGENCE GRID (Clean Side-by-Side Command Sections) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
+          gap: 20,
+        }}
+      >
+        {/* Left Column: Live Inbound Leads & Customer Intake */}
         <div
           style={{
             background: '#ffffff',
-            border: '1px solid #c7d2fe',
+            border: '1px solid #e2e8f0',
             borderRadius: 14,
             padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  background: '#eef2ff',
-                  color: '#4338ca',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <Wallet size={16} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: '#f0f9ff', color: '#0284c7', display: 'grid', placeItems: 'center' }}>
+                  <Layers size={17} />
+                </div>
+                <div>
                   <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                    Wallets &amp; Balances Runway (Desk 06)
+                    Live Inbound Leads (Desk 03)
                   </h3>
-                  <span
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Direct contact channels with instant Call &amp; WhatsApp actions
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigateToDesk('leads', '#leads')}
+                className="sales-btn-secondary"
+                style={{ fontSize: '0.76rem', padding: '5px 12px' }}
+              >
+                All Leads ({totalLeadsCount}) →
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {leads.slice(0, 4).map((l) => {
+                const rawDigits = (l.phone || l.name || '').replace(/\D/g, '').slice(-10);
+                const cleanPhone = rawDigits.length === 10 ? `+91 ${rawDigits}` : l.name;
+                return (
+                  <div
+                    key={l.id}
                     style={{
-                      background: '#eef2ff',
-                      color: '#4338ca',
-                      border: '1px solid #c7d2fe',
-                      fontSize: '0.72rem',
-                      fontWeight: 800,
-                      padding: '1px 7px',
-                      borderRadius: 9999,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      background: '#f8fafc',
+                      border: '1px solid #f1f5f9',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 12,
                     }}
                   >
-                    {walletsAlertBadge} Low Alert
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  Accounts with low balance (&lt; ₹1,000 or &lt; 3 runway days)
-                </span>
-              </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
+                          {cleanPhone}
+                        </span>
+                        {l.priority === 'Urgent' ? (
+                          <span
+                            style={{
+                              background: '#fef2f2',
+                              color: '#dc2626',
+                              border: '1px solid #fecaca',
+                              fontSize: '0.66rem',
+                              fontWeight: 800,
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                            }}
+                          >
+                            Urgent SLA
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              background: '#ecfdf5',
+                              color: '#059669',
+                              border: '1px solid #a7f3d0',
+                              fontSize: '0.66rem',
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                            }}
+                          >
+                            New Inbound
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: '#1e40af', marginTop: 2, fontWeight: 600 }}>
+                        🏢 {l.company || 'Client Workspace'} • Category: {l.category || 'General Inbound'}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <a
+                        href={`tel:${rawDigits}`}
+                        className="desk-action-btn"
+                        style={{
+                          padding: '6px 10px',
+                          fontSize: '0.75rem',
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Phone size={13} /> Call
+                      </a>
+                      <a
+                        href={`https://wa.me/91${rawDigits}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="desk-action-btn"
+                        style={{
+                          padding: '6px 10px',
+                          fontSize: '0.75rem',
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <MessageSquare size={13} /> WhatsApp
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('wallets', '#wallets')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '5px 12px' }}
-            >
-              Open Wallets ({customers.length}) →
-            </button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 360, overflowY: 'auto' }}>
-            {customers.map((c) => {
-              const bal = c.balance || c.walletBalance || 0;
-              const runway = c.runwayDays !== undefined ? c.runwayDays : Math.floor(bal / 300);
-              const isCritical = bal < 600 || runway <= 2;
-              return (
+          {/* Quick Client Intake Snippet */}
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Recently Auto-Verified Customer Accounts
+              </div>
+              <button
+                type="button"
+                onClick={() => navigateToDesk('pending_verification', '#verification')}
+                className="desk-action-btn"
+                style={{ fontSize: '0.74rem', padding: '3px 8px' }}
+              >
+                Intake Audit ({verifications.length}) →
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {customers.slice(0, 2).map((c) => (
                 <div
                   key={c.id}
                   style={{
-                    padding: '11px 14px',
-                    borderRadius: 10,
-                    background: isCritical ? '#fffbfb' : '#f8fafc',
-                    border: `1px solid ${isCritical ? '#fecaca' : '#f1f5f9'}`,
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    background: '#f8fafc',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#0f172a' }}>
                       {c.companyName || c.name}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
-                      Burn Rate: ₹300/day • Runway: <b style={{ color: isCritical ? '#dc2626' : '#059669' }}>{runway} Days left</b>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      👤 {c.contactPerson || c.contact} • +91 {c.phone} • {c.city || 'India'}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 900, fontSize: '0.98rem', color: isCritical ? '#dc2626' : '#0f172a' }}>
-                      {formatINR(bal)}
+                    <span className="desk-pill pill-emerald" style={{ fontSize: '0.7rem' }}>
+                      ✓ Auto-Verified
+                    </span>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                      {formatINR(c.balance || c.walletBalance || 0)}
                     </div>
-                    <a
-                      href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(c.contactPerson || c.name)},%20your%20AdMafia%20marketing%20wallet%20has%20${runway}%20days%20remaining.%20Please%20recharge%20to%20prevent%20campaign%20pause.`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        color: '#4338ca',
-                        textDecoration: 'none',
-                        display: 'inline-block',
-                        marginTop: 2,
-                      }}
-                    >
-                      Top-up Reminder →
-                    </a>
                   </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* 6. IN-DEPTH OPERATIONAL SECTION: ROW 4 (Desk 7 Queries, Desk 8 Groups) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: 20,
-        }}
-      >
-        {/* Left: Desk 7 Query & Support */}
+        {/* Right Column: Client Wallet Runway & Financial Ledger */}
         <div
           style={{
             background: '#ffffff',
             border: '1px solid #e2e8f0',
             borderRadius: 14,
             padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  background: '#ecfeff',
-                  color: '#0891b2',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <Headphones size={15} />
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: '#eef2ff', color: '#4f46e5', display: 'grid', placeItems: 'center' }}>
+                  <Wallet size={17} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
+                    Wallets &amp; Runway Monitor (Desk 06)
+                  </h3>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Daily ₹300 campaign burn rate &amp; active runway health
+                  </div>
+                </div>
               </div>
-              <h3 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                Query &amp; Support (Desk 07)
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('queries', '#queries')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.74rem', padding: '4px 10px' }}
-            >
-              Open →
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {queries.slice(0, 3).map((q) => (
-              <div
-                key={q.id}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  background: '#f8fafc',
-                  border: '1px solid #f1f5f9',
-                }}
+              <button
+                type="button"
+                onClick={() => navigateToDesk('wallets', '#wallets')}
+                className="sales-btn-secondary"
+                style={{ fontSize: '0.76rem', padding: '5px 12px' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.82rem', color: '#0f172a' }}>
-                    {q.customerName || q.company}
-                  </span>
-                  <span
+                Open Wallets ({customers.length}) →
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {customers.slice(0, 4).map((c) => {
+                const bal = c.balance || c.walletBalance || 0;
+                const runway = c.runwayDays || Math.floor(bal / 300);
+                const isHealthy = runway > 15;
+                const isLow = runway > 0 && runway <= 5;
+                return (
+                  <div
+                    key={c.id}
                     style={{
-                      fontSize: '0.66rem',
-                      fontWeight: 800,
-                      padding: '1px 6px',
-                      borderRadius: 4,
-                      background: q.priority === 'urgent' ? '#fef2f2' : '#ecfeff',
-                      color: q.priority === 'urgent' ? '#dc2626' : '#0891b2',
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      background: '#f8fafc',
+                      border: '1px solid #f1f5f9',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 12,
                     }}
                   >
-                    {q.priority ? q.priority.toUpperCase() : 'NORMAL'}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: 3 }}>
-                  {q.subject || q.title || 'Client inquiry regarding ad campaign pacing.'}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
+                        {c.name || c.companyName}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                        Daily Burn: <strong style={{ color: '#4f46e5' }}>₹300/day</strong> • {c.city || 'India'}
+                      </div>
+                    </div>
 
-        {/* Right: Desk 8 Customer Groups */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: 14,
-            padding: 20,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  background: '#fdf2f8',
-                  color: '#db2777',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <FolderTree size={15} />
-              </div>
-              <h3 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                Customer Groups (Desk 08)
-              </h3>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '1rem', fontWeight: 900, color: '#0f172a' }}>
+                        {formatINR(bal)}
+                      </div>
+                      <span
+                        className={`desk-pill ${isHealthy ? 'pill-emerald' : isLow ? 'pill-amber' : 'pill-rose'}`}
+                        style={{ fontSize: '0.68rem', marginTop: 3 }}
+                      >
+                        {runway} Days Runway
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('groups', '#groups')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.74rem', padding: '4px 10px', color: '#db2777' }}
-            >
-              Groups →
-            </button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {(groups.length > 0
-              ? groups
-              : [
-                  { id: 'g1', name: 'VIP Enterprise Retainers', count: 12, color: '#4f46e5' },
-                  { id: 'g2', name: 'High-Spend E-Commerce', count: 18, color: '#059669' },
-                  { id: 'g3', name: 'New Client Onboarding', count: 8, color: '#d97706' },
-                ]
-            )
-              .slice(0, 3)
-              .map((grp) => (
+          {/* Quick Financial Ledger Snippet */}
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Payment Collection &amp; Ledger (Desk 05)
+              </div>
+              <button
+                type="button"
+                onClick={() => navigateToDesk('payments', '#payments')}
+                className="desk-action-btn"
+                style={{ fontSize: '0.74rem', padding: '3px 8px' }}
+              >
+                Billing Ledger →
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(paymentRecords.length > 0 ? paymentRecords : invoices).slice(0, 2).map((item) => (
                 <div
-                  key={grp.id}
+                  key={item.id}
                   style={{
-                    padding: '10px 12px',
+                    padding: '8px 12px',
                     borderRadius: 8,
-                    background: '#fdf2f8',
-                    border: '1px solid #fce7f3',
+                    background: '#f8fafc',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                   }}
                 >
-                  <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#831843' }}>
-                    {grp.name}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 800,
-                      padding: '2px 8px',
-                      borderRadius: 9999,
-                      background: '#ffffff',
-                      color: '#db2777',
-                      border: '1px solid #fbcfe8',
-                    }}
-                  >
-                    {grp.count || 0} Clients
-                  </span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#0f172a' }}>
+                      {item.customerName || item.client || 'Client Account'}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      Ref: <span style={{ fontFamily: 'monospace' }}>{item.receiptNumber || item.invoiceNumber || item.utr || 'REC-SETTLED'}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span className="desk-pill pill-emerald" style={{ fontSize: '0.7rem' }}>
+                      PAID ✓
+                    </span>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 900, color: '#059669', marginTop: 2 }}>
+                      {formatINR(item.amount)}
+                    </div>
+                  </div>
                 </div>
               ))}
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
