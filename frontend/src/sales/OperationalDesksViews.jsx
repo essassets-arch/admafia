@@ -30,7 +30,10 @@ import {
   FileText,
   Printer,
   Receipt,
-  DollarSign
+  DollarSign,
+  UserCheck,
+  Sparkles,
+  BadgeCheck,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 
@@ -3792,3 +3795,787 @@ export function FollowupTasksDesk({ tasks, setTasks }) {
    DESK 08: CUSTOMER GROUPS & CATEGORY-BASED LEAD DISTRIBUTION
    ========================================================================== */
 export { default as CustomerGroupsDesk } from './CustomerGroupsDesk';
+
+/* ==========================================================================
+   APPROVED MEMBERS DESK: Customers who completed Payment & Profile KYC
+   ========================================================================== */
+export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDesk }) {
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [balanceFilter, setBalanceFilter] = useState('all'); // 'all' | 'healthy' | 'low' | 'zero'
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [topupCust, setTopupCust] = useState(null);
+  const [topupAmount, setTopupAmount] = useState(1500);
+  const [isProcessingTopup, setIsProcessingTopup] = useState(false);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState(null);
+
+  // Criteria: Member who has completed both Gate 1 Payment and Gate 2 Profile Submission
+  const isApproved = (c) => {
+    const isPaymentDone =
+      c.paymentStatus === 'paid' ||
+      c.payment_status === 'paid' ||
+      Number(c.amountPaid || 0) > 0 ||
+      Number(c.balance || c.walletBalance || 0) > 0;
+    const isProfileDone =
+      c.profileStatus === 'complete' ||
+      c.profile_status === 'complete' ||
+      Number(c.kycPercent || c.kyc_percent || 0) >= 100;
+    return (isPaymentDone && isProfileDone) || c.verified === true;
+  };
+
+  const approvedList = customers.filter(isApproved);
+
+  // Extract unique categories
+  const categories = Array.from(
+    new Set(approvedList.map((c) => c.category).filter(Boolean))
+  );
+
+  // Filtered members based on search, category and balance filters
+  const filtered = approvedList.filter((c) => {
+    const q = search.trim().toLowerCase();
+    const matchSearch =
+      !q ||
+      (c.companyName || c.name || '').toLowerCase().includes(q) ||
+      (c.contactPerson || c.contact || '').toLowerCase().includes(q) ||
+      (c.phone || '').includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.city || '').toLowerCase().includes(q) ||
+      (c.category || '').toLowerCase().includes(q);
+
+    if (!matchSearch) return false;
+
+    if (categoryFilter !== 'all' && (c.category || 'Other') !== categoryFilter) {
+      return false;
+    }
+
+    const bal = Number(c.balance || c.walletBalance || 0);
+    const runway = Number(c.runwayDays ?? Math.floor(bal / 300));
+    if (balanceFilter === 'healthy') return runway > 3;
+    if (balanceFilter === 'low') return runway > 0 && runway <= 3;
+    if (balanceFilter === 'zero') return runway === 0 || bal === 0;
+
+    return true;
+  });
+
+  // KPI Calculations
+  const totalApproved = approvedList.length;
+  const totalReserves = approvedList.reduce(
+    (sum, c) => sum + Number(c.balance || c.walletBalance || 0),
+    0
+  );
+  const totalDailyBurn = totalApproved * 300;
+  const avgRunwayDays = totalApproved > 0 ? Math.round(totalReserves / (totalApproved * 300)) : 0;
+  const healthyCount = approvedList.filter((c) => (c.runwayDays || Math.floor((c.balance || 0) / 300)) > 3).length;
+  const lowCount = approvedList.filter((c) => {
+    const r = c.runwayDays || Math.floor((c.balance || 0) / 300);
+    return r > 0 && r <= 3;
+  }).length;
+  const zeroCount = approvedList.filter((c) => (c.balance || 0) <= 0).length;
+
+  const handleApplyTopup = async () => {
+    if (!topupCust || !topupAmount || topupAmount <= 0) return;
+    setIsProcessingTopup(true);
+
+    try {
+      const added = Number(topupAmount);
+      const prevBal = Number(topupCust.balance || topupCust.walletBalance || 0);
+      const newBal = prevBal + added;
+      const addedDays = Math.floor(added / 300);
+      const newRunway = Math.floor(newBal / 300);
+      const utrRef = `TXN-TOPUP-${Date.now().toString().slice(-6)}`;
+
+      // 1. Sync with PostgreSQL Backend API if available
+      try {
+        await crmApi.topupCustomerWallet(topupCust.id, added);
+      } catch (err) {
+        console.warn('Backend topup API note:', err.message);
+      }
+
+      // 2. Update local state
+      if (setCustomers) {
+        setCustomers((prev) =>
+          prev.map((c) => {
+            if (c.id === topupCust.id || c.phone === topupCust.phone) {
+              return {
+                ...c,
+                balance: newBal,
+                walletBalance: newBal,
+                runwayDays: newRunway,
+                paymentStatus: 'paid',
+                amountPaid: Number(c.amountPaid || 0) + added,
+              };
+            }
+            return c;
+          })
+        );
+      }
+
+      // 3. Record transaction in growthline_wallet_transactions
+      const rawTx = localStorage.getItem('growthline_wallet_transactions');
+      const txList = rawTx ? JSON.parse(rawTx) : [];
+      const newTx = {
+        id: `tx_${Date.now()}`,
+        customerId: topupCust.id,
+        customerPhone: topupCust.phone,
+        customerUsername: topupCust.username,
+        company: topupCust.companyName || topupCust.name,
+        date: getLiveNowFormatted(),
+        ref: utrRef,
+        desc: `Sub-Admin Direct Wallet Credit (+₹${added.toLocaleString('en-IN')})`,
+        type: 'Credit',
+        amount: added,
+        balance: newBal,
+        method: 'Sub-Admin Instant Credit',
+        status: 'Verified ✓',
+      };
+      localStorage.setItem('growthline_wallet_transactions', JSON.stringify([newTx, ...txList]));
+
+      // 4. Record payment receipt in growthline_payment_records
+      const rawPay = localStorage.getItem('growthline_payment_records');
+      const payList = rawPay ? JSON.parse(rawPay) : [];
+      const newPayment = {
+        id: `pay_${Date.now()}`,
+        receiptNumber: `REC-${Date.now().toString().slice(-6)}`,
+        customerName: topupCust.companyName || topupCust.name,
+        contact: topupCust.contactPerson || topupCust.contact,
+        phone: topupCust.phone,
+        typeLabel: 'Wallet Top-Up',
+        amount: added,
+        gstAmount: Math.round(added * 0.18),
+        total: added,
+        paymentMode: 'Sub-Admin Instant Credit',
+        utr: utrRef,
+        date: getLiveNowFormatted(),
+        status: 'paid',
+        runwayAdded: addedDays,
+        notes: `Sub-Admin instant topup credit for ${topupCust.companyName || topupCust.name}`,
+      };
+      localStorage.setItem('growthline_payment_records', JSON.stringify([newPayment, ...payList]));
+      window.dispatchEvent(new CustomEvent('growthline_payment_recorded', { detail: newPayment }));
+
+      setActionSuccessMsg(`Successfully credited ₹${added.toLocaleString('en-IN')} to ${topupCust.companyName || topupCust.name}. New Live Balance: ₹${newBal.toLocaleString('en-IN')}`);
+      setTimeout(() => setActionSuccessMsg(null), 5000);
+      setTopupCust(null);
+    } catch (err) {
+      console.error('Failed to apply topup', err);
+    } finally {
+      setIsProcessingTopup(false);
+    }
+  };
+
+  return (
+    <div className="desk-page-container">
+      {/* Toast Notification */}
+      {actionSuccessMsg && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 20,
+            right: 20,
+            zIndex: 9999,
+            background: '#064e3b',
+            color: '#ecfdf5',
+            padding: '12px 20px',
+            borderRadius: 10,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            border: '1px solid #059669',
+          }}
+        >
+          <CheckCircle2 size={18} color="#34d399" />
+          <span>{actionSuccessMsg}</span>
+          <button
+            type="button"
+            onClick={() => setActionSuccessMsg(null)}
+            style={{ background: 'transparent', border: 'none', color: '#a7f3d0', cursor: 'pointer', marginLeft: 10 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Desk Header */}
+      <div className="desk-header">
+        <div>
+          <div className="desk-breadcrumb">SUB ADMIN OPERATIONS / CLIENT COMPLIANCE &amp; ACCOUNTS</div>
+          <h1 className="desk-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span>Approved Client Members</span>
+            <span
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                color: '#059669',
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                padding: '3px 10px',
+                borderRadius: 9999,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+              }}
+            >
+              <span className="sales-pulse-dot" style={{ width: 7, height: 7 }} /> Gate 1 (Payment) &amp; Gate 2 (Profile) Complete
+            </span>
+          </h1>
+          <p className="desk-subtitle">
+            Authoritative registry of verified client members who have completed full business profile KYC and active wallet payment settlements. Monitor live wallet balances and campaign runway pacing in real time.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="sales-btn-secondary"
+            onClick={() => window.location.reload()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}
+          >
+            <RefreshCw size={14} /> Refresh Members
+          </button>
+          {navigateToDesk && (
+            <button
+              type="button"
+              className="sales-btn-primary"
+              onClick={() => navigateToDesk('groups', '#groups')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}
+            >
+              <FolderTree size={14} /> Distribute Leads to Members →
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* KPI Ribbon */}
+      <div className="desk-kpi-grid">
+        <div className="desk-kpi-card">
+          <div className="desk-kpi-header">
+            <span className="desk-kpi-label">TOTAL APPROVED MEMBERS</span>
+            <UserCheck size={18} color="#059669" />
+          </div>
+          <div className="desk-kpi-val text-emerald">{totalApproved}</div>
+          <div className="desk-kpi-sub">
+            <span className="text-emerald" style={{ fontWeight: 700 }}>100% KYC &amp; Payment Passed</span>
+          </div>
+        </div>
+
+        <div className="desk-kpi-card">
+          <div className="desk-kpi-header">
+            <span className="desk-kpi-label">COLLECTIVE LIVE RESERVES</span>
+            <Wallet size={18} color="#4f46e5" />
+          </div>
+          <div className="desk-kpi-val text-indigo">{formatINR(totalReserves)}</div>
+          <div className="desk-kpi-sub">
+            <span className="text-indigo" style={{ fontWeight: 700 }}>Live Real-Time Wallet Balance</span>
+          </div>
+        </div>
+
+        <div className="desk-kpi-card">
+          <div className="desk-kpi-header">
+            <span className="desk-kpi-label">DAILY AD SPEND PACING</span>
+            <Clock size={18} color="#0284c7" />
+          </div>
+          <div className="desk-kpi-val text-cyan">{formatINR(totalDailyBurn)}/day</div>
+          <div className="desk-kpi-sub">
+            <span>₹300/day pacing across all active accounts</span>
+          </div>
+        </div>
+
+        <div className="desk-kpi-card">
+          <div className="desk-kpi-header">
+            <span className="desk-kpi-label">AVERAGE RUNWAY HEALTH</span>
+            <CheckCircle2 size={18} color="#10b981" />
+          </div>
+          <div className="desk-kpi-val text-emerald">{avgRunwayDays} Days</div>
+          <div className="desk-kpi-sub">
+            <span>{healthyCount} Healthy • {lowCount} Low Alert • {zeroCount} Depleted</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 12,
+          padding: '16px 20px',
+          marginBottom: 20,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 16,
+          flexWrap: 'wrap',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+        }}
+      >
+        {/* Search */}
+        <div style={{ position: 'relative', flex: '1 1 300px', maxWidth: '420px' }}>
+          <Search
+            size={16}
+            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}
+          />
+          <input
+            type="text"
+            placeholder="Search by company, contact person, phone, city..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="clean-input"
+            style={{ paddingLeft: 36, height: 38, fontSize: '0.84rem' }}
+          />
+        </div>
+
+        {/* Filters */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Category Dropdown */}
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="clean-input"
+            style={{ height: 38, fontSize: '0.82rem', padding: '0 12px', minWidth: 160 }}
+          >
+            <option value="all">All Categories ({categories.length})</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+
+          {/* Runway Filter Tabs */}
+          <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: 3, borderRadius: 8 }}>
+            <button
+              type="button"
+              onClick={() => setBalanceFilter('all')}
+              style={{
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: 6,
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: balanceFilter === 'all' ? '#ffffff' : 'transparent',
+                color: balanceFilter === 'all' ? '#0f172a' : '#64748b',
+                boxShadow: balanceFilter === 'all' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              All ({totalApproved})
+            </button>
+            <button
+              type="button"
+              onClick={() => setBalanceFilter('healthy')}
+              style={{
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: 6,
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: balanceFilter === 'healthy' ? '#ffffff' : 'transparent',
+                color: balanceFilter === 'healthy' ? '#059669' : '#64748b',
+                boxShadow: balanceFilter === 'healthy' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              Healthy Runway ({healthyCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setBalanceFilter('low')}
+              style={{
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: 6,
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: balanceFilter === 'low' ? '#ffffff' : 'transparent',
+                color: balanceFilter === 'low' ? '#d97706' : '#64748b',
+                boxShadow: balanceFilter === 'low' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              Low Alert ({lowCount})
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Approved Members List Table */}
+      <div className="desk-table-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <table className="desk-table">
+          <thead>
+            <tr>
+              <th style={{ width: '28%' }}>Approved Client &amp; Entity</th>
+              <th style={{ width: '22%' }}>Verification &amp; Compliance</th>
+              <th style={{ width: '26%' }}>Live Wallet Balance &amp; Burn Pacing</th>
+              <th style={{ width: '24%', textAlign: 'right' }}>Direct Operations Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={4} style={{ textAlign: 'center', padding: '48px 24px', color: '#64748b' }}>
+                  <UserCheck size={36} color="#cbd5e1" style={{ marginBottom: 12 }} />
+                  <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1e293b' }}>No Approved Members Found</div>
+                  <div style={{ fontSize: '0.84rem', marginTop: 4 }}>
+                    Approved members require both Gate 1 Payment and Gate 2 Profile KYC completion.
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              filtered.map((m) => {
+                const bal = Number(m.balance || m.walletBalance || 0);
+                const pacing = Number(m.dailyPacing || m.dailyAdSpend || 300);
+                const runway = Number(m.runwayDays ?? Math.floor(bal / Math.max(pacing, 1)));
+                const isHealthy = runway > 3;
+                const isLow = runway > 0 && runway <= 3;
+                const cleanPhone = (m.phone || '').trim();
+
+                return (
+                  <tr key={m.id || m.phone}>
+                    {/* 1. Client & Entity Details */}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                        <div
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: 10,
+                            background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
+                            color: '#ffffff',
+                            fontWeight: 800,
+                            display: 'grid',
+                            placeItems: 'center',
+                            fontSize: '0.9rem',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {(m.companyName || m.name || 'AM').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
+                            {m.companyName || m.name}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>
+                            👤 <b>{m.contactPerson || m.contact || 'Authorized Lead'}</b> • +91{' '}
+                            <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{cleanPhone}</span>
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                            ✉️ {m.email || 'Registered via Web Portal'} • 📍 {m.city || 'India'}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 2. Verification Badges */}
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span
+                            className="desk-pill pill-emerald"
+                            style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <CheckCircle2 size={12} /> Gate 1: Paid (₹{Number(m.amountPaid || bal).toLocaleString('en-IN')})
+                          </span>
+                          <span
+                            className="desk-pill pill-indigo"
+                            style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <ShieldCheck size={12} /> Gate 2: 100% KYC Complete
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#0369a1', fontWeight: 600, marginTop: 2 }}>
+                          Category: <b>{m.category || 'Meta Ads Lead Generation'}</b>
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                          Approved: {formatIndianDateTime(m.completedAt || m.registeredAt, m.completedAt || m.registeredAtRaw || m.registered_at)}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 3. Live Wallet Balance */}
+                    <td>
+                      <div
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 10,
+                          padding: '8px 14px',
+                          display: 'inline-block',
+                          minWidth: '200px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                            Live Ad Balance
+                          </span>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontSize: '0.66rem',
+                              fontWeight: 800,
+                              color: '#059669',
+                            }}
+                          >
+                            <span className="sales-pulse-dot" style={{ width: 6, height: 6 }} /> LIVE
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '1.25rem', fontWeight: 900, color: bal > 0 ? '#059669' : '#e11d48', marginTop: 2 }}>
+                          {formatINR(bal)}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, fontSize: '0.74rem' }}>
+                          <span style={{ color: '#475569' }}>
+                            Daily: <b>₹{pacing}/day</b>
+                          </span>
+                          <span
+                            className={`desk-pill ${isHealthy ? 'pill-emerald' : isLow ? 'pill-amber' : 'pill-rose'}`}
+                            style={{ fontSize: '0.68rem', padding: '1px 6px' }}
+                          >
+                            {runway} Days Runway
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 4. Operations Actions */}
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+                        <a
+                          href={`tel:${cleanPhone}`}
+                          className="desk-action-btn"
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '0.75rem',
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <Phone size={13} /> Call
+                        </a>
+                        <a
+                          href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(m.contactPerson || m.name)},%20this%20is%20AdMafia%20Marketing%20Operations.%20Your%20active%20campaign%20wallet%20balance%20is%20%E2%82%B9${bal.toLocaleString('en-IN')}%20(${runway}%20days%20runway%20remaining).`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="desk-action-btn"
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '0.75rem',
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            color: '#059669',
+                          }}
+                        >
+                          <MessageSquare size={13} /> WhatsApp
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setTopupCust(m)}
+                          className="sales-btn-primary"
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '0.75rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            background: '#4f46e5',
+                          }}
+                        >
+                          <Plus size={13} /> Top-Up
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedMember(m)}
+                          className="desk-action-btn"
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '0.75rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <Eye size={13} /> Profile
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* MODAL 1: Instant Top-Up Credit Modal */}
+      {topupCust && (
+        <div className="desk-modal-backdrop" onClick={() => setTopupCust(null)}>
+          <div className="desk-modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="desk-modal-header">
+              <div>
+                <div className="desk-modal-tag" style={{ color: '#4f46e5' }}>
+                  INSTANT AD WALLET RECHARGE
+                </div>
+                <h3 className="desk-modal-title">Credit Client Wallet Balance</h3>
+              </div>
+              <button type="button" className="desk-modal-close" onClick={() => setTopupCust(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 18, background: '#f8fafc', padding: 14, borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>
+                {topupCust.companyName || topupCust.name}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+                👤 {topupCust.contactPerson || topupCust.contact} • +91 {topupCust.phone}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px dashed #cbd5e1' }}>
+                <span style={{ fontSize: '0.8rem', color: '#475569' }}>Current Live Balance:</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#059669' }}>
+                  {formatINR(topupCust.balance || topupCust.walletBalance || 0)}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Amount Pills */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+                Select Top-Up Amount (₹):
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                {[500, 1000, 1500, 3000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setTopupAmount(amt)}
+                    style={{
+                      padding: '8px 4px',
+                      borderRadius: 8,
+                      border: topupAmount === amt ? '2px solid #4f46e5' : '1px solid #cbd5e1',
+                      background: topupAmount === amt ? '#eef2ff' : '#ffffff',
+                      color: topupAmount === amt ? '#4f46e5' : '#1e293b',
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    +₹{amt.toLocaleString('en-IN')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Amount */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                Or Custom Amount (₹):
+              </label>
+              <input
+                type="number"
+                min="300"
+                step="100"
+                value={topupAmount}
+                onChange={(e) => setTopupAmount(Number(e.target.value))}
+                className="clean-input"
+                style={{ height: 42, fontSize: '1rem', fontWeight: 800 }}
+              />
+              <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 4 }}>
+                Adds approx. {Math.floor((Number(topupAmount) || 0) / 300)} days of active campaign runway (@ ₹300/day).
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className="sales-btn-secondary" onClick={() => setTopupCust(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sales-btn-primary"
+                onClick={handleApplyTopup}
+                disabled={isProcessingTopup || !topupAmount || topupAmount <= 0}
+                style={{ background: '#4f46e5', padding: '10px 20px', fontWeight: 800 }}
+              >
+                {isProcessingTopup ? 'Crediting Wallet...' : `Confirm & Credit ₹${Number(topupAmount).toLocaleString('en-IN')} →`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: Full Business Profile Viewer */}
+      {selectedMember && (
+        <div className="desk-modal-backdrop" onClick={() => setSelectedMember(null)}>
+          <div className="desk-modal-card" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+            <div className="desk-modal-header">
+              <div>
+                <div className="desk-modal-tag" style={{ color: '#059669' }}>
+                  ✓ 100% KYC &amp; PAYMENT VERIFIED MEMBER
+                </div>
+                <h3 className="desk-modal-title">{selectedMember.companyName || selectedMember.name}</h3>
+              </div>
+              <button type="button" className="desk-modal-close" onClick={() => setSelectedMember(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Authorized Contact</div>
+                <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a', marginTop: 2 }}>{selectedMember.contactPerson || selectedMember.contact}</div>
+                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>+91 {selectedMember.phone}</div>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Business Category</div>
+                <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#4f46e5', marginTop: 2 }}>{selectedMember.category || 'Meta Ads Lead Gen'}</div>
+                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>{selectedMember.industry || 'Digital Lead Acquisition'}</div>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Live Wallet Reserves</div>
+                <div style={{ fontWeight: 900, fontSize: '1.15rem', color: '#059669', marginTop: 2 }}>{formatINR(selectedMember.balance || selectedMember.walletBalance || 0)}</div>
+                <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: 2 }}>Burn: ₹300/day • {selectedMember.runwayDays || Math.floor((selectedMember.balance || 0) / 300)} Days Left</div>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Target Geography</div>
+                <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a', marginTop: 2 }}>{selectedMember.city || 'India'}</div>
+                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>{selectedMember.state || 'Maharashtra'}, India</div>
+              </div>
+
+              <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Registered Work Email &amp; Web Domain</div>
+                <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a', marginTop: 2 }}>✉️ {selectedMember.email || 'Registered via Web Portal'}</div>
+                {selectedMember.website && (
+                  <div style={{ fontSize: '0.82rem', color: '#4f46e5', marginTop: 4 }}>
+                    🌐 <a href={selectedMember.website.startsWith('http') ? selectedMember.website : `https://${selectedMember.website}`} target="_blank" rel="noreferrer" style={{ color: '#4f46e5' }}>{selectedMember.website} ↗</a>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                Approved Member since: {formatIndianDateTime(selectedMember.completedAt || selectedMember.registeredAt)}
+              </span>
+              <button type="button" className="sales-btn-primary" onClick={() => setSelectedMember(null)}>
+                Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

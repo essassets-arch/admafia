@@ -19,6 +19,7 @@ import {
   Send,
   Eye,
   TrendingUp,
+  UserCheck,
 } from 'lucide-react';
 import { DEFAULT_DESK_LEADS, formatIndianDateTime } from './OperationalDesksViews';
 
@@ -132,6 +133,20 @@ export default function AllDesksOverviewDashboard({
   const todayTasks = tasks.filter((t) => t.dueStatus === 'today' && t.status !== 'completed');
   const todayTasksBadge = todayTasks.length;
 
+  const approvedMembersList = customers.filter((c) => {
+    const isPaymentDone =
+      c.paymentStatus === 'paid' ||
+      c.payment_status === 'paid' ||
+      Number(c.amountPaid || 0) > 0 ||
+      Number(c.balance || c.walletBalance || 0) > 0;
+    const isProfileDone =
+      c.profileStatus === 'complete' ||
+      c.profile_status === 'complete' ||
+      Number(c.kycPercent || c.kyc_percent || 0) >= 100;
+    return (isPaymentDone && isProfileDone) || c.verified === true;
+  });
+  const approvedMembersCount = approvedMembersList.length;
+
   // 9 Desks Master Definition for the Clean Navigation Hub
   const DESKS = [
     {
@@ -161,6 +176,20 @@ export default function AllDesksOverviewDashboard({
       color: '#059669',
       bg: '#ecfdf5',
       target: '#verification',
+    },
+    {
+      id: 'approved',
+      num: '02B',
+      title: 'Approved Members',
+      badge: '100% KYC & Paid',
+      pillClass: 'pill-emerald',
+      metric: `${approvedMembersCount} Members`,
+      sub: 'Verified accounts with completed payment & profile • Live wallet balance',
+      action: 'View Approved Members →',
+      icon: UserCheck,
+      color: '#15803d',
+      bg: '#f0fdf4',
+      target: '#approved',
     },
     {
       id: 'leads',

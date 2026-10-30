@@ -16,6 +16,7 @@ import {
   Sparkles,
   LayoutDashboard,
   Clock,
+  UserCheck,
 } from 'lucide-react';
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import {
@@ -30,6 +31,7 @@ import {
 import {
   CustomerRegistrationsDesk,
   PendingVerificationDesk,
+  ApprovedMembersDesk,
   LeadManagementDesk,
   ProfileCompletionDesk,
   PaymentCollectionDesk,
@@ -75,6 +77,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
     try {
       const h = (window.location.hash || '').toLowerCase();
       const p = (window.location.pathname || '').toLowerCase();
+      if (h.includes('approved') || h.includes('member')) return 'approved';
       if (h.includes('verification') || p.includes('verification')) return 'pending_verification';
       if (h.includes('lead') || p.includes('lead')) return 'leads';
       if (h.includes('profile') || p.includes('profile')) return 'profiles';
@@ -206,6 +209,19 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
 
   // Dynamic Badge Calculations
   const pendingVerificationBadge = verifications.length;
+  const approvedMembersList = customers.filter((c) => {
+    const isPaymentDone =
+      c.paymentStatus === 'paid' ||
+      c.payment_status === 'paid' ||
+      Number(c.amountPaid || 0) > 0 ||
+      Number(c.balance || c.walletBalance || 0) > 0;
+    const isProfileDone =
+      c.profileStatus === 'complete' ||
+      c.profile_status === 'complete' ||
+      Number(c.kycPercent || c.kyc_percent || 0) >= 100;
+    return (isPaymentDone && isProfileDone) || c.verified === true;
+  });
+  const approvedMembersBadge = approvedMembersList.length;
   const lowWalletsCount = customers.filter(
     (c) => (c.balance || 0) < 1000 || (c.runwayDays || 0) <= 2
   ).length;
@@ -381,6 +397,27 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
               }}
             >
               {pendingVerificationBadge}
+            </span>
+          </button>
+
+          {/* 2B. Approved Members (Payment & Profile KYC Complete) */}
+          <button
+            type="button"
+            className={`sales-nav-btn ${activeTab === 'approved' ? 'active' : ''}`}
+            onClick={() => navigateToDesk('approved', '#approved')}
+          >
+            <UserCheck size={18} strokeWidth={2.2} />
+            <span>Approved Members</span>
+            <span
+              className="sales-nav-badge"
+              style={{
+                background: '#f0fdf4',
+                color: '#15803d',
+                borderColor: '#bbf7d0',
+                fontWeight: 800,
+              }}
+            >
+              {approvedMembersBadge}
             </span>
           </button>
 
@@ -595,6 +632,14 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
               setVerifications={setVerifications}
               onApproveSuccess={handleVerificationApprove}
               customers={customers}
+            />
+          )}
+
+          {activeTab === 'approved' && (
+            <ApprovedMembersDesk
+              customers={customers}
+              setCustomers={setCustomers}
+              navigateToDesk={navigateToDesk}
             />
           )}
 
