@@ -22,6 +22,9 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 
+# Uploaded Media Files
+backend/uploads/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

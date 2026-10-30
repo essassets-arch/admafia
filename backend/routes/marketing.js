@@ -474,14 +474,14 @@ marketingRouter.post('/ideas', async (req, res) => {
     const {
       customerId,
       title,
-      objective,
+      objective = 'Lead Generation',
       concept,
       targetAudience = '',
       captionSuggestions = '',
-      callToAction = '',
+      callToAction = 'Enquire Now',
       hashtags = '',
       creativeBrief = '',
-      platform = 'Meta Ads (Facebook & Instagram)',
+      platform = 'Instagram & Facebook (Meta Ads)',
       language = 'English / Hinglish',
       campaignPeriod = '',
       constraints = '',
@@ -491,7 +491,7 @@ marketingRouter.post('/ideas', async (req, res) => {
 
     if (!customerId) return res.status(400).json({ ok: false, error: 'Customer selection is required.' });
     if (!title || !title.trim()) return res.status(400).json({ ok: false, error: 'Idea title is required.' });
-    if (!objective) return res.status(400).json({ ok: false, error: 'Marketing objective is required.' });
+    const finalObjective = (objective && objective.trim()) || 'Lead Generation';
     if (!concept || !concept.trim()) return res.status(400).json({ ok: false, error: 'Concept / brief is required.' });
 
     // Verify customer exists
@@ -512,15 +512,15 @@ marketingRouter.post('/ideas', async (req, res) => {
         id,
         customerId,
         title.trim(),
-        objective,
+        finalObjective,
         concept.trim(),
         targetAudience,
-        captionSuggestions,
-        callToAction,
+        captionSuggestions || concept.trim(),
+        callToAction || 'Enquire Now',
         hashtags,
         creativeBrief,
-        platform,
-        language,
+        platform || 'Instagram & Facebook (Meta Ads)',
+        language || 'English / Hinglish',
         campaignPeriod,
         constraints,
         status,
@@ -528,11 +528,11 @@ marketingRouter.post('/ideas', async (req, res) => {
       ]
     );
 
-    await logAuditEvent(customerId, 'idea', id, 'Created Idea', createdBy, { title, objective });
+    await logAuditEvent(customerId, 'idea', id, 'Created Idea', createdBy, { title, objective: finalObjective });
 
     res.status(201).json({
       ok: true,
-      idea: { id, customerId, title: title.trim(), objective, concept: concept.trim(), status },
+      idea: { id, customerId, title: title.trim(), objective: finalObjective, concept: concept.trim(), status },
       message: 'Marketing idea created and saved successfully.',
     });
   } catch (err) {

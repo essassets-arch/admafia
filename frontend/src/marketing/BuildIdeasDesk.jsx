@@ -3,26 +3,34 @@ import {
   Lightbulb,
   Sparkles,
   Save,
-  Users,
   Building,
-  Target,
-  Send,
-  Layers,
-  CheckCircle2,
-  Trash2,
-  RefreshCw,
   ArrowRight,
-  HelpCircle,
+  RefreshCw,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
 
-const OBJECTIVES = [
-  { id: 'lead_generation', label: 'Lead Generation', desc: 'Direct enquiries, form fills and phone calls.' },
-  { id: 'brand_awareness', label: 'Brand Awareness', desc: 'Reach local business audience and establish authority.' },
-  { id: 'product_promotion', label: 'Product Promotion', desc: 'Spotlight flagship commercial offerings & packages.' },
-  { id: 'festival_campaign', label: 'Festival Campaign', desc: 'Seasonal promotions, festive greetings & incentives.' },
-  { id: 'customer_engagement', label: 'Customer Engagement', desc: 'Social proof, testimonials and audience interaction.' },
+const PLATFORMS = [
+  'Instagram & Facebook (Meta Ads)',
+  'Instagram',
+  'Facebook',
+];
+
+const LANGUAGES = [
+  'English / Hinglish',
+  'Hindi',
+  'English',
+  'Gujarati',
+  'Marathi',
+];
+
+const COMMON_CTAS = [
+  'Enquire Now',
+  'Contact Us',
+  'Book Consultation',
+  'Get Quote',
+  'Send Message',
+  'Learn More',
 ];
 
 export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToDesk }) {
@@ -34,21 +42,12 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Form State
+  // 6 Core Requested Fields
   const [title, setTitle] = useState('');
-  const [objective, setObjective] = useState('lead_generation');
-  const [platform, setPlatform] = useState('Meta Ads (Facebook & Instagram)');
+  const [platform, setPlatform] = useState('Instagram & Facebook (Meta Ads)');
   const [language, setLanguage] = useState('English / Hinglish');
-  const [targetAudience, setTargetAudience] = useState('');
-  const [campaignPeriod, setCampaignPeriod] = useState('Immediate (Next 7–14 Days)');
-  const [constraints, setConstraints] = useState('');
-
-  // Generated / Editable Content Fields
+  const [callToAction, setCallToAction] = useState('Enquire Now');
   const [concept, setConcept] = useState('');
-  const [captionSuggestions, setCaptionSuggestions] = useState('');
-  const [callToAction, setCallToAction] = useState('Book Free Consultation');
-  const [hashtags, setHashtags] = useState('');
-  const [creativeBrief, setCreativeBrief] = useState('');
 
   // Load Customers
   useEffect(() => {
@@ -81,10 +80,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
       ]);
 
       if (custData && custData.ok) {
-        const c = custData.customer;
-        setSelectedCustomer(c);
-        // Default target audience based on real customer data
-        setTargetAudience(`Business owners, managers and consumers located in ${c.city || 'target region'} interested in ${c.category}.`);
+        setSelectedCustomer(custData.customer);
       }
 
       if (ideasData && ideasData.ok) {
@@ -103,7 +99,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
     }
   }, [selectedCustomerId, fetchCustomerData]);
 
-  // Generate Suggestions Engine (strictly grounded on customer profile, zero fabricated pricing or false claims)
+  // Generate Profile Suggestions (fills Campaign Name, CTA & Description)
   const handleGenerateSuggestions = () => {
     if (!selectedCustomer) {
       Swal.fire({ icon: 'warning', title: 'Please select a customer first.' });
@@ -116,66 +112,21 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
     const city = selectedCustomer.city || 'India';
 
     setTimeout(() => {
-      let genTitle = '';
-      let genConcept = '';
-      let genCaption = '';
-      let genCta = '';
-      let genTags = '';
-      let genBrief = '';
-
-      if (objective === 'lead_generation') {
-        genTitle = `${cat} High-Intent Lead Inbound Campaign`;
-        genConcept = `Target decision-makers looking for verified ${cat} solutions in ${city}. Focus on reliability, transparent communication, and rapid project turnaround.`;
-        genCaption = `Looking for reliable ${cat} solutions in ${city}?\n\nPartner with ${comp} to streamline your operations and achieve verified results.\n\n✓ Industry-certified expertise\n✓ Direct customer support\n✓ Tailored commercial solutions\n\nSend your requirement today to discuss your next steps with our team!`;
-        genCta = 'Enquire Now';
-        genTags = `#${cat.replace(/\s+/g, '')} #${city.replace(/\s+/g, '')} #BusinessGrowth #VerifiedLeads #${comp.replace(/\s+/g, '')}`;
-        genBrief = `High-contrast social banner featuring verified checkmarks, clean typography, company branding for ${comp}, and a prominent '${genCta}' action button.`;
-      } else if (objective === 'brand_awareness') {
-        genTitle = `${comp} Regional Authority & Brand Spotlight`;
-        genConcept = `Position ${comp} as the premier choice for ${cat} in ${city}, highlighting market credibility and dedicated customer commitment.`;
-        genCaption = `Trusted by businesses across ${city} for ${cat}.\n\nAt ${comp}, we help you turn ambitious objectives into reality with proven industry standards.\n\nDiscover how our solutions empower your business to thrive in a competitive market.`;
-        genCta = 'Learn More';
-        genTags = `#${cat.replace(/\s+/g, '')} #BrandSpotlight #${city.replace(/\s+/g, '')} #${comp.replace(/\s+/g, '')}`;
-        genBrief = `Clean corporate graphic showing ${comp}'s brand emblem, bold headline, and regional focus in ${city}.`;
-      } else if (objective === 'product_promotion') {
-        genTitle = `Featured ${cat} Offerings & Solutions`;
-        genConcept = `Showcase flagship commercial services offered by ${comp} with clear value propositions and easy enquiry channels.`;
-        genCaption = `Upgrade your business with specialized ${cat} services from ${comp}.\n\nDesigned specifically for businesses seeking quality, dependability, and commercial excellence.\n\nConnect with our specialists for a tailored solution.`;
-        genCta = 'Get Details';
-        genTags = `#${cat.replace(/\s+/g, '')} #ProductPromotion #BusinessExcellence #${city.replace(/\s+/g, '')}`;
-        genBrief = `Product/service showcase grid with distinct visual hierarchy, clean card outlines, and key value badges.`;
-      } else if (objective === 'festival_campaign') {
-        genTitle = `${comp} Festive Season Marketing Greeting`;
-        genConcept = `Seasonal customer outreach connecting festive occasions with special ${cat} consultation opportunities.`;
-        genCaption = `Wishing our valued clients and partners a prosperous festive season!\n\nCelebrate new milestones with ${comp}. We look forward to powering your growth in the coming quarter.\n\nSchedule your festive strategy session today.`;
-        genCta = 'Connect With Us';
-        genTags = `#FestiveGreetings #BusinessProsperity #${cat.replace(/\s+/g, '')} #${comp.replace(/\s+/g, '')}`;
-        genBrief = `Warm festive graphic with subtle gold/navy accents, celebratory greeting, and ${comp} branding.`;
-      } else {
-        genTitle = `${comp} Client Engagement & Community Dialogue`;
-        genConcept = `Interactive social content engaging prospective buyers around common industry challenges in ${cat}.`;
-        genCaption = `What is your biggest operational challenge when selecting a ${cat} provider in ${city}?\n\n1. Delivery timelines\n2. Quality consistency\n3. Dedicated technical support\n\nShare your thoughts in the comments, or reach out to our team at ${comp}!`;
-        genCta = 'Send Message';
-        genTags = `#IndustryInsights #${cat.replace(/\s+/g, '')} #BusinessDiscussion #${comp.replace(/\s+/g, '')}`;
-        genBrief = `Interactive poll/question layout with high legibility, clean spacing, and brand logo.`;
-      }
-
-      setTitle(genTitle);
-      setConcept(genConcept);
-      setCaptionSuggestions(genCaption);
-      setCallToAction(genCta);
-      setHashtags(genTags);
-      setCreativeBrief(genBrief);
+      setTitle(`${comp} - ${cat} Inbound Campaign`);
+      setPlatform('Instagram & Facebook (Meta Ads)');
+      setLanguage('English / Hinglish');
+      setCallToAction('Enquire Now');
+      setConcept(`Connect with prospective customers seeking verified ${cat} solutions in ${city}. Highlighting ${comp}'s industry expertise, verified quality, and tailored commercial offerings.`);
       setGenerating(false);
 
       Swal.fire({
         icon: 'success',
         title: 'Suggestions Generated',
-        text: 'Tailored suggestions generated based on verified customer profile.',
+        text: 'Tailored campaign name, CTA, and description generated from customer profile.',
         timer: 1400,
         showConfirmButton: false,
       });
-    }, 400);
+    }, 300);
   };
 
   // Save Idea to Backend
@@ -185,11 +136,11 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
       return;
     }
     if (!title.trim()) {
-      Swal.fire({ icon: 'warning', title: 'Please provide an idea title.' });
+      Swal.fire({ icon: 'warning', title: 'Please provide a campaign name.' });
       return;
     }
     if (!concept.trim()) {
-      Swal.fire({ icon: 'warning', title: 'Please provide a concept description.' });
+      Swal.fire({ icon: 'warning', title: 'Please provide a description.' });
       return;
     }
 
@@ -197,18 +148,18 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
     try {
       const res = await marketingApi.createIdea({
         customerId: selectedCustomerId,
-        title,
-        objective,
-        concept,
-        targetAudience,
-        captionSuggestions,
-        callToAction,
-        hashtags,
-        creativeBrief,
+        title: title.trim(),
+        objective: 'Lead Generation',
+        concept: concept.trim(),
+        targetAudience: '',
+        captionSuggestions: concept.trim(),
+        callToAction: callToAction || 'Enquire Now',
+        hashtags: '',
+        creativeBrief: '',
         platform,
         language,
-        campaignPeriod,
-        constraints,
+        campaignPeriod: '',
+        constraints: '',
         status,
         createdBy: 'Marketing Strategy Team',
       });
@@ -220,7 +171,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
           text: `Marketing idea "${title}" has been saved and is now ready for post creation.`,
           confirmButtonColor: '#4f46e5',
         });
-        // Refresh customer ideas list
+        // Clear or refresh customer ideas list
         fetchCustomerData(selectedCustomerId);
       }
     } catch (err) {
@@ -241,7 +192,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
         <div className="marketing-header-title-col">
           <h1>Build Marketing Ideas</h1>
           <p>
-            Customer-grounded workspace to structure marketing concepts, audience targets, and creative briefs.
+            Structure campaign ideas with platform targeting, language, call to action, and strategic descriptions.
           </p>
         </div>
       </div>
@@ -250,7 +201,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
       <div className="marketing-controls-card" style={{ background: '#ffffff' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, flexWrap: 'wrap' }}>
           <label style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
-            Select Active Customer:
+            Target Customer:
           </label>
           <select
             className="marketing-select"
@@ -278,7 +229,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
 
       {/* 3. Main Workspace Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '24px' }}>
-        {/* Left Column: Form & Suggestions Builder */}
+        {/* Left Column: 6 Core Requested Fields */}
         <div className="marketing-table-card" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Campaign Concept &amp; Strategy</h3>
@@ -294,48 +245,35 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
             </button>
           </div>
 
-          {/* Form Fields */}
+          {/* 1. Customer Name */}
           <div className="mkt-form-group">
             <label className="mkt-form-label">
-              Marketing Objective <span className="req">*</span>
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
-              {OBJECTIVES.map((obj) => (
-                <button
-                  type="button"
-                  key={obj.id}
-                  onClick={() => setObjective(obj.id)}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: objective === obj.id ? '2px solid #4f46e5' : '1.5px solid #e2e8f0',
-                    background: objective === obj.id ? '#eef2ff' : '#ffffff',
-                    color: objective === obj.id ? '#4f46e5' : '#334155',
-                    fontWeight: objective === obj.id ? 800 : 600,
-                    fontSize: '0.82rem',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {obj.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mkt-form-group">
-            <label className="mkt-form-label">
-              Idea Title <span className="req">*</span>
+              Customer Name <span className="req">*</span>
             </label>
             <input
               type="text"
               className="mkt-form-input"
-              placeholder="e.g. IT Software High-Intent Lead Inbound Campaign"
+              value={selectedCustomer ? selectedCustomer.name : 'No customer selected'}
+              disabled
+              style={{ background: '#f8fafc', color: '#0f172a', fontWeight: 700 }}
+            />
+          </div>
+
+          {/* 2. Campaign Name */}
+          <div className="mkt-form-group">
+            <label className="mkt-form-label">
+              Campaign Name <span className="req">*</span>
+            </label>
+            <input
+              type="text"
+              className="mkt-form-input"
+              placeholder="e.g. IT & Software High-Intent Lead Inbound Campaign"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>
 
+          {/* 3. Platform & 4. Language */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div className="mkt-form-group">
               <label className="mkt-form-label">Platform</label>
@@ -344,9 +282,9 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value)}
               >
-                <option value="Meta Ads (Facebook & Instagram)">Meta Ads (Facebook &amp; Instagram)</option>
-                <option value="Google Ads (Search & Performance Max)">Google Ads</option>
-                <option value="LinkedIn Sponsored Content">LinkedIn Ads</option>
+                {PLATFORMS.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
               </select>
             </div>
             <div className="mkt-form-group">
@@ -356,96 +294,59 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
               >
-                <option value="English / Hinglish">English / Hinglish</option>
-                <option value="English Only">English Only</option>
-                <option value="Hindi (Devanagari)">Hindi</option>
-                <option value="Gujarati">Gujarati</option>
+                {LANGUAGES.map((l) => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
               </select>
             </div>
           </div>
 
+          {/* 5. Call to Action (CTA) */}
           <div className="mkt-form-group">
-            <label className="mkt-form-label">Target Audience Definition</label>
-            <input
-              type="text"
-              className="mkt-form-input"
-              placeholder="e.g. Business decision makers and MSME owners in target cities"
-              value={targetAudience}
-              onChange={(e) => setTargetAudience(e.target.value)}
-            />
+            <label className="mkt-form-label">Call to Action (CTA)</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <select
+                className="mkt-form-select"
+                style={{ width: '45%' }}
+                value={COMMON_CTAS.includes(callToAction) ? callToAction : 'Custom'}
+                onChange={(e) => {
+                  if (e.target.value !== 'Custom') {
+                    setCallToAction(e.target.value);
+                  }
+                }}
+              >
+                {COMMON_CTAS.map((cta) => (
+                  <option key={cta} value={cta}>{cta}</option>
+                ))}
+                <option value="Custom">Custom CTA</option>
+              </select>
+              <input
+                type="text"
+                className="mkt-form-input"
+                style={{ flex: 1 }}
+                placeholder="Call to action text (e.g. Enquire Now)"
+                value={callToAction}
+                onChange={(e) => setCallToAction(e.target.value)}
+              />
+            </div>
           </div>
 
+          {/* 6. Description */}
           <div className="mkt-form-group">
             <label className="mkt-form-label">
-              Marketing Concept / Strategic Brief <span className="req">*</span>
+              Description <span className="req">*</span>
             </label>
             <textarea
               className="mkt-form-textarea"
-              rows={3}
-              placeholder="Describe the core proposition, problem addressed, and business benefit..."
+              rows={5}
+              placeholder="Describe the campaign concept, key business proposition, and customer messaging..."
               value={concept}
               onChange={(e) => setConcept(e.target.value)}
             />
           </div>
 
-          <div className="mkt-form-group">
-            <label className="mkt-form-label">Caption Suggestions</label>
-            <textarea
-              className="mkt-form-textarea"
-              rows={4}
-              placeholder="Primary advertising copy and bulleted value points..."
-              value={captionSuggestions}
-              onChange={(e) => setCaptionSuggestions(e.target.value)}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div className="mkt-form-group">
-              <label className="mkt-form-label">Call to Action (CTA)</label>
-              <input
-                type="text"
-                className="mkt-form-input"
-                placeholder="e.g. Enquire Now, Book Consultation"
-                value={callToAction}
-                onChange={(e) => setCallToAction(e.target.value)}
-              />
-            </div>
-            <div className="mkt-form-group">
-              <label className="mkt-form-label">Campaign Period</label>
-              <input
-                type="text"
-                className="mkt-form-input"
-                placeholder="e.g. 7–14 Days"
-                value={campaignPeriod}
-                onChange={(e) => setCampaignPeriod(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="mkt-form-group">
-            <label className="mkt-form-label">Hashtags</label>
-            <input
-              type="text"
-              className="mkt-form-input"
-              placeholder="#BrandName #Category #City #TargetKeywords"
-              value={hashtags}
-              onChange={(e) => setHashtags(e.target.value)}
-            />
-          </div>
-
-          <div className="mkt-form-group">
-            <label className="mkt-form-label">Creative Brief (Instructions for Designer)</label>
-            <textarea
-              className="mkt-form-textarea"
-              rows={2}
-              placeholder="Visual direction: Colors, imagery style, headline hierarchy, banner format..."
-              value={creativeBrief}
-              onChange={(e) => setCreativeBrief(e.target.value)}
-            />
-          </div>
-
           {/* Action Row */}
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
             <button
               type="button"
               className="mkt-btn-table-action"
@@ -513,7 +414,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
               <div style={{ textAlign: 'center', padding: '40px 16px', color: '#64748b' }}>
                 <Lightbulb size={32} style={{ color: '#cbd5e1', marginBottom: '8px' }} />
                 <p style={{ margin: 0, fontSize: '0.85rem' }}>
-                  No ideas saved yet for this customer. Use the builder on the left to structure and save your first campaign idea.
+                  No ideas saved yet for this customer. Fill the form on the left to structure and save your first campaign idea.
                 </p>
               </div>
             ) : (
@@ -534,6 +435,17 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
                       <span className={`mkt-pill ${idea.status === 'Saved' ? 'mkt-pill-green' : 'mkt-pill-amber'}`}>
                         {idea.status}
                       </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '6px 0 8px 0' }}>
+                      <span className="mkt-pill mkt-pill-indigo" style={{ fontSize: '0.72rem' }}>
+                        {idea.platform}
+                      </span>
+                      {idea.callToAction && (
+                        <span className="mkt-pill mkt-pill-slate" style={{ fontSize: '0.72rem' }}>
+                          CTA: {idea.callToAction}
+                        </span>
+                      )}
                     </div>
 
                     <p style={{ margin: '0 0 10px 0', fontSize: '0.82rem', color: '#475569', lineHeight: 1.4 }}>
@@ -567,4 +479,3 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
     </div>
   );
 }
-
