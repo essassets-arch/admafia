@@ -1909,10 +1909,11 @@ superadminRouter.post('/businesses', async (req, res) => {
       contactPerson,
       phone,
       email = '',
+      username = '',
       category = 'IT & Software',
       city = 'Mumbai',
       state = 'Maharashtra',
-      password = 'Customer@2026!',
+      password = '',
       initialBalance = 0,
       adminName = 'Super Admin',
       adminId = 'superadmin',
@@ -1930,14 +1931,16 @@ superadminRouter.post('/businesses', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'A valid 10-digit mobile number is required.' });
     }
 
+    const finalPassword = password && password.trim() ? password.trim() : `AdMafia@${cleanPhone.slice(-4)}`;
+    const finalUsername = username && username.trim() ? username.trim().toLowerCase().replace(/\s+/g, '') : `biz_${cleanPhone}`;
+
     // Check duplicate phone or username
-    const phoneCheck = await query(`SELECT id FROM customers WHERE phone = $1`, [cleanPhone]);
+    const phoneCheck = await query(`SELECT id FROM customers WHERE phone = $1 OR LOWER(username) = $2`, [cleanPhone, finalUsername]);
     if (phoneCheck.rowCount > 0) {
-      return res.status(409).json({ ok: false, error: `A business with phone number ${cleanPhone} is already registered.` });
+      return res.status(409).json({ ok: false, error: `A business with mobile ${cleanPhone} or username "${finalUsername}" is already registered.` });
     }
 
     const custId = `cust_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const username = `biz_${cleanPhone}`;
     const walletId = `wlt_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const parsedInitialBalance = Math.max(0, parseFloat(initialBalance) || 0);
 
@@ -1953,10 +1956,10 @@ superadminRouter.post('/businesses', async (req, res) => {
         )`,
         [
           custId,
-          username,
+          finalUsername,
           cleanPhone,
           email.trim() || null,
-          password.trim(),
+          finalPassword,
           companyName.trim(),
           category.trim(),
           contactPerson.trim(),
@@ -1998,15 +2001,19 @@ superadminRouter.post('/businesses', async (req, res) => {
       actionType: 'BUSINESS_CREATED',
       targetType: 'business',
       targetId: custId,
-      details: { companyName: companyName.trim(), contactPerson: contactPerson.trim(), phone: cleanPhone },
+      details: { companyName: companyName.trim(), contactPerson: contactPerson.trim(), phone: cleanPhone, username: finalUsername },
     });
 
     res.status(201).json({
       ok: true,
       customerId: custId,
-      username,
+      username: finalUsername,
+      phone: cleanPhone,
+      email: email.trim() || null,
+      password: finalPassword,
       companyName: companyName.trim(),
-      message: 'Business account created and activated successfully.',
+      loginUrl: 'https://admafia.marketing/portal',
+      message: 'Business account and customer login created successfully.',
     });
   } catch (err) {
     console.error('[POST /api/superadmin/businesses]', err);
@@ -2022,7 +2029,7 @@ superadminRouter.post('/users', async (req, res) => {
       email,
       username,
       phone = '',
-      password = 'User@2026!',
+      password = '',
       role = 'Support Agent',
       permissions = ['view_all'],
       customerId = null,
@@ -2043,6 +2050,8 @@ superadminRouter.post('/users', async (req, res) => {
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanUsername = username.trim().toLowerCase();
+    const cleanPhone = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+    const finalPassword = password && password.trim() ? password.trim() : 'User@2026!';
 
     // Check duplicate
     const dupCheck = await query(
@@ -2067,8 +2076,8 @@ superadminRouter.post('/users', async (req, res) => {
         fullName.trim(),
         cleanEmail,
         cleanUsername,
-        phone.trim() || null,
-        password.trim(),
+        cleanPhone || null,
+        finalPassword,
         role,
         permsJson,
         status,
@@ -2082,7 +2091,7 @@ superadminRouter.post('/users', async (req, res) => {
       actionType: 'USER_CREATED',
       targetType: 'user',
       targetId: userId,
-      details: { fullName: fullName.trim(), email: cleanEmail, username: cleanUsername, role },
+      details: { fullName: fullName.trim(), email: cleanEmail, username: cleanUsername, role, customerId },
     });
 
     res.status(201).json({
@@ -2090,8 +2099,12 @@ superadminRouter.post('/users', async (req, res) => {
       userId,
       username: cleanUsername,
       email: cleanEmail,
+      phone: cleanPhone || null,
+      password: finalPassword,
       role,
-      message: 'System user registered successfully.',
+      customerId: customerId || null,
+      loginUrl: 'https://admafia.marketing/portal',
+      message: 'System user and login credentials registered successfully.',
     });
   } catch (err) {
     console.error('[POST /api/superadmin/users]', err);
@@ -2099,13 +2112,92 @@ superadminRouter.post('/users', async (req, res) => {
   }
 });
 
-// List all system users
+// Reset Password for Customer Business Account
+superadminRouter.post('/accounts/:id/reset-password', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword, adminName = 'Super Admin' } = req.body || {};
+    if (!newPassword || !newPassword.trim()) {
+      return res.status(400).json({ ok: false, error: 'New password is required.' });
+    }
+
+    const check = await query(`SELECT id, company_name, username, phone, email FROM customers WHERE id = $1`, [id]);
+    if (check.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer business not found.' });
+    }
+
+    await query(`UPDATE customers SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [newPassword.trim(), id]);
+
+    await logSuperAdminAudit({
+      actorId: 'superadmin',
+      actorName: adminName,
+      actionType: 'ACCOUNT_PASSWORD_RESET',
+      targetType: 'business',
+      targetId: id,
+      details: { companyName: check.rows[0].company_name },
+    });
+
+    res.json({
+      ok: true,
+      customerId: id,
+      username: check.rows[0].username,
+      companyName: check.rows[0].company_name,
+      message: 'Password reset successfully for customer business.',
+    });
+  } catch (err) {
+    console.error('[POST /api/superadmin/accounts/:id/reset-password]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Reset Password for System User
+superadminRouter.post('/users/:id/reset-password', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword, adminName = 'Super Admin' } = req.body || {};
+    if (!newPassword || !newPassword.trim()) {
+      return res.status(400).json({ ok: false, error: 'New password is required.' });
+    }
+
+    const check = await query(`SELECT id, full_name, username, email FROM system_users WHERE id = $1`, [id]);
+    if (check.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'User not found.' });
+    }
+
+    await query(`UPDATE system_users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [newPassword.trim(), id]);
+
+    await logSuperAdminAudit({
+      actorId: 'superadmin',
+      actorName: adminName,
+      actionType: 'USER_PASSWORD_RESET',
+      targetType: 'user',
+      targetId: id,
+      details: { username: check.rows[0].username, fullName: check.rows[0].full_name },
+    });
+
+    res.json({
+      ok: true,
+      userId: id,
+      username: check.rows[0].username,
+      message: 'Password reset successfully for user.',
+    });
+  } catch (err) {
+    console.error('[POST /api/superadmin/users/:id/reset-password]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// List all system users with associated business name
 superadminRouter.get('/users', async (req, res) => {
   try {
     const listRes = await query(
-      `SELECT id, customer_id, full_name, email, username, phone, role, permissions, status, last_login_at, created_by, created_at
-       FROM system_users
-       ORDER BY created_at DESC`
+      `SELECT
+        u.id, u.customer_id, u.full_name, u.email, u.username, u.phone, u.role, u.permissions,
+        u.status, u.last_login_at, u.created_by, u.created_at,
+        c.company_name AS business_name
+       FROM system_users u
+       LEFT JOIN customers c ON c.id = u.customer_id
+       ORDER BY u.created_at DESC`
     );
 
     res.json({ ok: true, users: listRes.rows });

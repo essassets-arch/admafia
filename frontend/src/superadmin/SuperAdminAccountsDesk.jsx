@@ -11,9 +11,13 @@ import {
   X,
   Lock,
   Unlock,
+  Key,
+  ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
+import crmApi from '../services/crmApi';
 
 export default function SuperAdminAccountsDesk() {
   const [activeType, setActiveType] = useState('business'); // 'business' or 'user'
@@ -116,6 +120,88 @@ export default function SuperAdminAccountsDesk() {
       console.error('Failed to load history:', err);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  // Launch Customer Dashboard
+  const handleLaunchDashboard = async (target) => {
+    try {
+      const custId = target.customer_id || target.customerId || target.id || target.phone;
+      if (!custId) {
+        window.open('/portal', '_blank');
+        return;
+      }
+      const res = await crmApi.getCustomerWorkspace(custId).catch(() => null);
+      if (res?.customer) {
+        localStorage.setItem('growthline_active_user', JSON.stringify(res.customer));
+        window.open('/app/lead#app/dashboard', '_blank');
+        Swal.fire({
+          icon: 'success',
+          title: 'Customer Dashboard Launched 🚀',
+          html: `Logged into workspace for <strong>${res.customer.companyName || res.customer.name}</strong>.`,
+          timer: 1600,
+          showConfirmButton: false,
+        });
+      } else {
+        window.open('/portal', '_blank');
+      }
+    } catch (err) {
+      window.open('/portal', '_blank');
+    }
+  };
+
+  // Quick Reset Password prompt
+  const handlePromptResetPassword = async (target, type = 'business') => {
+    const targetName = target.company_name || target.full_name || target.username;
+    const defaultPrefix = type === 'business' ? 'AdMafia@' : 'User@';
+    const suggested = `${defaultPrefix}${Math.floor(1000 + Math.random() * 9000)}!`;
+
+    const { value: newPassword } = await Swal.fire({
+      title: `Reset Login Password`,
+      html: `
+        <div style="text-align:left; font-size:13px; line-height:1.6; margin-bottom:10px;">
+          <div>Target: <strong>${targetName}</strong></div>
+          <div style="font-size:12px; color:#64748b;">Set a new portal password for this account.</div>
+        </div>
+      `,
+      input: 'text',
+      inputValue: suggested,
+      inputLabel: 'New Portal Password',
+      inputPlaceholder: 'Enter new password',
+      showCancelButton: true,
+      confirmButtonText: 'Update Password',
+      confirmButtonColor: '#4f46e5',
+      inputValidator: (val) => {
+        if (!val || !val.trim()) return 'Password cannot be empty!';
+      },
+    });
+
+    if (newPassword) {
+      try {
+        let res;
+        if (type === 'business') {
+          res = await superadminApi.resetAccountPassword(target.id, { newPassword: newPassword.trim() });
+        } else {
+          res = await superadminApi.resetUserPassword(target.id, { newPassword: newPassword.trim() });
+        }
+
+        if (res && res.ok) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Password Updated!',
+            html: `
+              <div style="text-align:left; font-size:13px;">
+                <p>New Password: <code style="font-size:14px; color:#4338ca; font-weight:700;">${newPassword.trim()}</code></p>
+                <div style="margin-top:8px; padding:8px; background:#eff6ff; border-radius:6px; font-size:12px; color:#1e40af;">
+                  ✓ Updated in PostgreSQL. Customer can log in immediately.
+                </div>
+              </div>
+            `,
+          });
+        }
+      } catch (err) {
+        Swal.fire('Error', err.message || 'Could not reset password.', 'error');
+      }
     }
   };
 
@@ -284,6 +370,27 @@ export default function SuperAdminAccountsDesk() {
 
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: 6 }}>
+                          <button
+                            type="button"
+                            className="sa-action-btn sa-btn-outline"
+                            style={{ padding: '5px 8px', fontSize: 11 }}
+                            onClick={() => handleLaunchDashboard(b)}
+                            title="Launch Customer Dashboard"
+                          >
+                            <ExternalLink size={12} />
+                            <span>Dashboard</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="sa-action-btn sa-btn-outline"
+                            style={{ padding: '5px 8px', fontSize: 11 }}
+                            onClick={() => handlePromptResetPassword(b, 'business')}
+                            title="Reset Portal Password"
+                          >
+                            <Key size={12} />
+                          </button>
+
                           {b.status === 'active' ? (
                             <button
                               type="button"
@@ -406,27 +513,50 @@ export default function SuperAdminAccountsDesk() {
                       </td>
 
                       <td style={{ textAlign: 'right' }}>
-                        {u.status === 'active' ? (
+                        <div style={{ display: 'inline-flex', gap: 6 }}>
                           <button
                             type="button"
-                            className="sa-btn-danger"
-                            style={{ padding: '5px 10px', fontSize: '0.74rem' }}
-                            onClick={() => handleOpenStatusModal(u, 'suspended')}
+                            className="sa-action-btn sa-btn-outline"
+                            style={{ padding: '5px 8px', fontSize: 11 }}
+                            onClick={() => handleLaunchDashboard(u)}
+                            title="Launch Customer Dashboard as this user"
                           >
-                            <Lock size={12} />
-                            <span>Suspend</span>
+                            <ExternalLink size={12} />
+                            <span>Dashboard</span>
                           </button>
-                        ) : (
+
                           <button
                             type="button"
-                            className="sa-btn-success"
-                            style={{ padding: '5px 10px', fontSize: '0.74rem' }}
-                            onClick={() => handleOpenStatusModal(u, 'active')}
+                            className="sa-action-btn sa-btn-outline"
+                            style={{ padding: '5px 8px', fontSize: 11 }}
+                            onClick={() => handlePromptResetPassword(u, 'user')}
+                            title="Reset User Password"
                           >
-                            <Unlock size={12} />
-                            <span>Activate</span>
+                            <Key size={12} />
                           </button>
-                        )}
+
+                          {u.status === 'active' ? (
+                            <button
+                              type="button"
+                              className="sa-btn-danger"
+                              style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                              onClick={() => handleOpenStatusModal(u, 'suspended')}
+                            >
+                              <Lock size={12} />
+                              <span>Suspend</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="sa-btn-success"
+                              style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                              onClick={() => handleOpenStatusModal(u, 'active')}
+                            >
+                              <Unlock size={12} />
+                              <span>Activate</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))

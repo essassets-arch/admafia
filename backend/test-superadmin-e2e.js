@@ -7,6 +7,87 @@ const app = express();
 app.use(express.json());
 app.use('/api/superadmin', superadminRouter);
 
+// Mount /api/auth/login in test harness to verify Customer Dashboard login authentication
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { identifier, username, password } = req.body || {};
+    const q = String(identifier || username || '').trim().toLowerCase();
+    if (!q) {
+      return res.status(400).json({ ok: false, error: 'Username, mobile number, or email is required.' });
+    }
+
+    const cleanPhone = q.replace(/\D/g, '').slice(-10);
+
+    // 1. Check customers table
+    const custCheck = await query(
+      `SELECT id, password_hash, status FROM customers
+       WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR (length($2) = 10 AND phone = $2)
+       LIMIT 1`,
+      [q, cleanPhone]
+    );
+
+    let targetCustomerId = null;
+    let expectedPasswordHash = null;
+    let accountStatus = null;
+    let authUser = null;
+
+    if (custCheck.rowCount > 0) {
+      const row = custCheck.rows[0];
+      targetCustomerId = row.id;
+      expectedPasswordHash = row.password_hash;
+      accountStatus = row.status;
+    } else {
+      // 2. Check system_users table
+      const userCheck = await query(
+        `SELECT id, customer_id, full_name, email, username, phone, password_hash, role, permissions, status
+         FROM system_users
+         WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR (length($2) = 10 AND phone = $2)
+         LIMIT 1`,
+        [q, cleanPhone]
+      );
+
+      if (userCheck.rowCount === 0) {
+        return res.status(404).json({
+          ok: false,
+          error: 'No registered account found with these credentials.',
+        });
+      }
+
+      const uRow = userCheck.rows[0];
+      expectedPasswordHash = uRow.password_hash;
+      accountStatus = uRow.status;
+      authUser = {
+        id: uRow.id,
+        fullName: uRow.full_name,
+        email: uRow.email,
+        username: uRow.username,
+        role: uRow.role,
+      };
+
+      if (uRow.customer_id) {
+        targetCustomerId = uRow.customer_id;
+      }
+    }
+
+    if (password && expectedPasswordHash && expectedPasswordHash !== password) {
+      return res.status(401).json({ ok: false, error: 'Incorrect password for this account.' });
+    }
+
+    if (accountStatus === 'suspended' || accountStatus === 'blocked') {
+      return res.status(403).json({ ok: false, error: 'Workspace suspended.' });
+    }
+
+    const custRes = await query('SELECT id, company_name, phone, email, username FROM customers WHERE id = $1', [targetCustomerId]);
+    res.json({
+      ok: true,
+      customer: custRes.rows[0] || { id: targetCustomerId },
+      user: authUser || null,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 async function runSuperAdminE2ETests() {
   console.log('===============================================================');
   console.log('🧪 RUNNING SUPER ADMIN CONTROL CENTER END-TO-END TESTS');
@@ -46,8 +127,9 @@ async function runSuperAdminE2ETests() {
     // -------------------------------------------------------------------------
     // 2. Business Registration API
     // -------------------------------------------------------------------------
-    console.log('\n[2/8] Testing Business Registration API...');
+    console.log('\n[2/9] Testing Business Registration API...');
     const testPhone = `99${Date.now().toString().slice(-8)}`;
+    const testEmail = `suresh_${Date.now()}@apex.test`;
     const bizRes = await fetch(`${baseUrl}/businesses`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -55,7 +137,8 @@ async function runSuperAdminE2ETests() {
         companyName: 'Apex Test Dynamics',
         contactPerson: 'Suresh Raina',
         phone: testPhone,
-        email: `suresh_${Date.now()}@apex.test`,
+        email: testEmail,
+        password: 'BizPassword@123!',
         category: 'IT & Software',
         city: 'Pune',
         state: 'Maharashtra',
@@ -65,8 +148,10 @@ async function runSuperAdminE2ETests() {
     const bizData = await bizRes.json();
     assert(bizData.ok === true, 'Business registered successfully with 201 Created');
     assert(bizData.customerId.startsWith('cust_'), 'Valid customer ID returned');
+    assert(bizData.password === 'BizPassword@123!', 'Created business contains portal password');
 
     const testCustomerId = bizData.customerId;
+    const testBizUsername = bizData.username;
 
     // Verify wallet was created with initial deposit
     const walletCheck = await query('SELECT * FROM wallets WHERE customer_id = $1', [testCustomerId]);
@@ -76,7 +161,7 @@ async function runSuperAdminE2ETests() {
     // -------------------------------------------------------------------------
     // 3. User Provisioning API
     // -------------------------------------------------------------------------
-    console.log('\n[3/8] Testing User Provisioning API...');
+    console.log('\n[3/9] Testing User Provisioning API...');
     const testUsername = `op_${Date.now().toString().slice(-6)}`;
     const userRes = await fetch(`${baseUrl}/users`, {
       method: 'POST',
@@ -86,13 +171,16 @@ async function runSuperAdminE2ETests() {
         email: `${testUsername}@admafia.marketing`,
         username: testUsername,
         phone: '9822334455',
-        role: 'Operations Manager',
+        password: 'UserPassword@123!',
+        role: 'Business Manager',
+        customerId: testCustomerId,
         permissions: ['view_all', 'manage_queries'],
       }),
     });
     const userData = await userRes.json();
     assert(userData.ok === true, 'System user registered successfully');
-    assert(userData.role === 'Operations Manager', 'User role assigned correctly');
+    assert(userData.role === 'Business Manager', 'User role assigned correctly');
+    assert(userData.password === 'UserPassword@123!', 'User created with portal login password');
 
     // -------------------------------------------------------------------------
     // 4. Check Queries Lifecycle API
@@ -310,7 +398,7 @@ async function runSuperAdminE2ETests() {
     // -------------------------------------------------------------------------
     // 8. Finance Ledger & Audit Trail
     // -------------------------------------------------------------------------
-    console.log('\n[8/8] Testing Financial Ledger & Audit Trail...');
+    console.log('\n[8/9] Testing Financial Ledger & Audit Trail...');
     const finRes = await fetch(`${baseUrl}/finance/summary`);
     const finData = await finRes.json();
     assert(finData.ok === true, 'Finance summary returned');
@@ -322,6 +410,94 @@ async function runSuperAdminE2ETests() {
     const auditRes = await fetch(`${baseUrl}/audit-logs`);
     const auditData = await auditRes.json();
     assert(auditData.ok === true && auditData.logs.length > 0, 'Audit trail contains logged actions with actor and timestamp');
+
+    // -------------------------------------------------------------------------
+    // 9. Customer Dashboard Login Authentication & Password Governance
+    // -------------------------------------------------------------------------
+    console.log('\n[9/9] Testing Customer Dashboard Login & Password Governance...');
+    const authUrl = `http://127.0.0.1:${port}/api/auth/login`;
+
+    // A. Business Login by 10-digit mobile number + password
+    const loginByPhone = await fetch(authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: testPhone, password: 'BizPassword@123!' }),
+    });
+    const loginByPhoneData = await loginByPhone.json();
+    assert(loginByPhone.status === 200 && loginByPhoneData.ok === true, 'Business logs into Customer Dashboard by 10-digit mobile');
+    assert(loginByPhoneData.customer.id === testCustomerId, 'Customer Dashboard loads authoritative workspace');
+
+    // B. Business Login by email + password
+    const loginByEmail = await fetch(authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: testEmail, password: 'BizPassword@123!' }),
+    });
+    const loginByEmailData = await loginByEmail.json();
+    assert(loginByEmail.status === 200 && loginByEmailData.ok === true, 'Business logs into Customer Dashboard by email');
+
+    // C. Business Login by username + password
+    const loginByUsername = await fetch(authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: testBizUsername, password: 'BizPassword@123!' }),
+    });
+    const loginByUsernameData = await loginByUsername.json();
+    assert(loginByUsername.status === 200 && loginByUsernameData.ok === true, 'Business logs into Customer Dashboard by username');
+
+    // D. Bad password rejected with HTTP 401
+    const badPasswordRes = await fetch(authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: testPhone, password: 'WrongPassword999!' }),
+    });
+    assert(badPasswordRes.status === 401, 'Invalid password strictly rejected with HTTP 401');
+
+    // E. Scoped System User login by username + password
+    const userLoginRes = await fetch(authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: testUsername, password: 'UserPassword@123!' }),
+    });
+    const userLoginData = await userLoginRes.json();
+    assert(userLoginRes.status === 200 && userLoginData.ok === true, 'Scoped system user logs into Customer Dashboard');
+    assert(userLoginData.customer.id === testCustomerId, 'User login loads scoped customer workspace');
+    assert(userLoginData.user.username === testUsername, 'Authenticated user context attached');
+
+    // F. Reset Account Password via Super Admin API
+    const resetAccountRes = await fetch(`${baseUrl}/accounts/${testCustomerId}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword: 'NewBizPassword@999!' }),
+    });
+    const resetAccountData = await resetAccountRes.json();
+    assert(resetAccountRes.status === 200 && resetAccountData.ok === true, 'Super Admin successfully resets customer password');
+
+    // Verify old password fails
+    const oldPwdFail = await fetch(authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: testPhone, password: 'BizPassword@123!' }),
+    });
+    assert(oldPwdFail.status === 401, 'Old customer password no longer accepted');
+
+    // Verify new password succeeds
+    const newPwdSuccess = await fetch(authUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: testPhone, password: 'NewBizPassword@999!' }),
+    });
+    assert(newPwdSuccess.status === 200, 'New customer password logs into dashboard successfully');
+
+    // G. Reset User Password via Super Admin API
+    const userRow = await query('SELECT id FROM system_users WHERE username = $1', [testUsername]);
+    const resetUserRes = await fetch(`${baseUrl}/users/${userRow.rows[0].id}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword: 'NewUserPassword@999!' }),
+    });
+    const resetUserData = await resetUserRes.json();
+    assert(resetUserRes.status === 200 && resetUserData.ok === true, 'Super Admin successfully resets user password');
 
     // Clean up test customer and user to keep database clean
     await query('DELETE FROM support_query_messages WHERE query_id = $1', [testQueryId]);

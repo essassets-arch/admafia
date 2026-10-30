@@ -115,7 +115,7 @@ export const superadminApi = {
     }),
   getAccountHistory: (id) => request(`/superadmin/accounts/${id}/history`),
 
-  // 7. Add User / Business
+  // 7. Add User / Business & Credentials
   createBusiness: (data) =>
     request('/superadmin/businesses', {
       method: 'POST',
@@ -123,6 +123,16 @@ export const superadminApi = {
     }),
   createUser: (data) =>
     request('/superadmin/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  resetAccountPassword: (id, data) =>
+    request(`/superadmin/accounts/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  resetUserPassword: (id, data) =>
+    request(`/superadmin/users/${id}/reset-password`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),

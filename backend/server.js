@@ -508,44 +508,110 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Username, mobile number, or email is required.' });
     }
 
+    const cleanPhone = q.replace(/\D/g, '').slice(-10);
+
+    // 1. Check customers table (Business Account login by username, email, or 10-digit mobile)
     const custCheck = await query(
       `SELECT id, password_hash, status FROM customers
-       WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR phone = $2
+       WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR (length($2) = 10 AND phone = $2)
        LIMIT 1`,
-      [q, q.replace(/\D/g, '').slice(-10)]
+      [q, cleanPhone]
     );
 
-    if (custCheck.rowCount === 0) {
-      return res.status(404).json({
-        ok: false,
-        error: 'No registered account found with these credentials. Please create a business account first.',
-      });
+    let targetCustomerId = null;
+    let expectedPasswordHash = null;
+    let accountStatus = null;
+    let authUser = null;
+
+    if (custCheck.rowCount > 0) {
+      const row = custCheck.rows[0];
+      targetCustomerId = row.id;
+      expectedPasswordHash = row.password_hash;
+      accountStatus = row.status;
+    } else {
+      // 2. Check system_users table (User login created by Super Admin)
+      const userCheck = await query(
+        `SELECT id, customer_id, full_name, email, username, phone, password_hash, role, permissions, status
+         FROM system_users
+         WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR (length($2) = 10 AND phone = $2)
+         LIMIT 1`,
+        [q, cleanPhone]
+      );
+
+      if (userCheck.rowCount === 0) {
+        return res.status(404).json({
+          ok: false,
+          error: 'No registered account found with these credentials. Please check your username, mobile number, or email.',
+        });
+      }
+
+      const uRow = userCheck.rows[0];
+      expectedPasswordHash = uRow.password_hash;
+      accountStatus = uRow.status;
+      authUser = {
+        id: uRow.id,
+        fullName: uRow.full_name,
+        email: uRow.email,
+        username: uRow.username,
+        phone: uRow.phone,
+        role: uRow.role,
+        permissions: uRow.permissions,
+        customerId: uRow.customer_id,
+      };
+
+      if (uRow.customer_id) {
+        targetCustomerId = uRow.customer_id;
+      } else {
+        // Platform user opening customer dashboard: bind to primary customer workspace
+        const defaultCust = await query(`SELECT id FROM customers WHERE status = 'active' ORDER BY registered_at ASC LIMIT 1`);
+        if (defaultCust.rowCount > 0) {
+          targetCustomerId = defaultCust.rows[0].id;
+        }
+      }
     }
 
-    const row = custCheck.rows[0];
-    if (password && row.password_hash && row.password_hash !== password) {
+    if (password && expectedPasswordHash && expectedPasswordHash !== password) {
       return res.status(401).json({ ok: false, error: 'Incorrect password for this account.' });
     }
 
-    if (row.status === 'suspended') {
+    if (accountStatus === 'suspended' || accountStatus === 'blocked') {
       return res.status(403).json({
         ok: false,
         error: 'Compliance Hold Notice: Your workspace has been suspended by the operations administrator.',
       });
     }
 
-    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [row.id]);
-    const customer = mapCustomerRow(viewRes.rows[0], row.password_hash);
+    if (authUser?.id) {
+      await query(`UPDATE system_users SET last_login_at = NOW() WHERE id = $1`, [authUser.id]).catch(() => {});
+    }
+
+    if (!targetCustomerId) {
+      return res.status(404).json({
+        ok: false,
+        error: 'No associated customer workspace found for this user.',
+      });
+    }
+
+    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [targetCustomerId]);
+    if (viewRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer workspace record not found.' });
+    }
+
+    const customer = mapCustomerRow(viewRes.rows[0], expectedPasswordHash);
+    if (authUser) {
+      customer.authUser = authUser;
+    }
 
     const [leadsRes, txRes, invRes] = await Promise.all([
-      query('SELECT * FROM leads WHERE customer_id = $1 ORDER BY created_at DESC', [row.id]),
-      query('SELECT * FROM wallet_transactions WHERE customer_id = $1 ORDER BY created_at DESC', [row.id]),
-      query('SELECT * FROM tax_invoices WHERE customer_id = $1 ORDER BY created_at DESC', [row.id]),
+      query('SELECT * FROM leads WHERE customer_id = $1 ORDER BY created_at DESC', [targetCustomerId]),
+      query('SELECT * FROM wallet_transactions WHERE customer_id = $1 ORDER BY created_at DESC', [targetCustomerId]),
+      query('SELECT * FROM tax_invoices WHERE customer_id = $1 ORDER BY created_at DESC', [targetCustomerId]),
     ]);
 
     res.json({
       ok: true,
       customer,
+      user: authUser || null,
       leads: leadsRes.rows.map(mapLeadRow),
       transactions: txRes.rows.map(mapWalletTxRow),
       invoices: invRes.rows.map(mapInvoiceRow),
