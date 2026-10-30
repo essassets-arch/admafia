@@ -34,6 +34,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
   const [designerNotes, setDesignerNotes] = useState('');
   const [designerName, setDesignerName] = useState('Senior Graphics Designer');
   const [mediaUrl, setMediaUrl] = useState('');
+  const [localPreview, setLocalPreview] = useState('');
   const [mediaType, setMediaType] = useState('image');
   const [uploadingFile, setUploadingFile] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -119,6 +120,12 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
       });
       return;
     }
+
+    // Instant local preview
+    try {
+      const objUrl = URL.createObjectURL(file);
+      setLocalPreview(objUrl);
+    } catch (e) {}
 
     setUploadingFile(true);
     const reader = new FileReader();
@@ -271,7 +278,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                   borderRadius: 12,
                   padding: 24,
                   textAlign: 'center',
-                  background: mediaUrl ? '#f8fafc' : '#ffffff',
+                  background: (localPreview || mediaUrl) ? '#f8fafc' : '#ffffff',
                   cursor: 'pointer',
                   position: 'relative',
                   transition: 'border-color 0.15s',
@@ -297,12 +304,12 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                     <RefreshCw size={28} className="spin" color="#6366f1" />
                     <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#4f46e5' }}>Uploading artwork to repository...</span>
                   </div>
-                ) : mediaUrl ? (
+                ) : (localPreview || mediaUrl) ? (
                   <div>
                     <img
-                      src={mediaUrl}
-                      alt="Preview"
-                      style={{ maxHeight: 180, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+                      src={localPreview || mediaUrl}
+                      alt="Artwork Preview"
+                      style={{ maxHeight: 180, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', objectFit: 'contain' }}
                     />
                     <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>
                       ✓ Artwork Uploaded Successfully (Click or drag to replace)

@@ -35,6 +35,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
   // Reupload Modal State
   const [reuploadPost, setReuploadPost] = useState(null);
   const [newMediaUrl, setNewMediaUrl] = useState('');
+  const [localPreview, setLocalPreview] = useState('');
   const [newCreativeFormat, setNewCreativeFormat] = useState('Instagram / Facebook Post');
   const [revisionSummary, setRevisionSummary] = useState('');
   const [designerNotes, setDesignerNotes] = useState('');
@@ -83,6 +84,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
   const handleOpenReupload = (post) => {
     setReuploadPost(post);
     setNewMediaUrl('');
+    setLocalPreview('');
     setNewCreativeFormat(post.creativeFormat || 'Instagram / Facebook Post');
     setRevisionSummary('');
     setDesignerNotes('');
@@ -103,6 +105,12 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
       Swal.fire({ icon: 'error', title: 'Unsupported Format', text: 'Please upload a PNG, JPG, or WEBP image.' });
       return;
     }
+
+    // Instant local preview
+    try {
+      const objUrl = URL.createObjectURL(file);
+      setLocalPreview(objUrl);
+    } catch (err) {}
 
     setUploadingFile(true);
     const reader = new FileReader();
@@ -438,7 +446,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                       borderRadius: 10,
                       padding: 20,
                       textAlign: 'center',
-                      background: newMediaUrl ? '#f8fafc' : '#ffffff',
+                      background: (localPreview || newMediaUrl) ? '#f8fafc' : '#ffffff',
                       position: 'relative',
                     }}
                   >
@@ -462,12 +470,12 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                         <RefreshCw size={24} className="spin" color="#6366f1" />
                         <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#4f46e5' }}>Uploading corrected file...</span>
                       </div>
-                    ) : newMediaUrl ? (
+                    ) : (localPreview || newMediaUrl) ? (
                       <div>
                         <img
-                          src={newMediaUrl}
+                          src={localPreview || newMediaUrl}
                           alt="Corrected Preview"
-                          style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
+                          style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', objectFit: 'contain' }}
                         />
                         <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>
                           ✓ Corrected File Ready for Resubmission (Click to change)
