@@ -20,7 +20,7 @@ import {
   Eye,
   TrendingUp,
 } from 'lucide-react';
-import { DEFAULT_DESK_LEADS } from './OperationalDesksViews';
+import { DEFAULT_DESK_LEADS, formatIndianDateTime } from './OperationalDesksViews';
 
 const formatINR = (val) =>
   new Intl.NumberFormat('en-IN', {
@@ -728,7 +728,7 @@ export default function AllDesksOverviewDashboard({
                       {c.companyName || c.name}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      👤 {c.contactPerson || c.contact} • +91 {c.phone} • {c.city || 'India'} • ⏱️ {c.completedAt ? new Date(c.completedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : (c.registeredAt || liveClock.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))}
+                      👤 {c.contactPerson || c.contact} • +91 {c.phone} • {c.city || 'India'} • ⏱️ {formatIndianDateTime(c.completedAt || c.registeredAt, c.completedAt || c.registeredAtRaw || c.registered_at)}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -863,7 +863,7 @@ export default function AllDesksOverviewDashboard({
                       {item.customerName || item.client || 'Client Account'}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      Ref: <span style={{ fontFamily: 'monospace' }}>{item.receiptNumber || item.invoiceNumber || item.utr || 'REC-SETTLED'}</span> • ⏱️ {item.date || liveClock.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      Ref: <span style={{ fontFamily: 'monospace' }}>{item.receiptNumber || item.invoiceNumber || item.utr || 'REC-SETTLED'}</span> • ⏱️ {formatIndianDateTime(item.date, item.paid_at_raw || item.paid_at)}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>

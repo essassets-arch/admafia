@@ -61,12 +61,17 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     registeredFrom: row.registered_from || 'http://localhost:5173/#register',
     registeredAt: row.registered_at
       ? new Date(row.registered_at).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
           day: '2-digit',
           month: 'short',
+          year: 'numeric',
           hour: '2-digit',
           minute: '2-digit',
+          hour12: true,
         })
       : 'Today',
+    registeredAtRaw: row.registered_at,
+    registered_at_raw: row.registered_at,
   };
 }
 
@@ -101,12 +106,17 @@ function mapLeadRow(row) {
     dateGroup: 'today',
     createdAt: row.created_at
       ? new Date(row.created_at).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
           day: '2-digit',
           month: 'short',
+          year: 'numeric',
           hour: '2-digit',
           minute: '2-digit',
+          hour12: true,
         })
       : 'Today',
+    createdAtRaw: row.created_at,
+    created_at_raw: row.created_at,
   };
 }
 
@@ -123,13 +133,16 @@ function mapWalletTxRow(row) {
     status: row.status || 'Verified ✓',
     date: row.created_at
       ? new Date(row.created_at).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
           day: '2-digit',
           month: 'short',
           year: 'numeric',
           hour: '2-digit',
           minute: '2-digit',
+          hour12: true,
         })
       : 'Just now',
+    createdAtRaw: row.created_at,
   };
 }
 
@@ -148,11 +161,12 @@ function mapInvoiceRow(row) {
     status: row.status || 'Paid',
     date: row.issued_date
       ? new Date(row.issued_date).toLocaleDateString('en-IN', {
+          timeZone: 'Asia/Kolkata',
           day: '2-digit',
           month: 'short',
           year: 'numeric',
         })
-      : new Date().toLocaleDateString('en-IN'),
+      : new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }),
   };
 }
 
@@ -176,12 +190,17 @@ function mapPaymentRecordRow(row) {
     notes: row.notes || '',
     date: row.paid_at
       ? new Date(row.paid_at).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
           day: '2-digit',
           month: 'short',
+          year: 'numeric',
           hour: '2-digit',
           minute: '2-digit',
+          hour12: true,
         })
       : 'Today',
+    paidAtRaw: row.paid_at,
+    paid_at_raw: row.paid_at,
   };
 }
 
@@ -308,8 +327,18 @@ app.get('/api/state', async (req, res) => {
         profileStatus: r.profile_status,
         queueType: r.queue_type,
         submittedAt: r.submitted_at
-          ? new Date(r.submitted_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })
+          ? new Date(r.submitted_at).toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            })
           : 'Today',
+        submittedAtRaw: r.submitted_at,
+        submitted_at_raw: r.submitted_at,
       })),
       queries: qRes.rows,
       tasks: tRes.rows,
@@ -1085,7 +1114,34 @@ app.get('/api/invoices', async (req, res) => {
 app.get('/api/verifications', async (req, res) => {
   try {
     const result = await query('SELECT * FROM pending_verifications ORDER BY submitted_at DESC');
-    res.json({ ok: true, verifications: result.rows });
+    const verifications = result.rows.map((r) => ({
+      ...r,
+      customerId: r.customer_id,
+      company: r.company_name,
+      contact: r.contact_person,
+      phone: (r.phone || '').trim(),
+      packageTier: r.package_tier,
+      amount: Number(r.amount || 0),
+      dailyRate: Number(r.daily_rate || 300),
+      utrNumber: r.utr_number,
+      paymentStatus: r.payment_status,
+      profileStatus: r.profile_status,
+      queueType: r.queue_type,
+      submittedAt: r.submitted_at
+        ? new Date(r.submitted_at).toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+        : 'Today',
+      submittedAtRaw: r.submitted_at,
+      submitted_at_raw: r.submitted_at,
+    }));
+    res.json({ ok: true, verifications });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

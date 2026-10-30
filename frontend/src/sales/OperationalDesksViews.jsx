@@ -45,6 +45,7 @@ export const getLiveNowFormatted = (dateInput = new Date()) => {
   const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
   if (isNaN(d.getTime())) {
     return new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -54,6 +55,7 @@ export const getLiveNowFormatted = (dateInput = new Date()) => {
     });
   }
   return d.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -61,6 +63,71 @@ export const getLiveNowFormatted = (dateInput = new Date()) => {
     minute: '2-digit',
     hour12: true,
   });
+};
+
+export const formatIndianDateTime = (val, rawVal) => {
+  const target = rawVal || val;
+  if (!target) return getLiveNowFormatted();
+
+  // 1. If it's a valid Date object
+  if (target instanceof Date) {
+    return target.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
+  // 2. If it's a valid parseable ISO string or timestamp
+  if (typeof target === 'string' && (target.includes('T') || target.includes('-') || !isNaN(Date.parse(target)))) {
+    const d = new Date(target);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    }
+  }
+
+  // 3. If it's a legacy string like "30 Oct, 05:57 am" or "30 Oct, 05:57" (generated in UTC by old server)
+  if (typeof val === 'string') {
+    const match = val.match(/(\d{1,2}\s+[A-Za-z]+)(?:,\s*|\s+)(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+    if (match) {
+      const datePart = match[1];
+      let hours = parseInt(match[2], 10);
+      const minutes = parseInt(match[3], 10);
+      const meridiem = (match[4] || '').toLowerCase();
+      if (meridiem === 'pm' && hours < 12) hours += 12;
+      if (meridiem === 'am' && hours === 12) hours = 0;
+
+      // Construct a Date assuming it was UTC:
+      const currentYear = new Date().getFullYear();
+      const utcDate = new Date(`${datePart} ${currentYear} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00 UTC`);
+      if (!isNaN(utcDate.getTime())) {
+        return utcDate.toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+      }
+    }
+    return val;
+  }
+
+  return getLiveNowFormatted();
 };
 
 /* ==========================================================================
@@ -566,7 +633,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                       {c.name || 'Workspace'}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      {c.city} • Registered: {c.registeredAt || getLiveNowFormatted()}
+                      {c.city} • Registered: {formatIndianDateTime(c.registeredAt, c.registeredAtRaw || c.registered_at)}
                     </div>
                   </td>
 
@@ -1149,7 +1216,7 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
                   </span>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 4 }}>
-                  Contact: <span style={{ fontWeight: 600, color: '#334155' }}>{item.contact}</span> • Phone: <a href={`tel:${item.phone}`} style={{ color: '#4f46e5' }}>+91 {item.phone}</a> • Submitted: {item.submittedAt}
+                  Contact: <span style={{ fontWeight: 600, color: '#334155' }}>{item.contact}</span> • Phone: <a href={`tel:${item.phone}`} style={{ color: '#4f46e5' }}>+91 {item.phone}</a> • Submitted: {formatIndianDateTime(item.submittedAt, item.submittedAtRaw || item.submitted_at)}
                 </div>
               </div>
 
@@ -1300,7 +1367,9 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Intake Submission Time</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{selectedDetail.submittedAt || cust.registeredAt || getLiveNowFormatted()}</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
+                      {formatIndianDateTime(selectedDetail.submittedAt || cust.registeredAt, selectedDetail.submittedAtRaw || selectedDetail.submitted_at || cust.registeredAtRaw || cust.registered_at)}
+                    </div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>KYC Audit Progress</div>
