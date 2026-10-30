@@ -355,20 +355,20 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             <span>Customer Registrations</span>
           </button>
 
-          {/* 2. Pending Verification (Badge: dynamic count e.g. 7) */}
+          {/* 2. Verification Audit */}
           <button
             type="button"
             className={`sales-nav-btn ${activeTab === 'pending_verification' ? 'active' : ''}`}
             onClick={() => navigateToDesk('pending_verification', '#verification')}
           >
             <ShieldCheck size={18} strokeWidth={2.2} />
-            <span>Pending Verification</span>
+            <span>Verification Audit</span>
             <span
               className="sales-nav-badge"
               style={{
-                background: '#fef2f2',
-                color: '#dc2626',
-                borderColor: '#fecaca',
+                background: '#ecfdf5',
+                color: '#059669',
+                borderColor: '#a7f3d0',
                 fontWeight: 800,
               }}
             >
@@ -502,7 +502,6 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
               setCustomers={setCustomers}
               verifications={verifications}
               setVerifications={setVerifications}
-              onApproveVerification={handleVerificationApprove}
               invoices={invoices}
               setInvoices={setInvoices}
               queries={queries}

@@ -1052,12 +1052,10 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
   const [selectedDetail, setSelectedDetail] = useState(null);
 
   const filtered = verifications.filter((v) => {
-    if (filter === 'both') return v.queueType === 'Both Incomplete';
-    if (filter === 'payment') return v.queueType === 'Payment Pending';
-    if (filter === 'profile') return v.queueType === 'Profile Pending';
+    if (filter === 'paid') return v.paymentStatus === 'paid';
+    if (filter === 'awaiting') return v.paymentStatus !== 'paid';
     return true;
   });
-
 
   return (
     <div className="desk-page-container">
@@ -1066,11 +1064,13 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
         <div>
           <div className="desk-breadcrumb">SUB ADMIN &amp; SUPPORT OPERATIONS / DESK 02</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 className="desk-title">Profile Completion &amp; Verification</h1>
-            <span className="desk-badge-count-alert" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>{verifications.length} Registered</span>
+            <h1 className="desk-title">Automated Verification &amp; Profile Intake</h1>
+            <span className="desk-badge-count-alert" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
+              {verifications.length} Auto-Verified
+            </span>
           </div>
           <p className="desk-subtitle">
-            Authoritative profile completion records: Review customer registration status, compliance KYC audit, and ad wallet funding readiness.
+            100% automated onboarding &amp; KYC verification: Accounts are automatically verified upon customer submission with zero manual admin approval hurdles.
           </p>
         </div>
       </div>
@@ -1079,23 +1079,23 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
       <div className="desk-kpi-grid">
         <div className="desk-kpi-card">
           <div className="desk-kpi-label">TOTAL REGISTERED ACCOUNTS</div>
-          <div className="desk-kpi-val text-amber">{verifications.length}</div>
+          <div className="desk-kpi-val text-indigo">{verifications.length}</div>
           <div className="desk-kpi-sub">Total onboarding intake</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">100% KYC COMPLETED</div>
-          <div className="desk-kpi-val text-emerald">{verifications.filter((v) => v.profileStatus === 'complete' || (v.kycPercent || 100) >= 100).length || verifications.length}</div>
-          <div className="desk-kpi-sub">Auto-verified upon registration</div>
+          <div className="desk-kpi-label">100% PROFILE VERIFIED</div>
+          <div className="desk-kpi-val text-emerald">{verifications.length}</div>
+          <div className="desk-kpi-sub">Auto-verified on registration</div>
         </div>
         <div className="desk-kpi-card">
           <div className="desk-kpi-label">PAYMENT SETTLED</div>
-          <div className="desk-kpi-val text-indigo">{verifications.filter((v) => v.paymentStatus === 'paid').length}</div>
+          <div className="desk-kpi-val text-emerald">{verifications.filter((v) => v.paymentStatus === 'paid').length}</div>
           <div className="desk-kpi-sub">Active ad wallet funded</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">AWAITING WALLET TOP-UP</div>
-          <div className="desk-kpi-val text-warn">{verifications.filter((v) => v.paymentStatus !== 'paid').length}</div>
-          <div className="desk-kpi-sub">Self-registered, awaiting top-up</div>
+          <div className="desk-kpi-label">AWAITING AD BUDGET</div>
+          <div className="desk-kpi-val text-amber">{verifications.filter((v) => v.paymentStatus !== 'paid').length}</div>
+          <div className="desk-kpi-sub">Self-serve wallet top-up</div>
         </div>
       </div>
 
@@ -1103,16 +1103,13 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
       <div className="desk-filter-bar">
         <div className="desk-tabs">
           <button type="button" className={`desk-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
-            All Pending ({verifications.length})
+            All Accounts ({verifications.length})
           </button>
-          <button type="button" className={`desk-tab ${filter === 'both' ? 'active' : ''}`} onClick={() => setFilter('both')}>
-            Both Incomplete ({verifications.filter((v) => v.queueType === 'Both Incomplete').length})
+          <button type="button" className={`desk-tab ${filter === 'paid' ? 'active' : ''}`} onClick={() => setFilter('paid')}>
+            Payment Settled ({verifications.filter((v) => v.paymentStatus === 'paid').length})
           </button>
-          <button type="button" className={`desk-tab ${filter === 'payment' ? 'active' : ''}`} onClick={() => setFilter('payment')}>
-            Payment Pending ({verifications.filter((v) => v.queueType === 'Payment Pending').length})
-          </button>
-          <button type="button" className={`desk-tab ${filter === 'profile' ? 'active' : ''}`} onClick={() => setFilter('profile')}>
-            Profile Pending ({verifications.filter((v) => v.queueType === 'Profile Pending').length})
+          <button type="button" className={`desk-tab ${filter === 'awaiting' ? 'active' : ''}`} onClick={() => setFilter('awaiting')}>
+            Awaiting Ad Budget ({verifications.filter((v) => v.paymentStatus !== 'paid').length})
           </button>
         </div>
       </div>
@@ -1125,8 +1122,8 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{item.company}</h3>
-                  <span className={`desk-pill ${item.queueType === 'Both Incomplete' ? 'pill-rose' : item.queueType === 'Payment Pending' ? 'pill-amber' : 'pill-indigo'}`}>
-                    {item.queueType}
+                  <span className={`desk-pill ${item.paymentStatus === 'paid' ? 'pill-emerald' : 'pill-amber'}`}>
+                    {item.paymentStatus === 'paid' ? '✓ Auto-Verified & Paid' : '✓ Auto-Verified (Budget Pending)'}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 4 }}>
@@ -1158,7 +1155,7 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
                     border: 'none',
                     fontWeight: 700
                   }}
-                  title="View full payment and profile completion information"
+                  title="View full payment and profile completion audit record"
                 >
                   <Eye size={14} />
                   <span>Detail</span>
@@ -1186,7 +1183,7 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
               </div>
 
               <div style={{ fontSize: '0.8rem', color: '#475569' }}>
-                Reference: <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#e2e8f0', padding: '2px 6px', borderRadius: 4 }}>{item.utrNumber}</span>
+                Reference: <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#e2e8f0', padding: '2px 6px', borderRadius: 4 }}>{item.utrNumber || 'Auto-Verified'}</span>
               </div>
             </div>
 
@@ -1194,7 +1191,7 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
             <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', color: '#059669', fontWeight: 700 }}>
                 <CheckCircle2 size={15} />
-                <span>Profile Registration Complete &amp; 100% KYC Verified</span>
+                <span>Profile Registration Complete &amp; 100% Auto-Verified</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ fontSize: '0.78rem', color: '#475569' }}>

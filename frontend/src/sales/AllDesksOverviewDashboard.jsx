@@ -41,7 +41,6 @@ export default function AllDesksOverviewDashboard({
   setCustomers,
   verifications = [],
   setVerifications,
-  onApproveVerification,
   invoices = [],
   setInvoices,
   queries = [],
@@ -111,13 +110,6 @@ export default function AllDesksOverviewDashboard({
   });
 
   // Quick Inline Actions
-  const handleQuickApproveVerification = (item) => {
-    if (onApproveVerification) {
-      onApproveVerification(item);
-    }
-    setVerifications((prev) => prev.filter((v) => v.id !== item.id));
-  };
-
   const handleToggleTask = (taskId) => {
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, status: t.status === 'completed' ? 'pending' : 'completed' } : t))
@@ -306,12 +298,12 @@ export default function AllDesksOverviewDashboard({
             </div>
           </div>
 
-          {/* Card 2: Pending Verification */}
+          {/* Card 2: Verification Audit */}
           <div
             onClick={() => navigateToDesk('pending_verification', '#verification')}
             style={{
               background: '#ffffff',
-              border: '1px solid #fecaca',
+              border: '1px solid #bbf7d0',
               borderRadius: 12,
               padding: '16px 18px',
               cursor: 'pointer',
@@ -322,12 +314,12 @@ export default function AllDesksOverviewDashboard({
               justifyContent: 'space-between',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#dc2626';
+              e.currentTarget.style.borderColor = '#10b981';
               e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 16px rgba(220, 38, 38, 0.12)';
+              e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.12)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#fecaca';
+              e.currentTarget.style.borderColor = '#bbf7d0';
               e.currentTarget.style.transform = 'translateY(0)';
               e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
             }}
@@ -340,8 +332,8 @@ export default function AllDesksOverviewDashboard({
                       width: 36,
                       height: 36,
                       borderRadius: 10,
-                      background: '#fef2f2',
-                      color: '#dc2626',
+                      background: '#ecfdf5',
+                      color: '#059669',
                       display: 'grid',
                       placeItems: 'center',
                     }}
@@ -349,36 +341,36 @@ export default function AllDesksOverviewDashboard({
                     <ShieldCheck size={18} strokeWidth={2.2} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 800, textTransform: 'uppercase' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 800, textTransform: 'uppercase' }}>
                       DESK 02
                     </div>
                     <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                      Pending Verification
+                      Verification &amp; Intake
                     </div>
                   </div>
                 </div>
                 <span
                   style={{
-                    background: '#fef2f2',
-                    color: '#dc2626',
-                    border: '1px solid #fecaca',
+                    background: '#ecfdf5',
+                    color: '#059669',
+                    border: '1px solid #a7f3d0',
                     fontSize: '0.78rem',
                     fontWeight: 800,
                     padding: '2px 8px',
                     borderRadius: 9999,
                   }}
                 >
-                  {pendingVerificationsCount} Pending
+                  Auto-Verified ✓
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#dc2626' }}>
-                  {pendingVerificationsCount}
+                <span style={{ fontSize: '1.6rem', fontWeight: 900, color: '#059669' }}>
+                  {verifications.length}
                 </span>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Needs sub-admin approval</span>
+                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Accounts registered &amp; auto-verified</span>
               </div>
-              <div style={{ fontSize: '0.78rem', color: '#b91c1c', marginTop: 4, fontWeight: 600 }}>
-                ⚡ Action required to unlock wallet
+              <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: 4, fontWeight: 600 }}>
+                ✓ Instant self-serve • Zero manual approval needed
               </div>
             </div>
             <div
@@ -391,10 +383,10 @@ export default function AllDesksOverviewDashboard({
                 alignItems: 'center',
                 fontSize: '0.78rem',
                 fontWeight: 700,
-                color: '#dc2626',
+                color: '#059669',
               }}
             >
-              <span>Review Verifications</span>
+              <span>View Verification Records</span>
               <ArrowRight size={14} />
             </div>
           </div>
@@ -997,11 +989,11 @@ export default function AllDesksOverviewDashboard({
           </div>
         </div>
 
-        {/* Right: Desk 2 Pending Verification Priority Queue */}
+        {/* Right: Desk 2 Automated Verification Priority Queue */}
         <div
           style={{
             background: '#ffffff',
-            border: '1px solid #fecaca',
+            border: '1px solid #bbf7d0',
             borderRadius: 14,
             padding: 20,
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
@@ -1014,8 +1006,8 @@ export default function AllDesksOverviewDashboard({
                   width: 32,
                   height: 32,
                   borderRadius: 8,
-                  background: '#fef2f2',
-                  color: '#dc2626',
+                  background: '#ecfdf5',
+                  color: '#059669',
                   display: 'grid',
                   placeItems: 'center',
                 }}
@@ -1025,24 +1017,24 @@ export default function AllDesksOverviewDashboard({
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-                    Pending Verification Queue (Desk 02)
+                    Customer Verification &amp; Intake Audit (Desk 02)
                   </h3>
                   <span
                     style={{
-                      background: '#fef2f2',
-                      color: '#dc2626',
-                      border: '1px solid #fecaca',
+                      background: '#ecfdf5',
+                      color: '#059669',
+                      border: '1px solid #a7f3d0',
                       fontSize: '0.72rem',
                       fontWeight: 800,
                       padding: '1px 7px',
                       borderRadius: 9999,
                     }}
                   >
-                    {pendingVerificationsCount}
+                    {verifications.length} Auto-Verified
                   </span>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  Bank transfer &amp; KYC payments awaiting clearance
+                  Auto-verified upon customer submission • Zero manual approval gating
                 </span>
               </div>
             </div>
@@ -1050,9 +1042,9 @@ export default function AllDesksOverviewDashboard({
               type="button"
               onClick={() => navigateToDesk('pending_verification', '#verification')}
               className="sales-btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '5px 12px', color: '#dc2626', borderColor: '#fecaca' }}
+              style={{ fontSize: '0.76rem', padding: '5px 12px', color: '#059669', borderColor: '#a7f3d0' }}
             >
-              Open Queue ({pendingVerificationsCount}) →
+              Open Audit Log ({verifications.length}) →
             </button>
           </div>
 
@@ -1063,8 +1055,8 @@ export default function AllDesksOverviewDashboard({
                 style={{
                   padding: '12px 14px',
                   borderRadius: 10,
-                  background: '#fffbfb',
-                  border: '1px solid #fecaca',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -1080,17 +1072,18 @@ export default function AllDesksOverviewDashboard({
                       style={{
                         fontSize: '0.68rem',
                         fontWeight: 700,
-                        color: '#dc2626',
-                        background: '#fef2f2',
+                        color: '#059669',
+                        background: '#ecfdf5',
+                        border: '1px solid #a7f3d0',
                         padding: '1px 6px',
                         borderRadius: 4,
                       }}
                     >
-                      {v.packageTier || 'Transfer'}
+                      ✓ Auto-Verified
                     </span>
                   </div>
                   <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
-                    👤 {v.contact} • +91 {v.phone} • UTR: <span style={{ fontFamily: 'monospace' }}>{v.utr || 'VERIFY-BANK'}</span>
+                    👤 {v.contact} • +91 {v.phone} • Ref: <span style={{ fontFamily: 'monospace' }}>{v.utr || v.utrNumber || 'AUTO-VERIFIED'}</span>
                   </div>
                 </div>
 
@@ -1100,18 +1093,19 @@ export default function AllDesksOverviewDashboard({
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleQuickApproveVerification(v)}
-                    className="sales-btn-primary"
+                    onClick={() => navigateToDesk('pending_verification', '#verification')}
+                    className="sales-btn-secondary"
                     style={{
-                      padding: '5px 10px',
+                      padding: '5px 12px',
                       fontSize: '0.74rem',
                       fontWeight: 700,
-                      background: '#059669',
-                      borderColor: '#059669',
+                      color: '#4f46e5',
+                      borderColor: '#c7d2fe',
+                      background: '#ffffff',
                     }}
-                    title="Clear payment and credit client wallet immediately"
+                    title="View full audit record"
                   >
-                    ✓ Approve
+                    View Detail
                   </button>
                 </div>
               </div>
