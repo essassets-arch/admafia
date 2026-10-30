@@ -620,3 +620,4 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
     </div>
   );
 }
+

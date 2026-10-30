@@ -297,3 +297,4 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
     </div>
   );
 }
+

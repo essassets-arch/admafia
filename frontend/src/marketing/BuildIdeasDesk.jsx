@@ -567,3 +567,4 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
     </div>
   );
 }
+

@@ -247,3 +247,4 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
     </div>
   );
 }
+
