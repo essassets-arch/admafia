@@ -423,21 +423,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                             </button>
                           )}
 
-                          {/* 2. Secondary New Campaign Button */}
-                          {activeCampaign && (
-                            <button
-                              type="button"
-                              className="mkt-btn-table-action"
-                              onClick={() => handleOpenCreateCampaign(c)}
-                              title="Configure New Campaign"
-                              style={{ fontSize: '0.78rem', padding: '6px 10px' }}
-                            >
-                              <Plus size={12} />
-                              <span>New</span>
-                            </button>
-                          )}
-
-                          {/* 3. Customer Campaign History */}
+                          {/* 2. Customer Campaign History */}
                           {custCampaigns.length > 0 && (
                             <button
                               type="button"
