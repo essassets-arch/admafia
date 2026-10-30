@@ -347,7 +347,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
       <div className="desk-header" style={{ marginBottom: 20, alignItems: 'flex-start' }}>
         <div>
           <h1 className="desk-title" style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
-            Customer Groups &amp; Category Lead Distribution
+            Lead Distribution
           </h1>
           <p className="desk-subtitle" style={{ marginTop: 4, color: '#64748b', fontSize: '0.92rem' }}>
             Automatically distribute inbound leads to all matching customers in a category with one click.

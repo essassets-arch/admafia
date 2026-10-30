@@ -156,7 +156,7 @@ export const OPERATIONAL_DESKS_DATA = [
   {
     id: 9,
     num: '9',
-    name: 'Customer Groups & Lead Routing',
+    name: 'Lead Distribution',
     route: '/admin/groups',
     badge: 'Industry Group Catalogs',
     badgeCount: null,

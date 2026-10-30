@@ -227,8 +227,8 @@ export default function AllDesksOverviewDashboard({
     {
       id: 'groups',
       num: '08',
-      title: 'Customer Groups',
-      badge: 'Lead Distribution',
+      title: 'Lead Distribution',
+      badge: 'Category Routing',
       pillClass: 'pill-indigo',
       metric: `${groups.length || 6} Categories`,
       sub: 'Instant 1-click lead distribution to matching industry categories',

@@ -437,14 +437,14 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             <span>Query &amp; Support</span>
           </button>
 
-          {/* 8. Customer Groups */}
+          {/* 8. Lead Distribution */}
           <button
             type="button"
             className={`sales-nav-btn ${activeTab === 'groups' ? 'active' : ''}`}
             onClick={() => navigateToDesk('groups', '#groups')}
           >
             <FolderTree size={18} strokeWidth={2.2} />
-            <span>Customer Groups</span>
+            <span>Lead Distribution</span>
           </button>
         </nav>
 
