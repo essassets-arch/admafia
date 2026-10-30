@@ -356,17 +356,13 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 <th>Customer / Business</th>
                 <th>Category</th>
                 <th>Available Balance</th>
-                <th>Creatives Status</th>
-                <th>Campaign Name &amp; Status</th>
-                <th>Platform / Integration</th>
-                <th>Last Action &amp; Actor</th>
                 <th>Marketing Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '40px' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
                       <RefreshCw size={18} className="spin" />
                       <span>Loading marketing control dashboard...</span>
@@ -375,7 +371,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
                     <Building size={36} style={{ color: '#cbd5e1', marginBottom: '8px' }} />
                     <h4 style={{ margin: '0 0 6px 0', color: '#0f172a' }}>No customers found</h4>
                     <p style={{ fontSize: '0.84rem', margin: 0 }}>
@@ -394,6 +390,23 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                       <td>
                         <div className="mkt-cell-primary">{c.name}</div>
                         <div className="mkt-cell-sub">{c.contactPerson} • +91 {c.phone}</div>
+                        {activeCampaign && (
+                          <div style={{ marginTop: '4px' }}>
+                            <span
+                              className={`mkt-pill ${
+                                activeCampaign.status === 'Running'
+                                  ? 'mkt-pill-green'
+                                  : activeCampaign.status === 'Draft'
+                                  ? 'mkt-pill-amber'
+                                  : 'mkt-pill-rose'
+                              }`}
+                              style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+                            >
+                              {activeCampaign.status === 'Running' && <span className="marketing-live-dot" />}
+                              {activeCampaign.name}: {activeCampaign.status}
+                            </span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Category */}
@@ -411,69 +424,6 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                         </div>
                         <div className="mkt-cell-sub">
                           Daily: ₹{c.dailyAdSpend}/day
-                        </div>
-                      </td>
-
-                      {/* Creatives Status */}
-                      <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <span
-                            className="mkt-pill"
-                            style={{
-                              background: c.approvedPostsCount > 0 ? '#ecfdf5' : '#f8fafc',
-                              color: c.approvedPostsCount > 0 ? '#059669' : '#94a3b8',
-                              borderColor: c.approvedPostsCount > 0 ? '#a7f3d0' : '#e2e8f0',
-                            }}
-                          >
-                            {c.approvedPostsCount} Approved
-                          </span>
-                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                            {c.pendingPostsCount} Pending • {c.draftPostsCount} Drafts
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Campaign Name & Status */}
-                      <td>
-                        {activeCampaign ? (
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a' }}>
-                              {activeCampaign.name}
-                            </div>
-                            <div style={{ marginTop: '4px' }}>
-                              {activeCampaign.status === 'Running' ? (
-                                <span className="mkt-pill mkt-pill-green">
-                                  <span className="marketing-live-dot" /> Running
-                                </span>
-                              ) : activeCampaign.status === 'Draft' ? (
-                                <span className="mkt-pill mkt-pill-amber">Draft</span>
-                              ) : (
-                                <span className="mkt-pill mkt-pill-rose">Stopped</span>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="mkt-pill mkt-pill-slate">No Campaign</span>
-                        )}
-                      </td>
-
-                      {/* Platform / Integration Status */}
-                      <td>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                          {activeCampaign?.platform || 'Meta Ads'}
-                        </div>
-                        <div className="mkt-cell-sub">
-                          Status: <strong>{activeCampaign?.externalPlatformStatus || 'Not Connected'}</strong>
-                        </div>
-                      </td>
-
-                      {/* Last Action & Actor */}
-                      <td>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                          {activeCampaign?.lastAction || c.lastAction || 'N/A'}
-                        </div>
-                        <div className="mkt-cell-sub">
-                          by {activeCampaign?.lastActor || c.lastActor || 'System'}
                         </div>
                       </td>
 
