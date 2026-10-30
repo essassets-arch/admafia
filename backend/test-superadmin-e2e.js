@@ -264,6 +264,35 @@ async function runSuperAdminE2ETests() {
     const walletAfterTopup = await query('SELECT available_balance FROM wallets WHERE customer_id = $1', [testCustomerId]);
     assert(Number(walletAfterTopup.rows[0].available_balance) === 2000, 'Wallet balance atomically updated to ₹2000');
 
+    // Test direct Super Admin customer top-up (manual-credit)
+    const directTopupUtr = `DIR_UTR_${Date.now()}`;
+    const directTopupRes = await fetch(`${baseUrl}/topups/manual-credit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerId: testCustomerId,
+        amount: 1500,
+        referenceUtr: directTopupUtr,
+        paymentMode: 'IMPS/NEFT Direct',
+        description: 'Super Admin direct top-up test',
+        adminName: 'Super Admin Master',
+      }),
+    });
+    const directTopupData = await directTopupRes.json();
+    assert(directTopupRes.status === 200 && directTopupData.ok === true, 'Direct customer top-up succeeds with 200 OK');
+    assert(Number(directTopupData.newBalance) === 3500, 'Direct customer top-up updates balance from ₹2000 to ₹3500');
+
+    // Verify customer portal reflects new balance and transaction
+    const custView = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [testCustomerId]);
+    assert(Number(custView.rows[0].wallet_balance) === 3500, 'Customer portal view reflects live ₹3500 balance');
+    assert(custView.rows[0].payment_status === 'paid', 'Customer payment status marked paid');
+
+    const custTx = await query('SELECT * FROM wallet_transactions WHERE customer_id = $1 AND reference_utr = $2', [testCustomerId, directTopupUtr]);
+    assert(custTx.rowCount === 1 && custTx.rows[0].status === 'Verified ✓', 'Transaction recorded with Verified ✓ in customer ledger');
+
+    const paymentRec = await query('SELECT * FROM payment_records WHERE customer_id = $1 AND utr_reference = $2', [testCustomerId, directTopupUtr]);
+    assert(paymentRec.rowCount === 1 && paymentRec.rows[0].status === 'paid', 'Payment receipt created for customer accounting');
+
     // Test duplicate UTR rejection
     const dupUtrRes = await fetch(`${baseUrl}/topups/manual-credit`, {
       method: 'POST',
@@ -326,9 +355,9 @@ async function runSuperAdminE2ETests() {
     });
     assert(reApproveRes.status === 409, 'Concurrent / duplicate refund approval strictly blocked with HTTP 409 Conflict');
 
-    // Verify balance decreased from 2000 to 1500
+    // Verify balance decreased from 3500 to 3000 (after 500 refund)
     const walletAfterRefund = await query('SELECT available_balance FROM wallets WHERE customer_id = $1', [testCustomerId]);
-    assert(Number(walletAfterRefund.rows[0].available_balance) === 1500, 'Wallet balance atomically debited to ₹1500');
+    assert(Number(walletAfterRefund.rows[0].available_balance) === 3000, 'Wallet balance atomically debited to ₹3000');
 
     // Test Refund Reconciliation Ledger
     const reconRes = await fetch(`${baseUrl}/refunds/reconciliation`);

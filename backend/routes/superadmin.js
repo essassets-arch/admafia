@@ -1597,6 +1597,15 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
       });
     }
 
+    const custCheck = await query(`SELECT id, company_name, contact_person, phone FROM customers WHERE id = $1`, [customerId]);
+    if (custCheck.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer account not found.' });
+    }
+    const customer = custCheck.rows[0];
+
+    let recordedNewBalance = 0;
+    let recordedOldBalance = 0;
+
     await withTransaction(async (tx) => {
       const walletRes = await tx(
         `SELECT id, available_balance, total_lifetime_paid FROM wallets WHERE customer_id = $1 FOR UPDATE`,
@@ -1610,7 +1619,10 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
       const currentBalance = Number(walletRes.rows[0].available_balance);
       const newBalance = Number((currentBalance + creditAmount).toFixed(2));
       const newLifetime = Number((Number(walletRes.rows[0].total_lifetime_paid) + creditAmount).toFixed(2));
+      recordedOldBalance = currentBalance;
+      recordedNewBalance = newBalance;
 
+      // 1. Update wallet balance
       await tx(
         `UPDATE wallets
          SET available_balance = $1,
@@ -1620,6 +1632,16 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
         [newBalance, newLifetime, customerId]
       );
 
+      // 2. Mark customer payment status active/paid
+      await tx(
+        `UPDATE customers
+         SET payment_status = 'paid',
+             updated_at = NOW()
+         WHERE id = $1`,
+        [customerId]
+      );
+
+      // 3. Insert into wallet transactions
       const txId = `tx_manual_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
       await tx(
         `INSERT INTO wallet_transactions (
@@ -1636,6 +1658,25 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
           paymentMethod,
         ]
       );
+
+      // 4. Insert into payment_records for billing / invoices
+      const receiptNo = `REC_${Date.now()}_${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+      await tx(
+        `INSERT INTO payment_records (
+          id, receipt_number, customer_id, company_name, contact_person, phone, tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, paid_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'topup', $7, 0.00, $7, $8, $9, 'paid', NOW())`,
+        [
+          `pay_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          receiptNo,
+          customerId,
+          customer.company_name,
+          customer.contact_person,
+          customer.phone,
+          creditAmount,
+          paymentMethod,
+          cleanUtr,
+        ]
+      );
     });
 
     await logSuperAdminAudit({
@@ -1644,12 +1685,25 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
       actionType: 'MANUAL_WALLET_CREDIT',
       targetType: 'wallet',
       targetId: customerId,
-      details: { amount: creditAmount, referenceUtr: cleanUtr, description: description.trim() },
+      details: {
+        companyName: customer.company_name,
+        amount: creditAmount,
+        previousBalance: recordedOldBalance,
+        newBalance: recordedNewBalance,
+        referenceUtr: cleanUtr,
+        description: description.trim(),
+      },
     });
 
     res.json({
       ok: true,
-      message: `Manual credit of ₹${creditAmount.toFixed(2)} applied successfully to customer wallet.`,
+      customerId,
+      companyName: customer.company_name,
+      amount: creditAmount,
+      previousBalance: recordedOldBalance,
+      newBalance: recordedNewBalance,
+      referenceUtr: cleanUtr,
+      message: `Top-up of ₹${creditAmount.toFixed(2)} applied successfully to ${customer.company_name}'s wallet.`,
     });
   } catch (err) {
     console.error('[POST /api/superadmin/topups/manual-credit]', err);
