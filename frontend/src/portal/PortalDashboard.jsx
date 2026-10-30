@@ -164,7 +164,13 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         .getCustomerWorkspace(identifier)
         .then((res) => {
           if (res?.customer) {
-            setCustomer((prev) => ({ ...prev, ...res.customer }));
+            setCustomer((prev) => {
+              const merged = { ...prev, ...res.customer };
+              try {
+                localStorage.setItem('growthline_active_user', JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
             setWalletBalance(Number(res.customer.walletBalance ?? res.customer.balance ?? 0));
           }
           if (Array.isArray(res?.leads)) setLeads(res.leads);
@@ -202,9 +208,23 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       if (u && (u.id === customer.id || u.phone === customer.phone || u.username === customer.username)) {
         setCustomer((prev) => ({
           ...prev,
+          ...u,
           companyName: u.companyName || u.name || prev.companyName,
+          name: u.companyName || u.name || prev.name,
           contactPerson: u.contactPerson || u.contact || prev.contactPerson,
+          contact: u.contactPerson || u.contact || prev.contact,
           phone: u.phone || prev.phone,
+          category: u.category || prev.category,
+          industry: u.industry || prev.industry,
+          website: u.website || u.domain || prev.website,
+          domain: u.website || u.domain || prev.domain,
+          city: u.city || prev.city,
+          state: u.state || prev.state,
+          country: u.country || prev.country,
+          email: u.email || prev.email,
+          personalEmail: u.personalEmail || prev.personalEmail,
+          profile_status: u.profile_status || u.profileStatus || prev.profile_status,
+          profileStatus: u.profile_status || u.profileStatus || prev.profileStatus,
         }));
       }
     };

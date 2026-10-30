@@ -13,19 +13,21 @@ export default function AccountProfileKYC({
       if (raw) u = JSON.parse(raw);
     } catch (e) {}
 
+    const c = customer || {};
+
     return {
-      companyName: u.companyName || u.name || customer?.companyName || customer?.name || '',
-      category: u.category || customer?.category || 'IT & Software',
-      websiteUrl: u.website || u.domain || customer?.website || customer?.domain || '',
-      industry: u.industry || customer?.industry || 'Other',
-      contactPerson: u.contactPerson || u.contact || customer?.contactPerson || customer?.contact || u.username || customer?.username || '',
-      email: u.email || customer?.email || '',
-      phone: u.phone || customer?.phone || '',
-      personalEmail: u.personalEmail || customer?.personalEmail || '',
-      city: u.city || customer?.city || customer?.address?.city || '',
-      state: u.state || customer?.state || customer?.address?.state || '',
-      country: u.country || customer?.country || 'India',
-      profile_status: u.profileStatus || u.profile_status || customer?.profileStatus || customer?.profile_status || 'incomplete',
+      companyName: c.companyName || c.name || u.companyName || u.name || '',
+      category: c.category || u.category || 'IT & Software',
+      websiteUrl: c.website || c.domain || u.website || u.domain || '',
+      industry: c.industry || u.industry || 'Other',
+      contactPerson: c.contactPerson || c.contact || u.contactPerson || u.contact || c.username || u.username || '',
+      email: c.email || u.email || '',
+      phone: c.phone || u.phone || '',
+      personalEmail: c.personalEmail || u.personalEmail || '',
+      city: c.city || c?.address?.city || u.city || '',
+      state: c.state || c?.address?.state || u.state || 'Maharashtra',
+      country: c.country || u.country || 'India',
+      profile_status: c.profileStatus || c.profile_status || u.profileStatus || u.profile_status || 'incomplete',
     };
   };
 
@@ -34,10 +36,54 @@ export default function AccountProfileKYC({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  // Sync real-time when customer prop or localStorage updates
+  // Sync real-time when customer prop changes
   useEffect(() => {
-    setProfileData(getProfileInitial());
+    if (customer) {
+      setProfileData((prev) => ({
+        companyName: customer.companyName || customer.name || prev.companyName || '',
+        category: customer.category || prev.category || 'IT & Software',
+        websiteUrl: customer.website || customer.domain || prev.websiteUrl || '',
+        industry: customer.industry || prev.industry || 'Other',
+        contactPerson: customer.contactPerson || customer.contact || customer.username || prev.contactPerson || '',
+        email: customer.email || prev.email || '',
+        phone: customer.phone || prev.phone || '',
+        personalEmail: customer.personalEmail || prev.personalEmail || '',
+        city: customer.city || customer?.address?.city || prev.city || '',
+        state: customer.state || customer?.address?.state || prev.state || 'Maharashtra',
+        country: customer.country || prev.country || 'India',
+        profile_status: customer.profileStatus || customer.profile_status || prev.profile_status || 'incomplete',
+      }));
+    }
   }, [customer]);
+
+  // Direct fetch from PostgreSQL on component mount to guarantee latest saved data is filled
+  useEffect(() => {
+    const idOrPhone = customer?.id || customer?.phone;
+    if (idOrPhone) {
+      crmApi
+        .getCustomerWorkspace(idOrPhone)
+        .then((res) => {
+          if (res?.customer) {
+            const c = res.customer;
+            setProfileData((prev) => ({
+              companyName: c.companyName || c.name || prev.companyName || '',
+              category: c.category || prev.category || 'IT & Software',
+              websiteUrl: c.website || c.domain || prev.websiteUrl || '',
+              industry: c.industry || prev.industry || 'Other',
+              contactPerson: c.contactPerson || c.contact || c.username || prev.contactPerson || '',
+              email: c.email || prev.email || '',
+              phone: c.phone || prev.phone || '',
+              personalEmail: c.personalEmail || prev.personalEmail || '',
+              city: c.city || c?.address?.city || prev.city || '',
+              state: c.state || c?.address?.state || prev.state || 'Maharashtra',
+              country: c.country || prev.country || 'India',
+              profile_status: c.profileStatus || c.profile_status || prev.profile_status || 'complete',
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [customer?.id, customer?.phone]);
 
   useEffect(() => {
     const handleActiveUserChange = (e) => {
@@ -45,17 +91,18 @@ export default function AccountProfileKYC({
         const u = e.detail;
         setProfileData((prev) => ({
           ...prev,
-          companyName: u.companyName || u.name || prev.companyName,
-          category: u.category || prev.category,
-          websiteUrl: u.website || u.domain || prev.websiteUrl,
-          industry: u.industry || prev.industry,
-          contactPerson: u.contactPerson || u.contact || prev.contactPerson,
-          email: u.email || prev.email,
-          phone: u.phone || prev.phone,
-          personalEmail: u.personalEmail || prev.personalEmail,
-          city: u.city || prev.city,
-          state: u.state || prev.state,
-          country: u.country || prev.country,
+          companyName: u.companyName || u.name || prev.companyName || '',
+          category: u.category || prev.category || 'IT & Software',
+          websiteUrl: u.website || u.domain || prev.websiteUrl || '',
+          industry: u.industry || prev.industry || 'Other',
+          contactPerson: u.contactPerson || u.contact || u.username || prev.contactPerson || '',
+          email: u.email || prev.email || '',
+          phone: u.phone || prev.phone || '',
+          personalEmail: u.personalEmail || prev.personalEmail || '',
+          city: u.city || prev.city || '',
+          state: u.state || prev.state || 'Maharashtra',
+          country: u.country || prev.country || 'India',
+          profile_status: u.profileStatus || u.profile_status || prev.profile_status || 'complete',
         }));
       }
     };
