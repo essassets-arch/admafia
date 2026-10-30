@@ -82,8 +82,6 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
       setActiveDesk(resolveDeskFromUrl());
       const reqId = resolveRequestIdFromUrl();
       setSelectedRequestId(reqId || null);
-      const reqId = resolveRequestIdFromUrl();
-      if (reqId) setSelectedRequestId(reqId);
     };
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
