@@ -587,6 +587,14 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   };
 
   const handleUpdateCustomer = (updates) => {
+    const targetId = customer?.id || customer?.phone || updates.id || updates.phone;
+    if (targetId) {
+      crmApi
+        .updateCustomerProfile(targetId, updates)
+        .then(() => crmApi.syncStateFromPostgres().catch(() => {}))
+        .catch((err) => console.warn('Backend customer update note:', err.message));
+    }
+
     setCustomer((prev) => {
       const updated = { ...prev, ...updates };
       try {
@@ -596,7 +604,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           const parsed = JSON.parse(rawCusts);
           if (Array.isArray(parsed)) {
             const synced = parsed.map((c) => {
-              if (c.id === updated.id || c.phone === updated.phone || c.username === updated.username) {
+              if (c.id === updated.id || c.phone === updated.phone || c.phone === prev.phone || c.username === updated.username) {
                 return {
                   ...c,
                   ...updates,
@@ -604,6 +612,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                   companyName: updated.companyName || updated.name || c.companyName,
                   contact: updated.contactPerson || updated.contact || c.contact,
                   contactPerson: updated.contactPerson || updated.contact || c.contactPerson,
+                  profileStatus: 'complete',
+                  profile_status: 'complete',
+                  kycPercent: 100,
+                  verified: true,
                 };
               }
               return c;
@@ -611,7 +623,52 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             localStorage.setItem('growthline_registered_customers', JSON.stringify(synced));
           }
         }
+
+        // Sync Desk 02 (Pending Verification)
+        const rawPV = localStorage.getItem('growthline_pending_verifications');
+        if (rawPV) {
+          const parsedPV = JSON.parse(rawPV);
+          if (Array.isArray(parsedPV)) {
+            const syncedPV = parsedPV.map((pv) => {
+              if (pv.customerId === updated.id || pv.phone === updated.phone || pv.phone === prev.phone) {
+                return {
+                  ...pv,
+                  company: updated.companyName || pv.company,
+                  contact: updated.contactPerson || pv.contact,
+                  phone: updated.phone || pv.phone,
+                  profileStatus: 'complete',
+                  queueType: pv.paymentStatus === 'verified' || pv.paymentStatus === 'paid' ? 'Completed' : 'Payment Pending',
+                };
+              }
+              return pv;
+            });
+            localStorage.setItem('growthline_pending_verifications', JSON.stringify(syncedPV));
+          }
+        }
+
+        // Sync Desk 05 (Payment Records)
+        const rawPay = localStorage.getItem('growthline_payment_records');
+        if (rawPay) {
+          const parsedPay = JSON.parse(rawPay);
+          if (Array.isArray(parsedPay)) {
+            const syncedPay = parsedPay.map((pr) => {
+              if (pr.customerId === updated.id || pr.phone === updated.phone || pr.phone === prev.phone) {
+                return {
+                  ...pr,
+                  company: updated.companyName || pr.company,
+                  contact: updated.contactPerson || pr.contact,
+                  phone: updated.phone || pr.phone,
+                  city: updated.city || pr.city,
+                };
+              }
+              return pr;
+            });
+            localStorage.setItem('growthline_payment_records', JSON.stringify(syncedPay));
+          }
+        }
+
         window.dispatchEvent(new CustomEvent('growthline_customer_registered', { detail: updated }));
+        window.dispatchEvent(new CustomEvent('growthline_active_user_changed', { detail: updated }));
       } catch (e) {}
       return updated;
     });
