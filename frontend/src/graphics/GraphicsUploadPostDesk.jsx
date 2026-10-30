@@ -244,41 +244,10 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
               )}
             </div>
 
-            {/* Step 2: Creative Format */}
-            <div style={{ marginBottom: 18 }}>
-              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: 8, textTransform: 'uppercase' }}>
-                2. Creative Asset Format *
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
-                {CREATIVE_FORMATS.map((fmt) => (
-                  <button
-                    key={fmt.id}
-                    type="button"
-                    onClick={() => setCreativeFormat(fmt.id)}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      border: creativeFormat === fmt.id ? '2px solid #6366f1' : '1px solid #e2e8f0',
-                      background: creativeFormat === fmt.id ? '#eef2ff' : '#ffffff',
-                      color: creativeFormat === fmt.id ? '#4f46e5' : '#334155',
-                      fontWeight: 700,
-                      fontSize: '0.78rem',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    <div>{fmt.label}</div>
-                    <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 2 }}>{fmt.ratio}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Step 3: File Upload Area */}
+            {/* Step 2: File Upload Area */}
             <div style={{ marginBottom: 18 }}>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
-                3. Upload Finished Artwork (PNG, JPG, WEBP) *
+                2. Upload Finished Artwork (PNG, JPG, WEBP) *
               </label>
               <div
                 style={{
@@ -337,10 +306,10 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
               </div>
             </div>
 
-            {/* Step 4: Designer Notes & Specifications */}
+            {/* Step 3: Designer Notes & Specifications */}
             <div style={{ marginBottom: 22 }}>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
-                4. Designer Notes &amp; Specifications
+                3. Designer Notes &amp; Specifications
               </label>
               <textarea
                 rows={3}

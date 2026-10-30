@@ -487,27 +487,10 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                   </div>
                 </div>
 
-                {/* Creative Format */}
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
-                    2. Creative Asset Format
-                  </label>
-                  <select
-                    className="graphics-select"
-                    style={{ width: '100%', padding: '8px 12px' }}
-                    value={newCreativeFormat}
-                    onChange={(e) => setNewCreativeFormat(e.target.value)}
-                  >
-                    {CREATIVE_FORMATS.map((f) => (
-                      <option key={f.id} value={f.id}>{f.label}</option>
-                    ))}
-                  </select>
-                </div>
-
                 {/* What Was Fixed */}
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
-                    3. Revision Correction Notes (How feedback was addressed)
+                    2. Revision Correction Notes (How feedback was addressed)
                   </label>
                   <textarea
                     rows={2}
