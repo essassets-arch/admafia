@@ -216,22 +216,6 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
                 >
                   {p.caption}
                 </div>
-
-                <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                      Auditor: <strong>{p.reviewerName}</strong>
-                    </div>
-                    <span className="gfx-pill gfx-pill-indigo" style={{ fontSize: '0.66rem' }}>
-                      Meta Ready ✓
-                    </span>
-                  </div>
-                  {p.approvalRemarks && (
-                    <div style={{ fontSize: '0.70rem', color: '#059669', fontStyle: 'italic', marginTop: 4 }}>
-                      "{p.approvalRemarks}"
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           ))}
