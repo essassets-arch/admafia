@@ -138,7 +138,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
       const rawLeads = localStorage.getItem('growthline_all_leads');
       let existingLeads = [];
       if (rawLeads) {
-        try { existingLeads = JSON.parse(rawLeads); } catch (err) { }
+        try { existingLeads = JSON.parse(rawLeads); } catch(err){}
       }
       const updatedLeads = [newLead, ...existingLeads.filter((l) => l.id !== newLead.id)];
       localStorage.setItem('growthline_all_leads', JSON.stringify(updatedLeads));
@@ -157,7 +157,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
           city: newLead.city,
           requirement: newLead.requirement,
         })
-        .catch(() => { });
+        .catch(() => {});
 
       // 3. Dispatch custom events for real-time CRM updates without overwriting active user session
       window.dispatchEvent(new CustomEvent('growthline_lead_added', { detail: newLead }));
@@ -234,7 +234,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         const nextKyc = isComp ? 25 : 100;
         try {
           crmApi.patchCustomer(c.id, { profileStatus: nextProfile, kycPercent: nextKyc });
-        } catch (e) { }
+        } catch (e) {}
         return { ...c, profileStatus: nextProfile, kycPercent: nextKyc, verified: nextProfile === 'complete' };
       })
     );
@@ -249,7 +249,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         const nextBal = isPaid ? 0 : (c.balance > 0 ? c.balance : 3000);
         try {
           crmApi.patchCustomer(c.id, { paymentStatus: nextPayment, balance: nextBal });
-        } catch (e) { }
+        } catch (e) {}
         return {
           ...c,
           paymentStatus: nextPayment,
@@ -269,7 +269,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         const nextProfile = nextKyc >= 75 ? 'complete' : c.profileStatus;
         try {
           crmApi.patchCustomer(c.id, { profileStatus: nextProfile, kycPercent: nextKyc });
-        } catch (e) { }
+        } catch (e) {}
         return { ...c, kycPercent: nextKyc, profileStatus: nextProfile, verified: nextProfile === 'complete' };
       })
     );
@@ -315,7 +315,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         deposit: added.balance,
       })
       .then(() => crmApi.syncStateFromPostgres())
-      .catch(() => { });
+      .catch(() => {});
     setIsAddModalOpen(false);
     setNewCust({
       username: '',
@@ -822,7 +822,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
 
             <form onSubmit={handleSubmitLead}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
+                
                 {/* 1. Select Company * */}
                 <div>
                   <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', marginBottom: 6, display: 'block' }}>
@@ -1385,7 +1385,7 @@ export function LeadManagementDesk() {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed;
       }
-    } catch (e) { }
+    } catch (e) {}
     return [];
   };
 
@@ -1461,7 +1461,7 @@ export function LeadManagementDesk() {
       const rawLeads = localStorage.getItem('growthline_all_leads');
       let existingLeads = [];
       if (rawLeads) {
-        try { existingLeads = JSON.parse(rawLeads); } catch (err) { }
+        try { existingLeads = JSON.parse(rawLeads); } catch(err){}
       }
       const updatedLeads = [newLead, ...existingLeads.filter((l) => l.id !== newLead.id)];
       localStorage.setItem('growthline_all_leads', JSON.stringify(updatedLeads));
@@ -1483,12 +1483,12 @@ export function LeadManagementDesk() {
           city: newLead.city,
           requirement: newLead.requirement,
         })
-        .catch(() => { });
+        .catch(() => {});
 
       // Dispatch custom events without overwriting active customer session
       window.dispatchEvent(new CustomEvent('growthline_lead_added', { detail: newLead }));
       window.dispatchEvent(new Event('storage'));
-    } catch (err) {
+    } catch(err) {
       console.error(err);
     }
 
@@ -1519,7 +1519,7 @@ export function LeadManagementDesk() {
           return [...cleaned, ...DEFAULT_DESK_LEADS.filter((l) => !ids.has(l.id))];
         }
       }
-    } catch (e) { }
+    } catch (e) {}
     return DEFAULT_DESK_LEADS;
   });
 
@@ -1535,7 +1535,7 @@ export function LeadManagementDesk() {
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setLeads(parsed);
-        } catch (err) { }
+        } catch (err) {}
       }
     };
     window.addEventListener('growthline_lead_added', handleLeadAdded);
@@ -1863,7 +1863,7 @@ export function LeadManagementDesk() {
 
             <form onSubmit={handleSubmitLead}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
+                
                 {/* 1. Select Company * */}
                 <div>
                   <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', marginBottom: 6, display: 'block' }}>
@@ -1987,7 +1987,7 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
         const newProfileStatus = newPercent === 100 ? 'complete' : c.profileStatus;
         try {
           crmApi.patchCustomer(c.id, { profileStatus: newProfileStatus, kycPercent: newPercent });
-        } catch (e) { }
+        } catch (e) {}
         return { ...c, kycPercent: newPercent, profileStatus: newProfileStatus, verified: newPercent === 100 };
       })
     );
@@ -2311,7 +2311,7 @@ export function PaymentCollectionDesk({
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch (e) { }
+    } catch (e) {}
     return INITIAL_PAYMENT_RECORDS;
   });
 
@@ -2358,7 +2358,7 @@ export function PaymentCollectionDesk({
       if (hasChange) {
         try {
           localStorage.setItem('growthline_payment_records', JSON.stringify(updated));
-        } catch (e) { }
+        } catch (e) {}
         return updated;
       }
       return prev;
@@ -2378,7 +2378,7 @@ export function PaymentCollectionDesk({
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setRecords(parsed);
-        } catch (err) { }
+        } catch (err) {}
       }
     };
 
@@ -2394,7 +2394,7 @@ export function PaymentCollectionDesk({
     setRecords(newList);
     try {
       localStorage.setItem('growthline_payment_records', JSON.stringify(newList));
-    } catch (e) { }
+    } catch (e) {}
   };
 
   // Open Add Modal with default pre-selection
@@ -2440,8 +2440,8 @@ export function PaymentCollectionDesk({
         newPayData.type === 'topup'
           ? 'Wallet Top-Up'
           : newPayData.type === 'registration'
-            ? 'Registration Package'
-            : 'Service Invoice Payment',
+          ? 'Registration Package'
+          : 'Service Invoice Payment',
       amount: amt,
       gstAmount: Math.round(amt * 0.18),
       total: Math.round(amt * 1.18),
@@ -3265,7 +3265,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
       }
 
       window.dispatchEvent(new CustomEvent('growthline_payment_recorded', { detail: topupRecord }));
-    } catch (e) { }
+    } catch (e) {}
 
     alert(`₹${topupAmount.toLocaleString('en-IN')} added to ${topupCust.name}!`);
     setTopupCust(null);

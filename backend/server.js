@@ -61,11 +61,11 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     registeredFrom: row.registered_from || 'http://localhost:5173/#register',
     registeredAt: row.registered_at
       ? new Date(row.registered_at).toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
       : 'Today',
   };
 }
@@ -101,11 +101,11 @@ function mapLeadRow(row) {
     dateGroup: 'today',
     createdAt: row.created_at
       ? new Date(row.created_at).toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
       : 'Today',
   };
 }
@@ -123,12 +123,12 @@ function mapWalletTxRow(row) {
     status: row.status || 'Verified ✓',
     date: row.created_at
       ? new Date(row.created_at).toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
       : 'Just now',
   };
 }
@@ -148,10 +148,10 @@ function mapInvoiceRow(row) {
     status: row.status || 'Paid',
     date: row.issued_date
       ? new Date(row.issued_date).toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      })
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })
       : new Date().toLocaleDateString('en-IN'),
   };
 }
@@ -176,11 +176,11 @@ function mapPaymentRecordRow(row) {
     notes: row.notes || '',
     date: row.paid_at
       ? new Date(row.paid_at).toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
       : 'Today',
   };
 }
