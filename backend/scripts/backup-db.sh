@@ -49,3 +49,4 @@ echo "=========================================================="
 echo "Rollback command if ever needed:"
 echo "cat $BACKUP_FILE | docker exec -i admafia-postgres psql -U postgres -d admafia_crm"
 echo "=========================================================="
+
