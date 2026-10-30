@@ -465,6 +465,9 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                   const isLive = Boolean(c.adCampaignActive || (activeCampaign && activeCampaign.status === 'Running'));
                   const activeDays = c.activeDays && c.activeDays.length > 0 ? c.activeDays : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
                   const isTodayActive = activeDays.includes(todayItem.code);
+                  const dailySpend = c.dailyAdSpend || 300;
+                  const isLowBalance = c.availableBalance < dailySpend || c.availableBalance <= 0;
+                  const runwayDays = dailySpend > 0 ? Math.floor(c.availableBalance / dailySpend) : 0;
 
                   return (
                     <tr key={c.id}>
@@ -472,7 +475,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                       <td>
                         <div className="mkt-cell-primary">{c.name}</div>
                         <div className="mkt-cell-sub">{c.contactPerson} • +91 {c.phone}</div>
-                        <div style={{ marginTop: '6px' }}>
+                        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                           <span
                             className={`mkt-pill ${isLive ? 'mkt-pill-green' : 'mkt-pill-slate'}`}
                             style={{ fontSize: '0.74rem', padding: '3px 8px', fontWeight: 800 }}
@@ -480,6 +483,14 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                             {isLive && <span className="marketing-live-dot" />}
                             {isLive ? 'MARKETING IS LIVE' : 'MARKETING IS OFF'}
                           </span>
+                          {isLowBalance && (
+                            <span
+                              className="mkt-pill mkt-pill-rose"
+                              style={{ fontSize: '0.68rem', padding: '2px 7px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                            >
+                              ⚠️ Customer Balance is Low
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -493,7 +504,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
                           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                             <strong style={{ fontSize: '0.96rem', color: '#0f172a' }}>
-                              ₹{c.dailyAdSpend || 300}
+                              ₹{dailySpend}
                             </strong>
                             <span style={{ fontSize: '0.72rem', color: '#64748b' }}>/ active day</span>
                           </div>
@@ -517,7 +528,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                             return (
                               <span
                                 key={d.code}
-                                title={`${d.label}: ${isSelected ? `₹${c.dailyAdSpend || 300}` : 'Off'}${isToday ? ' (Today)' : ''}`}
+                                title={`${d.label}: ${isSelected ? `₹${dailySpend}` : 'Off'}${isToday ? ' (Today)' : ''}`}
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
@@ -544,9 +555,9 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
 
                         {/* Weekly Pacing & Today State */}
                         <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', lineHeight: 1.4 }}>
-                          Weekly: <strong>₹{(activeDays.length * (c.dailyAdSpend || 300)).toLocaleString('en-IN')}</strong> • Today ({todayItem.label}):{' '}
+                          Weekly: <strong>₹{(activeDays.length * dailySpend).toLocaleString('en-IN')}</strong> • Today ({todayItem.label}):{' '}
                           {isLive && isTodayActive ? (
-                            <strong style={{ color: '#059669' }}>● Active (₹{c.dailyAdSpend || 300}/day)</strong>
+                            <strong style={{ color: '#059669' }}>● Active (₹{dailySpend}/day)</strong>
                           ) : isLive ? (
                             <span style={{ color: '#64748b' }}>● Day Off</span>
                           ) : (
@@ -562,17 +573,36 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                           style={{
                             fontSize: '0.96rem',
                             fontWeight: 800,
-                            color: c.availableBalance >= (c.dailyAdSpend || 300) ? '#059669' : '#dc2626',
+                            color: !isLowBalance ? '#059669' : '#dc2626',
                           }}
                         >
                           ₹{c.availableBalance.toLocaleString('en-IN')}
                         </div>
                         <div className="mkt-cell-sub" style={{ marginTop: '4px' }}>
                           Runway:{' '}
-                          <strong style={{ color: c.availableBalance >= (c.dailyAdSpend || 300) ? '#334155' : '#dc2626' }}>
-                            {c.dailyAdSpend > 0 ? Math.floor(c.availableBalance / c.dailyAdSpend) : 0} days funded
+                          <strong style={{ color: !isLowBalance ? '#334155' : '#dc2626' }}>
+                            {runwayDays} days funded
                           </strong>
                         </div>
+                        {isLowBalance && (
+                          <div style={{ marginTop: '6px' }}>
+                            <span
+                              className="mkt-pill mkt-pill-rose"
+                              style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                padding: '3px 7px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                              }}
+                            >
+                              {c.availableBalance <= 0
+                                ? '⚠️ Balance is Zero'
+                                : '⚠️ Balance is Low (Needs Top Up)'}
+                            </span>
+                          </div>
+                        )}
                       </td>
 
                       {/* 5. Marketing Actions */}
@@ -596,22 +626,29 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                               <span>Stop Marketing</span>
                             </button>
                           ) : (
-                            <button
-                              type="button"
-                              className="mkt-btn-table-action success"
-                              onClick={() => handleStartMarketingForCustomer(c, activeCampaign)}
-                              title="Start Marketing Campaign (Deducts daily ad spend from wallet)"
-                              style={{
-                                fontWeight: 800,
-                                padding: '7px 14px',
-                                background: '#d1fae5',
-                                color: '#047857',
-                                borderColor: '#10b981',
-                              }}
-                            >
-                              <Play size={13} fill="currentColor" />
-                              <span>Start Marketing</span>
-                            </button>
+                            <div>
+                              <button
+                                type="button"
+                                className="mkt-btn-table-action success"
+                                onClick={() => handleStartMarketingForCustomer(c, activeCampaign)}
+                                title="Start Marketing Campaign (Deducts daily ad spend from wallet)"
+                                style={{
+                                  fontWeight: 800,
+                                  padding: '7px 14px',
+                                  background: '#d1fae5',
+                                  color: '#047857',
+                                  borderColor: '#10b981',
+                                }}
+                              >
+                                <Play size={13} fill="currentColor" />
+                                <span>Start Marketing</span>
+                              </button>
+                              {isLowBalance && (
+                                <div style={{ fontSize: '0.70rem', color: '#e11d48', fontWeight: 800, marginTop: '4px' }}>
+                                  ⚠️ Balance is low (Min ₹{dailySpend})
+                                </div>
+                              )}
+                            </div>
                           )}
 
                           {/* Customer Campaign History */}

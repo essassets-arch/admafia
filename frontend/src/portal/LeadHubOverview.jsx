@@ -245,6 +245,11 @@ export default function LeadHubOverview({
               <strong className="pacing-status-state-text">
                 {customer.adCampaignActive ? 'Running (Active)' : 'Paused (Off)'}
               </strong>
+              {!customer.adCampaignActive && walletBalance < dailySpend && (
+                <span style={{ fontSize: '0.70rem', color: '#e11d48', fontWeight: 800, marginTop: 2 }}>
+                  ⚠️ Balance is Low
+                </span>
+              )}
             </div>
             <button
               type="button"
@@ -349,8 +354,12 @@ export default function LeadHubOverview({
             </div>
 
             <div className="pacing-card-footer-between">
-              <span>Runway: <strong className="text-red-alert">{dailySpend > 0 ? Math.floor(walletBalance / dailySpend) : 0} days funded</strong></span>
-              <span className="text-amber-alert">● Needs Top Up</span>
+              <span>Runway: <strong className={walletBalance < dailySpend ? 'text-red-alert' : ''}>{dailySpend > 0 ? Math.floor(walletBalance / dailySpend) : 0} days funded</strong></span>
+              {walletBalance < dailySpend ? (
+                <span className="text-red-alert" style={{ fontWeight: 800 }}>● Balance is Low (Needs Top Up)</span>
+              ) : (
+                <span className="text-amber-alert">● Funded</span>
+              )}
             </div>
           </div>
         </div>
@@ -479,6 +488,8 @@ export default function LeadHubOverview({
                 <span className="bullet-dot">●</span>
                 {isMarketingLiveToday
                   ? 'Marketing is LIVE (Meta Ads Running)'
+                  : walletBalance < dailySpend
+                  ? 'Marketing is OFF (Customer Balance is Low - Needs Top Up)'
                   : 'Marketing is OFF (Campaign Paused)'}
               </span>
             </div>

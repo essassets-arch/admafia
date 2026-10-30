@@ -637,8 +637,13 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                         🌐 #register
                       </span>
                     </div>
-                    <div style={{ fontWeight: 700, color: '#0f172a', marginTop: 3 }}>
-                      {c.name || 'Workspace'}
+                    <div style={{ fontWeight: 700, color: '#0f172a', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span>{c.name || 'Workspace'}</span>
+                      {((c.balance || 0) < (c.dailyPacing || 300) || (c.runwayDays || 0) <= 1) && (
+                        <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
+                          ⚠️ Low Balance
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
                       {c.city} • Registered: {formatIndianDateTime(c.registeredAt, c.registeredAtRaw || c.registered_at)}
@@ -723,10 +728,19 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
 
                   {/* 8. Wallet / Runway */}
                   <td>
-                    <div style={{ fontWeight: 800, color: '#0f172a' }}>{formatINR(c.balance || 0)}</div>
-                    <div style={{ fontSize: '0.74rem', color: c.runwayDays > 0 ? '#059669' : '#e11d48', fontWeight: 700 }}>
-                      {c.runwayDays || 0} Days @ ₹300/d
+                    <div style={{ fontWeight: 800, color: ((c.balance || 0) >= (c.dailyPacing || 300) && (c.runwayDays || 0) > 1) ? '#0f172a' : '#e11d48' }}>
+                      {formatINR(c.balance || 0)}
                     </div>
+                    <div style={{ fontSize: '0.74rem', color: ((c.balance || 0) >= (c.dailyPacing || 300) && (c.runwayDays || 0) > 1) ? '#059669' : '#e11d48', fontWeight: 700 }}>
+                      {c.runwayDays || 0} Days @ ₹{c.dailyPacing || 300}/d
+                    </div>
+                    {((c.balance || 0) < (c.dailyPacing || 300) || (c.runwayDays || 0) <= 1) && (
+                      <div style={{ marginTop: 4 }}>
+                        <span className="desk-pill pill-rose" style={{ fontSize: '0.64rem', padding: '1px 6px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <AlertTriangle size={10} /> ⚠️ Balance is Low
+                        </span>
+                      </div>
+                    )}
                   </td>
 
                   {/* 9. Status */}
@@ -3448,30 +3462,50 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((c) => (
+            {filtered.map((c) => {
+              const pacing = c.dailyPacing || 300;
+              const isLow = (c.balance || 0) < pacing || (c.balance || 0) <= 0 || (c.runwayDays || 0) <= 1;
+              return (
               <tr key={c.id}>
                 <td>
-                  <div style={{ fontWeight: 800, color: '#0f172a' }}>{c.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 800, color: '#0f172a' }}>{c.name}</span>
+                    {isLow && (
+                      <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
+                        ⚠️ Low Balance
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{c.contact} • {c.city}</div>
                 </td>
                 <td>
-                  <span style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>{formatINR(c.balance)}</span>
+                  <span style={{ fontSize: '1rem', fontWeight: 800, color: !isLow ? '#0f172a' : '#e11d48' }}>{formatINR(c.balance)}</span>
+                  {isLow && (
+                    <div style={{ fontSize: '0.70rem', color: '#e11d48', fontWeight: 800, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <AlertTriangle size={11} /> ⚠️ Customer Balance is Low
+                    </div>
+                  )}
                 </td>
                 <td>
-                  <span style={{ fontWeight: 700, color: '#4f46e5' }}>₹{c.dailyPacing} / day</span>
+                  <span style={{ fontWeight: 700, color: '#4f46e5' }}>₹{pacing} / day</span>
                 </td>
                 <td>
-                  <span className={`desk-pill ${c.runwayDays > 15 ? 'pill-emerald' : c.runwayDays > 0 ? 'pill-amber' : 'pill-rose'}`}>
-                    {c.runwayDays} Days
+                  <span className={`desk-pill ${c.runwayDays > 15 ? 'pill-emerald' : !isLow ? 'pill-amber' : 'pill-rose'}`}>
+                    {c.runwayDays || 0} Days
                   </span>
                 </td>
                 <td style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: c.balance > 0 ? '#059669' : '#e11d48' }}>
-                    {c.balance > 0 ? '🟢 Active Lead Ingestion' : '🔴 Delivery Paused (Recharge Req.)'}
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: !isLow ? '#059669' : '#e11d48' }}>
+                    {(c.balance || 0) <= 0
+                      ? '🔴 Delivery Paused (Zero Balance)'
+                      : isLow
+                      ? '⚠️ Customer Balance is Low (Recharge Req.)'
+                      : '🟢 Active Lead Ingestion'}
                   </span>
                 </td>
               </tr>
-            ))}
+            );
+          })}
           </tbody>
         </table>
       </div>
@@ -4237,6 +4271,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                 const runway = Number(m.runwayDays ?? Math.floor(bal / Math.max(pacing, 1)));
                 const isHealthy = runway > 3;
                 const isLow = runway > 0 && runway <= 3;
+                const isLowBalance = bal < pacing || bal <= 0 || runway <= 1;
                 const cleanPhone = (m.phone || '').trim();
 
                 return (
@@ -4261,8 +4296,13 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                           {(m.companyName || m.name || 'AM').slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
-                            {m.companyName || m.name}
+                          <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span>{m.companyName || m.name}</span>
+                            {isLowBalance && (
+                              <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
+                                ⚠️ Low Balance
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>
                             👤 <b>{m.contactPerson || m.contact || 'Authorized Lead'}</b> • +91{' '}
@@ -4324,14 +4364,15 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                               gap: 4,
                               fontSize: '0.66rem',
                               fontWeight: 800,
-                              color: '#059669',
+                              color: !isLowBalance ? '#059669' : '#e11d48',
                             }}
                           >
-                            <span className="sales-pulse-dot" style={{ width: 6, height: 6 }} /> LIVE
+                            <span className="sales-pulse-dot" style={{ width: 6, height: 6, background: !isLowBalance ? '#059669' : '#e11d48' }} />
+                            {!isLowBalance ? 'LIVE' : 'LOW BALANCE'}
                           </span>
                         </div>
 
-                        <div style={{ fontSize: '1.25rem', fontWeight: 900, color: bal > 0 ? '#059669' : '#e11d48', marginTop: 2 }}>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 900, color: !isLowBalance ? '#059669' : '#e11d48', marginTop: 2 }}>
                           {formatINR(bal)}
                         </div>
 
@@ -4340,12 +4381,19 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                             Daily: <b>₹{pacing}/day</b>
                           </span>
                           <span
-                            className={`desk-pill ${isHealthy ? 'pill-emerald' : isLow ? 'pill-amber' : 'pill-rose'}`}
+                            className={`desk-pill ${isHealthy ? 'pill-emerald' : !isLowBalance ? 'pill-amber' : 'pill-rose'}`}
                             style={{ fontSize: '0.68rem', padding: '1px 6px' }}
                           >
                             {runway} Days Runway
                           </span>
                         </div>
+                        {isLowBalance && (
+                          <div style={{ marginTop: 4 }}>
+                            <span className="desk-pill pill-rose" style={{ fontSize: '0.64rem', padding: '1px 6px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <AlertTriangle size={10} /> ⚠️ Customer Balance is Low
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </td>
 

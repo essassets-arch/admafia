@@ -889,8 +889,20 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     }
   };
 
-  const handleToggleCampaign = () => {
-    setCustomer((prev) => ({ ...prev, adCampaignActive: !prev.adCampaignActive }));
+  const handleToggleCampaign = async () => {
+    const dailyLimit = Number(customer.dailyAdSpend || 300);
+    if (!customer.adCampaignActive && walletBalance < dailyLimit) {
+      alert(`⚠️ Customer Balance is Low:\nYour Ad Wallet balance (₹${walletBalance.toLocaleString('en-IN')}) is below daily ad spend pacing (₹${dailyLimit.toLocaleString('en-IN')}).\n\nPlease top up your wallet to run marketing campaigns.`);
+      setIsPaymentModalOpen(true);
+      return;
+    }
+    const nextActive = !customer.adCampaignActive;
+    setCustomer((prev) => ({ ...prev, adCampaignActive: nextActive }));
+    try {
+      await crmApi.patchCustomer(customer.id, { adCampaignActive: nextActive });
+    } catch (e) {
+      console.warn('Sync campaign state note:', e.message);
+    }
   };
 
   return (

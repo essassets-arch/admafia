@@ -815,9 +815,11 @@ export default function AllDesksOverviewDashboard({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {customers.slice(0, 4).map((c) => {
                 const bal = c.balance || c.walletBalance || 0;
-                const runway = c.runwayDays || Math.floor(bal / 300);
+                const pacing = c.dailyPacing || c.dailyAdSpend || 300;
+                const runway = c.runwayDays || Math.floor(bal / Math.max(pacing, 1));
                 const isHealthy = runway > 15;
                 const isLow = runway > 0 && runway <= 5;
+                const isLowBalance = bal < pacing || bal <= 0 || runway <= 1;
                 return (
                   <div
                     key={c.id}
@@ -833,23 +835,28 @@ export default function AllDesksOverviewDashboard({
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
-                        {c.name || c.companyName}
+                      <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span>{c.name || c.companyName}</span>
+                        {isLowBalance && (
+                          <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
+                            ⚠️ Low Balance
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
-                        Daily Burn: <strong style={{ color: '#4f46e5' }}>₹300/day</strong> • {c.city || 'India'}
+                        Daily Burn: <strong style={{ color: '#4f46e5' }}>₹{pacing}/day</strong> • {c.city || 'India'}
                       </div>
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '1rem', fontWeight: 900, color: '#0f172a' }}>
+                      <div style={{ fontSize: '1rem', fontWeight: 900, color: !isLowBalance ? '#0f172a' : '#e11d48' }}>
                         {formatINR(bal)}
                       </div>
                       <span
-                        className={`desk-pill ${isHealthy ? 'pill-emerald' : isLow ? 'pill-amber' : 'pill-rose'}`}
-                        style={{ fontSize: '0.68rem', marginTop: 3 }}
+                        className={`desk-pill ${isHealthy ? 'pill-emerald' : !isLowBalance ? 'pill-amber' : 'pill-rose'}`}
+                        style={{ fontSize: '0.68rem', marginTop: 3, fontWeight: 800 }}
                       >
-                        {runway} Days Runway
+                        {isLowBalance ? '⚠️ Low Balance' : `${runway} Days Runway`}
                       </span>
                     </div>
                   </div>

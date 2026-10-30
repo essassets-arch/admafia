@@ -302,11 +302,24 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   </td>
                 </tr>
               ) : (
-                customers.map((c) => (
+                customers.map((c) => {
+                  const dailySpend = c.dailyAdSpend || 300;
+                  const isLowBal = c.availableBalance < dailySpend || c.availableBalance <= 0;
+                  return (
                   <tr key={c.id}>
                     <td>
                       <div className="mkt-cell-primary">{c.name}</div>
                       <div className="mkt-cell-sub">ID: {c.customerId || c.id}</div>
+                      {isLowBal && (
+                        <div style={{ marginTop: '3px' }}>
+                          <span
+                            className="mkt-pill mkt-pill-rose"
+                            style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                          >
+                            ⚠️ Low Balance
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{c.owner || c.contactPerson || 'Business Owner'}</div>
@@ -323,12 +336,22 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                       <div className="mkt-cell-sub">{c.city || 'India'}</div>
                     </td>
                     <td>
-                      <div className="mkt-badge-mono" style={{ color: c.availableBalance > 0 ? '#059669' : '#dc2626' }}>
+                      <div className="mkt-badge-mono" style={{ color: !isLowBal ? '#059669' : '#dc2626' }}>
                         ₹{c.availableBalance.toLocaleString('en-IN')}
                       </div>
                       <div className="mkt-cell-sub">
-                        Pacing: ₹{c.dailyAdSpend}/day
+                        Pacing: ₹{dailySpend}/day
                       </div>
+                      {isLowBal && (
+                        <div style={{ marginTop: '4px' }}>
+                          <span
+                            className="mkt-pill mkt-pill-rose"
+                            style={{ fontSize: '0.66rem', fontWeight: 800, padding: '2px 6px' }}
+                          >
+                            {c.availableBalance <= 0 ? '⚠️ Zero Balance' : '⚠️ Balance is Low (Needs Top Up)'}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td>
                       {c.campaignStatus === 'Running' ? (
@@ -339,9 +362,23 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                       ) : c.campaignStatus === 'Draft' ? (
                         <span className="mkt-pill mkt-pill-amber">Draft Configured</span>
                       ) : c.campaignStatus === 'Stopped' ? (
-                        <span className="mkt-pill mkt-pill-rose">Stopped</span>
+                        <div>
+                          <span className="mkt-pill mkt-pill-rose">Stopped</span>
+                          {isLowBal && (
+                            <div style={{ fontSize: '0.68rem', color: '#e11d48', fontWeight: 800, marginTop: '2px' }}>
+                              ⚠️ Low Balance Paused
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <span className="mkt-pill mkt-pill-slate">No Campaign</span>
+                        <div>
+                          <span className="mkt-pill mkt-pill-slate">No Campaign</span>
+                          {isLowBal && (
+                            <div style={{ fontSize: '0.68rem', color: '#e11d48', fontWeight: 800, marginTop: '2px' }}>
+                              ⚠️ Low Balance
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td>
@@ -379,9 +416,10 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
+                );
+              })
+            )}
+          </tbody>
           </table>
         </div>
 
