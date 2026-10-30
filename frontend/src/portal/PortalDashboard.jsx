@@ -56,12 +56,18 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   // Helper to check if an item (lead/transaction/invoice) belongs to the active customer
   const belongsToCustomer = (item, cust) => {
     if (!item || !cust) return false;
-    if (cust.id && item.customerId && item.customerId === cust.id) return true;
-    if (cust.phone && item.customerPhone && item.customerPhone === cust.phone) return true;
-    if (cust.username && item.customerUsername && item.customerUsername.toLowerCase() === cust.username.toLowerCase()) return true;
-    const custComp = (cust.companyName || cust.name || '').trim().toLowerCase();
-    const itemComp = (item.company || item.assignedCompany || item.customerCompanyName || '').trim().toLowerCase();
-    if (custComp && itemComp && custComp === itemComp) return true;
+    const cId = String(cust.id || '').trim();
+    const cPhone = String(cust.phone || '').replace(/\D/g, '').slice(-10);
+    const cUser = String(cust.username || '').trim().toLowerCase();
+
+    // 1. Authoritative Customer ID match
+    if (cId && item.customerId && String(item.customerId).trim() === cId) return true;
+    // 2. Authoritative 10-digit mobile number match
+    if (cPhone && item.customerPhone && String(item.customerPhone).replace(/\D/g, '').slice(-10) === cPhone) return true;
+    if (cPhone && item.phone && String(item.phone).replace(/\D/g, '').slice(-10) === cPhone && (item.type === 'topup' || item.type === 'wallet')) return true;
+    // 3. Authoritative username match
+    if (cUser && item.customerUsername && String(item.customerUsername).trim().toLowerCase() === cUser) return true;
+
     return false;
   };
 

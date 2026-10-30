@@ -123,13 +123,44 @@ export default function App() {
       return 'landing';
     }
 
-    // 2. Sales & Admin Operations Desks
+    // 2. Explicit Register Request (#register or /register or #create-account)
+    // MUST ALWAYS OPEN REGISTER FORM, NEVER DASHBOARD!
+    // Per User Request: "on create account open register form not dashbaord"
+    if (
+      h.includes('#register') ||
+      h.includes('register') ||
+      h.includes('create-account') ||
+      p.startsWith('/register') ||
+      p === '/register'
+    ) {
+      if (p.includes('/app')) {
+        try { window.history.replaceState({}, '', '/#register'); } catch (e) {}
+      }
+      return 'register';
+    }
+
+    // 3. Explicit Customer Login Request (#login or /login)
+    if (h.includes('#login') || p.startsWith('/login')) {
+      if (p.includes('/app')) {
+        try {
+          localStorage.removeItem('growthline_active_user');
+          sessionStorage.clear();
+          window.history.replaceState({}, '', '/');
+        } catch (e) {}
+        window.location.hash = '';
+        window.location.href = '/';
+        return 'landing';
+      }
+      return 'login';
+    }
+
+    // 4. Sales & Admin Operations Desks
     if (p.startsWith('/sales') || h.startsWith('#sales') || p.startsWith('/admin') || h.startsWith('#admin')) {
       if (h.includes('login') || h === '#sales/login') return 'sales-login';
       return 'sales-portal';
     }
 
-    // 3. Customer Portal (/app or /app/lead)
+    // 5. Customer Portal (/app or /app/lead)
     if (h.includes('#app') || p.startsWith('/app')) {
       let activeUser = null;
       try {
@@ -148,17 +179,11 @@ export default function App() {
       return 'portal';
     }
 
-    // 4. Dedicated Standalone Workspace Configuration Page (#workspace-setup)
+    // 6. Dedicated Standalone Workspace Configuration Page (#workspace-setup)
     if (h.includes('#workspace-setup') || h.includes('#profile-setup') || h.includes('#setup') || p.startsWith('/workspace-setup') || p.startsWith('/profile-setup') || p.startsWith('/setup')) return 'workspace-setup';
 
-    // 5. Commercial Package & Payment Funnel (/onboarding/checkout)
+    // 7. Commercial Package & Payment Funnel (/onboarding/checkout)
     if (h.includes('#checkout') || h.includes('#onboarding') || p.startsWith('/checkout') || p.startsWith('/onboarding')) return 'checkout';
-
-    // 6. Customer Registration (/register or #register)
-    if (h.includes('#register') || p.startsWith('/register')) return 'register';
-
-    // 7. Customer Login (/login or #login)
-    if (h.includes('#login') || p.startsWith('/login')) return 'login';
 
     // 8. Auth
     if (h.includes('#auth') || p.startsWith('/auth')) return 'auth';
@@ -454,37 +479,85 @@ export default function App() {
           </a>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             {currentUser ? (
-              <button 
-                type="button" 
-                onClick={() => {
-                  try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch (e) {}
-                  window.location.hash = '#app/dashboard';
-                  setCurrentView('portal');
-                }}
-                className="btn"
-                style={{
-                  padding: '9px 24px',
-                  fontSize: '0.92rem',
-                  fontWeight: 700,
-                  background: '#ffb800',
-                  color: '#171347',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 14px rgba(255, 184, 0, 0.35)',
-                  cursor: 'pointer',
-                  border: 'none',
-                }}
-              >
-                <span>Dashboard</span>
-                <span style={{ fontSize: '1rem', fontWeight: 900 }}>→</span>
-              </button>
+              <>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch (e) {}
+                    window.location.hash = '#app/dashboard';
+                    setCurrentView('portal');
+                  }}
+                  className="btn"
+                  style={{
+                    padding: '9px 22px',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    background: '#ffb800',
+                    color: '#171347',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 14px rgba(255, 184, 0, 0.35)',
+                    cursor: 'pointer',
+                    border: 'none',
+                  }}
+                >
+                  <span>Dashboard</span>
+                  <span style={{ fontSize: '1rem', fontWeight: 900 }}>→</span>
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    try {
+                      localStorage.removeItem('growthline_active_user');
+                      sessionStorage.clear();
+                      window.history.pushState({}, '', '/#register');
+                    } catch (e) {}
+                    setCurrentUser(null);
+                    window.location.hash = '#register';
+                    setCurrentView('register');
+                  }}
+                  className="btn alt"
+                  style={{
+                    padding: '8px 18px',
+                    fontSize: '0.86rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Create Account
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    try {
+                      localStorage.removeItem('growthline_active_user');
+                      sessionStorage.clear();
+                      window.history.pushState({}, '', '/');
+                    } catch (e) {}
+                    setCurrentUser(null);
+                    window.location.hash = '';
+                    setCurrentView('landing');
+                  }}
+                  className="btn alt"
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
+                    color: '#64748b',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Sign Out
+                </button>
+              </>
             ) : (
               <>
                 <button 
                   type="button" 
                   onClick={() => {
+                    try { window.history.pushState({}, '', '/#login'); } catch (e) {}
                     window.location.hash = '#login';
                     setCurrentView('login');
                   }}
@@ -501,6 +574,12 @@ export default function App() {
                 <button 
                   type="button" 
                   onClick={() => {
+                    try {
+                      localStorage.removeItem('growthline_active_user');
+                      sessionStorage.clear();
+                      window.history.pushState({}, '', '/#register');
+                    } catch (e) {}
+                    setCurrentUser(null);
                     window.location.hash = '#register';
                     setCurrentView('register');
                   }}
@@ -514,7 +593,7 @@ export default function App() {
                     cursor: 'pointer',
                   }}
                 >
-                  Register
+                  Create Account
                 </button>
               </>
             )}
