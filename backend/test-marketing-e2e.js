@@ -158,6 +158,7 @@ async function runMarketingTests() {
         platform: 'Meta Ads (Facebook & Instagram)',
         caption: 'Struggling with legacy infrastructure? Partner with Alpha Tech Systems.',
         callToAction: 'Enquire Now',
+        mediaUrl: '/uploads/marketing/cloud_banner_v1.png',
         status: 'Draft',
         submittedBy: 'Marketing Creative Team',
       }),

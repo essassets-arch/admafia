@@ -435,7 +435,7 @@ marketingRouter.get('/customers/:id/wallet-transactions', async (req, res) => {
 marketingRouter.get('/ideas', async (req, res) => {
   try {
     const { customerId, status, objective } = req.query;
-    const where = [];
+    const where = ['mp.is_deleted = FALSE'];
     const params = [];
 
     if (customerId) {
@@ -667,7 +667,7 @@ marketingRouter.delete('/ideas/:id', async (req, res) => {
 marketingRouter.get('/posts', async (req, res) => {
   try {
     const { customerId, ideaId, status, search } = req.query;
-    const where = [];
+    const where = ['mp.is_deleted = FALSE'];
     const params = [];
 
     if (customerId) {
@@ -964,6 +964,60 @@ marketingRouter.post('/posts/:id/submit', async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
+// 7B. DELETE /api/marketing/posts/:id (Enterprise Soft Deletion & Audit Retention)
+// -----------------------------------------------------------------------------
+marketingRouter.delete('/posts/:id', async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const { actor = 'Marketing Manager' } = req.body || {};
+
+    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [postId]);
+    if (postRes.rowCount === 0 || postRes.rows[0].is_deleted) {
+      return res.status(404).json({ ok: false, error: 'Post not found or already archived.' });
+    }
+    const post = postRes.rows[0];
+
+    // Prevent archiving if active in running campaign
+    const campRes = await query(
+      `SELECT id, name, status FROM marketing_campaigns WHERE post_id = $1 AND status = 'Running'`,
+      [postId]
+    );
+    if (campRes.rowCount > 0) {
+      return res.status(400).json({
+        ok: false,
+        error: `Cannot archive post: It is currently active in a running marketing campaign ("${campRes.rows[0].name}"). Stop the campaign first.`,
+      });
+    }
+
+    // Enterprise Soft Deletion: Preserves all past revisions, reviews, and audit history permanently
+    await query(
+      `UPDATE marketing_posts SET
+        is_deleted = TRUE,
+        deleted_at = NOW(),
+        deleted_by = $1,
+        updated_at = NOW()
+      WHERE id = $2`,
+      [actor, postId]
+    );
+
+    await logAuditEvent(post.customer_id, 'post_archived', postId, `Archived post "${post.title}"`, actor, {
+      postId,
+      title: post.title,
+      revision: post.revision_number,
+    });
+
+    res.json({
+      ok: true,
+      message: 'Post safely archived. Historical revisions and audit trail retained permanently.',
+      postId,
+    });
+  } catch (err) {
+    console.error('[DELETE /api/marketing/posts/:id]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------------
 // 8. POST /api/marketing/posts/:id/review (Approve / Reject / Request Changes)
 // -----------------------------------------------------------------------------
 marketingRouter.post('/posts/:id/review', async (req, res) => {
@@ -971,6 +1025,7 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
     const postId = req.params.id;
     const {
       decision, // 'Approved' | 'Rejected' | 'Changes Requested'
+      expectedRevisionNumber,
       reviewerName = 'Marketing Reviewer',
       reviewerRole = 'Senior Marketing Reviewer',
       remarks = '',
@@ -1004,6 +1059,17 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Post not found.' });
     }
     const post = postRes.rows[0];
+    const currentRev = Number(post.revision_number || 1);
+
+    // Concurrency / Stale Revision Guard: Ensure the reviewer is reviewing the exact latest revision
+    if (expectedRevisionNumber !== undefined && expectedRevisionNumber !== null && Number(expectedRevisionNumber) !== currentRev) {
+      return res.status(409).json({
+        ok: false,
+        error: `Concurrent Review Conflict: You are reviewing Revision #${expectedRevisionNumber}, but the artwork has already been updated to Revision #${currentRev}. Please refresh and audit the latest uploaded creative.`,
+        currentRevision: currentRev,
+        expectedRevision: Number(expectedRevisionNumber),
+      });
+    }
 
     // Separation of Duties check: Creator cannot approve their own post if required
     if (decision === 'Approved' && post.submitted_by && post.submitted_by.toLowerCase() === reviewerName.toLowerCase() && reviewerName.toLowerCase() !== 'admin') {
@@ -1013,15 +1079,16 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
     const reviewId = `rev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
     await withTransaction(async (txQuery) => {
-      // 1. Insert Review record
+      // 1. Insert Review record with explicit revision_number
       await txQuery(
         `INSERT INTO marketing_post_reviews (
-          id, post_id, reviewer_name, reviewer_role, decision, remarks,
+          id, post_id, revision_number, reviewer_name, reviewer_role, decision, remarks,
           rejection_reason, correction_instructions
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           reviewId,
           postId,
+          currentRev,
           reviewerName,
           reviewerRole,
           decision,
@@ -1031,15 +1098,37 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
         ]
       );
 
-      // 2. Update post status
+      // 2. Synchronize the specific revision record in marketing_post_revisions
+      await txQuery(
+        `UPDATE marketing_post_revisions SET
+          review_status = $1,
+          reviewer_name = $2,
+          review_remarks = $3,
+          rejection_reason = $4,
+          correction_instructions = $5,
+          reviewed_at = NOW()
+        WHERE post_id = $6 AND revision_number = $7`,
+        [
+          decision,
+          reviewerName,
+          remarks,
+          rejectionReason,
+          correctionInstructions,
+          postId,
+          currentRev,
+        ]
+      );
+
+      // 3. Update post status
       await txQuery(
         `UPDATE marketing_posts SET status = $1, updated_at = NOW() WHERE id = $2`,
         [decision, postId]
       );
     });
 
-    await logAuditEvent(post.customer_id, 'review', reviewId, `Decision: ${decision}`, reviewerName, {
+    await logAuditEvent(post.customer_id, 'review', reviewId, `Decision: ${decision} (Rev #${currentRev})`, reviewerName, {
       postId,
+      revisionNumber: currentRev,
       decision,
       remarks,
       rejectionReason,
@@ -1052,6 +1141,7 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
       decision,
       reviewId,
       postId,
+      revisionNumber: currentRev,
     });
   } catch (err) {
     console.error('[POST /api/marketing/posts/:id/review]', err);
@@ -1116,6 +1206,19 @@ marketingRouter.post('/media/upload', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'File size exceeds maximum 15MB limit.' });
     }
 
+    // Deep Content / Magic Bytes Inspection: Disallow executable, script, or polyglot payloads
+    const isExecutableOrScript =
+      (buffer.length >= 2 && buffer[0] === 0x4D && buffer[1] === 0x5A) || // PE / Windows EXE / DLL ('MZ')
+      (buffer.length >= 4 && buffer[0] === 0x7F && buffer[1] === 0x45 && buffer[2] === 0x4C && buffer[3] === 0x46) || // Linux ELF
+      (buffer.length >= 2 && buffer[0] === 0x23 && buffer[1] === 0x21) || // Shell script ('#!')
+      (buffer.length >= 8 && buffer.slice(0, 200).toString('utf8').toLowerCase().includes('<script')); // Embedded HTML/SVG script
+    if (isExecutableOrScript) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Security Violation: Executable binary or script content detected in media payload.',
+      });
+    }
+
     const extMatch = filename.match(/\.([a-zA-Z0-9]+)$/);
     const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '.jpg';
     const safeName = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}${ext}`;
@@ -1145,7 +1248,7 @@ marketingRouter.post('/media/upload', async (req, res) => {
 marketingRouter.get('/campaigns', async (req, res) => {
   try {
     const { customerId, status } = req.query;
-    const where = [];
+    const where = ['mp.is_deleted = FALSE'];
     const params = [];
 
     if (customerId) {
@@ -1250,52 +1353,61 @@ marketingRouter.post('/campaigns', async (req, res) => {
     // 2. Determine and verify creative post
     let effectivePostId = postId;
     if (!effectivePostId) {
-      // Find latest approved post for this customer if exists
+      // Find latest verified and approved post for this customer with valid artwork
       const existingApproved = await query(
-        `SELECT id FROM marketing_posts WHERE customer_id = $1 AND status = 'Approved' ORDER BY created_at DESC LIMIT 1`,
+        `SELECT id, revision_number FROM marketing_posts 
+         WHERE customer_id = $1 AND status = 'Approved' AND media_url IS NOT NULL AND media_url != '' AND is_deleted = FALSE 
+         ORDER BY updated_at DESC LIMIT 1`,
         [customerId]
       );
       if (existingApproved.rowCount > 0) {
         effectivePostId = existingApproved.rows[0].id;
       } else {
-        // Auto-provision an approved creative post for this customer so schema FK is preserved
-        const autoPostId = `post_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        await query(
-          `INSERT INTO marketing_posts (
-            id, customer_id, title, platform, caption, call_to_action, status, revision_number, created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, 'Approved', 1, 'Automated Campaign Setup')`,
-          [
-            autoPostId,
-            customerId,
-            `${name.trim()} - Main Creative`,
-            platform || 'Meta Ads (Facebook & Instagram)',
-            `Verified marketing campaign for ${custRes.rows[0].company_name}`,
-            'Enquire Now',
-          ]
-        );
-        effectivePostId = autoPostId;
-      }
-    } else {
-      // Verify Post exists, belongs to THIS customer, AND has status = 'Approved'
-      const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [effectivePostId]);
-      if (postRes.rowCount === 0) {
-        return res.status(404).json({ ok: false, error: 'Selected creative post not found.' });
-      }
-      const post = postRes.rows[0];
-
-      if (post.customer_id !== customerId) {
         return res.status(400).json({
           ok: false,
-          error: 'Cross-Customer Security Violation: The selected creative post does not belong to this customer.',
+          error: 'No approved creative posts available for this customer. Only posts that have passed the Verification Audit Queue can be deployed into campaigns.',
         });
       }
+    }
 
-      if (post.status !== 'Approved') {
-        return res.status(400).json({
-          ok: false,
-          error: `Only verified and Approved posts can be deployed into marketing campaigns. Current post status: ${post.status}`,
-        });
-      }
+    // Verify Post exists, belongs to THIS customer, AND has status = 'Approved'
+    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [effectivePostId]);
+    if (postRes.rowCount === 0 || postRes.rows[0].is_deleted) {
+      return res.status(404).json({ ok: false, error: 'Selected creative post not found or archived.' });
+    }
+    const post = postRes.rows[0];
+
+    if (post.customer_id !== customerId) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Cross-Customer Security Violation: The selected creative post does not belong to this customer.',
+      });
+    }
+
+    if (post.status !== 'Approved') {
+      return res.status(400).json({
+        ok: false,
+        error: `Only verified and Approved posts can be deployed into marketing campaigns. Current post status: ${post.status}`,
+      });
+    }
+
+    if (!post.media_url || !post.media_url.trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Cannot deploy campaign: The selected post does not have uploaded creative artwork.',
+      });
+    }
+
+    // Revision-level verification: Ensure the latest revision is Approved
+    const latestRevRes = await query(
+      `SELECT revision_number, review_status FROM marketing_post_revisions WHERE post_id = $1 ORDER BY revision_number DESC LIMIT 1`,
+      [effectivePostId]
+    );
+    if (latestRevRes.rowCount > 0 && latestRevRes.rows[0].review_status !== 'Approved') {
+      return res.status(400).json({
+        ok: false,
+        error: `Campaign Creative Ineligible: The latest revision (Rev #${latestRevRes.rows[0].revision_number}) is in '${latestRevRes.rows[0].review_status}' status. Only posts whose latest revision is Approved can be deployed.`,
+      });
     }
 
     // 3. Verify Customer Wallet Balance from authoritative wallets table
@@ -1398,6 +1510,14 @@ marketingRouter.post('/campaigns', async (req, res) => {
     res.status(201).json({
       ok: true,
       campaignId,
+      campaign: {
+        id: campaignId,
+        customerId,
+        name: name.trim(),
+        status,
+        postId: effectivePostId,
+        dailyBudget: Number(dailyBudget),
+      },
       externalPlatformStatus: externalStatus,
       newBalance: newBalanceAfterStart,
       message: hasMetaToken

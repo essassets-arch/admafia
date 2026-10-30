@@ -30,6 +30,7 @@ graphicsRouter.get('/summary', async (req, res) => {
         COUNT(*) FILTER (WHERE status = 'Approved')::INT AS approved_count,
         COUNT(*) FILTER (WHERE status IN ('Rejected', 'Changes Requested'))::INT AS rejected_count
       FROM marketing_posts
+      WHERE is_deleted = FALSE
     `);
 
     const row = countsRes.rows[0] || {};
@@ -69,7 +70,7 @@ graphicsRouter.get('/requests', async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
     const offset = (pageNum - 1) * limitNum;
 
-    const whereClauses = [];
+    const whereClauses = ['mp.is_deleted = FALSE'];
     const params = [];
 
     if (status && status !== 'all') {
@@ -256,7 +257,7 @@ graphicsRouter.get('/requests/:id', async (req, res) => {
       FROM marketing_posts mp
       LEFT JOIN customers c ON c.id = mp.customer_id
       LEFT JOIN marketing_ideas mi ON mi.id = mp.idea_id
-      WHERE mp.id = $1
+      WHERE mp.id = $1 AND mp.is_deleted = FALSE
     `, [postId]);
 
     if (postRes.rowCount === 0) {
@@ -339,7 +340,7 @@ graphicsRouter.post('/upload', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Artwork media URL is required.' });
     }
 
-    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [postId]);
+    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE`, [postId]);
     if (postRes.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Selected post request not found.' });
     }
@@ -422,7 +423,7 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Corrected artwork image is required.' });
     }
 
-    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [postId]);
+    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE`, [postId]);
     if (postRes.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Post request not found.' });
     }
@@ -492,7 +493,7 @@ graphicsRouter.get('/approved', async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
     const offset = (pageNum - 1) * limitNum;
 
-    const whereClauses = [`mp.status = 'Approved'`, `mp.media_url IS NOT NULL`, `mp.media_url != ''`];
+    const whereClauses = [`mp.status = 'Approved'`, `mp.media_url IS NOT NULL`, `mp.media_url != ''`, `mp.is_deleted = FALSE`];
     const params = [];
 
     if (search && search.trim()) {
@@ -605,7 +606,7 @@ graphicsRouter.get('/rejected', async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
     const offset = (pageNum - 1) * limitNum;
 
-    const whereClauses = [`mp.status IN ('Rejected', 'Changes Requested')`];
+    const whereClauses = [`mp.status IN ('Rejected', 'Changes Requested')`, `mp.is_deleted = FALSE`];
     const params = [];
 
     if (search && search.trim()) {

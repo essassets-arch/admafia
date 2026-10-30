@@ -83,6 +83,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
     try {
       const res = await marketingApi.reviewPost(post.id, {
         decision: 'Approved',
+        expectedRevisionNumber: post.revisionNumber || post.revision_number,
         reviewerName: 'Marketing Quality Auditor',
         reviewerRole: 'Senior Marketing Auditor',
         remarks: remarks || 'Post verified and compliant with advertising guidelines.',
@@ -130,6 +131,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
     try {
       const res = await marketingApi.reviewPost(post.id, {
         decision: 'Rejected',
+        expectedRevisionNumber: post.revisionNumber || post.revision_number,
         reviewerName: 'Marketing Quality Auditor',
         rejectionReason: reason.trim(),
         remarks: `Rejected: ${reason.trim()}`,
@@ -176,6 +178,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
     try {
       const res = await marketingApi.reviewPost(post.id, {
         decision: 'Changes Requested',
+        expectedRevisionNumber: post.revisionNumber || post.revision_number,
         reviewerName: 'Marketing Quality Auditor',
         correctionInstructions: instructions.trim(),
         remarks: `Changes Requested: ${instructions.trim()}`,

@@ -489,6 +489,9 @@ CREATE TABLE IF NOT EXISTS marketing_posts (
     designer_name       VARCHAR(140) DEFAULT 'Graphics Designer',
     creative_instructions TEXT DEFAULT '',
     priority            VARCHAR(40) DEFAULT 'Normal',
+    is_deleted          BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_at          TIMESTAMPTZ,
+    deleted_by          VARCHAR(140),
     created_by          VARCHAR(140) NOT NULL DEFAULT 'Marketing Content Team',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -498,10 +501,11 @@ CREATE INDEX IF NOT EXISTS idx_marketing_posts_customer ON marketing_posts(custo
 CREATE INDEX IF NOT EXISTS idx_marketing_posts_status ON marketing_posts(status);
 
 -- Multi-Version Artwork Revisions Table for Graphics Department
+-- Retention Policy: Uses ON DELETE RESTRICT to guarantee audit retention of historical creative iterations
 CREATE TABLE IF NOT EXISTS marketing_post_revisions (
     id                  VARCHAR(64) PRIMARY KEY,
     post_id             VARCHAR(64) NOT NULL
-                        REFERENCES marketing_posts(id) ON DELETE CASCADE,
+                        REFERENCES marketing_posts(id) ON DELETE RESTRICT,
     revision_number     INT NOT NULL DEFAULT 1,
     media_url           TEXT NOT NULL,
     media_type          VARCHAR(64) DEFAULT 'image',
@@ -513,6 +517,7 @@ CREATE TABLE IF NOT EXISTS marketing_post_revisions (
     reviewer_name       VARCHAR(140),
     review_remarks      TEXT DEFAULT '',
     rejection_reason    TEXT DEFAULT '',
+    correction_instructions TEXT DEFAULT '',
     reviewed_at         TIMESTAMPTZ
 );
 
@@ -522,6 +527,7 @@ CREATE TABLE IF NOT EXISTS marketing_post_reviews (
     id                  VARCHAR(64) PRIMARY KEY,
     post_id             VARCHAR(64) NOT NULL
                         REFERENCES marketing_posts(id) ON DELETE CASCADE,
+    revision_number     INT NOT NULL DEFAULT 1,
     reviewer_name       VARCHAR(140) NOT NULL,
     reviewer_role       VARCHAR(100) NOT NULL DEFAULT 'Marketing Reviewer',
     decision            VARCHAR(40) NOT NULL
