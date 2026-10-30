@@ -129,35 +129,6 @@ export async function initDatabase() {
       `);
     }
     console.log('[PostgreSQL] Relational schema & views verified (14 tables + vw_sales_customer_accounts)');
-
-    // Seed default customer groups if empty
-    try {
-      const grpCheck = await query('SELECT COUNT(*) as count FROM customer_groups');
-      const count = Number(grpCheck.rows[0]?.count || 0);
-      if (count === 0) {
-        const defaultGroups = [
-          ['grp_it', 'IT & Software', 'IT & Software', '💻', 'Web development, SaaS, cloud infrastructure & IT services.'],
-          ['grp_hardware', 'Hardware & Computer Accessories', 'Hardware', '🖥️', 'Computer hardware, networking devices, peripherals & electronic accessories.'],
-          ['grp_construction', 'Construction & Building Materials', 'Construction', '🏗️', 'Commercial & residential builders, cement, steel, tiles & architectural materials.'],
-          ['grp_manufacturing', 'Manufacturing', 'Manufacturing', '🏭', 'Chemicals, plastics, polymers, industrial machinery & B2B fabricators.'],
-          ['grp_marketing', 'Digital Marketing', 'Digital Marketing', '📈', 'Performance marketing agencies, social media management & SEO specialists.'],
-          ['grp_electrical', 'Electrical Products', 'Electrical', '⚡', 'Industrial cables, switchgear, solar components & lighting manufacturers.'],
-          ['grp_healthcare', 'Healthcare', 'Healthcare', '🏥', 'Hospitals, diagnostic clinics, pharmaceuticals & medical devices.'],
-          ['grp_other', 'Other', 'Other', '🏢', 'General commerce, business consulting & specialized industries.']
-        ];
-        for (const [id, name, cat, icon, desc] of defaultGroups) {
-          await query(
-            `INSERT INTO customer_groups (id, name, category, icon, description, status)
-             VALUES ($1, $2, $3, $4, $5, 'active')
-             ON CONFLICT (name) DO UPDATE SET category = EXCLUDED.category, icon = EXCLUDED.icon, description = EXCLUDED.description`,
-            [id, name, cat, icon, desc]
-          );
-        }
-        console.log('[PostgreSQL] Seeded 8 default customer groups');
-      }
-    } catch (grpErr) {
-      console.warn('[PostgreSQL] Group seeding warning:', grpErr.message);
-    }
   }
 
   return { mode: dbMode };
