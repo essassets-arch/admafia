@@ -519,20 +519,6 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                     required
                   />
                 </div>
-
-                {/* Designer Signature */}
-                <div style={{ marginBottom: 10 }}>
-                  <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
-                    4. Designer Signature
-                  </label>
-                  <input
-                    type="text"
-                    className="graphics-search-input"
-                    style={{ width: '100%', padding: '8px 12px' }}
-                    value={designerName}
-                    onChange={(e) => setDesignerName(e.target.value)}
-                  />
-                </div>
               </div>
 
               <div className="graphics-modal-footer">

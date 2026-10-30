@@ -338,7 +338,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
             </div>
 
             {/* Step 4: Designer Notes & Specifications */}
-            <div style={{ marginBottom: 18 }}>
+            <div style={{ marginBottom: 22 }}>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
                 4. Designer Notes &amp; Specifications
               </label>
@@ -349,21 +349,6 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                 placeholder="Notes on color palette, branding assets used, font hierarchy, or layout considerations..."
                 value={designerNotes}
                 onChange={(e) => setDesignerNotes(e.target.value)}
-              />
-            </div>
-
-            {/* Step 5: Designer Identity */}
-            <div style={{ marginBottom: 22 }}>
-              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
-                5. Designer Name / Signature
-              </label>
-              <input
-                type="text"
-                className="graphics-search-input"
-                style={{ width: '100%', padding: '8px 12px' }}
-                value={designerName}
-                onChange={(e) => setDesignerName(e.target.value)}
-                placeholder="Designer name or agency signature"
               />
             </div>
 
