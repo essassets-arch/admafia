@@ -95,7 +95,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       isSelfRegistered: true,
       completedAt: new Date().toISOString(),
       registeredAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ', Today',
-      registeredFrom: 'http://localhost:5173/#register',
+      registeredFrom: 'https://admafia.marketing/#register',
     };
 
     try {
@@ -167,6 +167,32 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
 
   return (
     <div className="auth-fullpage-shell">
+      {/* Top Navigation Bar with Logo and Return to Website */}
+      <header className="auth-fullpage-topbar">
+        <div className="auth-fullpage-topbar-inner">
+          <div className="auth-fullpage-brand" onClick={onBackToWebsite} style={{ cursor: 'pointer' }}>
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
+              style={{
+                height: '42px',
+                width: 'auto',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
+          <div className="auth-fullpage-topbar-actions">
+            <span className="auth-topbar-Question">Already registered?</span>
+            <button type="button" className="auth-topbar-switch-btn" onClick={onSwitchToLogin}>
+              Sign In
+            </button>
+            <button type="button" className="auth-topbar-back-btn" onClick={onBackToWebsite}>
+              <ArrowLeft size={15} /> Back to Website
+            </button>
+          </div>
+        </div>
+      </header>
+
       {/* Main Full-Page Split Grid */}
       <main className="auth-fullpage-grid">
         {/* LEFT COLUMN: Enterprise Showcase & Value Proposition */}
@@ -472,7 +498,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
             <div className="auth-switch-link">
               Already registered?{' '}
               <button type="button" onClick={onSwitchToLogin} className="link-button-bold">
-                Sign In to Workspace (#login)
+                Sign In to Workspace
               </button>
             </div>
           </div>
@@ -487,7 +513,6 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuspendedSim, setIsSuspendedSim] = useState(false);
   const [suspensionError, setSuspensionError] = useState('');
   const [loginError, setLoginError] = useState('');
   const [resetNotice, setResetNotice] = useState('');
@@ -498,14 +523,6 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
 
     if (!username.trim() || !password) {
       setLoginError('Please enter your username/mobile/email and password.');
-      return;
-    }
-
-    // Suspension Protection Safeguard
-    if (isSuspendedSim) {
-      setSuspensionError(
-        'Compliance Hold Notice: Your account is currently under administrative review. Access to lead hub is temporarily paused.'
-      );
       return;
     }
 
@@ -576,6 +593,32 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
 
   return (
     <div className="auth-fullpage-shell">
+      {/* Top Navigation Bar with Logo and Return to Website */}
+      <header className="auth-fullpage-topbar">
+        <div className="auth-fullpage-topbar-inner">
+          <div className="auth-fullpage-brand" onClick={onBackToWebsite} style={{ cursor: 'pointer' }}>
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
+              style={{
+                height: '42px',
+                width: 'auto',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
+          <div className="auth-fullpage-topbar-actions">
+            <span className="auth-topbar-Question">Don&apos;t have an account?</span>
+            <button type="button" className="auth-topbar-switch-btn" onClick={onSwitchToRegister}>
+              Create Account
+            </button>
+            <button type="button" className="auth-topbar-back-btn" onClick={onBackToWebsite}>
+              <ArrowLeft size={15} /> Back to Website
+            </button>
+          </div>
+        </div>
+      </header>
+
       {/* Main Full-Page Split Grid */}
       <main className="auth-fullpage-grid">
         {/* LEFT COLUMN: Customer Portal Command Center Showcase */}
@@ -620,7 +663,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
                     ACTIVE WORKSPACE SYNCHRONIZATION
                   </span>
                 </div>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>/app/lead#app/dashboard</span>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>Verified Customer Access</span>
               </div>
 
               <div className="auth-live-card-body">
@@ -712,7 +755,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
             <div className="auth-card-top">
               <h2>Sign In to Workspace</h2>
               <p>
-                Enter your credentials to open your CRM dashboard at <code>/app/lead#app/dashboard</code>
+                Enter your credentials to sign in to your marketing &amp; lead workspace.
               </p>
             </div>
 
@@ -883,24 +926,10 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
               </button>
             </div>
 
-            {/* Compliance Test Toggle */}
-            <div className="auth-compliance-toggle">
-              <label className="checkbox-wrap">
-                <input
-                  type="checkbox"
-                  checked={isSuspendedSim}
-                  onChange={(e) => setIsSuspendedSim(e.target.checked)}
-                />
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                  Simulate Account Compliance Hold (status = 'Suspended')
-                </span>
-              </label>
-            </div>
-
             <div className="auth-switch-link">
               Don&apos;t have a business account?{' '}
               <button type="button" onClick={onSwitchToRegister} className="link-button-bold">
-                Create Account (#register)
+                Create Business Account
               </button>
             </div>
           </div>

@@ -106,21 +106,67 @@ export default function App() {
   });
   const [errors, setErrors] = useState([]);
   const [sent, setSent] = useState(false);
-  const [currentView, setCurrentView] = useState(() => {
-    const h = window.location.hash.toLowerCase();
-    const p = window.location.pathname.toLowerCase();
+  const resolveView = () => {
+    const h = (window.location.hash || '').toLowerCase();
+    const p = (window.location.pathname || '').toLowerCase();
+
+    // 1. Direct redirect to normal website if on /app/lead#login or any /app with #login, #signout, or #logout
+    // Per User Request: "on https://admafia.marketing/app/lead#login sign out redirect to direct normal website"
+    if ((p.includes('/app') || h.includes('app')) && (h.includes('login') || h.includes('signout') || h.includes('logout'))) {
+      try {
+        localStorage.removeItem('growthline_active_user');
+        sessionStorage.clear();
+        window.history.replaceState({}, '', '/');
+      } catch (e) {}
+      window.location.hash = '';
+      window.location.href = '/';
+      return 'landing';
+    }
+
+    // 2. Sales & Admin Operations Desks
     if (p.startsWith('/sales') || h.startsWith('#sales') || p.startsWith('/admin') || h.startsWith('#admin')) {
       if (h.includes('login') || h === '#sales/login') return 'sales-login';
       return 'sales-portal';
     }
+
+    // 3. Customer Portal (/app or /app/lead)
+    if (h.includes('#app') || p.startsWith('/app')) {
+      let activeUser = null;
+      try {
+        const raw = localStorage.getItem('growthline_active_user');
+        if (raw) activeUser = JSON.parse(raw);
+      } catch (e) {}
+      if (!activeUser) {
+        // Unauthenticated customer visiting portal: redirect to normal website
+        try {
+          window.history.replaceState({}, '', '/');
+        } catch (e) {}
+        window.location.hash = '';
+        window.location.href = '/';
+        return 'landing';
+      }
+      return 'portal';
+    }
+
+    // 4. Dedicated Standalone Workspace Configuration Page (#workspace-setup)
     if (h.includes('#workspace-setup') || h.includes('#profile-setup') || h.includes('#setup') || p.startsWith('/workspace-setup') || p.startsWith('/profile-setup') || p.startsWith('/setup')) return 'workspace-setup';
-    if (h.includes('#app') || p.startsWith('/app')) return 'portal';
+
+    // 5. Commercial Package & Payment Funnel (/onboarding/checkout)
     if (h.includes('#checkout') || h.includes('#onboarding') || p.startsWith('/checkout') || p.startsWith('/onboarding')) return 'checkout';
+
+    // 6. Customer Registration (/register or #register)
     if (h.includes('#register') || p.startsWith('/register')) return 'register';
+
+    // 7. Customer Login (/login or #login)
     if (h.includes('#login') || p.startsWith('/login')) return 'login';
+
+    // 8. Auth
     if (h.includes('#auth') || p.startsWith('/auth')) return 'auth';
+
     return 'landing';
-  });
+  };
+
+  const [currentView, setCurrentView] = useState(resolveView);
 
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -162,19 +208,7 @@ export default function App() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      const h = window.location.hash.toLowerCase();
-      const p = window.location.pathname.toLowerCase();
-      if (p.startsWith('/sales') || h.startsWith('#sales') || p.startsWith('/admin') || h.startsWith('#admin')) {
-        if (h.includes('login') || h === '#sales/login') setCurrentView('sales-login');
-        else setCurrentView('sales-portal');
-      }
-      else if (h.includes('#workspace-setup') || h.includes('#profile-setup') || h.includes('#setup') || p.startsWith('/workspace-setup') || p.startsWith('/profile-setup') || p.startsWith('/setup')) setCurrentView('workspace-setup');
-      else if (h.includes('#app') || p.startsWith('/app')) setCurrentView('portal');
-      else if (h.includes('#checkout') || h.includes('#onboarding') || p.startsWith('/checkout') || p.startsWith('/onboarding')) setCurrentView('checkout');
-      else if (h.includes('#register') || p.startsWith('/register')) setCurrentView('register');
-      else if (h.includes('#login') || p.startsWith('/login')) setCurrentView('login');
-      else if (h.includes('#auth') || p.startsWith('/auth')) setCurrentView('auth');
-      else setCurrentView('landing');
+      setCurrentView(resolveView());
     };
     window.addEventListener('hashchange', handleHashChange);
     window.addEventListener('popstate', handleHashChange);
@@ -285,15 +319,25 @@ export default function App() {
       <PortalDashboard
         key={currentUser?.id || currentUser?.phone || currentUser?.username || 'portal'}
         onSignOut={() => {
-          try { localStorage.removeItem('growthline_active_user'); } catch(e) {}
+          try {
+            localStorage.removeItem('growthline_active_user');
+            sessionStorage.clear();
+          } catch(e) {}
           setCurrentUser(null);
-          window.location.hash = '#login';
-          setCurrentView('login');
+          try {
+            window.history.pushState({}, '', '/');
+          } catch(e) {}
+          window.location.hash = '';
+          setCurrentView('landing');
+          window.location.href = '/';
         }}
         onBackToWebsite={() => {
+          try {
+            window.history.pushState({}, '', '/');
+          } catch(e) {}
           window.location.hash = '';
-          try { window.history.pushState({}, '', '/'); } catch(e) {}
           setCurrentView('landing');
+          window.location.href = '/';
         }}
       />
     );
@@ -313,13 +357,15 @@ export default function App() {
           setCurrentView('portal');
         }}
         onSwitchToRegister={() => {
+          try { window.history.pushState({}, '', '/#register'); } catch(e) {}
           window.location.hash = '#register';
           setCurrentView('register');
         }}
         onBackToWebsite={() => {
-          window.location.hash = '';
           try { window.history.pushState({}, '', '/'); } catch(e) {}
+          window.location.hash = '';
           setCurrentView('landing');
+          window.location.href = '/';
         }}
       />
     );
@@ -336,7 +382,6 @@ export default function App() {
             } catch(e) {}
             setCurrentUser(newCustomer);
           }
-          // Redirect to http://localhost:5173/app/lead#app/dashboard
           try {
             window.history.pushState({}, '', '/app/lead#app/dashboard');
           } catch(e) {}
@@ -344,13 +389,15 @@ export default function App() {
           setCurrentView('portal');
         }}
         onSwitchToLogin={() => {
+          try { window.history.pushState({}, '', '/#login'); } catch(e) {}
           window.location.hash = '#login';
           setCurrentView('login');
         }}
         onBackToWebsite={() => {
-          window.location.hash = '';
           try { window.history.pushState({}, '', '/'); } catch(e) {}
+          window.location.hash = '';
           setCurrentView('landing');
+          window.location.href = '/';
         }}
       />
     );
