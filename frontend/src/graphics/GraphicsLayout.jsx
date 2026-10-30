@@ -82,6 +82,8 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
       setActiveDesk(resolveDeskFromUrl());
       const reqId = resolveRequestIdFromUrl();
       setSelectedRequestId(reqId || null);
+      const reqId = resolveRequestIdFromUrl();
+      if (reqId) setSelectedRequestId(reqId);
     };
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
@@ -230,7 +232,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
                 }}
               >
                 <div className="graphics-nav-label-box">
-                  <Icon size={18} className="graphics-nav-icon" />
+<Icon size={18} className="graphics-nav-icon" />
                   <span className="graphics-nav-title">{item.label}</span>
                 </div>
                 {item.badge !== null && item.badge !== undefined && (
@@ -370,3 +372,4 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
     </div>
   );
 }
+                  
