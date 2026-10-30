@@ -666,7 +666,6 @@ export default function LeadHubOverview({
                         <div className="phone-digits-line">
                           <span className="phone-strong">{displayPhone}</span>
                         </div>
-                        {!item.read && <span className="unread-micro-tag">New</span>}
                       </div>
                     </div>
 

@@ -309,55 +309,6 @@ export default function LeadPipelineInbox({
                       <div className="phone-digits-line">
                         <span className="phone-strong">{displayPhone}</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '3px' }}>
-                        {!item.read && <span className="unread-micro-tag">New</span>}
-                        {item.category && (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '0.73rem',
-                              fontWeight: 700,
-                              color: '#4338ca',
-                              background: '#eef2ff',
-                              border: '1px solid #c7d2fe',
-                              padding: '1px 8px',
-                              borderRadius: '6px'
-                            }}
-                          >
-                            🏷️ {item.category}
-                          </span>
-                        )}
-                        {(item.company || item.assignedCompany) && (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '0.73rem',
-                              fontWeight: 700,
-                              color: '#065f46',
-                              background: '#ecfdf5',
-                              border: '1px solid #a7f3d0',
-                              padding: '1px 8px',
-                              borderRadius: '6px'
-                            }}
-                          >
-                            🏢 {item.company || item.assignedCompany}
-                          </span>
-                        )}
-                        {item.budget && (
-                          <span style={{ fontSize: '0.73rem', color: '#059669', fontWeight: 700 }}>
-                            {item.budget}
-                          </span>
-                        )}
-                      </div>
-                      {item.requirement && (
-                        <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: '4px', lineHeight: 1.35 }}>
-                          <b>Requirement:</b> {item.requirement}
-                        </div>
-                      )}
                     </div>
                   </div>
 
