@@ -74,6 +74,7 @@ export const formatIndianDateTime = (val, rawVal) => {
 
   // 1. If it's a valid Date object
   if (target instanceof Date) {
+    if (isNaN(target.getTime())) return getLiveNowFormatted();
     return target.toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata',
       day: '2-digit',
@@ -85,8 +86,41 @@ export const formatIndianDateTime = (val, rawVal) => {
     });
   }
 
-  // 2. If it's a valid parseable ISO string or timestamp
-  if (typeof target === 'string' && (target.includes('T') || target.includes('-') || !isNaN(Date.parse(target)))) {
+  // 2. If it's a legacy string like "30 Oct, 05:57 am" or "30 Oct 2026, 05:57 am" (generated in UTC by old server build)
+  if (typeof target === 'string') {
+    const match = target.match(/(\d{1,2})\s+([A-Za-z]{3,9})(?:\s+(\d{4}))?(?:,\s*|\s+)(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?/i);
+    if (match) {
+      const day = parseInt(match[1], 10);
+      const monthStr = match[2].toLowerCase().slice(0, 3);
+      const months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+      const month = months[monthStr];
+      if (month !== undefined) {
+        const year = match[3] ? parseInt(match[3], 10) : new Date().getFullYear();
+        let hours = parseInt(match[4], 10);
+        const minutes = parseInt(match[5], 10);
+        const meridiem = (match[6] || '').toLowerCase();
+        if (meridiem === 'pm' && hours < 12) hours += 12;
+        if (meridiem === 'am' && hours === 12) hours = 0;
+
+        // Interpret strictly as UTC and format into Asia/Kolkata Indian Standard Time (IST):
+        const utcDate = new Date(Date.UTC(year, month, day, hours, minutes, 0));
+        if (!isNaN(utcDate.getTime())) {
+          return utcDate.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+        }
+      }
+    }
+  }
+
+  // 3. If it's a valid parseable ISO string or timestamp
+  if (typeof target === 'string') {
     const d = new Date(target);
     if (!isNaN(d.getTime())) {
       return d.toLocaleString('en-IN', {
@@ -101,36 +135,7 @@ export const formatIndianDateTime = (val, rawVal) => {
     }
   }
 
-  // 3. If it's a legacy string like "30 Oct, 05:57 am" or "30 Oct, 05:57" (generated in UTC by old server)
-  if (typeof val === 'string') {
-    const match = val.match(/(\d{1,2}\s+[A-Za-z]+)(?:,\s*|\s+)(\d{1,2}):(\d{2})\s*(am|pm)?/i);
-    if (match) {
-      const datePart = match[1];
-      let hours = parseInt(match[2], 10);
-      const minutes = parseInt(match[3], 10);
-      const meridiem = (match[4] || '').toLowerCase();
-      if (meridiem === 'pm' && hours < 12) hours += 12;
-      if (meridiem === 'am' && hours === 12) hours = 0;
-
-      // Construct a Date assuming it was UTC:
-      const currentYear = new Date().getFullYear();
-      const utcDate = new Date(`${datePart} ${currentYear} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00 UTC`);
-      if (!isNaN(utcDate.getTime())) {
-        return utcDate.toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        });
-      }
-    }
-    return val;
-  }
-
-  return getLiveNowFormatted();
+  return target || getLiveNowFormatted();
 };
 
 /* ==========================================================================

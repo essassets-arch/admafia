@@ -69,10 +69,10 @@ export default function LeadPipelineInbox({
     }
   };
 
-  // Toggle Read
-  const handleToggleRead = (lead) => {
-    if (onUpdateLead) {
-      onUpdateLead(lead.id, { read: !lead.read });
+  // Mark as Read (once read, stays read permanently; cannot be un-read)
+  const handleMarkAsRead = (lead) => {
+    if (onUpdateLead && !lead.read) {
+      onUpdateLead(lead.id, { read: true });
     }
   };
 
@@ -374,6 +374,7 @@ export default function LeadPipelineInbox({
                         href={`tel:${item.phone}`}
                         className="btn-list-action call"
                         title={`Call ${displayPhone}`}
+                        onClick={() => handleMarkAsRead(item)}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
@@ -388,34 +389,13 @@ export default function LeadPipelineInbox({
                         rel="noreferrer"
                         className="btn-list-action chat"
                         title="Chat on WhatsApp"
+                        onClick={() => handleMarkAsRead(item)}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
                         </svg>
                         <span>Chat</span>
                       </a>
-
-                      {/* 2B. Mark Interested */}
-                      <button
-                        type="button"
-                        className="btn-list-action"
-                        onClick={() => {
-                          const nextStatus = item.status === 'Interested' ? 'new' : 'Interested';
-                          onUpdateLead && onUpdateLead(item.id, { status: nextStatus });
-                        }}
-                        style={{
-                          background: item.status === 'Interested' ? '#ecfdf5' : '#ffffff',
-                          color: item.status === 'Interested' ? '#059669' : '#334155',
-                          borderColor: item.status === 'Interested' ? '#a7f3d0' : '#cbd5e1',
-                          fontWeight: 700,
-                        }}
-                        title={item.status === 'Interested' ? 'Marked as Interested' : 'Mark as Interested'}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        <span>{item.status === 'Interested' ? 'Interested ✓' : 'Interested'}</span>
-                      </button>
 
                       {/* 3. In Follow-up */}
                       <button
@@ -433,18 +413,26 @@ export default function LeadPipelineInbox({
                         <span>In Follow-up</span>
                       </button>
 
-                      {/* 4. Read */}
+                      {/* 4. Read (Permanent: once read, stays read) */}
                       <button
                         type="button"
                         className={`btn-list-action read ${item.read ? 'is-read' : ''}`}
-                        onClick={() => handleToggleRead(item)}
-                        title={item.read ? 'Mark as Unread' : 'Mark as Read'}
+                        onClick={() => handleMarkAsRead(item)}
+                        disabled={Boolean(item.read)}
+                        title={item.read ? 'Lead Read' : 'Mark as Read'}
+                        style={item.read ? { cursor: 'default', opacity: 0.85 } : undefined}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                          <circle cx="12" cy="12" r="3"/>
+                          {item.read ? (
+                            <polyline points="20 6 9 17 4 12" />
+                          ) : (
+                            <>
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                              <circle cx="12" cy="12" r="3"/>
+                            </>
+                          )}
                         </svg>
-                        <span>{item.read ? 'Read' : 'Mark Read'}</span>
+                        <span>{item.read ? 'Read ✓' : 'Mark Read'}</span>
                       </button>
 
                       {/* 5. Drop */}

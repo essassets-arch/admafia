@@ -49,8 +49,8 @@ export default function FollowUpsQueue({
 
   // Toggle Read
   const handleToggleRead = (lead) => {
-    if (onUpdateLead) {
-      onUpdateLead(lead.id, { read: !lead.read });
+    if (onUpdateLead && !lead.read) {
+      onUpdateLead(lead.id, { read: true });
     }
   };
 
@@ -303,18 +303,26 @@ export default function FollowUpsQueue({
                         <span>In Follow-up</span>
                       </button>
 
-                      {/* 4. Read */}
+                      {/* 4. Read (Permanent: once read, stays read) */}
                       <button
                         type="button"
                         className={`btn-list-action read ${item.read ? 'is-read' : ''}`}
                         onClick={() => handleToggleRead(item)}
-                        title={item.read ? 'Mark as Unread' : 'Mark as Read'}
+                        disabled={Boolean(item.read)}
+                        title={item.read ? 'Lead Read' : 'Mark as Read'}
+                        style={item.read ? { cursor: 'default', opacity: 0.85 } : undefined}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                          <circle cx="12" cy="12" r="3"/>
+                          {item.read ? (
+                            <polyline points="20 6 9 17 4 12" />
+                          ) : (
+                            <>
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                              <circle cx="12" cy="12" r="3"/>
+                            </>
+                          )}
                         </svg>
-                        <span>{item.read ? 'Read' : 'Mark Read'}</span>
+                        <span>{item.read ? 'Read ✓' : 'Mark Read'}</span>
                       </button>
 
                       {/* 5. Drop */}
