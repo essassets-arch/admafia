@@ -7,6 +7,7 @@ import CheckoutPage from './portal/CheckoutPage';
 import SalesLoginPage from './sales/SalesLoginPage';
 import SalesExecutiveDashboard from './sales/SalesExecutiveDashboard';
 import MarketingLayout from './marketing/MarketingLayout';
+import GraphicsLayout from './graphics/GraphicsLayout';
 import { CustomerLoginPage, CustomerRegisterPage } from './portal/AuthPages';
 import crmApi from './services/crmApi';
 import './portal/portal.css';
@@ -164,6 +165,11 @@ export default function App() {
     // 4B. Marketing Department Operations Panel (/marketing)
     if (p.startsWith('/marketing') || h.startsWith('#marketing') || h.startsWith('#/marketing')) {
       return 'marketing-portal';
+    }
+
+    // 4C. Graphics Department Creative Ops Panel (/graphics)
+    if (p.startsWith('/graphics') || h.startsWith('#graphics') || h.startsWith('#/graphics')) {
+      return 'graphics-portal';
     }
 
     // 5. Customer Portal (/app or /app/lead)
@@ -327,6 +333,30 @@ export default function App() {
   if (currentView === 'marketing-portal') {
     return (
       <MarketingLayout
+        onSignOut={() => {
+          try {
+            localStorage.removeItem('growthline_active_user');
+            sessionStorage.clear();
+          } catch (e) {}
+          window.location.hash = '';
+          try { window.history.pushState({}, '', '/'); } catch (e) {}
+          setCurrentView('landing');
+          window.location.href = '/';
+        }}
+        onBackToWebsite={() => {
+          try { window.history.pushState({}, '', '/'); } catch (e) {}
+          window.location.hash = '';
+          setCurrentView('landing');
+          window.location.href = '/';
+        }}
+      />
+    );
+  }
+
+  // View: Graphics Department Creative Ops Workspace (/graphics)
+  if (currentView === 'graphics-portal') {
+    return (
+      <GraphicsLayout
         onSignOut={() => {
           try {
             localStorage.removeItem('growthline_active_user');

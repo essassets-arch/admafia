@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
+import { graphicsRouter } from './routes/graphics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2027,6 +2028,11 @@ app.patch('/api/lead-assignments/:id', async (req, res) => {
 // 6B. MARKETING DEPARTMENT API ROUTER (/api/marketing/*)
 // =============================================================================
 app.use('/api/marketing', marketingRouter);
+
+// =============================================================================
+// 6C. GRAPHICS DEPARTMENT API ROUTER (/api/graphics/*)
+// =============================================================================
+app.use('/api/graphics', graphicsRouter);
 
 // =============================================================================
 // 7. PRODUCTION STATIC FRONTEND SERVING (When frontend/dist is built on VPS)

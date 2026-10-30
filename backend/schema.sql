@@ -480,11 +480,15 @@ CREATE TABLE IF NOT EXISTS marketing_posts (
     language            VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
     campaign_association VARCHAR(255) DEFAULT '',
     intended_publish_at TIMESTAMPTZ,
-    status              VARCHAR(40) NOT NULL DEFAULT 'Draft'
-                        CHECK (status IN ('Draft', 'Pending Verification', 'Approved', 'Rejected', 'Changes Requested')),
+    status              VARCHAR(40) NOT NULL DEFAULT 'Draft',
     submitted_by        VARCHAR(140),
     submitted_at        TIMESTAMPTZ,
     revision_number     INT NOT NULL DEFAULT 1,
+    creative_format     VARCHAR(64) DEFAULT 'Instagram / Facebook Post',
+    designer_notes      TEXT DEFAULT '',
+    designer_name       VARCHAR(140) DEFAULT 'Graphics Designer',
+    creative_instructions TEXT DEFAULT '',
+    priority            VARCHAR(40) DEFAULT 'Normal',
     created_by          VARCHAR(140) NOT NULL DEFAULT 'Marketing Content Team',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -492,6 +496,27 @@ CREATE TABLE IF NOT EXISTS marketing_posts (
 
 CREATE INDEX IF NOT EXISTS idx_marketing_posts_customer ON marketing_posts(customer_id, status);
 CREATE INDEX IF NOT EXISTS idx_marketing_posts_status ON marketing_posts(status);
+
+-- Multi-Version Artwork Revisions Table for Graphics Department
+CREATE TABLE IF NOT EXISTS marketing_post_revisions (
+    id                  VARCHAR(64) PRIMARY KEY,
+    post_id             VARCHAR(64) NOT NULL
+                        REFERENCES marketing_posts(id) ON DELETE CASCADE,
+    revision_number     INT NOT NULL DEFAULT 1,
+    media_url           TEXT NOT NULL,
+    media_type          VARCHAR(64) DEFAULT 'image',
+    creative_format     VARCHAR(64) DEFAULT 'Instagram / Facebook Post',
+    designer_notes      TEXT DEFAULT '',
+    uploaded_by         VARCHAR(140) NOT NULL DEFAULT 'Graphics Designer',
+    uploaded_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    review_status       VARCHAR(40) DEFAULT 'Pending Verification',
+    reviewer_name       VARCHAR(140),
+    review_remarks      TEXT DEFAULT '',
+    rejection_reason    TEXT DEFAULT '',
+    reviewed_at         TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_revisions_post ON marketing_post_revisions(post_id, revision_number DESC);
 
 CREATE TABLE IF NOT EXISTS marketing_post_reviews (
     id                  VARCHAR(64) PRIMARY KEY,
