@@ -435,7 +435,7 @@ marketingRouter.get('/customers/:id/wallet-transactions', async (req, res) => {
 marketingRouter.get('/ideas', async (req, res) => {
   try {
     const { customerId, status, objective } = req.query;
-    const where = ['mp.is_deleted = FALSE'];
+    const where = [];
     const params = [];
 
     if (customerId) {
@@ -1298,7 +1298,7 @@ marketingRouter.post('/media/upload', async (req, res) => {
 marketingRouter.get('/campaigns', async (req, res) => {
   try {
     const { customerId, status } = req.query;
-    const where = ['mp.is_deleted = FALSE'];
+    const where = ['(mp.is_deleted IS NULL OR mp.is_deleted = FALSE)'];
     const params = [];
 
     if (customerId) {

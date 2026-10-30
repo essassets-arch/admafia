@@ -8,6 +8,14 @@ import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
 
+// Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err.stack || err.message || err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]', reason?.stack || reason?.message || reason);
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

@@ -32,43 +32,77 @@ export async function initDatabase() {
   const password = process.env.PGPASSWORD || 'postgres';
   const database = process.env.PGDATABASE || 'admafia_crm';
 
-  // 1. Try connecting to external PostgreSQL Server (e.g. postgresql-x64-18 on port 5432)
-  try {
-    const adminClient = new Client({
-      host,
-      port,
-      user,
-      password,
-      database: 'postgres',
-      connectionTimeoutMillis: 2500,
-    });
-    await adminClient.connect();
+  const isDockerOrDedicatedPg = Boolean(
+    process.env.PGHOST &&
+    process.env.PGHOST !== 'localhost' &&
+    process.env.PGHOST !== '127.0.0.1'
+  );
 
-    const dbCheck = await adminClient.query(
-      'SELECT 1 FROM pg_database WHERE datname = $1',
-      [database]
-    );
-    if (dbCheck.rowCount === 0) {
-      await adminClient.query(`CREATE DATABASE "${database}"`);
-      console.log(`[PostgreSQL] Created database "${database}" on ${host}:${port}`);
+  const maxRetries = isDockerOrDedicatedPg ? 15 : 2;
+  const retryDelayMs = 2000;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // 1. Try connecting directly to the specified database (e.g. admafia_crm)
+      const pool = new Pool({
+        host,
+        port,
+        user,
+        password,
+        database,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 3000,
+      });
+
+      await pool.query('SELECT 1');
+      activePool = pool;
+      dbMode = 'postgres-server';
+      console.log(`[PostgreSQL] Connected directly to PostgreSQL server at ${host}:${port}/${database} (attempt ${attempt})`);
+      break;
+    } catch (connErr) {
+      // If database does not exist (error 3D000) and we are in local dev, attempt creation via default DB
+      if (connErr.code === '3D000' && !isDockerOrDedicatedPg) {
+        try {
+          console.log(`[PostgreSQL] Database "${database}" not found. Creating via admin client...`);
+          const adminClient = new Client({
+            host,
+            port,
+            user,
+            password,
+            database: 'postgres',
+            connectionTimeoutMillis: 3000,
+          });
+          await adminClient.connect();
+          await adminClient.query(`CREATE DATABASE "${database}"`);
+          await adminClient.end();
+          console.log(`[PostgreSQL] Database "${database}" created successfully.`);
+
+          activePool = new Pool({ host, port, user, password, database, max: 20, idleTimeoutMillis: 30000 });
+          await activePool.query('SELECT 1');
+          dbMode = 'postgres-server';
+          break;
+        } catch (adminErr) {
+          console.warn('[PostgreSQL] Could not create database via admin client:', adminErr.message);
+        }
+      }
+
+      if (attempt < maxRetries) {
+        console.warn(`[PostgreSQL] Connection attempt ${attempt}/${maxRetries} to ${host}:${port}/${database} failed (${connErr.message}). Retrying in ${retryDelayMs / 1000}s...`);
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      } else {
+        if (isDockerOrDedicatedPg) {
+          console.error(`[PostgreSQL FATAL] Could not connect to PostgreSQL server at ${host}:${port}/${database} after ${maxRetries} attempts.`);
+          throw connErr;
+        } else {
+          console.warn(`[PostgreSQL] Local PostgreSQL server at ${host}:${port}/${database} unavailable (${connErr.message}). Falling back to embedded PGlite...`);
+        }
+      }
     }
-    await adminClient.end();
+  }
 
-    activePool = new Pool({
-      host,
-      port,
-      user,
-      password,
-      database,
-      max: 20,
-      idleTimeoutMillis: 30000,
-    });
-
-    await activePool.query('SELECT NOW()');
-    dbMode = 'postgres-server';
-    console.log(`[PostgreSQL] Connected to PostgreSQL server at ${host}:${port}/${database}`);
-  } catch (err) {
-    // 2. Fallback to persistent disk-backed PostgreSQL engine (PGlite) in backend/pgdata
+  // Fallback to PGlite only for local dev when external PG is not available
+  if (dbMode !== 'postgres-server') {
     const dataDir = path.join(__dirname, 'pgdata');
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
@@ -101,82 +135,70 @@ export async function initDatabase() {
     console.log(`[PostgreSQL] Initialized persistent PostgreSQL database at ${dataDir}`);
   }
 
+  const safeExec = async (sql) => {
+    try {
+      if (dbMode === 'postgres-server') {
+        await activePool.query(sql);
+      } else {
+        await pgliteInstance.exec(sql);
+      }
+    } catch (e) {
+      // Ignored if column already exists or relation doesn't exist yet
+    }
+  };
+
+  // Pre-upgrade existing tables if present before schema indexes run
+  await safeExec(`DROP VIEW IF EXISTS vw_sales_customer_accounts CASCADE`);
+  await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other'`);
+  await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active'`);
+  await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+  await safeExec(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64)`);
+  await safeExec(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software'`);
+  await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS active_days VARCHAR(120) DEFAULT 'MON,TUE,WED,THU,FRI'`);
+  await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS schedule_preset VARCHAR(64) DEFAULT 'weekdays'`);
+  await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS ad_campaign_active BOOLEAN DEFAULT FALSE`);
+  await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post'`);
+  await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_notes TEXT DEFAULT ''`);
+  await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_name VARCHAR(140) DEFAULT 'Graphics Designer'`);
+  await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_instructions TEXT DEFAULT ''`);
+  await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS priority VARCHAR(40) DEFAULT 'Normal'`);
+  await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE`);
+  await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+  await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(140)`);
+  await safeExec(`ALTER TABLE marketing_post_reviews ADD COLUMN IF NOT EXISTS revision_number INT NOT NULL DEFAULT 1`);
+  await safeExec(`ALTER TABLE marketing_post_revisions ADD COLUMN IF NOT EXISTS correction_instructions TEXT DEFAULT ''`);
+
   // Run schema.sql migration
   const schemaPath = path.join(__dirname, 'schema.sql');
   if (fs.existsSync(schemaPath)) {
     const rawSql = fs.readFileSync(schemaPath, 'utf8');
     // Remove pgcrypto extension if not needed so both standard PG and PGlite execute cleanly
     const cleanSql = rawSql.replace(/CREATE EXTENSION IF NOT EXISTS "pgcrypto";/gi, '');
-
-    const safeExec = async (sql) => {
-      try {
-        if (dbMode === 'postgres-server') {
-          await activePool.query(sql);
-        } else {
-          await pgliteInstance.exec(sql);
-        }
-      } catch (e) {
-        // Ignored if table not yet created
-      }
-    };
-
-    // Pre-upgrade existing tables if present before schema indexes run
-    await safeExec(`DROP VIEW IF EXISTS vw_sales_customer_accounts CASCADE`);
-    await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other'`);
-    await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active'`);
-    await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
-    await safeExec(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64)`);
-    await safeExec(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software'`);
-    await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS active_days VARCHAR(120) DEFAULT 'MON,TUE,WED,THU,FRI'`);
-    await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS schedule_preset VARCHAR(64) DEFAULT 'weekdays'`);
-    await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS ad_campaign_active BOOLEAN DEFAULT FALSE`);
-
-    if (dbMode === 'postgres-server') {
-      await activePool.query(cleanSql);
-      // Auto-complete registered customers
-      await activePool.query(`
-        UPDATE customers SET profile_status = 'complete', kyc_percent = 100, verified = TRUE WHERE profile_status = 'incomplete';
-        UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
-        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other';
-        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active';
-        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
-        ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64);
-        ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_notes TEXT DEFAULT '';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_name VARCHAR(140) DEFAULT 'Graphics Designer';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_instructions TEXT DEFAULT '';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS priority VARCHAR(40) DEFAULT 'Normal';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(140);
-        ALTER TABLE marketing_post_reviews ADD COLUMN IF NOT EXISTS revision_number INT NOT NULL DEFAULT 1;
-        ALTER TABLE marketing_post_revisions ADD COLUMN IF NOT EXISTS correction_instructions TEXT DEFAULT '';
-      `);
-    } else {
-      await pgliteInstance.exec(cleanSql);
-      await pgliteInstance.exec(`
-        UPDATE customers SET profile_status = 'complete', kyc_percent = 100, verified = TRUE WHERE profile_status = 'incomplete';
-        UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
-        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other';
-        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active';
-        ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
-        ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64);
-        ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_notes TEXT DEFAULT '';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_name VARCHAR(140) DEFAULT 'Graphics Designer';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_instructions TEXT DEFAULT '';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS priority VARCHAR(40) DEFAULT 'Normal';
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
-        ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(140);
-        ALTER TABLE marketing_post_reviews ADD COLUMN IF NOT EXISTS revision_number INT NOT NULL DEFAULT 1;
-        ALTER TABLE marketing_post_revisions ADD COLUMN IF NOT EXISTS correction_instructions TEXT DEFAULT '';
-      `);
-    }
-    console.log('[PostgreSQL] Relational schema & views verified (14 tables + vw_sales_customer_accounts)');
+    await safeExec(cleanSql);
   }
+
+  // Post-migration auto-completes and updates
+  await safeExec(`
+    UPDATE customers SET profile_status = 'complete', kyc_percent = 100, verified = TRUE WHERE profile_status = 'incomplete';
+    UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
+    ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other';
+    ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active';
+    ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64);
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software';
+    ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post';
+    ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_notes TEXT DEFAULT '';
+    ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_name VARCHAR(140) DEFAULT 'Graphics Designer';
+    ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_instructions TEXT DEFAULT '';
+    ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS priority VARCHAR(40) DEFAULT 'Normal';
+    ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+    ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(140);
+    ALTER TABLE marketing_post_reviews ADD COLUMN IF NOT EXISTS revision_number INT NOT NULL DEFAULT 1;
+    ALTER TABLE marketing_post_revisions ADD COLUMN IF NOT EXISTS correction_instructions TEXT DEFAULT '';
+  `);
+
+  console.log('[PostgreSQL] Relational schema & views verified (14 tables + vw_sales_customer_accounts)');
 
   return { mode: dbMode };
 }
