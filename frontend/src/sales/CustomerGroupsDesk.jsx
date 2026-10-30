@@ -11,40 +11,53 @@ import {
   Eye,
   Edit2,
   Trash2,
-  UserPlus,
-  UserMinus,
   X,
   Building,
   Phone,
   Mail,
   MapPin,
-  Check,
+  Clock,
+  Sparkles,
+  ExternalLink,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 
-const PREDEFINED_CATEGORIES = [
-  'IT & Software',
-  'Hardware',
-  'Construction & Building Materials',
-  'Manufacturing',
-  'Digital Marketing',
-  'Electrical Products',
-  'Healthcare',
-  'Other',
-];
-
 export default function CustomerGroupsDesk({ customers = [] }) {
-  // Groups State
+  // Data States
+  const [categoriesList, setCategoriesList] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [historyList, setHistoryList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [notification, setNotification] = useState(null);
   const [search, setSearch] = useState('');
 
-  // Memberships Map: { [groupId]: [cust1, cust2...] }
-  const [membershipsMap, setMembershipsMap] = useState({});
+  // 1. Create Lead Modal State
+  const [isCreateLeadOpen, setIsCreateLeadOpen] = useState(false);
+  const [isDistributing, setIsDistributing] = useState(false);
+  const [leadForm, setLeadForm] = useState({
+    title: '',
+    requirement: '',
+    category: '',
+    buyerName: '',
+    buyerPhone: '',
+    buyerEmail: '',
+    budget: '',
+    location: '',
+    priority: 'Normal',
+  });
 
-  // 1. Create / Edit Group Modal State
+  // Selected Category Live Recipient Preview in Create Lead Form
+  const [previewRecipients, setPreviewRecipients] = useState([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // 2. View Group Customers Modal State
+  const [viewingGroup, setViewingGroup] = useState(null);
+  const [viewingMembers, setViewingMembers] = useState([]);
+  const [viewSearch, setViewSearch] = useState('');
+  const [viewLoading, setViewLoading] = useState(false);
+
+  // 3. Create / Edit Group Modal State
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
   const [groupForm, setGroupForm] = useState({
@@ -52,59 +65,37 @@ export default function CustomerGroupsDesk({ customers = [] }) {
     category: 'IT & Software',
     description: '',
   });
-  const [selectedCustIdsForGroup, setSelectedCustIdsForGroup] = useState(new Set());
-  const [custModalSearch, setCustModalSearch] = useState('');
 
-  // 2. View / Manage Customers Modal State
-  const [viewingGroup, setViewingGroup] = useState(null);
-  const [viewMemberSearch, setViewMemberSearch] = useState('');
-  const [addMembersSelectedIds, setAddMembersSelectedIds] = useState(new Set());
-  const [addMemberSearch, setAddMemberSearch] = useState('');
-  const [isAddingMembersOpen, setIsAddingMembersOpen] = useState(false);
-
-  // 3. Compact Distribute Lead Modal State
-  const [distributeGroup, setDistributeGroup] = useState(null);
-  const [isDistributing, setIsDistributing] = useState(false);
-  const [distributeForm, setDistributeForm] = useState({
-    title: '',
-    requirement: '',
-    buyerName: '',
-    buyerPhone: '',
-    buyerEmail: '',
-    budget: '',
-    location: '',
-    priority: 'Urgent',
-  });
+  // 4. Inspect Distribution History Modal State
+  const [inspectItem, setInspectItem] = useState(null);
+  const [inspectRecipients, setInspectRecipients] = useState([]);
+  const [inspectLoading, setInspectLoading] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // Fetch groups and their member counts from backend
-  const fetchGroupsAndMembers = useCallback(async () => {
+  // Fetch all categories, groups, and distribution history from PostgreSQL
+  const fetchData = useCallback(async () => {
     try {
       setRefreshing(true);
-      const fetchedGroups = await crmApi.getGroups();
-      const safeGroups = Array.isArray(fetchedGroups) ? fetchedGroups : [];
-      setGroups(safeGroups);
+      const [cats, grps, hist] = await Promise.all([
+        crmApi.getCategories().catch(() => []),
+        crmApi.getGroups().catch(() => []),
+        crmApi.getDistributionHistory().catch(() => []),
+      ]);
 
-      // Fetch live memberships for each group
-      const memMap = {};
-      await Promise.all(
-        safeGroups.map(async (g) => {
-          try {
-            const mems = await crmApi.getGroupMembers(g.id);
-            memMap[g.id] = mems || [];
-          } catch {
-            memMap[g.id] = [];
-          }
-        })
-      );
-      setMembershipsMap(memMap);
+      const safeCats = Array.isArray(cats) ? cats : [];
+      const safeGrps = Array.isArray(grps) ? grps : [];
+      const safeHist = Array.isArray(hist) ? hist : [];
+
+      setCategoriesList(safeCats);
+      setGroups(safeGrps);
+      setHistoryList(safeHist);
     } catch (err) {
       console.error('[CustomerGroupsDesk] Fetch error:', err);
-      showToast(err.message || 'Failed to load groups', 'error');
+      showToast(err.message || 'Failed to load categories', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -112,34 +103,196 @@ export default function CustomerGroupsDesk({ customers = [] }) {
   }, []);
 
   useEffect(() => {
-    fetchGroupsAndMembers();
-  }, [fetchGroupsAndMembers]);
+    fetchData();
+  }, [fetchData]);
 
-  // Filter groups by search query
-  const filteredGroups = useMemo(() => {
-    if (!search.trim()) return groups;
-    const q = search.toLowerCase();
-    return groups.filter((g) => {
-      const gName = (g.name || '').toLowerCase();
-      const gCat = (g.category || '').toLowerCase();
-      const gDesc = (g.description || '').toLowerCase();
-      return gName.includes(q) || gCat.includes(q) || gDesc.includes(q);
-    });
-  }, [groups, search]);
+  // Combined options for the Target Category dropdown (from DB categories & groups)
+  const categoryOptions = useMemo(() => {
+    const map = new Map();
 
-  // All available customers (from props, normalized)
-  const allCustomers = useMemo(() => {
-    return (customers || []).map((c) => ({
-      id: c.id,
-      name: c.companyName || c.name || c.contactPerson || 'Customer Account',
-      company: c.companyName || c.name || 'Company',
-      contact: c.contactPerson || c.contact || c.username || 'Contact',
-      phone: c.phone || '',
-      email: c.email || '',
-      category: c.category || c.businessCategory || 'General',
-      status: c.status || 'active',
+    // Add categories from categoriesList
+    for (const c of categoriesList) {
+      const key = c.category || c.name;
+      if (key && !map.has(key)) {
+        map.set(key, {
+          category: key,
+          name: c.name || key,
+          groupId: c.groupId || null,
+          eligibleCount: Number(c.eligibleCount || 0),
+        });
+      }
+    }
+
+    // Add groups if not already present
+    for (const g of groups) {
+      const key = g.category || g.name;
+      if (key && !map.has(key)) {
+        map.set(key, {
+          category: key,
+          name: g.name,
+          groupId: g.id,
+          eligibleCount: Number(g.customerCount || 0),
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  }, [categoriesList, groups]);
+
+  // When category changes in Create Lead form, fetch live eligible customers preview
+  useEffect(() => {
+    if (!isCreateLeadOpen || !leadForm.category) {
+      setPreviewRecipients([]);
+      return;
+    }
+
+    let isMounted = true;
+    setPreviewLoading(true);
+
+    const selOption = categoryOptions.find((o) => o.category === leadForm.category);
+    const targetGroupId = selOption?.groupId || '';
+
+    crmApi
+      .previewCategoryRecipients(leadForm.category, targetGroupId)
+      .then((res) => {
+        if (isMounted) {
+          setPreviewRecipients(res.recipients || []);
+        }
+      })
+      .catch((err) => {
+        console.warn('[Preview error]:', err.message);
+        if (isMounted) setPreviewRecipients([]);
+      })
+      .finally(() => {
+        if (isMounted) setPreviewLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [leadForm.category, isCreateLeadOpen, categoryOptions]);
+
+  // Filtered rows for the Category & Groups table
+  const filteredRows = useMemo(() => {
+    const list = categoryOptions.length > 0 ? categoryOptions : groups.map((g) => ({
+      category: g.category || g.name,
+      name: g.name,
+      groupId: g.id,
+      description: g.description,
+      eligibleCount: Number(g.customerCount || 0),
     }));
-  }, [customers]);
+
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter(
+      (r) =>
+        (r.category || '').toLowerCase().includes(q) ||
+        (r.name || '').toLowerCase().includes(q) ||
+        (r.description || '').toLowerCase().includes(q)
+    );
+  }, [categoryOptions, groups, search]);
+
+  // =========================================================================
+  // ACTIONS: Create & Distribute Lead
+  // =========================================================================
+  const handleOpenCreateLead = (prefillCategory = '') => {
+    const defaultCat = prefillCategory || (categoryOptions[0]?.category || 'IT & Software');
+    setLeadForm({
+      title: '',
+      requirement: '',
+      category: defaultCat,
+      buyerName: '',
+      buyerPhone: '',
+      buyerEmail: '',
+      budget: '',
+      location: '',
+      priority: 'Normal',
+    });
+    setIsCreateLeadOpen(true);
+  };
+
+  const handleSubmitDistributeLead = async (e) => {
+    e.preventDefault();
+
+    if (!leadForm.title.trim()) {
+      showToast('Lead title is required.', 'error');
+      return;
+    }
+    if (!leadForm.requirement.trim()) {
+      showToast('Lead description / buyer requirement is required.', 'error');
+      return;
+    }
+    if (!leadForm.category) {
+      showToast('Please select a target category.', 'error');
+      return;
+    }
+    if (!leadForm.buyerName.trim()) {
+      showToast('Buyer name is required.', 'error');
+      return;
+    }
+
+    const cleanPhone = String(leadForm.buyerPhone || '').replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10 || !['6', '7', '8', '9'].includes(cleanPhone[0])) {
+      showToast('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.', 'error');
+      return;
+    }
+
+    const selOption = categoryOptions.find((o) => o.category === leadForm.category);
+    const eligibleCount = previewRecipients.length;
+
+    if (eligibleCount === 0) {
+      showToast(`Cannot distribute: 0 eligible customers in ${leadForm.category}.`, 'error');
+      return;
+    }
+
+    try {
+      setIsDistributing(true);
+      const payload = {
+        title: leadForm.title.trim(),
+        description: leadForm.requirement.trim(),
+        requirement: leadForm.requirement.trim(),
+        category: leadForm.category,
+        groupId: selOption?.groupId || null,
+        buyerName: leadForm.buyerName.trim(),
+        buyerPhone: cleanPhone,
+        buyerEmail: leadForm.buyerEmail.trim(),
+        budget: leadForm.budget.trim() || '₹1.5L – ₹3.5L',
+        location: leadForm.location.trim() || 'Pan India',
+        city: leadForm.location.trim() || 'India',
+        priority: leadForm.priority,
+        source: 'Category Lead Distribution',
+      };
+
+      const result = await crmApi.distributeLead(payload);
+      const assignedCount = result.recipientsCount || result.recipientCount || eligibleCount;
+
+      showToast(`Success! Distributed lead to ${assignedCount} customer${assignedCount === 1 ? '' : 's'} in "${leadForm.category}".`);
+      setIsCreateLeadOpen(false);
+      await fetchData();
+    } catch (err) {
+      console.error('[distributeLead error]:', err);
+      showToast(err.message || 'Lead distribution failed', 'error');
+    } finally {
+      setIsDistributing(false);
+    }
+  };
+
+  // =========================================================================
+  // ACTIONS: View Group / Category Customers
+  // =========================================================================
+  const handleOpenViewCustomers = async (row) => {
+    setViewingGroup(row);
+    setViewSearch('');
+    setViewLoading(true);
+    try {
+      const res = await crmApi.previewCategoryRecipients(row.category, row.groupId || '');
+      setViewingMembers(res.recipients || []);
+    } catch {
+      setViewingMembers([]);
+    } finally {
+      setViewLoading(false);
+    }
+  };
 
   // =========================================================================
   // ACTIONS: Create / Edit Group
@@ -151,36 +304,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
       category: 'IT & Software',
       description: '',
     });
-    setSelectedCustIdsForGroup(new Set());
-    setCustModalSearch('');
     setIsGroupModalOpen(true);
-  };
-
-  const handleOpenEditGroup = (grp) => {
-    setEditingGroup(grp);
-    setGroupForm({
-      name: grp.name || '',
-      category: grp.category || 'IT & Software',
-      description: grp.description || '',
-    });
-    // Pre-populate already assigned members
-    const currentMembers = membershipsMap[grp.id] || [];
-    const assignedIds = new Set(currentMembers.map((m) => m.id || m.customer_id));
-    setSelectedCustIdsForGroup(assignedIds);
-    setCustModalSearch('');
-    setIsGroupModalOpen(true);
-  };
-
-  const handleToggleCustomerForGroup = (custId) => {
-    setSelectedCustIdsForGroup((prev) => {
-      const next = new Set(prev);
-      if (next.has(custId)) {
-        next.delete(custId);
-      } else {
-        next.add(custId);
-      }
-      return next;
-    });
   };
 
   const handleSaveGroup = async (e) => {
@@ -191,198 +315,34 @@ export default function CustomerGroupsDesk({ customers = [] }) {
     }
 
     try {
-      let savedGroup;
       if (editingGroup) {
-        savedGroup = await crmApi.updateGroup(editingGroup.id, {
-          name: groupForm.name.trim(),
-          category: groupForm.category,
-          description: groupForm.description,
-          status: editingGroup.status || 'active',
-        });
-        showToast(`Group "${savedGroup.name}" updated successfully.`);
+        await crmApi.updateGroup(editingGroup.id, groupForm);
+        showToast(`Group "${groupForm.name}" updated.`);
       } else {
-        savedGroup = await crmApi.createGroup({
-          name: groupForm.name.trim(),
-          category: groupForm.category,
-          description: groupForm.description,
-          status: 'active',
-        });
-        showToast(`Customer group "${savedGroup.name}" created.`);
+        await crmApi.createGroup({ ...groupForm, status: 'active' });
+        showToast(`Group "${groupForm.name}" created.`);
       }
-
-      // Assign selected customers if any
-      const targetGroupId = savedGroup.id || (editingGroup && editingGroup.id);
-      if (targetGroupId) {
-        const selectedArr = Array.from(selectedCustIdsForGroup);
-        if (selectedArr.length > 0) {
-          await crmApi.assignCustomersToGroup(targetGroupId, selectedArr);
-        }
-      }
-
       setIsGroupModalOpen(false);
-      await fetchGroupsAndMembers();
+      await fetchData();
     } catch (err) {
-      console.error('[handleSaveGroup] Error:', err);
       showToast(err.message || 'Failed to save group', 'error');
     }
   };
 
-  const handleDeleteGroup = async (grp) => {
-    if (!window.confirm(`Are you sure you want to delete the group "${grp.name}"?`)) {
-      return;
-    }
-    try {
-      await crmApi.deleteGroup(grp.id);
-      showToast(`Group "${grp.name}" deleted.`);
-      await fetchGroupsAndMembers();
-      if (viewingGroup && viewingGroup.id === grp.id) {
-        setViewingGroup(null);
-      }
-    } catch (err) {
-      showToast(err.message || 'Failed to delete group', 'error');
-    }
-  };
-
   // =========================================================================
-  // ACTIONS: View / Manage Customers
+  // ACTIONS: Inspect Distribution History Item
   // =========================================================================
-  const handleOpenViewMembers = async (grp) => {
-    setViewingGroup(grp);
-    setViewMemberSearch('');
-    setIsAddingMembersOpen(false);
-    setAddMembersSelectedIds(new Set());
-    setAddMemberSearch('');
-
-    // Ensure member data is fresh
+  const handleInspectHistory = async (hItem) => {
+    setInspectItem(hItem);
+    setInspectLoading(true);
     try {
-      const freshMems = await crmApi.getGroupMembers(grp.id);
-      setMembershipsMap((prev) => ({ ...prev, [grp.id]: freshMems || [] }));
+      const details = await crmApi.getDistributionDetails(hItem.id);
+      setInspectRecipients(details.recipients || details.assignments || []);
     } catch {
-      // ignore
-    }
-  };
-
-  const handleRemoveMember = async (groupId, customerId, custName) => {
-    if (!window.confirm(`Remove "${custName}" from this group?`)) return;
-    try {
-      await crmApi.removeCustomerFromGroup(groupId, customerId);
-      showToast(`Removed "${custName}" from group.`);
-      const freshMems = await crmApi.getGroupMembers(groupId);
-      setMembershipsMap((prev) => ({ ...prev, [groupId]: freshMems || [] }));
-      // Also update customer count in groups state
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === groupId ? { ...g, customerCount: Math.max(0, (freshMems || []).length) } : g
-        )
-      );
-    } catch (err) {
-      showToast(err.message || 'Failed to remove customer', 'error');
-    }
-  };
-
-  const handleAddSelectedMembersToGroup = async () => {
-    if (!viewingGroup) return;
-    const toAdd = Array.from(addMembersSelectedIds);
-    if (toAdd.length === 0) {
-      showToast('Select at least one customer to add.', 'error');
-      return;
-    }
-
-    try {
-      await crmApi.assignCustomersToGroup(viewingGroup.id, toAdd);
-      showToast(`Added ${toAdd.length} customer${toAdd.length === 1 ? '' : 's'} to ${viewingGroup.name}.`);
-      setAddMembersSelectedIds(new Set());
-      setIsAddingMembersOpen(false);
-      const freshMems = await crmApi.getGroupMembers(viewingGroup.id);
-      setMembershipsMap((prev) => ({ ...prev, [viewingGroup.id]: freshMems || [] }));
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === viewingGroup.id ? { ...g, customerCount: (freshMems || []).length } : g
-        )
-      );
-    } catch (err) {
-      showToast(err.message || 'Failed to add customers', 'error');
-    }
-  };
-
-  // =========================================================================
-  // ACTIONS: Distribute Lead (Single Step Compact Modal)
-  // =========================================================================
-  const handleOpenDistributeLead = (grp) => {
-    setDistributeGroup(grp);
-    setDistributeForm({
-      title: '',
-      requirement: '',
-      buyerName: 'Verified Buyer',
-      buyerPhone: '',
-      buyerEmail: '',
-      budget: '',
-      location: '',
-      priority: 'Urgent',
-    });
-  };
-
-  const handleDistributeSubmit = async (e) => {
-    e.preventDefault();
-    if (!distributeGroup) return;
-
-    const currentMembers = membershipsMap[distributeGroup.id] || [];
-    if (currentMembers.length === 0) {
-      showToast('Cannot distribute: This group currently has 0 customers assigned.', 'error');
-      return;
-    }
-
-    if (!distributeForm.title.trim()) {
-      showToast('Lead title is required.', 'error');
-      return;
-    }
-    if (!distributeForm.requirement.trim()) {
-      showToast('Lead requirement details are required.', 'error');
-      return;
-    }
-    const cleanPhone = String(distributeForm.buyerPhone || '').replace(/\D/g, '').slice(-10);
-    if (cleanPhone.length !== 10 || !['6', '7', '8', '9'].includes(cleanPhone[0])) {
-      showToast('Please enter a valid 10-digit buyer mobile number (starting with 6, 7, 8, or 9).', 'error');
-      return;
-    }
-
-    try {
-      setIsDistributing(true);
-      const payload = {
-        groupId: distributeGroup.id,
-        title: distributeForm.title.trim(),
-        description: distributeForm.requirement.trim(),
-        category: distributeGroup.category || 'IT & Software',
-        requirement: distributeForm.requirement.trim(),
-        budget: distributeForm.budget.trim() || '₹1,00,000 – ₹3,00,000',
-        location: distributeForm.location.trim() || 'Pan India',
-        priority: distributeForm.priority,
-        source: 'Admin Direct Distribution',
-        buyerName: distributeForm.buyerName.trim() || 'Direct Buyer',
-        buyerPhone: cleanPhone,
-        buyerEmail: distributeForm.buyerEmail.trim(),
-        city: distributeForm.location.trim() || 'India',
-      };
-
-      const result = await crmApi.distributeLead(payload);
-      const count = result.recipientsCount || result.assignedCount || currentMembers.length;
-      showToast(`Success! Lead distributed to ${count} customer${count === 1 ? '' : 's'} in "${distributeGroup.name}".`);
-      setDistributeGroup(null);
-      await fetchGroupsAndMembers();
-    } catch (err) {
-      console.error('[handleDistributeSubmit] Error:', err);
-      showToast(err.message || 'Lead distribution failed', 'error');
+      setInspectRecipients([]);
     } finally {
-      setIsDistributing(false);
+      setInspectLoading(false);
     }
-  };
-
-  // Helper for live customer count
-  const getCustomerCount = (grp) => {
-    if (membershipsMap[grp.id]) {
-      return membershipsMap[grp.id].length;
-    }
-    return Number(grp.customerCount || 0);
   };
 
   return (
@@ -412,24 +372,24 @@ export default function CustomerGroupsDesk({ customers = [] }) {
         </div>
       )}
 
-      {/* 1. Simple Header */}
+      {/* 1. Header Bar with Prominent Create Lead Action */}
       <div className="desk-header" style={{ marginBottom: 20, alignItems: 'flex-start' }}>
         <div>
           <h1 className="desk-title" style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
-            Customer Groups
+            Customer Groups &amp; Category Lead Distribution
           </h1>
           <p className="desk-subtitle" style={{ marginTop: 4, color: '#64748b', fontSize: '0.92rem' }}>
-            Organize customers by industry and distribute relevant leads.
+            Automatically distribute inbound leads to all matching customers in a category with one click.
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             type="button"
             className="sales-btn-secondary"
-            onClick={fetchGroupsAndMembers}
+            onClick={fetchData}
             disabled={refreshing}
-            title="Refresh groups"
+            title="Refresh database records"
             style={{ padding: '9px 14px' }}
           >
             <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
@@ -438,18 +398,34 @@ export default function CustomerGroupsDesk({ customers = [] }) {
 
           <button
             type="button"
-            className="sales-btn-primary"
+            className="sales-btn-secondary"
             onClick={handleOpenCreateGroup}
-            style={{ padding: '9px 18px', fontSize: '0.88rem' }}
+            style={{ padding: '9px 14px', fontSize: '0.85rem' }}
           >
-            <Plus size={16} strokeWidth={2.5} />
-            <span>+ Create Group</span>
+            <Plus size={15} />
+            <span>New Group</span>
+          </button>
+
+          {/* PROMINENT CREATE LEAD BUTTON */}
+          <button
+            type="button"
+            className="sales-btn-primary"
+            onClick={() => handleOpenCreateLead()}
+            style={{
+              padding: '10px 22px',
+              fontSize: '0.92rem',
+              fontWeight: 800,
+              boxShadow: '0 4px 14px rgba(79, 70, 229, 0.35)',
+            }}
+          >
+            <Send size={16} strokeWidth={2.5} style={{ marginRight: 2 }} />
+            <span>Create &amp; Distribute Lead</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Search Groups Bar */}
-      <div style={{ marginBottom: 18 }}>
+      {/* 2. Search & Filter Bar */}
+      <div style={{ marginBottom: 16 }}>
         <div style={{ position: 'relative', maxWidth: 420 }}>
           <Search
             size={16}
@@ -464,7 +440,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
           <input
             type="text"
             className="desk-search-input"
-            placeholder="Search groups..."
+            placeholder="Search categories or groups..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
@@ -482,13 +458,13 @@ export default function CustomerGroupsDesk({ customers = [] }) {
         </div>
       </div>
 
-      {/* 3. Simple Table Interface */}
+      {/* 3. Categories & Customer Groups Table */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
           <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px', color: '#4f46e5' }} />
-          <p style={{ fontWeight: 600 }}>Loading customer groups...</p>
+          <p style={{ fontWeight: 600 }}>Loading customer categories from PostgreSQL...</p>
         </div>
-      ) : filteredGroups.length === 0 ? (
+      ) : filteredRows.length === 0 ? (
         <div
           style={{
             background: '#ffffff',
@@ -500,38 +476,34 @@ export default function CustomerGroupsDesk({ customers = [] }) {
         >
           <Users size={44} style={{ margin: '0 auto 14px', color: '#94a3b8' }} />
           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b', margin: '0 0 6px' }}>
-            {search ? 'No groups match your search' : 'No customer groups configured yet'}
+            No categories found matching "{search}"
           </h3>
-          <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0 0 20px' }}>
-            {search
-              ? 'Try adjusting your search terms.'
-              : 'Create your first group to start organizing customers and distributing category leads.'}
+          <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0 0 16px' }}>
+            Check your search terms or create a new customer group.
           </p>
-          {!search && (
-            <button
-              type="button"
-              className="sales-btn-primary"
-              onClick={handleOpenCreateGroup}
-              style={{ display: 'inline-flex', padding: '10px 20px' }}
-            >
-              <Plus size={16} strokeWidth={2.5} />
-              <span>Create Group</span>
-            </button>
-          )}
         </div>
       ) : (
-        <div className="desk-table-card" style={{ background: '#ffffff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <div
+          className="desk-table-card"
+          style={{
+            background: '#ffffff',
+            borderRadius: 12,
+            overflow: 'hidden',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            marginBottom: 28,
+          }}
+        >
           <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 <th style={{ textAlign: 'left', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: '#475569' }}>
-                  Group Name
+                  Target Category / Group
                 </th>
                 <th style={{ textAlign: 'left', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: '#475569' }}>
-                  Category
+                  Industry Scope
                 </th>
                 <th style={{ textAlign: 'right', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: '#475569' }}>
-                  Customers
+                  Eligible Customers
                 </th>
                 <th style={{ textAlign: 'right', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: '#475569' }}>
                   Actions
@@ -539,38 +511,38 @@ export default function CustomerGroupsDesk({ customers = [] }) {
               </tr>
             </thead>
             <tbody>
-              {filteredGroups.map((grp) => {
-                const count = getCustomerCount(grp);
+              {filteredRows.map((row, idx) => {
+                const count = row.eligibleCount ?? 0;
                 return (
                   <tr
-                    key={grp.id}
+                    key={row.category + '_' + idx}
                     style={{
                       borderBottom: '1px solid #f1f5f9',
                       transition: 'background-color 0.15s ease',
                     }}
                   >
-                    {/* Group Name */}
+                    {/* Category / Group Name */}
                     <td style={{ padding: '14px 18px' }}>
                       <div
                         style={{
                           fontWeight: 700,
-                          fontSize: '0.94rem',
+                          fontSize: '0.95rem',
                           color: '#0f172a',
                           cursor: 'pointer',
                         }}
-                        onClick={() => handleOpenViewMembers(grp)}
-                        title="Click to view and manage assigned customers"
+                        onClick={() => handleOpenViewCustomers(row)}
+                        title="Click to view matching eligible customers"
                       >
-                        {grp.name}
+                        {row.name || row.category}
                       </div>
-                      {grp.description && (
+                      {row.description && (
                         <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
-                          {grp.description}
+                          {row.description}
                         </div>
                       )}
                     </td>
 
-                    {/* Category */}
+                    {/* Industry Scope Badge */}
                     <td style={{ padding: '14px 18px' }}>
                       <span
                         style={{
@@ -583,11 +555,11 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           color: '#4338ca',
                         }}
                       >
-                        {grp.category || 'Other'}
+                        {row.category}
                       </span>
                     </td>
 
-                    {/* Customers Count */}
+                    {/* Live Customer Count */}
                     <td style={{ padding: '14px 18px', textAlign: 'right' }}>
                       <span
                         style={{
@@ -612,7 +584,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                         <button
                           type="button"
-                          onClick={() => handleOpenViewMembers(grp)}
+                          onClick={() => handleOpenViewCustomers(row)}
                           className="sales-btn-secondary"
                           style={{
                             padding: '6px 12px',
@@ -620,7 +592,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                             fontWeight: 600,
                             borderRadius: 6,
                           }}
-                          title="View & manage group customers"
+                          title="View eligible customers in this category"
                         >
                           <Eye size={13} style={{ marginRight: 4 }} />
                           View
@@ -628,23 +600,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
 
                         <button
                           type="button"
-                          onClick={() => handleOpenEditGroup(grp)}
-                          className="sales-btn-secondary"
-                          style={{
-                            padding: '6px 12px',
-                            fontSize: '0.78rem',
-                            fontWeight: 600,
-                            borderRadius: 6,
-                          }}
-                          title="Edit group details"
-                        >
-                          <Edit2 size={13} style={{ marginRight: 4 }} />
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDistributeLead(grp)}
+                          onClick={() => handleOpenCreateLead(row.category)}
                           className="sales-btn-primary"
                           style={{
                             padding: '6px 14px',
@@ -652,29 +608,10 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                             fontWeight: 700,
                             borderRadius: 6,
                           }}
-                          title={`Distribute a lead to all ${count} customers in this group`}
+                          title={`Distribute a lead to all ${count} customer(s) in this category`}
                         >
                           <Send size={13} style={{ marginRight: 4 }} />
                           Distribute Lead
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteGroup(grp)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#94a3b8',
-                            cursor: 'pointer',
-                            padding: '6px 8px',
-                            borderRadius: 6,
-                            transition: 'color 0.15s ease',
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
-                          onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
-                          title="Delete group"
-                        >
-                          <Trash2 size={15} />
                         </button>
                       </div>
                     </td>
@@ -686,30 +623,150 @@ export default function CustomerGroupsDesk({ customers = [] }) {
         </div>
       )}
 
+      {/* 4. Distribution History Section */}
+      <div style={{ marginTop: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+              Lead Distribution History
+            </h2>
+            <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+              Record of master leads distributed to customer categories.
+            </p>
+          </div>
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>
+            {historyList.length} Total Distributions
+          </span>
+        </div>
+
+        {historyList.length === 0 ? (
+          <div
+            style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: 10,
+              padding: '24px 20px',
+              textAlign: 'center',
+              color: '#64748b',
+              fontSize: '0.86rem',
+            }}
+          >
+            No leads distributed yet. Click <strong>"Create &amp; Distribute Lead"</strong> above to dispatch your first category lead.
+          </div>
+        ) : (
+          <div
+            className="desk-table-card"
+            style={{
+              background: '#ffffff',
+              borderRadius: 12,
+              overflow: 'hidden',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            }}
+          >
+            <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                    Lead Title &amp; Buyer
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                    Category
+                  </th>
+                  <th style={{ textAlign: 'center', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                    Recipients
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                    Date &amp; Time
+                  </th>
+                  <th style={{ textAlign: 'right', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyList.slice(0, 10).map((h) => (
+                  <tr key={h.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>{h.title}</div>
+                      <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                        Buyer: {h.buyerName} • {h.displayPhone}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          fontSize: '0.76rem',
+                          fontWeight: 600,
+                          backgroundColor: '#eef2ff',
+                          color: '#4338ca',
+                        }}
+                      >
+                        {h.category}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <span
+                        style={{
+                          padding: '3px 10px',
+                          borderRadius: 14,
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          backgroundColor: '#ecfdf5',
+                          color: '#047857',
+                        }}
+                      >
+                        {h.totalRecipients || 0} Accounts
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#64748b' }}>
+                      {h.createdAt ? new Date(h.createdAt).toLocaleString('en-IN') : 'Recently'}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleInspectHistory(h)}
+                        className="sales-btn-secondary"
+                        style={{ padding: '5px 10px', fontSize: '0.76rem' }}
+                      >
+                        <Eye size={12} style={{ marginRight: 4 }} />
+                        Inspect
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* =========================================================================
-         MODAL 1: CREATE / EDIT GROUP
+         MODAL 1: CREATE & DISTRIBUTE LEAD (Simple, One-Click, Dynamic Preview)
          ========================================================================= */}
-      {isGroupModalOpen && (
-        <div className="sales-modal-overlay" onClick={() => setIsGroupModalOpen(false)}>
+      {isCreateLeadOpen && (
+        <div className="sales-modal-overlay" onClick={() => !isDistributing && setIsCreateLeadOpen(false)}>
           <div
             className="sales-modal-card"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 560, width: '100%', borderRadius: 12, padding: 24 }}
+            style={{ maxWidth: 620, width: '100%', borderRadius: 12, padding: 24 }}
           >
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
-                  {editingGroup ? 'Edit Customer Group' : 'Create Customer Group'}
+                  Create &amp; Distribute Lead
                 </h3>
                 <p style={{ margin: '3px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
-                  Organize customers into a segment for one-click lead distribution.
+                  Save one lead and automatically distribute it to all eligible customers in the target category.
                 </p>
               </div>
               <button
                 type="button"
                 className="desk-close-btn"
-                onClick={() => setIsGroupModalOpen(false)}
+                disabled={isDistributing}
+                onClick={() => setIsCreateLeadOpen(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
               >
                 <X size={20} />
@@ -717,180 +774,203 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSaveGroup} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Group Name */}
+            <form onSubmit={handleSubmitDistributeLead} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Target Category (Dynamic Dropdown from DB) */}
               <div>
-                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 6, color: '#334155' }}>
-                  Group Name <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. IT Customers"
-                  value={groupForm.name}
-                  onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
-                  className="desk-form-input"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                />
-              </div>
-
-              {/* Category Dropdown */}
-              <div>
-                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 6, color: '#334155' }}>
-                  Category <span style={{ color: '#ef4444' }}>*</span>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                  Target Category <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <select
                   required
-                  value={groupForm.category}
-                  onChange={(e) => setGroupForm({ ...groupForm, category: e.target.value })}
-                  className="desk-form-input"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  value={leadForm.category}
+                  onChange={(e) => setLeadForm({ ...leadForm, category: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.9rem',
+                    backgroundColor: '#ffffff',
+                    fontWeight: 600,
+                  }}
                 >
-                  {PREDEFINED_CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
+                  <option value="">-- Select Target Category --</option>
+                  {categoryOptions.map((opt) => (
+                    <option key={opt.category} value={opt.category}>
+                      {opt.name} ({opt.eligibleCount} Eligible Accounts)
                     </option>
                   ))}
                 </select>
+
+                {/* Recipient Count & Confirmation Banner */}
+                {leadForm.category && (
+                  <div style={{ marginTop: 8 }}>
+                    {previewLoading ? (
+                      <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Checking matching accounts...</div>
+                    ) : previewRecipients.length > 0 ? (
+                      <div
+                        style={{
+                          background: '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          color: '#15803d',
+                          padding: '8px 12px',
+                          borderRadius: 6,
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <CheckCircle2 size={16} />
+                        <span>
+                          Distribute this lead to {previewRecipients.length} eligible {leadForm.category} customer{previewRecipients.length === 1 ? '' : 's'}?
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          background: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          color: '#b91c1c',
+                          padding: '8px 12px',
+                          borderRadius: 6,
+                          fontSize: '0.84rem',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <AlertTriangle size={16} />
+                        <span>
+                          0 eligible active customers found in {leadForm.category}. Lead cannot be distributed.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Description (optional) */}
+              {/* Lead Title */}
               <div>
-                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 6, color: '#334155' }}>
-                  Description <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                  Lead Title <span style={{ color: '#ef4444' }}>*</span>
                 </label>
-                <textarea
-                  rows={2}
-                  placeholder="Brief note about the customers or industry in this group..."
-                  value={groupForm.description}
-                  onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
-                  className="desk-form-input"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', resize: 'vertical' }}
-                />
-              </div>
-
-              {/* Assign Customers (Multi-select searchable list) */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <label style={{ fontWeight: 700, fontSize: '0.84rem', color: '#334155' }}>
-                    Assign Customers ({selectedCustIdsForGroup.size} Selected)
-                  </label>
-                  {allCustomers.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (selectedCustIdsForGroup.size === allCustomers.length) {
-                          setSelectedCustIdsForGroup(new Set());
-                        } else {
-                          setSelectedCustIdsForGroup(new Set(allCustomers.map((c) => c.id)));
-                        }
-                      }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#4f46e5',
-                        fontSize: '0.78rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {selectedCustIdsForGroup.size === allCustomers.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                  )}
-                </div>
-
-                {/* Search within customers list */}
                 <input
                   type="text"
-                  placeholder="Search existing customers by name, company, or phone..."
-                  value={custModalSearch}
-                  onChange={(e) => setCustModalSearch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    border: '1px solid #e2e8f0',
-                    fontSize: '0.82rem',
-                    marginBottom: 8,
-                  }}
+                  required
+                  placeholder="e.g. Enterprise Cloud Infrastructure & Networking Equipment"
+                  value={leadForm.title}
+                  onChange={(e) => setLeadForm({ ...leadForm, title: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
                 />
+              </div>
 
-                <div
-                  style={{
-                    maxHeight: 180,
-                    overflowY: 'auto',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 8,
-                    background: '#f8fafc',
-                    padding: 6,
-                  }}
-                >
-                  {allCustomers.length === 0 ? (
-                    <div style={{ padding: 14, textAlign: 'center', fontSize: '0.82rem', color: '#94a3b8' }}>
-                      No customers found in database.
-                    </div>
-                  ) : (
-                    allCustomers
-                      .filter((c) => {
-                        if (!custModalSearch.trim()) return true;
-                        const q = custModalSearch.toLowerCase();
-                        return (
-                          c.name.toLowerCase().includes(q) ||
-                          c.company.toLowerCase().includes(q) ||
-                          (c.phone || '').includes(q) ||
-                          (c.email || '').toLowerCase().includes(q)
-                        );
-                      })
-                      .map((c) => {
-                        const isChecked = selectedCustIdsForGroup.has(c.id);
-                        return (
-                          <div
-                            key={c.id}
-                            onClick={() => handleToggleCustomerForGroup(c.id)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '7px 10px',
-                              borderRadius: 6,
-                              marginBottom: 4,
-                              background: isChecked ? '#eef2ff' : '#ffffff',
-                              border: isChecked ? '1px solid #c7d2fe' : '1px solid #f1f5f9',
-                              cursor: 'pointer',
-                              transition: 'all 0.1s ease',
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {}} // Handled by div onClick
-                                style={{ cursor: 'pointer' }}
-                              />
-                              <div>
-                                <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#1e293b' }}>
-                                  {c.company}
-                                </div>
-                                <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                                  {c.contact} • {c.phone || c.email}
-                                </div>
-                              </div>
-                            </div>
-                            <span
-                              style={{
-                                fontSize: '0.72rem',
-                                color: '#64748b',
-                                background: '#f1f5f9',
-                                padding: '2px 6px',
-                                borderRadius: 4,
-                              }}
-                            >
-                              {c.category}
-                            </span>
-                          </div>
-                        );
-                      })
-                  )}
+              {/* Lead Description / Buyer Requirement */}
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                  Lead Description / Buyer Requirement <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Detail the specific customer requirement, product specifications, quantities, or commercial scope..."
+                  value={leadForm.requirement}
+                  onChange={(e) => setLeadForm({ ...leadForm, requirement: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', resize: 'vertical' }}
+                />
+              </div>
+
+              {/* Buyer Name & Buyer Mobile */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                    Buyer Name <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Ramesh Patel"
+                    value={leadForm.buyerName}
+                    onChange={(e) => setLeadForm({ ...leadForm, buyerName: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                    Buyer Mobile <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    placeholder="10-digit mobile (e.g. 9876543210)"
+                    value={leadForm.buyerPhone}
+                    onChange={(e) => setLeadForm({ ...leadForm, buyerPhone: e.target.value.replace(/\D/g, '') })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  />
+                </div>
+              </div>
+
+              {/* Buyer Email & Budget */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                    Buyer Email <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="buyer@example.com"
+                    value={leadForm.buyerEmail}
+                    onChange={(e) => setLeadForm({ ...leadForm, buyerEmail: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                    Budget <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. ₹1.5L – ₹3.5L"
+                    value={leadForm.budget}
+                    onChange={(e) => setLeadForm({ ...leadForm, budget: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  />
+                </div>
+              </div>
+
+              {/* Location & Priority */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                    Location / Market <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mumbai, Maharashtra"
+                    value={leadForm.location}
+                    onChange={(e) => setLeadForm({ ...leadForm, location: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                    Priority
+                  </label>
+                  <select
+                    value={leadForm.priority}
+                    onChange={(e) => setLeadForm({ ...leadForm, priority: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  >
+                    <option value="Normal">Normal</option>
+                    <option value="High">High</option>
+                    <option value="Urgent">Urgent</option>
+                  </select>
                 </div>
               </div>
 
@@ -899,12 +979,26 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 <button
                   type="button"
                   className="sales-btn-secondary"
-                  onClick={() => setIsGroupModalOpen(false)}
+                  disabled={isDistributing}
+                  onClick={() => setIsCreateLeadOpen(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="sales-btn-primary">
-                  {editingGroup ? 'Save Changes' : 'Save Group'}
+                <button
+                  type="submit"
+                  className="sales-btn-primary"
+                  disabled={isDistributing || previewRecipients.length === 0}
+                  style={{ minWidth: 180 }}
+                >
+                  {isDistributing ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" /> Distributing...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={14} /> Create &amp; Distribute
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -913,21 +1007,21 @@ export default function CustomerGroupsDesk({ customers = [] }) {
       )}
 
       {/* =========================================================================
-         MODAL 2: VIEW & MANAGE GROUP CUSTOMERS
+         MODAL 2: VIEW CATEGORY / GROUP CUSTOMERS
          ========================================================================= */}
       {viewingGroup && (
         <div className="sales-modal-overlay" onClick={() => setViewingGroup(null)}>
           <div
             className="sales-modal-card"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 680, width: '100%', borderRadius: 12, padding: 24 }}
+            style={{ maxWidth: 660, width: '100%', borderRadius: 12, padding: 24 }}
           >
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
-                    {viewingGroup.name}
+                    {viewingGroup.name || viewingGroup.category}
                   </h3>
                   <span
                     style={{
@@ -942,8 +1036,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                     {viewingGroup.category}
                   </span>
                 </div>
-                <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
-                  Manage customers assigned to this group.
+                <p style={{ margin: '3px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                  Eligible customers in this category who will receive distributed leads.
                 </p>
               </div>
               <button
@@ -956,270 +1050,108 @@ export default function CustomerGroupsDesk({ customers = [] }) {
               </button>
             </div>
 
-            {/* Toolbar: Search & Add Customers toggle */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <Search
-                  size={15}
-                  style={{
-                    position: 'absolute',
-                    left: 10,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: '#94a3b8',
-                  }}
-                />
-                <input
-                  type="text"
-                  placeholder="Search group customers..."
-                  value={viewMemberSearch}
-                  onChange={(e) => setViewMemberSearch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    paddingLeft: 32,
-                    paddingRight: 10,
-                    paddingTop: 8,
-                    paddingBottom: 8,
-                    borderRadius: 6,
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.84rem',
-                  }}
-                />
-              </div>
-
-              <button
-                type="button"
-                className={isAddingMembersOpen ? 'sales-btn-secondary' : 'sales-btn-primary'}
-                onClick={() => setIsAddingMembersOpen(!isAddingMembersOpen)}
-                style={{ padding: '8px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-              >
-                {isAddingMembersOpen ? (
-                  <>
-                    <X size={14} style={{ marginRight: 4 }} /> Close Add Panel
-                  </>
-                ) : (
-                  <>
-                    <UserPlus size={14} style={{ marginRight: 4 }} /> + Add Customers
-                  </>
-                )}
-              </button>
+            {/* Search Customers */}
+            <div style={{ marginBottom: 12 }}>
+              <input
+                type="text"
+                placeholder="Search customers by company, contact, or phone..."
+                value={viewSearch}
+                onChange={(e) => setViewSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.84rem',
+                }}
+              />
             </div>
 
-            {/* Add Customers Panel */}
-            {isAddingMembersOpen && (
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 8,
-                  padding: 14,
-                  marginBottom: 16,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#1e293b' }}>
-                    Select Customers to Add ({addMembersSelectedIds.size} selected)
-                  </div>
-                  {addMembersSelectedIds.size > 0 && (
-                    <button
-                      type="button"
-                      className="sales-btn-primary"
-                      onClick={handleAddSelectedMembersToGroup}
-                      style={{ padding: '6px 14px', fontSize: '0.78rem' }}
-                    >
-                      Confirm Add ({addMembersSelectedIds.size})
-                    </button>
-                  )}
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="Search unassigned customers..."
-                  value={addMemberSearch}
-                  onChange={(e) => setAddMemberSearch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '7px 10px',
-                    borderRadius: 6,
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.82rem',
-                    marginBottom: 8,
-                  }}
-                />
-
-                <div style={{ maxHeight: 150, overflowY: 'auto' }}>
-                  {(() => {
-                    const assignedSet = new Set(
-                      (membershipsMap[viewingGroup.id] || []).map((m) => m.id || m.customer_id)
-                    );
-                    const unassigned = allCustomers.filter((c) => !assignedSet.has(c.id));
-                    const filteredUnassigned = unassigned.filter((c) => {
-                      if (!addMemberSearch.trim()) return true;
-                      const q = addMemberSearch.toLowerCase();
-                      return (
-                        c.name.toLowerCase().includes(q) ||
-                        c.company.toLowerCase().includes(q) ||
-                        (c.phone || '').includes(q)
-                      );
-                    });
-
-                    if (filteredUnassigned.length === 0) {
-                      return (
-                        <div style={{ padding: 12, textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>
-                          No unassigned customers available.
-                        </div>
-                      );
-                    }
-
-                    return filteredUnassigned.map((c) => {
-                      const isChecked = addMembersSelectedIds.has(c.id);
-                      return (
-                        <div
-                          key={c.id}
-                          onClick={() => {
-                            setAddMembersSelectedIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(c.id)) next.delete(c.id);
-                              else next.add(c.id);
-                              return next;
-                            });
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '6px 10px',
-                            borderRadius: 6,
-                            marginBottom: 4,
-                            background: isChecked ? '#eef2ff' : '#ffffff',
-                            border: isChecked ? '1px solid #c7d2fe' : '1px solid #e2e8f0',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <input type="checkbox" checked={isChecked} onChange={() => {}} />
-                            <span style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1e293b' }}>
-                              {c.company}
-                            </span>
-                            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                              ({c.contact} • {c.phone})
-                            </span>
-                          </div>
-                          <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{c.category}</span>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-            )}
-
-            {/* Current Group Members Table */}
+            {/* List Table */}
             <div
               style={{
                 border: '1px solid #e2e8f0',
                 borderRadius: 8,
                 overflow: 'hidden',
-                maxHeight: 340,
+                maxHeight: 320,
                 overflowY: 'auto',
               }}
             >
-              {(() => {
-                const members = membershipsMap[viewingGroup.id] || [];
-                const filteredMembers = members.filter((m) => {
-                  if (!viewMemberSearch.trim()) return true;
-                  const q = viewMemberSearch.toLowerCase();
-                  const cName = (m.companyName || m.name || m.company_name || '').toLowerCase();
-                  const cContact = (m.contactPerson || m.contact || m.contact_person || '').toLowerCase();
-                  const cPhone = (m.phone || '').toLowerCase();
-                  const cEmail = (m.email || '').toLowerCase();
-                  return cName.includes(q) || cContact.includes(q) || cPhone.includes(q) || cEmail.includes(q);
-                });
-
-                if (members.length === 0) {
-                  return (
-                    <div style={{ padding: 36, textAlign: 'center', color: '#64748b' }}>
-                      <Users size={32} style={{ margin: '0 auto 8px', color: '#94a3b8' }} />
-                      <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#1e293b' }}>
-                        No customers assigned yet
-                      </div>
-                      <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 12px' }}>
-                        Click "+ Add Customers" above to assign customers to this group.
-                      </p>
-                    </div>
-                  );
-                }
-
-                if (filteredMembers.length === 0) {
-                  return (
-                    <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: '0.84rem' }}>
-                      No customers match "{viewMemberSearch}".
-                    </div>
-                  );
-                }
-
-                return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                          Company & Contact
-                        </th>
-                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                          Details
-                        </th>
-                        <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredMembers.map((m) => {
-                        const mId = m.id || m.customer_id;
-                        const mCompany = m.companyName || m.company_name || m.name || 'Company';
-                        const mContact = m.contactPerson || m.contact_person || m.contact || 'Contact';
-                        const mPhone = m.phone || '';
-                        const mEmail = m.email || '';
+              {viewLoading ? (
+                <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>
+                  <RefreshCw size={20} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                  Loading customers...
+                </div>
+              ) : viewingMembers.length === 0 ? (
+                <div style={{ padding: 36, textAlign: 'center', color: '#64748b' }}>
+                  <Users size={32} style={{ margin: '0 auto 8px', color: '#94a3b8' }} />
+                  <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#1e293b' }}>
+                    0 eligible customers found
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 0' }}>
+                    No active customers currently match this category.
+                  </p>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        Company Name
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        Contact Person
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        Phone &amp; Email
+                      </th>
+                      <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewingMembers
+                      .filter((m) => {
+                        if (!viewSearch.trim()) return true;
+                        const q = viewSearch.toLowerCase();
                         return (
-                          <tr key={mId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '10px 14px' }}>
-                              <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#1e293b' }}>
-                                {mCompany}
-                              </div>
-                              <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                                {mContact}
-                              </div>
-                            </td>
-                            <td style={{ padding: '10px 14px' }}>
-                              <div style={{ fontSize: '0.76rem', color: '#334155' }}>{mPhone}</div>
-                              {mEmail && <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{mEmail}</div>}
-                            </td>
-                            <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveMember(viewingGroup.id, mId, mCompany)}
-                                style={{
-                                  background: 'none',
-                                  border: '1px solid #fecdd3',
-                                  color: '#e11d48',
-                                  padding: '4px 8px',
-                                  borderRadius: 6,
-                                  fontSize: '0.74rem',
-                                  fontWeight: 600,
-                                  cursor: 'pointer',
-                                }}
-                                title="Remove customer from this group"
-                              >
-                                Remove
-                              </button>
-                            </td>
-                          </tr>
+                          (m.companyName || '').toLowerCase().includes(q) ||
+                          (m.contactPerson || '').toLowerCase().includes(q) ||
+                          (m.phone || '').includes(q)
                         );
-                      })}
-                    </tbody>
-                  </table>
-                );
-              })()}
+                      })
+                      .map((m) => (
+                        <tr key={m.customerId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
+                            {m.companyName}
+                          </td>
+                          <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
+                            {m.contactPerson}
+                          </td>
+                          <td style={{ padding: '10px 14px', fontSize: '0.78rem', color: '#334155' }}>
+                            <div>{m.phone}</div>
+                            {m.email && <div style={{ color: '#94a3b8' }}>{m.email}</div>}
+                          </td>
+                          <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                            <span
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: 10,
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                backgroundColor: '#ecfdf5',
+                                color: '#047857',
+                              }}
+                            >
+                              Eligible
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              )}
             </div>
 
             {/* Footer */}
@@ -1237,236 +1169,176 @@ export default function CustomerGroupsDesk({ customers = [] }) {
       )}
 
       {/* =========================================================================
-         MODAL 3: COMPACT LEAD DISTRIBUTION (Single Screen, No Wizard)
+         MODAL 3: CREATE / EDIT GROUP
          ========================================================================= */}
-      {distributeGroup && (
-        <div className="sales-modal-overlay" onClick={() => !isDistributing && setDistributeGroup(null)}>
+      {isGroupModalOpen && (
+        <div className="sales-modal-overlay" onClick={() => setIsGroupModalOpen(false)}>
           <div
             className="sales-modal-card"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 580, width: '100%', borderRadius: 12, padding: 24 }}
+            style={{ maxWidth: 500, width: '100%', borderRadius: 12, padding: 24 }}
           >
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
-                  Distribute Lead
-                </h3>
-                <p style={{ margin: '3px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
-                  Target Group: <strong>{distributeGroup.name}</strong> ({distributeGroup.category})
-                </p>
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                {editingGroup ? 'Edit Group' : 'Create Customer Group'}
+              </h3>
               <button
                 type="button"
                 className="desk-close-btn"
-                onClick={() => !isDistributing && setDistributeGroup(null)}
+                onClick={() => setIsGroupModalOpen(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
               >
                 <X size={20} />
               </button>
             </div>
 
-            {/* Confirmation Banner */}
-            {(() => {
-              const count = getCustomerCount(distributeGroup);
-              if (count === 0) {
-                return (
-                  <div
-                    style={{
-                      background: '#fef2f2',
-                      border: '1px solid #fecaca',
-                      color: '#b91c1c',
-                      padding: '10px 14px',
-                      borderRadius: 8,
-                      fontSize: '0.84rem',
-                      fontWeight: 600,
-                      marginBottom: 16,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                  >
-                    <AlertTriangle size={16} />
-                    <span>This group has 0 customers. Assign customers first before distributing leads.</span>
-                  </div>
-                );
-              }
-              return (
-                <div
-                  style={{
-                    background: '#f0fdf4',
-                    border: '1px solid #bbf7d0',
-                    color: '#15803d',
-                    padding: '10px 14px',
-                    borderRadius: 8,
-                    fontSize: '0.86rem',
-                    fontWeight: 700,
-                    marginBottom: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <CheckCircle2 size={16} />
-                  <span>
-                    Send this lead to {count} customer{count === 1 ? '' : 's'} in {distributeGroup.name}?
-                  </span>
-                </div>
-              );
-            })()}
-
-            {/* Compact Form */}
-            <form onSubmit={handleDistributeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Lead Title */}
+            <form onSubmit={handleSaveGroup} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                  Lead Title <span style={{ color: '#ef4444' }}>*</span>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5 }}>
+                  Group Name *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Inbound Enquiry for Enterprise Networking Setup"
-                  value={distributeForm.title}
-                  onChange={(e) => setDistributeForm({ ...distributeForm, title: e.target.value })}
+                  placeholder="e.g. IT Customers"
+                  value={groupForm.name}
+                  onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
                 />
               </div>
 
-              {/* Lead Details / Requirement */}
               <div>
-                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                  Lead Details / Requirement <span style={{ color: '#ef4444' }}>*</span>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5 }}>
+                  Category *
                 </label>
-                <textarea
-                  rows={3}
+                <input
+                  type="text"
                   required
-                  placeholder="Describe buyer requirements, specifications, quantities, or scope..."
-                  value={distributeForm.requirement}
-                  onChange={(e) => setDistributeForm({ ...distributeForm, requirement: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', resize: 'vertical' }}
+                  placeholder="e.g. IT & Software"
+                  value={groupForm.category}
+                  onChange={(e) => setGroupForm({ ...groupForm, category: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
                 />
               </div>
 
-              {/* Buyer Name & Buyer Mobile */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Buyer Name <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Ramesh Patel"
-                    value={distributeForm.buyerName}
-                    onChange={(e) => setDistributeForm({ ...distributeForm, buyerName: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Buyer Mobile <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="10-digit mobile (e.g. 9876543210)"
-                    value={distributeForm.buyerPhone}
-                    onChange={(e) => setDistributeForm({ ...distributeForm, buyerPhone: e.target.value.replace(/\D/g, '') })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5 }}>
+                  Description (optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Brief note about the segment..."
+                  value={groupForm.description}
+                  onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                />
               </div>
 
-              {/* Buyer Email & Budget */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Buyer Email <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="buyer@example.com"
-                    value={distributeForm.buyerEmail}
-                    onChange={(e) => setDistributeForm({ ...distributeForm, buyerEmail: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Budget <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. ₹50,000"
-                    value={distributeForm.budget}
-                    onChange={(e) => setDistributeForm({ ...distributeForm, budget: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-              </div>
-
-              {/* Location & Priority */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Location <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Mumbai, Maharashtra"
-                    value={distributeForm.location}
-                    onChange={(e) => setDistributeForm({ ...distributeForm, location: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Priority
-                  </label>
-                  <select
-                    value={distributeForm.priority}
-                    onChange={(e) => setDistributeForm({ ...distributeForm, priority: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  >
-                    <option value="Urgent">Urgent</option>
-                    <option value="High">High</option>
-                    <option value="Normal">Normal</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Submit Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
                 <button
                   type="button"
                   className="sales-btn-secondary"
-                  disabled={isDistributing}
-                  onClick={() => setDistributeGroup(null)}
+                  onClick={() => setIsGroupModalOpen(false)}
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="sales-btn-primary"
-                  disabled={isDistributing || getCustomerCount(distributeGroup) === 0}
-                  style={{ minWidth: 160 }}
-                >
-                  {isDistributing ? (
-                    <>
-                      <RefreshCw size={14} className="animate-spin" /> Distributing...
-                    </>
-                  ) : (
-                    <>
-                      <Send size={14} /> Distribute Lead
-                    </>
-                  )}
+                <button type="submit" className="sales-btn-primary">
+                  Save Group
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+         MODAL 4: INSPECT DISTRIBUTION HISTORY
+         ========================================================================= */}
+      {inspectItem && (
+        <div className="sales-modal-overlay" onClick={() => setInspectItem(null)}>
+          <div
+            className="sales-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 680, width: '100%', borderRadius: 12, padding: 24 }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                  Distribution Inspection
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                  {inspectItem.title} ({inspectItem.category})
+                </p>
+              </div>
+              <button
+                type="button"
+                className="desk-close-btn"
+                onClick={() => setInspectItem(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', maxHeight: 300, overflowY: 'auto' }}>
+              {inspectLoading ? (
+                <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>Loading recipients...</div>
+              ) : inspectRecipients.length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>No recipient records found.</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        Customer / Company
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        Phone
+                      </th>
+                      <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        Response Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inspectRecipients.map((r, i) => (
+                      <tr key={r.id || i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.84rem', color: '#1e293b' }}>
+                          {r.companyName || r.company_name || 'Customer'}
+                        </td>
+                        <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
+                          {r.phone}
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: 10,
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              backgroundColor: r.responseInterest === 'Interested' ? '#ecfdf5' : '#f1f5f9',
+                              color: r.responseInterest === 'Interested' ? '#047857' : '#64748b',
+                            }}
+                          >
+                            {r.responseInterest || 'Pending'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button
+                type="button"
+                className="sales-btn-secondary"
+                onClick={() => setInspectItem(null)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

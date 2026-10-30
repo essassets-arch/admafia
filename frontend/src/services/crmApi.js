@@ -194,6 +194,18 @@ export const crmApi = {
   /**
    * Customer Groups & Category-Based Lead Distribution APIs
    */
+  async getCategories() {
+    const res = await apiRequest('/categories');
+    return res.categories || [];
+  },
+
+  async previewCategoryRecipients(category, groupId = '') {
+    const params = new URLSearchParams();
+    if (category) params.set('category', category);
+    if (groupId) params.set('groupId', groupId);
+    return apiRequest(`/categories/preview?${params.toString()}`);
+  },
+
   async getGroups() {
     const res = await apiRequest('/groups');
     return res.groups || [];

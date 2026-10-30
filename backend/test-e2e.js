@@ -57,6 +57,13 @@ async function runTests() {
   // -------------------------------------------------------------------------
   // TEST 1: Health Check & Zero Static Data Baseline
   // -------------------------------------------------------------------------
+  // Clean up any stale test accounts from previous runs
+  for (const p of ['9111122222', '9333344444', '9600011111', '9600022222', '9600033333', '9600044444', '9600055555', '9700099999']) {
+    await api(`/customers/${p}`, { method: 'DELETE' });
+  }
+  await api('/groups/grp_test_it', { method: 'DELETE' });
+  await api('/groups/grp_test_hw', { method: 'DELETE' });
+
   console.log('1️⃣  Checking PostgreSQL Connection & Baseline Counts...');
   const health1 = await api('/health');
   assert(health1.status === 200 && health1.data.ok === true, 'GET /api/health returns 200 OK');
@@ -254,6 +261,13 @@ async function runTests() {
   // -------------------------------------------------------------------------
   console.log('1️⃣1️⃣ Testing Customer Groups & Category-Based Lead Distribution System...');
 
+  // Ensure clean test baseline
+  for (const p of ['9600011111', '9600022222', '9600033333', '9600044444', '9600055555', '9700099999']) {
+    await api(`/customers/${p}`, { method: 'DELETE' });
+  }
+  await api('/groups/grp_test_it', { method: 'DELETE' });
+  await api('/groups/grp_test_hw', { method: 'DELETE' });
+
   // Step A: Create Target IT Group & Separate Hardware Group
   const itGroupRes = await api('/groups', {
     method: 'POST',
@@ -310,6 +324,7 @@ async function runTests() {
       email: 'vendor@hardwaretech.in',
       companyName: 'Apex Hardware Supplies Ltd',
       contactPerson: 'Karan Sharma',
+      category: 'Hardware',
       password: 'Password123!',
     }),
   });
@@ -340,11 +355,10 @@ async function runTests() {
   const previewRes = await api('/groups/grp_test_it/preview-recipients');
   assert(previewRes.status === 200 && previewRes.data.eligibleCount === 5, 'Preview confirmed exactly 5 eligible IT recipients in database');
 
-  // Step F: CORE ACTION — Distribute 1 Master Lead to IT Group
+  // Step F: CORE ACTION — Distribute 1 Master Lead by Category ('IT & Software')
   const distRes = await api('/leads/distribute', {
     method: 'POST',
     body: JSON.stringify({
-      groupId: 'grp_test_it',
       title: 'Cloud Infrastructure & Kubernetes Modernization Project',
       description: 'Client requires enterprise AWS/Azure migration and containerization.',
       category: 'IT & Software',
@@ -352,7 +366,7 @@ async function runTests() {
       budget: '₹4.5L – ₹8.0L',
       location: 'Mumbai, Maharashtra',
       priority: 'Urgent',
-      source: 'Direct Intake',
+      source: 'Category Lead Distribution',
       buyerName: 'Vikram Joshi (CTO)',
       buyerPhone: '9820012345',
       buyerEmail: 'v.joshi@techbuyer.com',
@@ -361,23 +375,70 @@ async function runTests() {
   });
 
   assert(distRes.status === 201 && distRes.data.ok === true, 'Master lead distribution API returned HTTP 201');
-  assert(distRes.data.recipientCount === 5, 'One master lead created -> exactly 5 customer assignments generated');
+  assert(distRes.data.recipientsCount === 5 || distRes.data.recipientCount === 5, 'Category distribution: One master lead created -> exactly 5 IT customer assignments generated');
   assert(distRes.data.assignments.length === 5, 'Backend returned 5 assignment confirmation records');
   const masterLeadId = distRes.data.masterLead.id;
 
-  // Step G: Cross-Category Isolation Verification
-  const hwLeads = await api(`/leads?customerId=${hwCustId}`);
-  assert(
-    hwLeads.data.leads.length === 0,
-    'Strict Category Isolation: Hardware customer received 0 IT leads'
-  );
+  // Step F2: Acceptance Criterion 3 — Retry the same distribution request -> no duplicate assignments
+  const retryDistRes = await api('/leads/distribute', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: masterLeadId, // Same master lead ID retry
+      title: 'Cloud Infrastructure & Kubernetes Modernization Project',
+      description: 'Client requires enterprise AWS/Azure migration and containerization.',
+      category: 'IT & Software',
+      requirement: 'Full-stack cloud migration for 40 microservices, 24/7 SLA monitoring.',
+      buyerName: 'Vikram Joshi (CTO)',
+      buyerPhone: '9820012345',
+    }),
+  });
+  assert(retryDistRes.status === 201, 'Retry distribution returned HTTP 201 (idempotent)');
+  const it1Check = await api(`/leads?customerId=${itCustIds[0]}`);
+  assert(it1Check.data.leads.length === 1, 'Retry safely prevented duplicate assignments (exactly 1 lead retained per customer)');
 
-  // Step H: Customer Lead Inbox Verification (Each IT customer sees the lead)
+  // Step F3: Acceptance Criterion 2 — Distribute to Hardware Category -> Only Hardware recipient
+  const hwDistRes = await api('/leads/distribute', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: 'Server Rack & Switch Supplies Requirement',
+      description: 'Procurement of 10x 42U Server Racks and Cat6 Cables',
+      category: 'Hardware',
+      requirement: 'Industrial networking racks and patch cables with 3-year warranty.',
+      buyerName: 'Amit Shah',
+      buyerPhone: '9876599999',
+    }),
+  });
+  assert(hwDistRes.status === 201 && hwDistRes.data.recipientsCount === 1, 'Hardware Category distribution: exactly 1 Hardware customer assigned');
+  const it1HwCheck = await api(`/leads?customerId=${itCustIds[0]}`);
+  assert(it1HwCheck.data.leads.length === 1, 'IT customer received 0 Hardware leads (Strict Category Isolation)');
+
+  // Step F4: Acceptance Criterion 4 — Category with 0 customers returns clear error
+  const emptyCatRes = await api('/leads/distribute', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: 'Non-existent Category Lead',
+      requirement: 'Sample enquiry',
+      category: 'NonExistentCategoryXYZ',
+      buyerName: 'Test Buyer',
+      buyerPhone: '9876543210',
+    }),
+  });
+  assert(emptyCatRes.status === 400 && emptyCatRes.data.ok === false, 'Distribution to category with 0 customers cleanly rejected with HTTP 400');
+  assert(emptyCatRes.data.error.includes('No active eligible customers found'), 'Clear error message returned explaining 0 eligible customers');
+
+  // Step G: Acceptance Criterion 5 — Log in as each recipient and verify assigned lead is accessible
   for (let i = 0; i < itCustIds.length; i++) {
-    const custLeads = await api(`/leads?customerId=${itCustIds[i]}`);
+    const loginRes = await api('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ identifier: itPhones[i], password: 'Password123!' }),
+    });
+    assert(loginRes.status === 200, `Customer IT-${i + 1} (${itPhones[i]}) successfully authenticated via login`);
+
+    const custWorkspace = await api(`/customers/${itPhones[i]}`);
+    assert(custWorkspace.status === 200, `Customer IT-${i + 1} workspace fetched`);
     assert(
-      custLeads.data.leads.length === 1 && custLeads.data.leads[0].masterLeadId === masterLeadId,
-      `Customer IT-${i + 1} (${itPhones[i]}) received the lead in their individual CRM inbox`
+      custWorkspace.data.leads.some((l) => l.masterLeadId === masterLeadId),
+      `Customer IT-${i + 1} can view the assigned master lead in their CRM workspace`
     );
   }
 

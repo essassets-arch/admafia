@@ -152,6 +152,49 @@ export async function query(text, params = []) {
   };
 }
 
+/**
+ * Execute a block inside an atomic database transaction.
+ * Rolls back automatically on any error, and commits on completion.
+ */
+export async function withTransaction(callback) {
+  if (dbMode === 'uninitialized') {
+    await initDatabase();
+  }
+  if (dbMode === 'postgres-server') {
+    const client = await activePool.connect();
+    try {
+      await client.query('BEGIN');
+      const txQuery = async (text, params = []) => {
+        const res = await client.query(text, params);
+        return {
+          rows: res.rows || [],
+          rowCount: res.rowCount !== undefined ? res.rowCount : (res.rows ? res.rows.length : 0),
+        };
+      };
+      const result = await callback(txQuery);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  } else {
+    return pgliteInstance.transaction(async (tx) => {
+      const txQuery = async (text, params = []) => {
+        const res = await tx.query(text, params);
+        const rows = res.rows || [];
+        return {
+          rows,
+          rowCount: rows.length > 0 ? rows.length : (res.affectedRows || 0),
+        };
+      };
+      return callback(txQuery);
+    });
+  }
+}
+
 export function getDbStatus() {
   return {
     connected: dbMode !== 'uninitialized',

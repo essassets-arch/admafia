@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initDatabase, query, getDbStatus } from './db.js';
+import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1142,13 +1142,168 @@ app.get('/api/groups', async (req, res) => {
     const result = await query(`
       SELECT 
         cg.*,
-        (SELECT COUNT(*) FROM customer_group_memberships cgm WHERE cgm.group_id = cg.id) AS customer_count,
-        (SELECT COUNT(*) FROM master_leads ml WHERE ml.group_id = cg.id) AS leads_received,
+        (
+          SELECT COUNT(DISTINCT c.id) 
+          FROM customers c
+          LEFT JOIN customer_group_memberships cgm ON cgm.customer_id = c.id
+          WHERE c.status = 'active'
+            AND (
+              cgm.group_id = cg.id 
+              OR c.group_id = cg.id
+              OR LOWER(c.category) = LOWER(cg.category)
+              OR LOWER(c.category) = LOWER(cg.name)
+            )
+        ) AS customer_count,
+        (SELECT COUNT(*) FROM master_leads ml WHERE ml.group_id = cg.id OR LOWER(ml.category) = LOWER(cg.category) OR LOWER(ml.category) = LOWER(cg.name)) AS leads_received,
         (SELECT COUNT(*) FROM lead_assignments la WHERE la.group_id = cg.id) AS leads_distributed
       FROM customer_groups cg
       ORDER BY cg.created_at ASC
     `);
     res.json({ ok: true, groups: result.rows.map(mapGroupRow) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// List all categories and customer groups with live eligible customer counts
+app.get('/api/categories', async (req, res) => {
+  try {
+    const groupsRes = await query(`
+      SELECT 
+        cg.*,
+        (
+          SELECT COUNT(DISTINCT c.id) 
+          FROM customers c
+          LEFT JOIN customer_group_memberships cgm ON cgm.customer_id = c.id
+          WHERE c.status = 'active'
+            AND (
+              cgm.group_id = cg.id 
+              OR c.group_id = cg.id
+              OR LOWER(c.category) = LOWER(cg.category)
+              OR LOWER(c.category) = LOWER(cg.name)
+            )
+        ) AS customer_count,
+        (SELECT COUNT(*) FROM master_leads ml WHERE ml.group_id = cg.id OR LOWER(ml.category) = LOWER(cg.category) OR LOWER(ml.category) = LOWER(cg.name)) AS leads_received,
+        (SELECT COUNT(*) FROM lead_assignments la WHERE la.group_id = cg.id) AS leads_distributed
+      FROM customer_groups cg
+      ORDER BY cg.created_at ASC
+    `);
+
+    const custCatRes = await query(`
+      SELECT DISTINCT category FROM customers WHERE category IS NOT NULL AND category != ''
+    `);
+
+    const categoryMap = new Map();
+
+    for (const g of groupsRes.rows) {
+      const catKey = g.category || g.name;
+      if (!categoryMap.has(catKey)) {
+        categoryMap.set(catKey, {
+          category: catKey,
+          name: g.name,
+          groupId: g.id,
+          icon: g.icon || '🏢',
+          description: g.description || '',
+          eligibleCount: Number(g.customer_count || 0),
+          leadsReceived: Number(g.leads_received || 0),
+          leadsDistributed: Number(g.leads_distributed || 0),
+        });
+      } else {
+        const existing = categoryMap.get(catKey);
+        existing.eligibleCount = Math.max(existing.eligibleCount, Number(g.customer_count || 0));
+      }
+    }
+
+    for (const row of custCatRes.rows) {
+      const cat = row.category;
+      if (!categoryMap.has(cat)) {
+        const countRes = await query(
+          `SELECT COUNT(DISTINCT c.id) as count 
+           FROM customers c 
+           WHERE c.status = 'active' AND (LOWER(c.category) = LOWER($1) OR LOWER(c.industry) = LOWER($1))`,
+          [cat]
+        );
+        categoryMap.set(cat, {
+          category: cat,
+          name: cat,
+          groupId: null,
+          icon: '🏢',
+          description: `${cat} Industry Segment`,
+          eligibleCount: Number(countRes.rows[0]?.count || 0),
+          leadsReceived: 0,
+          leadsDistributed: 0,
+        });
+      }
+    }
+
+    const categories = Array.from(categoryMap.values());
+    res.json({
+      ok: true,
+      categories,
+      groups: groupsRes.rows.map(mapGroupRow),
+    });
+  } catch (err) {
+    console.error('[GET /api/categories]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Preview eligible recipients by category or group
+app.get('/api/categories/preview', async (req, res) => {
+  try {
+    const targetCat = (req.query.category || '').trim();
+    const targetGroupId = (req.query.groupId || '').trim();
+
+    if (!targetCat && !targetGroupId) {
+      return res.status(400).json({ ok: false, error: 'Category or groupId parameter is required' });
+    }
+
+    const customersRes = await query(
+      `SELECT DISTINCT 
+         c.id, c.username, c.company_name, c.contact_person, c.phone, c.email,
+         c.category, c.city, c.state, c.status, c.profile_status, c.payment_status,
+         COALESCE(w.available_balance, 0) AS balance
+       FROM customers c
+       LEFT JOIN customer_group_memberships cgm ON cgm.customer_id = c.id
+       LEFT JOIN customer_groups cg ON (cg.id = cgm.group_id OR cg.id = c.group_id)
+       LEFT JOIN wallets w ON w.customer_id = c.id
+       WHERE c.status = 'active'
+         AND (
+           ( $1 <> '' AND (
+             LOWER(c.category) = LOWER($1)
+             OR LOWER(c.industry) = LOWER($1)
+             OR LOWER(cg.category) = LOWER($1)
+             OR LOWER(cg.name) = LOWER($1)
+           ) )
+           OR ( $2 <> '' AND (
+             cgm.group_id = $2
+             OR c.group_id = $2
+             OR cg.id = $2
+           ) )
+         )
+       ORDER BY c.company_name ASC`,
+      [targetCat, targetGroupId || '']
+    );
+
+    const recipients = customersRes.rows.map((r) => ({
+      customerId: r.id,
+      companyName: r.company_name,
+      contactPerson: r.contact_person,
+      phone: (r.phone || '').trim(),
+      email: r.email || '',
+      category: r.category || 'Other',
+      city: r.city || '',
+      balance: Number(r.balance || 0),
+      notificationStatus: 'Ready to Dispatch',
+    }));
+
+    res.json({
+      ok: true,
+      category: targetCat,
+      groupId: targetGroupId || null,
+      eligibleCount: recipients.length,
+      recipients,
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -1296,6 +1451,9 @@ app.post('/api/groups/:id/members', async (req, res) => {
         [memId, groupId, cId]
       );
       if (insRes.rowCount > 0) assignedCount++;
+      if (grpRes.rows[0].category) {
+        await query('UPDATE customers SET group_id = $1, category = $2 WHERE id = $3', [groupId, grpRes.rows[0].category, cId]);
+      }
     }
 
     const updatedMembers = await query(
@@ -1391,34 +1549,40 @@ app.get('/api/groups/:id/preview-recipients', async (req, res) => {
   }
 });
 
-// CORE ACTION: Distribute One Lead to All Customers in Target Group
+// CORE ACTION: Distribute One Lead to All Customers in Target Category or Group
 app.post('/api/leads/distribute', async (req, res) => {
   try {
     const {
       groupId,
+      category,
+      targetCategory,
       title,
       description = '',
-      category = 'IT & Software',
-      requirement = 'Inbound Meta Ads Enquiry',
+      requirement,
       budget = '₹1.5L – ₹3.5L',
       location = '',
       priority = 'Urgent',
-      source = 'Direct Intake',
+      source = 'Category Lead Distribution',
       deadlineDate = null,
       buyerName = 'Verified Buyer',
       buyerPhone,
       buyerEmail = '',
       city = '',
+      id,
     } = req.body || {};
 
-    if (!groupId) {
-      return res.status(400).json({ ok: false, error: 'Target customer group (groupId) is required' });
+    const targetCat = (category || targetCategory || '').trim();
+    const targetGroupId = (groupId || '').trim();
+
+    if (!targetCat && !targetGroupId) {
+      return res.status(400).json({ ok: false, error: 'Target category or customer group is required.' });
     }
     if (!title || !title.trim()) {
-      return res.status(400).json({ ok: false, error: 'Lead title is required' });
+      return res.status(400).json({ ok: false, error: 'Lead title is required.' });
     }
-    if (!requirement || !requirement.trim()) {
-      return res.status(400).json({ ok: false, error: 'Customer requirement details are required' });
+    const reqText = (requirement || description || '').trim();
+    if (!reqText) {
+      return res.status(400).json({ ok: false, error: 'Customer requirement details are required.' });
     }
 
     const cleanBuyerDigits = String(buyerPhone || '9876543210').replace(/\D/g, '').slice(-10);
@@ -1429,149 +1593,190 @@ app.post('/api/leads/distribute', async (req, res) => {
       });
     }
 
-    // Verify group
-    const grpRes = await query('SELECT * FROM customer_groups WHERE id = $1', [groupId]);
-    if (grpRes.rowCount === 0) {
-      return res.status(404).json({ ok: false, error: 'Customer group not found' });
+    // Resolve target group and final category name
+    let matchedGroup = null;
+    if (targetGroupId) {
+      const grpRes = await query('SELECT * FROM customer_groups WHERE id = $1', [targetGroupId]);
+      if (grpRes.rowCount > 0) {
+        matchedGroup = grpRes.rows[0];
+      }
     }
-    const group = grpRes.rows[0];
+    if (!matchedGroup && targetCat) {
+      const grpRes = await query(
+        'SELECT * FROM customer_groups WHERE LOWER(category) = LOWER($1) OR LOWER(name) = LOWER($1) LIMIT 1',
+        [targetCat]
+      );
+      if (grpRes.rowCount > 0) {
+        matchedGroup = grpRes.rows[0];
+      }
+    }
 
-    // Get active eligible customers in this group
+    const finalCategory = targetCat || (matchedGroup ? (matchedGroup.category || matchedGroup.name) : 'Other');
+    const finalGroupId = matchedGroup ? matchedGroup.id : (targetGroupId || null);
+    const finalGroupName = matchedGroup ? matchedGroup.name : finalCategory;
+
+    // Query active eligible customers for this category or group
     const eligibleRes = await query(
-      `SELECT c.*, COALESCE(w.available_balance, 0) AS balance
-       FROM customer_group_memberships cgm
-       JOIN customers c ON c.id = cgm.customer_id
+      `SELECT DISTINCT 
+         c.id, c.username, c.company_name, c.contact_person, c.phone, c.email,
+         c.category, c.city, c.state, c.status, c.profile_status, c.payment_status,
+         COALESCE(w.available_balance, 0) AS balance
+       FROM customers c
+       LEFT JOIN customer_group_memberships cgm ON cgm.customer_id = c.id
+       LEFT JOIN customer_groups cg ON (cg.id = cgm.group_id OR cg.id = c.group_id)
        LEFT JOIN wallets w ON w.customer_id = c.id
-       WHERE cgm.group_id = $1 AND c.status = 'active'
+       WHERE c.status = 'active'
+         AND (
+           ( $1 <> '' AND (
+             LOWER(c.category) = LOWER($1)
+             OR LOWER(c.industry) = LOWER($1)
+             OR LOWER(cg.category) = LOWER($1)
+             OR LOWER(cg.name) = LOWER($1)
+           ) )
+           OR ( $2 <> '' AND (
+             cgm.group_id = $2
+             OR c.group_id = $2
+             OR cg.id = $2
+           ) )
+         )
        ORDER BY c.company_name ASC`,
-      [groupId]
+      [finalCategory, targetGroupId || '']
     );
 
     if (eligibleRes.rowCount === 0) {
       return res.status(400).json({
         ok: false,
-        error: `Group "${group.name}" currently has 0 active customer accounts assigned. Assign customers to the group first.`,
+        error: `No active eligible customers found in category "${finalCategory}". Assign or register customers before distributing leads.`,
       });
     }
 
     const eligibleCustomers = eligibleRes.rows;
-    const masterLeadId = req.body.id || `mlead_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const masterLeadId = id || `mlead_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const displayPhone = `+91 ${cleanBuyerDigits}`;
 
-    // 1. Insert Master Lead
-    const mLeadInsert = await query(
-      `INSERT INTO master_leads (
-         id, title, description, category, group_id, buyer_name, buyer_phone,
-         buyer_email, city, requirement, budget, location, priority, source,
-         deadline_date, created_by, created_at, updated_at
-       ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7,
-         $8, $9, $10, $11, $12, $13, $14,
-         $15, 'Admin Operations', NOW(), NOW()
-       )
-       ON CONFLICT (id) DO NOTHING
-       RETURNING *`,
-      [
-        masterLeadId,
-        title.trim(),
-        description || '',
-        category || group.category || 'Other',
-        groupId,
-        buyerName || displayPhone,
-        cleanBuyerDigits,
-        buyerEmail || `lead_${cleanBuyerDigits.slice(-4)}@example.com`,
-        city || location || '',
-        requirement,
-        budget || '₹1.5L – ₹3.5L',
-        location || city || '',
-        priority || 'Urgent',
-        source || 'Direct Intake',
-        deadlineDate || null,
-      ]
-    );
-
-    const savedMasterLead = mLeadInsert.rows[0] || (await query('SELECT * FROM master_leads WHERE id = $1', [masterLeadId])).rows[0];
-
-    // 2. Create customer lead in leads and assignment in lead_assignments for each customer
-    const createdAssignments = [];
-    for (const cust of eligibleCustomers) {
-      const custLeadId = `lead_${masterLeadId}_${cust.id}`.slice(0, 64);
-      const assignId = `asgn_${masterLeadId}_${cust.id}`.slice(0, 64);
-
-      // Insert customer-specific lead so it shows in /app/lead inbox
-      await query(
-        `INSERT INTO leads (
-           id, customer_id, master_lead_id, customer_phone, customer_username,
-           company_name, category, buyer_phone, display_phone, buyer_name, buyer_email,
-           city, requirement, budget, source, priority, status, is_hot, is_read, notes,
-           created_at, updated_at
+    // Execute atomic transaction for lead creation & assignments
+    const result = await withTransaction(async (txQuery) => {
+      // 1. Insert Master Lead
+      const mLeadInsert = await txQuery(
+        `INSERT INTO master_leads (
+           id, title, description, category, group_id, buyer_name, buyer_phone,
+           buyer_email, city, requirement, budget, location, priority, source,
+           deadline_date, created_by, created_at, updated_at
          ) VALUES (
-           $1, $2, $3, $4, $5,
-           $6, $7, $8, $9, $10, $11,
-           $12, $13, $14, $15, $16, 'new', TRUE, FALSE, $17,
-           NOW(), NOW()
+           $1, $2, $3, $4, $5, $6, $7,
+           $8, $9, $10, $11, $12, $13, $14,
+           $15, 'Admin Operations', NOW(), NOW()
          )
-         ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`,
+         ON CONFLICT (id) DO UPDATE SET
+           title = EXCLUDED.title,
+           requirement = EXCLUDED.requirement,
+           updated_at = NOW()
+         RETURNING *`,
         [
-          custLeadId,
-          cust.id,
           masterLeadId,
-          cust.phone,
-          cust.username,
-          cust.company_name,
-          category || group.category || 'Other',
-          cleanBuyerDigits,
-          displayPhone,
+          title.trim(),
+          description || reqText,
+          finalCategory,
+          finalGroupId,
           buyerName || displayPhone,
+          cleanBuyerDigits,
           buyerEmail || `lead_${cleanBuyerDigits.slice(-4)}@example.com`,
-          city || cust.city || '',
-          requirement,
+          city || location || '',
+          reqText,
           budget || '₹1.5L – ₹3.5L',
-          source || 'Direct Intake',
+          location || city || '',
           priority || 'Urgent',
-          description || `Category lead dispatched for ${group.name}`,
+          source || 'Direct Intake',
+          deadlineDate || null,
         ]
       );
 
-      // Insert recipient assignment record with idempotency
-      await query(
-        `INSERT INTO lead_assignments (
-           id, master_lead_id, customer_id, group_id, customer_lead_id,
-           status, response_interest, response_notes, is_read, notification_status,
-           assigned_at
-         ) VALUES (
-           $1, $2, $3, $4, $5,
-           'new', 'Pending', '', FALSE, 'Delivered',
-           NOW()
-         )
-         ON CONFLICT (master_lead_id, customer_id) DO UPDATE SET assigned_at = NOW()
-         RETURNING *`,
-        [assignId, masterLeadId, cust.id, groupId, custLeadId]
-      );
+      const savedMasterLead = mLeadInsert.rows[0];
+      const createdAssignments = [];
 
-      createdAssignments.push({
-        id: assignId,
-        customerId: cust.id,
-        companyName: cust.company_name,
-        contactPerson: cust.contact_person,
-        phone: cust.phone,
-        status: 'new',
-        responseInterest: 'Pending',
-        notificationStatus: 'Delivered',
-      });
-    }
+      for (const cust of eligibleCustomers) {
+        const custLeadId = `lead_${masterLeadId}_${cust.id}`.slice(0, 64);
+        const assignId = `asgn_${masterLeadId}_${cust.id}`.slice(0, 64);
+
+        // Insert / update customer-specific lead so it displays in their individual CRM /app/lead
+        await txQuery(
+          `INSERT INTO leads (
+             id, customer_id, master_lead_id, customer_phone, customer_username,
+             company_name, category, buyer_phone, display_phone, buyer_name, buyer_email,
+             city, requirement, budget, source, priority, status, is_hot, is_read, notes,
+             created_at, updated_at
+           ) VALUES (
+             $1, $2, $3, $4, $5,
+             $6, $7, $8, $9, $10, $11,
+             $12, $13, $14, $15, $16, 'new', TRUE, FALSE, $17,
+             NOW(), NOW()
+           )
+           ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`,
+          [
+            custLeadId,
+            cust.id,
+            masterLeadId,
+            cust.phone,
+            cust.username,
+            cust.company_name,
+            finalCategory,
+            cleanBuyerDigits,
+            displayPhone,
+            buyerName || displayPhone,
+            buyerEmail || `lead_${cleanBuyerDigits.slice(-4)}@example.com`,
+            city || cust.city || '',
+            reqText,
+            budget || '₹1.5L – ₹3.5L',
+            source || 'Direct Intake',
+            priority || 'Urgent',
+            description || `Category lead dispatched for ${finalGroupName}`,
+          ]
+        );
+
+        // Insert / update assignment record with idempotency
+        await txQuery(
+          `INSERT INTO lead_assignments (
+             id, master_lead_id, customer_id, group_id, customer_lead_id,
+             status, response_interest, response_notes, is_read, notification_status,
+             assigned_at
+           ) VALUES (
+             $1, $2, $3, $4, $5,
+             'new', 'Pending', '', FALSE, 'Delivered',
+             NOW()
+           )
+           ON CONFLICT (master_lead_id, customer_id) DO UPDATE SET assigned_at = NOW()`,
+          [assignId, masterLeadId, cust.id, finalGroupId, custLeadId]
+        );
+
+        createdAssignments.push({
+          id: assignId,
+          customerId: cust.id,
+          companyName: cust.company_name,
+          contactPerson: cust.contact_person,
+          phone: cust.phone,
+          status: 'new',
+          responseInterest: 'Pending',
+          notificationStatus: 'Delivered',
+        });
+      }
+
+      return {
+        masterLead: savedMasterLead,
+        assignments: createdAssignments,
+      };
+    });
 
     res.status(201).json({
       ok: true,
-      message: `Lead "${title}" successfully distributed to all ${eligibleCustomers.length} active customer(s) in group "${group.name}".`,
+      message: `Lead "${title}" successfully distributed to all ${eligibleCustomers.length} active customer(s) in "${finalCategory}".`,
       masterLead: mapMasterLeadRow({
-        ...savedMasterLead,
-        group_name: group.name,
+        ...result.masterLead,
+        group_name: finalGroupName,
         recipients_count: eligibleCustomers.length,
         interested_count: 0,
       }),
-      recipientCount: eligibleCustomers.length,
-      assignments: createdAssignments,
+      recipientsCount: eligibleCustomers.length,
+      assignments: result.assignments,
     });
   } catch (err) {
     console.error('[POST /api/leads/distribute]', err);
