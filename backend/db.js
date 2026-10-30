@@ -212,9 +212,20 @@ export async function initDatabase() {
     ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS last_replied_by VARCHAR(140) DEFAULT '';
     ALTER TABLE support_queries DROP CONSTRAINT IF EXISTS support_queries_status_check;
     ALTER TABLE support_queries DROP CONSTRAINT IF EXISTS support_queries_priority_check;
-    INSERT INTO system_users (id, full_name, email, username, phone, password_hash, role, permissions, status)
-    VALUES ('user_superadmin_01', 'AdMafia Executive Super Admin', 'admin@admafia.marketing', 'superadmin', '9999999999', 'SuperAdmin@2026!', 'Super Admin', '["all"]', 'active')
-    ON CONFLICT (username) DO NOTHING;
+    ALTER TABLE system_users DROP CONSTRAINT IF EXISTS system_users_role_check;
+    ALTER TABLE system_users ADD COLUMN IF NOT EXISTS department VARCHAR(64) DEFAULT 'Super Admin';
+
+    INSERT INTO system_users (id, full_name, email, username, phone, password_hash, role, department, permissions, status)
+    VALUES
+      ('user_superadmin_01', 'AdMafia Executive Super Admin', 'admin@admafia.marketing', 'superadmin', '9999999999', 'SuperAdmin@2026!', 'Super Admin', 'Super Admin', '["all"]', 'active'),
+      ('user_marketing_01', 'Senior Marketing Campaign Director', 'marketing@admafia.marketing', 'marketing', '9888888888', 'Marketing@2026!', 'Marketing Manager', 'Marketing', '["marketing:all", "campaigns:manage", "ideas:create", "posts:verify"]', 'active'),
+      ('user_graphics_01', 'Lead Creative & Graphics Designer', 'graphics@admafia.marketing', 'graphics', '9777777777', 'Graphics@2026!', 'Senior Graphics Designer', 'Graphics', '["graphics:all", "artworks:upload", "requests:manage"]', 'active'),
+      ('user_sales_01', 'Principal Sales & Accounts Executive', 'sales@admafia.marketing', 'sales', '9666666666', 'Sales@2026!', 'Sales Executive', 'Sales', '["sales:all", "leads:call", "deals:manage", "groups:edit"]', 'active')
+    ON CONFLICT (username) DO UPDATE SET
+      password_hash = EXCLUDED.password_hash,
+      role = EXCLUDED.role,
+      department = EXCLUDED.department,
+      status = 'active';
   `);
 
   console.log('[PostgreSQL] Relational schema & views verified (14 tables + vw_sales_customer_accounts)');

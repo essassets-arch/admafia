@@ -88,6 +88,78 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+app.get('/api/auth/admin-departments', (req, res) => {
+  res.json({
+    ok: true,
+    departments: [
+      { id: 'superadmin', name: 'Super Admin Control Center', path: '/superadmin' },
+      { id: 'marketing', name: 'Marketing Department', path: '/marketing' },
+      { id: 'graphics', name: 'Graphics Department', path: '/graphics' },
+      { id: 'sales', name: 'Sales Department', path: '/sales' },
+    ],
+  });
+});
+
+app.post('/api/auth/admin-login', async (req, res) => {
+  try {
+    const { identifier, username, password } = req.body || {};
+    const q = String(identifier || username || '').trim().toLowerCase();
+    if (!q || !password) return res.status(400).json({ ok: false, error: 'Identifier and password are required.' });
+
+    const cleanPhone = q.replace(/\D/g, '').slice(-10);
+    const userCheck = await query(
+      `SELECT id, customer_id, full_name, email, username, phone, password_hash, role, COALESCE(department, '') as department, status
+       FROM system_users
+       WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR (length($2) = 10 AND phone = $2)
+       LIMIT 1`,
+      [q, cleanPhone]
+    );
+
+    if (userCheck.rowCount === 0) return res.status(404).json({ ok: false, error: 'No user found' });
+    const uRow = userCheck.rows[0];
+
+    if (uRow.password_hash !== password) return res.status(401).json({ ok: false, error: 'Incorrect password' });
+    if (uRow.status === 'suspended' || uRow.status === 'inactive') return res.status(403).json({ ok: false, error: 'Account suspended' });
+
+    let department = uRow.department;
+    let targetUrl = '/superadmin';
+    const role = uRow.role || '';
+    const rLower = role.toLowerCase();
+    const dLower = (department || '').toLowerCase();
+
+    if (dLower === 'marketing' || rLower.includes('marketing')) {
+      department = 'Marketing';
+      targetUrl = '/marketing';
+    } else if (dLower === 'graphics' || rLower.includes('graphic')) {
+      department = 'Graphics';
+      targetUrl = '/graphics';
+    } else if (dLower === 'sales' || rLower.includes('sales')) {
+      department = 'Sales';
+      targetUrl = '/sales';
+    } else {
+      department = 'Super Admin';
+      targetUrl = '/superadmin';
+    }
+
+    res.json({
+      ok: true,
+      token: `adm_token_${Date.now()}`,
+      targetUrl,
+      department,
+      user: {
+        id: uRow.id,
+        fullName: uRow.full_name,
+        username: uRow.username,
+        email: uRow.email,
+        role: uRow.role,
+        department,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 async function runSuperAdminE2ETests() {
   console.log('===============================================================');
   console.log('🧪 RUNNING SUPER ADMIN CONTROL CENTER END-TO-END TESTS');
@@ -527,6 +599,79 @@ async function runSuperAdminE2ETests() {
     });
     const resetUserData = await resetUserRes.json();
     assert(resetUserRes.status === 200 && resetUserData.ok === true, 'Super Admin successfully resets user password');
+
+    // -------------------------------------------------------------------------
+    // 10. Multi-Department Admin & Staff Authentication Gateway (/api/auth/admin-login)
+    // -------------------------------------------------------------------------
+    console.log('\n[10/10] Testing Multi-Department Admin & Staff Gateway API...');
+    const adminAuthUrl = `http://127.0.0.1:${port}/api/auth/admin-login`;
+    const deptsUrl = `http://127.0.0.1:${port}/api/auth/admin-departments`;
+
+    // A. Departments List
+    const deptsRes = await fetch(deptsUrl);
+    const deptsData = await deptsRes.json();
+    assert(deptsData.ok === true && Array.isArray(deptsData.departments), 'Department directory returns configured departments list');
+    assert(deptsData.departments.length >= 4, 'Gateway includes Super Admin, Marketing, Graphics & Sales departments');
+
+    // B. Super Admin Department Login
+    const saLoginRes = await fetch(adminAuthUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: 'superadmin', password: 'SuperAdmin@2026!' }),
+    });
+    const saLoginData = await saLoginRes.json();
+    assert(saLoginRes.status === 200 && saLoginData.ok === true, 'Super Admin logs in with verified credentials');
+    assert(saLoginData.targetUrl === '/superadmin', 'Super Admin dynamically routes to /superadmin panel');
+    assert(saLoginData.department === 'Super Admin', 'Super Admin department correctly identified');
+
+    // C. Marketing Department Login
+    const mktLoginRes = await fetch(adminAuthUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: 'marketing', password: 'Marketing@2026!' }),
+    });
+    const mktLoginData = await mktLoginRes.json();
+    assert(mktLoginRes.status === 200 && mktLoginData.ok === true, 'Marketing Manager logs in with verified credentials');
+    assert(mktLoginData.targetUrl === '/marketing', 'Marketing Manager dynamically routes to /marketing panel');
+    assert(mktLoginData.department === 'Marketing', 'Marketing department correctly identified');
+
+    // D. Graphics Department Login
+    const gfxLoginRes = await fetch(adminAuthUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: 'graphics', password: 'Graphics@2026!' }),
+    });
+    const gfxLoginData = await gfxLoginRes.json();
+    assert(gfxLoginRes.status === 200 && gfxLoginData.ok === true, 'Graphics Designer logs in with verified credentials');
+    assert(gfxLoginData.targetUrl === '/graphics', 'Graphics Designer dynamically routes to /graphics panel');
+    assert(gfxLoginData.department === 'Graphics', 'Graphics department correctly identified');
+
+    // E. Sales Department Login
+    const salesLoginRes = await fetch(adminAuthUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: 'sales', password: 'Sales@2026!' }),
+    });
+    const salesLoginData = await salesLoginRes.json();
+    assert(salesLoginRes.status === 200 && salesLoginData.ok === true, 'Sales Executive logs in with verified credentials');
+    assert(salesLoginData.targetUrl === '/sales', 'Sales Executive dynamically routes to /sales panel');
+    assert(salesLoginData.department === 'Sales', 'Sales department correctly identified');
+
+    // F. Security Rejection for Invalid Admin Password
+    const wrongAdminPwd = await fetch(adminAuthUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: 'superadmin', password: 'WrongAdminPassword123' }),
+    });
+    assert(wrongAdminPwd.status === 401, 'Invalid administrator password strictly rejected with HTTP 401 Unauthorized');
+
+    // G. Rejection for Unknown Administrator
+    const unknownAdmin = await fetch(adminAuthUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: 'unknown_admin_9999', password: 'AnyPassword' }),
+    });
+    assert(unknownAdmin.status === 404, 'Non-existent administrator account rejected with HTTP 404 Not Found');
 
     // Clean up test customer and user to keep database clean
     await query('DELETE FROM support_query_messages WHERE query_id = $1', [testQueryId]);

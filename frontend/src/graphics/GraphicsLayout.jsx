@@ -16,9 +16,14 @@ import GraphicsUploadPostDesk from './GraphicsUploadPostDesk';
 import GraphicsApprovedPostsDesk from './GraphicsApprovedPostsDesk';
 import GraphicsRejectedPostsDesk from './GraphicsRejectedPostsDesk';
 import graphicsApi from '../services/graphicsApi';
+import adminAuthApi from '../services/adminAuthApi';
 import './graphics.css';
 
 export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
+  const activeUser = adminAuthApi.getCurrentUser() || {
+    fullName: 'Lead Creative & Graphics Designer',
+    role: 'Senior Graphics Designer',
+  };
   // Resolve active desk from URL pathname or hash
   const resolveDeskFromUrl = () => {
     try {
@@ -320,8 +325,8 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
                 <Paintbrush size={16} />
               </div>
               <div className="graphics-user-meta">
-                <span className="graphics-user-title">Senior Graphics Designer</span>
-                <span className="graphics-user-dept">AdMafia Creative Production</span>
+                <span className="graphics-user-title">{activeUser.fullName || 'Creative Designer'}</span>
+                <span className="graphics-user-dept">{activeUser.role || 'Senior Graphics Designer'}</span>
               </div>
             </div>
           </div>

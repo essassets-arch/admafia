@@ -604,8 +604,8 @@ CREATE TABLE IF NOT EXISTS system_users (
     username            VARCHAR(80) NOT NULL UNIQUE,
     phone               VARCHAR(32),
     password_hash       TEXT NOT NULL,
-    role                VARCHAR(40) NOT NULL DEFAULT 'Super Admin'
-                        CHECK (role IN ('Super Admin', 'Operations Manager', 'Finance Auditor', 'Support Agent', 'Business Manager', 'Staff')),
+    role                VARCHAR(60) NOT NULL DEFAULT 'Super Admin',
+    department          VARCHAR(64) NOT NULL DEFAULT 'Super Admin',
     permissions         TEXT NOT NULL DEFAULT '["all"]',
     status              VARCHAR(24) NOT NULL DEFAULT 'active'
                         CHECK (status IN ('active', 'suspended', 'inactive')),
@@ -617,6 +617,7 @@ CREATE TABLE IF NOT EXISTS system_users (
 
 CREATE INDEX IF NOT EXISTS idx_system_users_email ON system_users(email);
 CREATE INDEX IF NOT EXISTS idx_system_users_role ON system_users(role, status);
+CREATE INDEX IF NOT EXISTS idx_system_users_dept ON system_users(department, status);
 
 -- 15B. Customer Support Query Conversation Thread Messages
 CREATE TABLE IF NOT EXISTS support_query_messages (

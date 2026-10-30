@@ -20,9 +20,14 @@ import CreatePostIdeasDesk from './CreatePostIdeasDesk';
 import VerifyPostsDesk from './VerifyPostsDesk';
 import CustomerMarketingControlDesk from './CustomerMarketingControlDesk';
 import marketingApi from '../services/marketingApi';
+import adminAuthApi from '../services/adminAuthApi';
 import './marketing.css';
 
 export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
+  const activeUser = adminAuthApi.getCurrentUser() || {
+    fullName: 'Senior Marketing Director',
+    role: 'Marketing Manager',
+  };
   // Resolve active desk from URL pathname or hash
   const resolveDeskFromUrl = () => {
     try {
@@ -265,6 +270,13 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
                 second: '2-digit',
                 hour12: true,
               })} IST
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(236,72,153,0.12)', border: '1px solid rgba(236,72,153,0.3)', padding: '5px 12px', borderRadius: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ec4899' }} />
+              <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#fbcfe8' }}>{activeUser.fullName}</div>
+                <div style={{ fontSize: 10, color: '#f472b6' }}>{activeUser.role}</div>
+              </div>
             </div>
           </div>
         </header>

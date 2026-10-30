@@ -2106,6 +2106,13 @@ superadminRouter.post('/users', async (req, res) => {
     const cleanUsername = username.trim().toLowerCase();
     const cleanPhone = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
     const finalPassword = password && password.trim() ? password.trim() : 'User@2026!';
+    const userDept = req.body.department || (
+      role.includes('Marketing') ? 'Marketing' :
+      (role.includes('Graphic') || role.includes('Creative')) ? 'Graphics' :
+      (role.includes('Sales') || role.includes('Telecaller')) ? 'Sales' :
+      (role.includes('Client') || role.includes('Staff')) ? 'Customer Portal' :
+      'Super Admin'
+    );
 
     // Check duplicate
     const dupCheck = await query(
@@ -2122,8 +2129,8 @@ superadminRouter.post('/users', async (req, res) => {
 
     await query(
       `INSERT INTO system_users (
-        id, customer_id, full_name, email, username, phone, password_hash, role, permissions, status, created_by, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())`,
+        id, customer_id, full_name, email, username, phone, password_hash, role, department, permissions, status, created_by, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())`,
       [
         userId,
         customerId || null,
@@ -2133,6 +2140,7 @@ superadminRouter.post('/users', async (req, res) => {
         cleanPhone || null,
         finalPassword,
         role,
+        userDept,
         permsJson,
         status,
         adminName,
@@ -2246,7 +2254,7 @@ superadminRouter.get('/users', async (req, res) => {
   try {
     const listRes = await query(
       `SELECT
-        u.id, u.customer_id, u.full_name, u.email, u.username, u.phone, u.role, u.permissions,
+        u.id, u.customer_id, u.full_name, u.email, u.username, u.phone, u.role, COALESCE(u.department, 'Super Admin') AS department, u.permissions,
         u.status, u.last_login_at, u.created_by, u.created_at,
         c.company_name AS business_name
        FROM system_users u

@@ -30,9 +30,14 @@ import SuperAdminAccountsDesk from './SuperAdminAccountsDesk';
 import SuperAdminAddUserDesk from './SuperAdminAddUserDesk';
 
 import superadminApi from '../services/superadminApi';
+import adminAuthApi from '../services/adminAuthApi';
 import './superadmin.css';
 
 export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
+  const activeUser = adminAuthApi.getCurrentUser() || {
+    fullName: 'AdMafia Executive Super Admin',
+    role: 'Super Admin',
+  };
   // Resolve active desk from URL pathname or hash
   const resolveDeskFromUrl = () => {
     try {
@@ -356,11 +361,13 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
             </button>
 
             {/* Super Admin User Profile Pill */}
-            <div className="sa-admin-pill">
-              <div className="sa-admin-avatar">SA</div>
+            <div className="sa-admin-pill" title={`Logged in as ${activeUser.fullName || 'Super Admin'} (${activeUser.email || activeUser.username || ''})`}>
+              <div className="sa-admin-avatar">
+                {(activeUser.fullName || 'SA').slice(0, 2).toUpperCase()}
+              </div>
               <div className="sa-admin-info">
-                <div className="sa-admin-name">Super Admin</div>
-                <div className="sa-admin-role">Platform Governor</div>
+                <div className="sa-admin-name">{activeUser.fullName || 'Super Admin'}</div>
+                <div className="sa-admin-role">{activeUser.role || 'Platform Governor'}</div>
               </div>
             </div>
           </div>

@@ -623,6 +623,244 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // =============================================================================
+// 2B. DEPARTMENT ADMIN & STAFF AUTHENTICATION (/api/auth/admin-login)
+// =============================================================================
+app.get('/api/auth/admin-departments', (req, res) => {
+  res.json({
+    ok: true,
+    departments: [
+      {
+        id: 'superadmin',
+        name: 'Super Admin Control Center',
+        icon: '👑',
+        path: '/superadmin',
+        roleBadge: 'Super Admin',
+        color: '#7c3aed',
+        defaultUser: {
+          username: 'superadmin',
+          email: 'admin@admafia.marketing',
+          password: 'SuperAdmin@2026!',
+          role: 'Super Admin',
+          title: 'Founders, Platform Owners & Finance Directors',
+        },
+        desks: [
+          'Dashboard',
+          'Check Queries',
+          'Manage Finance',
+          'Check Refunds',
+          'Account Top-Up',
+          'Account Block / Activate',
+          'Add User / Business',
+        ],
+      },
+      {
+        id: 'marketing',
+        name: 'Marketing Department',
+        icon: '✨',
+        path: '/marketing',
+        roleBadge: 'Marketing Manager',
+        color: '#ec4899',
+        defaultUser: {
+          username: 'marketing',
+          email: 'marketing@admafia.marketing',
+          password: 'Marketing@2026!',
+          role: 'Marketing Manager',
+          title: 'Marketing Managers, Planners & Media Buyers',
+        },
+        desks: [
+          'Marketing Overview',
+          'Customers Desk',
+          'Build Ideas Desk',
+          'Create Post Ideas',
+          'Verify Posts Desk',
+          'Customer Marketing Control',
+        ],
+      },
+      {
+        id: 'graphics',
+        name: 'Graphics Department',
+        icon: '🎨',
+        path: '/graphics',
+        roleBadge: 'Senior Graphics Designer',
+        color: '#06b6d4',
+        defaultUser: {
+          username: 'graphics',
+          email: 'graphics@admafia.marketing',
+          password: 'Graphics@2026!',
+          role: 'Senior Graphics Designer',
+          title: 'Graphic Designers & Creative Artists',
+        },
+        desks: [
+          'Post Requests Queue',
+          'Upload Post / Creative',
+          'Approved Posts',
+          'Rejected Posts / Revisions',
+        ],
+      },
+      {
+        id: 'sales',
+        name: 'Sales Department',
+        icon: '💼',
+        path: '/sales',
+        roleBadge: 'Sales Executive',
+        color: '#10b981',
+        defaultUser: {
+          username: 'sales',
+          email: 'sales@admafia.marketing',
+          password: 'Sales@2026!',
+          role: 'Sales Executive',
+          title: 'Sales Executives, Telecallers & Closers',
+        },
+        desks: [
+          'Sales Executive Dashboard',
+          'Customer Groups Desk',
+          'Lead Qualification & Follow-up Desks',
+        ],
+      },
+    ],
+  });
+});
+
+app.post('/api/auth/admin-login', async (req, res) => {
+  try {
+    const { identifier, username, password } = req.body || {};
+    const q = String(identifier || username || '').trim().toLowerCase();
+    if (!q) {
+      return res.status(400).json({ ok: false, error: 'Username, employee email, or mobile number is required.' });
+    }
+    if (!password) {
+      return res.status(400).json({ ok: false, error: 'Password is required.' });
+    }
+
+    const cleanPhone = q.replace(/\D/g, '').slice(-10);
+
+    const userCheck = await query(
+      `SELECT id, customer_id, full_name, email, username, phone, password_hash, role, COALESCE(department, '') as department, permissions, status
+       FROM system_users
+       WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR (length($2) = 10 AND phone = $2)
+       LIMIT 1`,
+      [q, cleanPhone]
+    );
+
+    if (userCheck.rowCount === 0) {
+      return res.status(404).json({
+        ok: false,
+        error: 'No administrator or department account found matching these credentials. Please check your username, email, or mobile number.',
+      });
+    }
+
+    const uRow = userCheck.rows[0];
+
+    if (uRow.password_hash !== password) {
+      return res.status(401).json({ ok: false, error: 'Incorrect password for this administrator account.' });
+    }
+
+    if (uRow.status === 'suspended' || uRow.status === 'inactive') {
+      return res.status(403).json({
+        ok: false,
+        error: 'Access Suspended: This department administrator account has been deactivated or suspended.',
+      });
+    }
+
+    await query(`UPDATE system_users SET last_login_at = NOW() WHERE id = $1`, [uRow.id]).catch(() => {});
+
+    // Determine target department and landing route
+    let department = uRow.department;
+    let targetUrl = '/superadmin';
+    const role = uRow.role || '';
+    const rLower = role.toLowerCase();
+    const dLower = (department || '').toLowerCase();
+
+    if (dLower === 'marketing' || rLower.includes('marketing') || rLower.includes('campaign')) {
+      department = 'Marketing';
+      targetUrl = '/marketing';
+    } else if (dLower === 'graphics' || rLower.includes('graphic') || rLower.includes('creative') || rLower.includes('designer')) {
+      department = 'Graphics';
+      targetUrl = '/graphics';
+    } else if (dLower === 'sales' || rLower.includes('sales') || rLower.includes('telecaller')) {
+      department = 'Sales';
+      targetUrl = '/sales';
+    } else if (rLower.includes('client') || rLower.includes('business') || rLower === 'staff') {
+      department = 'Customer Portal';
+      targetUrl = '/portal';
+    } else {
+      department = 'Super Admin';
+      targetUrl = '/superadmin';
+    }
+
+    let parsedPermissions = [];
+    try {
+      parsedPermissions = typeof uRow.permissions === 'string' ? JSON.parse(uRow.permissions) : (uRow.permissions || []);
+    } catch (e) {
+      parsedPermissions = [uRow.permissions];
+    }
+
+    const token = `adm_token_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+    res.json({
+      ok: true,
+      token,
+      targetUrl,
+      department,
+      user: {
+        id: uRow.id,
+        fullName: uRow.full_name,
+        username: uRow.username,
+        email: uRow.email,
+        phone: uRow.phone,
+        role: uRow.role,
+        department,
+        permissions: parsedPermissions,
+        customerId: uRow.customer_id,
+      },
+    });
+  } catch (err) {
+    console.error('[POST /api/auth/admin-login]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/auth/admin-session', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '').trim();
+    const userId = req.headers['x-admin-id'] || req.query.userId;
+
+    if (!userId && !token) {
+      return res.status(401).json({ ok: false, error: 'No active session token provided.' });
+    }
+
+    let userCheck;
+    if (userId) {
+      userCheck = await query(`SELECT id, full_name, email, username, phone, role, COALESCE(department, '') as department, permissions, status FROM system_users WHERE id = $1 LIMIT 1`, [userId]);
+    } else {
+      userCheck = await query(`SELECT id, full_name, email, username, phone, role, COALESCE(department, '') as department, permissions, status FROM system_users WHERE status = 'active' ORDER BY last_login_at DESC NULLS LAST LIMIT 1`);
+    }
+
+    if (userCheck.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Session user record not found.' });
+    }
+
+    const u = userCheck.rows[0];
+    res.json({
+      ok: true,
+      user: {
+        id: u.id,
+        fullName: u.full_name,
+        email: u.email,
+        username: u.username,
+        phone: u.phone,
+        role: u.role,
+        department: u.department || 'Super Admin',
+        status: u.status,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// =============================================================================
 // 3. CUSTOMERS & ISOLATED WORKSPACE DATA (/api/customers)
 // =============================================================================
 app.get('/api/customers', async (req, res) => {

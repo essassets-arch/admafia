@@ -41,6 +41,7 @@ import {
   CustomerGroupsDesk,
 } from './OperationalDesksViews';
 import crmApi from '../services/crmApi';
+import adminAuthApi from '../services/adminAuthApi';
 import './sales.css';
 
 // Storage keys for real-time sync with http://localhost:5173/#register
@@ -71,6 +72,10 @@ const loadStoredVerifications = () => {
 };
 
 export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) {
+  const activeUser = adminAuthApi.getCurrentUser() || {
+    fullName: 'Principal Sales & Accounts Executive',
+    role: 'Sales Executive',
+  };
   // Navigation & URL Management: Unified 1-Page Dashboard + 9 Authorized Operational Desks
   // 'overview' | 'customers' | 'pending_verification' | 'leads' | 'profiles' | 'payments' | 'wallets' | 'queries' | 'tasks' | 'groups'
   const getDeskFromUrl = () => {
@@ -496,10 +501,10 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         {/* Sidebar Footer */}
         <div className="sales-sidebar-footer">
           <div className="sales-rep-card">
-            <div className="sales-rep-avatar">VS</div>
+            <div className="sales-rep-avatar">{(activeUser.fullName || 'SE').slice(0, 2).toUpperCase()}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="sales-rep-name">Vikram Shah</div>
-              <div className="sales-rep-role">Operations Specialist</div>
+              <div className="sales-rep-name">{activeUser.fullName || 'Sales Executive'}</div>
+              <div className="sales-rep-role">{activeUser.role || 'Sales Operations'}</div>
             </div>
             <button
               type="button"

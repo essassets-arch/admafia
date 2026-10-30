@@ -9,6 +9,8 @@ import SalesExecutiveDashboard from './sales/SalesExecutiveDashboard';
 import MarketingLayout from './marketing/MarketingLayout';
 import GraphicsLayout from './graphics/GraphicsLayout';
 import SuperAdminLayout from './superadmin/SuperAdminLayout';
+import AdminLoginPage from './admin/AdminLoginPage';
+import adminAuthApi from './services/adminAuthApi';
 import { CustomerLoginPage, CustomerRegisterPage } from './portal/AuthPages';
 import crmApi from './services/crmApi';
 import './portal/portal.css';
@@ -157,31 +159,64 @@ export default function App() {
       return 'login';
     }
 
+    // 4. Dedicated Department & Admin Unified Authentication (/admin/login or /superadmin/login or #admin/login)
+    if (
+      p === '/admin/login' ||
+      p.startsWith('/admin/login') ||
+      p === '/superadmin/login' ||
+      p.startsWith('/superadmin/login') ||
+      h.includes('admin/login') ||
+      h.includes('superadmin/login') ||
+      p === '/staff/login' ||
+      h.includes('staff/login')
+    ) {
+      return 'admin-login';
+    }
+
     // 4A. Super Admin Operations Control Center (/superadmin or /admin)
     if (
       p.startsWith('/superadmin') ||
       h.startsWith('#superadmin') ||
       h.startsWith('#/superadmin') ||
-      p.startsWith('/admin') ||
+      p === '/admin' ||
+      p.startsWith('/admin/') ||
       h.startsWith('#admin') ||
       h.startsWith('#/admin')
     ) {
+      const adminUser = adminAuthApi.getCurrentUser();
+      if (!adminUser || !adminAuthApi.hasAccessTo('Super Admin')) {
+        return 'admin-login';
+      }
       return 'superadmin-portal';
     }
 
     // 4B. Sales Operations Desks (/sales)
     if (p.startsWith('/sales') || h.startsWith('#sales')) {
-      if (h.includes('login') || h === '#sales/login') return 'sales-login';
+      if (h.includes('login') || h === '#sales/login') {
+        return 'admin-login';
+      }
+      const adminUser = adminAuthApi.getCurrentUser();
+      if (!adminUser || !adminAuthApi.hasAccessTo('Sales')) {
+        return 'admin-login';
+      }
       return 'sales-portal';
     }
 
     // 4C. Marketing Department Operations Panel (/marketing)
     if (p.startsWith('/marketing') || h.startsWith('#marketing') || h.startsWith('#/marketing')) {
+      const adminUser = adminAuthApi.getCurrentUser();
+      if (!adminUser || !adminAuthApi.hasAccessTo('Marketing')) {
+        return 'admin-login';
+      }
       return 'marketing-portal';
     }
 
     // 4D. Graphics Department Creative Ops Panel (/graphics)
     if (p.startsWith('/graphics') || h.startsWith('#graphics') || h.startsWith('#/graphics')) {
+      const adminUser = adminAuthApi.getCurrentUser();
+      if (!adminUser || !adminAuthApi.hasAccessTo('Graphics')) {
+        return 'admin-login';
+      }
       return 'graphics-portal';
     }
 
@@ -303,18 +338,36 @@ export default function App() {
     }
   };
 
+  // View: Unified Department & Admin Login (/admin/login or /superadmin/login)
+  if (currentView === 'admin-login') {
+    return (
+      <AdminLoginPage
+        onLoginSuccess={(user, targetUrl) => {
+          const dest = targetUrl || '/superadmin';
+          try {
+            window.history.pushState({}, '', dest);
+          } catch (e) {}
+          setCurrentView(resolveView());
+        }}
+        onBackToWebsite={() => {
+          try { window.history.pushState({}, '', '/'); } catch (e) {}
+          window.location.hash = '';
+          setCurrentView('landing');
+          window.location.href = '/';
+        }}
+      />
+    );
+  }
+
   // View: Sales Executive Login (/sales#login)
   if (currentView === 'sales-login') {
     return (
-      <SalesLoginPage
-        onLoggedIn={(rep) => {
-          window.location.hash = '#dashboard';
-          setCurrentView('sales-portal');
-        }}
-        onSwitchToCustomerPortal={() => {
-          window.location.hash = '#login';
-          try { window.history.pushState({}, '', '/#login'); } catch(e) {}
-          setCurrentView('login');
+      <AdminLoginPage
+        requiredDept="sales"
+        targetUrl="/sales"
+        onLoginSuccess={(user, targetUrl) => {
+          try { window.history.pushState({}, '', targetUrl || '/sales'); } catch(e) {}
+          setCurrentView(resolveView());
         }}
         onBackToWebsite={() => {
           window.location.hash = '';
@@ -330,12 +383,14 @@ export default function App() {
     return (
       <SalesExecutiveDashboard
         onSignOut={() => {
-          window.location.hash = '#login';
-          setCurrentView('sales-login');
+          adminAuthApi.logout();
+          try { window.history.pushState({}, '', '/admin/login?dept=sales'); } catch (e) {}
+          window.location.hash = '';
+          setCurrentView('admin-login');
         }}
         onBackToWebsite={() => {
           window.location.hash = '';
-          try { window.history.pushState({}, '', '/'); } catch(e) {}
+          try { window.history.pushState({}, '', '/'); } catch (e) {}
           setCurrentView('landing');
         }}
       />
@@ -347,14 +402,10 @@ export default function App() {
     return (
       <MarketingLayout
         onSignOut={() => {
-          try {
-            localStorage.removeItem('growthline_active_user');
-            sessionStorage.clear();
-          } catch (e) {}
+          adminAuthApi.logout();
+          try { window.history.pushState({}, '', '/admin/login?dept=marketing'); } catch (e) {}
           window.location.hash = '';
-          try { window.history.pushState({}, '', '/'); } catch (e) {}
-          setCurrentView('landing');
-          window.location.href = '/';
+          setCurrentView('admin-login');
         }}
         onBackToWebsite={() => {
           try { window.history.pushState({}, '', '/'); } catch (e) {}
@@ -371,14 +422,10 @@ export default function App() {
     return (
       <GraphicsLayout
         onSignOut={() => {
-          try {
-            localStorage.removeItem('growthline_active_user');
-            sessionStorage.clear();
-          } catch (e) {}
+          adminAuthApi.logout();
+          try { window.history.pushState({}, '', '/admin/login?dept=graphics'); } catch (e) {}
           window.location.hash = '';
-          try { window.history.pushState({}, '', '/'); } catch (e) {}
-          setCurrentView('landing');
-          window.location.href = '/';
+          setCurrentView('admin-login');
         }}
         onBackToWebsite={() => {
           try { window.history.pushState({}, '', '/'); } catch (e) {}
@@ -395,14 +442,10 @@ export default function App() {
     return (
       <SuperAdminLayout
         onSignOut={() => {
-          try {
-            localStorage.removeItem('growthline_active_user');
-            sessionStorage.clear();
-          } catch (e) {}
+          adminAuthApi.logout();
+          try { window.history.pushState({}, '', '/admin/login?dept=superadmin'); } catch (e) {}
           window.location.hash = '';
-          try { window.history.pushState({}, '', '/'); } catch (e) {}
-          setCurrentView('landing');
-          window.location.href = '/';
+          setCurrentView('admin-login');
         }}
         onBackToWebsite={() => {
           try { window.history.pushState({}, '', '/'); } catch (e) {}
