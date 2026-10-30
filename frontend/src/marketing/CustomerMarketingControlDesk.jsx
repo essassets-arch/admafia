@@ -33,6 +33,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [approvedPosts, setApprovedPosts] = useState([]);
   const [loadingApprovedPosts, setLoadingApprovedPosts] = useState(false);
+  const [submitMode, setSubmitMode] = useState('start'); // 'start' or 'draft'
 
   // New Campaign Form Fields
   const [campaignName, setCampaignName] = useState('');
@@ -140,6 +141,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
       return;
     }
 
+    const shouldStart = submitMode === 'start';
     setCreating(true);
     try {
       const res = await marketingApi.createCampaign({
@@ -150,17 +152,28 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
         platform,
         targetAudience,
         startDate,
-        endDate: endDate || null,
+        endDate: null,
         dailyBudget: Number(dailyBudget),
         actor: 'Marketing Campaign Manager',
+        status: shouldStart ? 'Running' : 'Draft',
       });
 
       if (res && res.ok) {
+        if (shouldStart && res.campaignId) {
+          try {
+            await marketingApi.startCampaign(res.campaignId, 'Marketing Campaign Manager');
+          } catch (startErr) {
+            console.warn('[Start Campaign Warning]', startErr);
+          }
+        }
+
         setIsCreateModalOpen(false);
         await Swal.fire({
           icon: 'success',
-          title: 'Campaign Created!',
-          text: res.message || 'Campaign successfully configured and ready for activation.',
+          title: shouldStart ? 'Marketing Started Live! 🚀' : 'Campaign Saved as Draft',
+          text: shouldStart
+            ? `Campaign "${campaignName}" is now active in Running status.`
+            : `Campaign "${campaignName}" saved. Click "Start Marketing" whenever ready to launch.`,
           confirmButtonColor: '#4f46e5',
         });
         fetchData(true);
@@ -174,6 +187,37 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     } finally {
       setCreating(false);
     }
+  };
+
+  // View Customer Campaign History Modal
+  const handleViewCampaignHistory = (cust, custCampaigns) => {
+    const listHtml = custCampaigns.map((camp, idx) => `
+      <div style="text-align: left; padding: 12px; margin-bottom: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <strong style="color: #0f172a; font-size: 0.92rem;">${idx + 1}. ${camp.name}</strong>
+          <span style="font-size: 0.74rem; font-weight: 800; padding: 2px 8px; border-radius: 9999px; background: ${camp.status === 'Running' ? '#ecfdf5' : '#f1f5f9'}; color: ${camp.status === 'Running' ? '#059669' : '#64748b'};">
+            ${camp.status}
+          </span>
+        </div>
+        <div style="font-size: 0.82rem; color: #475569; margin-top: 4px;">
+          Budget: <strong>₹${camp.dailyBudget}/day</strong> • Platform: <strong>${camp.platform}</strong>
+        </div>
+        <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">
+          Last action: ${camp.lastAction || 'Created'} by ${camp.lastActor || 'Operator'}
+        </div>
+      </div>
+    `).join('');
+
+    Swal.fire({
+      title: `Campaign History: ${cust.name}`,
+      html: `
+        <div style="max-height: 380px; overflow-y: auto; padding-right: 4px;">
+          ${listHtml || '<p style="color:#64748b">No campaign history recorded yet.</p>'}
+        </div>
+      `,
+      confirmButtonText: 'Close',
+      confirmButtonColor: '#4f46e5',
+    });
   };
 
   // Start Marketing Campaign
@@ -435,36 +479,68 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
 
                       {/* Actions */}
                       <td>
-                        <div className="mkt-actions-flex">
+                        <div className="mkt-actions-flex" style={{ gap: '8px', flexWrap: 'wrap' }}>
+                          {/* 1. Primary Start / Stop Button */}
                           {activeCampaign && activeCampaign.status === 'Running' ? (
                             <button
                               type="button"
                               className="mkt-btn-table-action danger"
                               onClick={() => handleStopMarketing(activeCampaign)}
-                              title="Stop Running Campaign"
+                              title="Stop Running Campaign (Halts daily ad pacing)"
+                              style={{ fontWeight: 800, padding: '7px 14px', background: '#ffe4e6', color: '#be123c', borderColor: '#f43f5e' }}
                             >
-                              <Square size={13} />
-                              <span>Stop</span>
+                              <Square size={13} fill="currentColor" />
+                              <span>Stop Marketing</span>
                             </button>
-                          ) : activeCampaign && activeCampaign.status !== 'Running' ? (
+                          ) : activeCampaign ? (
                             <button
                               type="button"
                               className="mkt-btn-table-action success"
                               onClick={() => handleStartMarketing(activeCampaign)}
-                              title="Start Campaign"
+                              title="Start / Resume Marketing Campaign"
+                              style={{ fontWeight: 800, padding: '7px 14px', background: '#d1fae5', color: '#047857', borderColor: '#10b981' }}
                             >
-                              <Play size={13} />
-                              <span>Start</span>
+                              <Play size={13} fill="currentColor" />
+                              <span>Start Marketing</span>
                             </button>
                           ) : (
                             <button
                               type="button"
                               className="mkt-btn-table-action primary"
                               onClick={() => handleOpenCreateCampaign(c)}
-                              title="Create Marketing Campaign"
+                              title="Start Marketing Campaign for this Customer"
+                              style={{ fontWeight: 800, padding: '7px 14px' }}
                             >
-                              <Plus size={13} />
-                              <span>Configure</span>
+                              <Rocket size={13} />
+                              <span>Start Marketing</span>
+                            </button>
+                          )}
+
+                          {/* 2. Secondary New Campaign Button */}
+                          {activeCampaign && (
+                            <button
+                              type="button"
+                              className="mkt-btn-table-action"
+                              onClick={() => handleOpenCreateCampaign(c)}
+                              title="Configure New Campaign"
+                              style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                            >
+                              <Plus size={12} />
+                              <span>New</span>
+                            </button>
+                          )}
+
+                          {/* 3. Customer Campaign History */}
+                          {custCampaigns.length > 0 && (
+                            <button
+                              type="button"
+                              className="mkt-btn-table-action"
+                              onClick={() => handleViewCampaignHistory(c, custCampaigns)}
+                              title="View Customer Campaign History"
+                              style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                            >
+                              <History size={12} />
+                              <span>History ({custCampaigns.length})</span>
                             </button>
                           )}
                         </div>
@@ -632,7 +708,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 </div>
               </div>
 
-              <div className="marketing-modal-footer">
+              <div className="marketing-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '12px' }}>
                 <button
                   type="button"
                   className="mkt-btn-table-action"
@@ -640,14 +716,28 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="marketing-btn-primary"
-                  disabled={creating || approvedPosts.length === 0}
-                >
-                  <Rocket size={14} />
-                  <span>{creating ? 'Configuring...' : 'Create Campaign'}</span>
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="submit"
+                    className="mkt-btn-table-action"
+                    disabled={creating || approvedPosts.length === 0}
+                    onClick={() => setSubmitMode('draft')}
+                    title="Save Campaign as Draft (Do not start yet)"
+                  >
+                    <span>Save Draft</span>
+                  </button>
+                  <button
+                    type="submit"
+                    className="marketing-btn-primary"
+                    disabled={creating || approvedPosts.length === 0}
+                    onClick={() => setSubmitMode('start')}
+                    style={{ background: '#059669', borderColor: '#047857', fontWeight: 800 }}
+                    title="Deploy and Start Marketing Campaign Immediately"
+                  >
+                    <Play size={14} fill="currentColor" />
+                    <span>{creating && submitMode === 'start' ? 'Starting...' : 'Start Marketing Now 🚀'}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
