@@ -620,26 +620,15 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="mkt-form-group">
-                    <label className="mkt-form-label">Campaign Start Date</label>
-                    <input
-                      type="datetime-local"
-                      className="mkt-form-input"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="mkt-form-group">
-                    <label className="mkt-form-label">Campaign End Date (Optional)</label>
-                    <input
-                      type="datetime-local"
-                      className="mkt-form-input"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
+                <div className="mkt-form-group">
+                  <label className="mkt-form-label">Campaign Start Date</label>
+                  <input
+                    type="datetime-local"
+                    className="mkt-form-input"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    required
+                  />
                 </div>
               </div>
 
