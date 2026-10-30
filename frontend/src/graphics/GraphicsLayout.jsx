@@ -111,21 +111,21 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
     {
       id: 'post_requests',
       label: 'Post Requests',
-      sublabel: 'View all submitted briefs',
+      path: '/graphics/post-requests',
       icon: Inbox,
       badge: summary?.pendingUploads || null,
     },
     {
       id: 'upload_post',
       label: 'Upload Post',
-      sublabel: 'Upload finished artwork',
+      path: '/graphics/upload-post',
       icon: UploadCloud,
       badge: null,
     },
     {
       id: 'approved_posts',
       label: 'Approved Posts',
-      sublabel: 'Campaign-ready creatives',
+      path: '/graphics/approved-posts',
       icon: CheckCircle2,
       badge: summary?.approvedCount || null,
       color: '#10b981',
@@ -133,7 +133,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
     {
       id: 'rejected_posts',
       label: 'Rejected Posts',
-      sublabel: 'Revision & feedback queue',
+      path: '/graphics/rejected-posts',
       icon: AlertTriangle,
       badge: summary?.rejectedCount || null,
       urgent: (summary?.rejectedCount || 0) > 0,
@@ -179,18 +179,18 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
             const Icon = item.icon;
             const isActive = activeDesk === item.id;
             return (
-              <button
-                type="button"
+              <a
                 key={item.id}
+                href={item.path}
                 className={`graphics-nav-item ${isActive ? 'active' : ''}`}
-                onClick={() => navigateToDesk(item.id)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateToDesk(item.id);
+                }}
               >
                 <div className="graphics-nav-label-box">
                   <Icon size={18} className="graphics-nav-icon" />
-                  <div className="graphics-nav-text-col">
-                    <span className="graphics-nav-title">{item.label}</span>
-                    <span className="graphics-nav-desc">{item.sublabel}</span>
-                  </div>
+                  <span className="graphics-nav-title">{item.label}</span>
                 </div>
                 {item.badge !== null && item.badge !== undefined && (
                   <span
@@ -199,7 +199,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
                     {item.badge}
                   </span>
                 )}
-              </button>
+              </a>
             );
           })}
         </nav>
