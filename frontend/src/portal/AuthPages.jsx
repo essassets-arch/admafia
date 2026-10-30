@@ -450,24 +450,6 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
               </button>
             </form>
 
-            {/* Trust Badges Row */}
-            <div className="auth-trust-row">
-              <div className="trust-pill">
-                <ShieldCheck size={15} color="#10b981" />
-                <span>Secure Workspace</span>
-              </div>
-              <div className="trust-dot">•</div>
-              <div className="trust-pill">
-                <Sparkles size={15} color="#4f46e5" />
-                <span>Instant Setup</span>
-              </div>
-              <div className="trust-dot">•</div>
-              <div className="trust-pill">
-                <CheckCircle2 size={15} color="#059669" />
-                <span>Verified Buyer Leads</span>
-              </div>
-            </div>
-
             <div className="auth-switch-link">
               Already registered?{' '}
               <button type="button" onClick={onSwitchToLogin} className="link-button-bold">
