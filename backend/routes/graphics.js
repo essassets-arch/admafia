@@ -423,20 +423,28 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Corrected artwork image is required.' });
     }
 
-    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE`, [postId]);
-    if (postRes.rowCount === 0) {
-      return res.status(404).json({ ok: false, error: 'Post request not found.' });
-    }
-    const post = postRes.rows[0];
-
-    const nextRev = Number(post.revision_number || 1) + 1;
-    const revId = `rev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const fullNotes = revisionSummary
-      ? `${designerNotes ? designerNotes + ' | ' : ''}Correction: ${revisionSummary}`
-      : designerNotes;
+    let resultPayload;
 
     await withTransaction(async (txQuery) => {
-      // 1. Insert new immutable revision record
+      // 1. Atomic row-level lock on the post record in PostgreSQL
+      const postRes = await txQuery(
+        `SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE FOR UPDATE`,
+        [postId]
+      );
+      if (postRes.rowCount === 0) {
+        const err = new Error('Post request not found or archived.');
+        err.statusCode = 404;
+        throw err;
+      }
+      const post = postRes.rows[0];
+
+      const nextRev = Number(post.revision_number || 1) + 1;
+      const revId = `rev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const fullNotes = revisionSummary
+        ? `${designerNotes ? designerNotes + ' | ' : ''}Correction: ${revisionSummary}`
+        : designerNotes;
+
+      // 2. Insert new immutable revision record
       await txQuery(`
         INSERT INTO marketing_post_revisions (
           id, post_id, revision_number, media_url, media_type, creative_format,
@@ -444,7 +452,7 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), 'Pending Verification')
       `, [revId, postId, nextRev, mediaUrl.trim(), mediaType, creativeFormat, fullNotes, designerName]);
 
-      // 2. Update post record to next revision number and transition back to 'Pending Verification'
+      // 3. Update post record to next revision number and transition back to 'Pending Verification'
       await txQuery(`
         UPDATE marketing_posts SET
           media_url = $1,
@@ -459,25 +467,34 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
           updated_at = NOW()
         WHERE id = $7
       `, [mediaUrl.trim(), mediaType, creativeFormat, fullNotes, designerName, nextRev, postId]);
+
+      resultPayload = {
+        customerId: post.customer_id,
+        nextRev,
+        mediaUrl: mediaUrl.trim(),
+        revisionSummary,
+      };
     });
 
-    await logAuditEvent(post.customer_id, 'graphics_reupload', postId, `Reuploaded Corrected Artwork (Rev #${nextRev})`, designerName, {
+    await logAuditEvent(resultPayload.customerId, 'graphics_reupload', postId, `Reuploaded Corrected Artwork (Rev #${resultPayload.nextRev})`, designerName, {
       postId,
-      previousRevision: post.revision_number,
-      newRevision: nextRev,
+      newRevision: resultPayload.nextRev,
       mediaUrl,
       revisionSummary,
     });
 
     res.json({
       ok: true,
-      message: `Corrected creative (Revision #${nextRev}) resubmitted to Marketing for verification!`,
+      message: `Corrected creative (Revision #${resultPayload.nextRev}) resubmitted to Marketing for verification!`,
       postId,
-      revisionNumber: nextRev,
+      revisionNumber: resultPayload.nextRev,
       status: 'Pending Verification',
-      mediaUrl: mediaUrl.trim(),
+      mediaUrl: resultPayload.mediaUrl,
     });
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ ok: false, error: err.message });
+    }
     console.error('[POST /api/graphics/requests/:id/reupload]', err);
     res.status(500).json({ ok: false, error: err.message });
   }

@@ -1054,32 +1054,41 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
       });
     }
 
-    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [postId]);
-    if (postRes.rowCount === 0) {
-      return res.status(404).json({ ok: false, error: 'Post not found.' });
-    }
-    const post = postRes.rows[0];
-    const currentRev = Number(post.revision_number || 1);
-
-    // Concurrency / Stale Revision Guard: Ensure the reviewer is reviewing the exact latest revision
-    if (expectedRevisionNumber !== undefined && expectedRevisionNumber !== null && Number(expectedRevisionNumber) !== currentRev) {
-      return res.status(409).json({
-        ok: false,
-        error: `Concurrent Review Conflict: You are reviewing Revision #${expectedRevisionNumber}, but the artwork has already been updated to Revision #${currentRev}. Please refresh and audit the latest uploaded creative.`,
-        currentRevision: currentRev,
-        expectedRevision: Number(expectedRevisionNumber),
-      });
-    }
-
-    // Separation of Duties check: Creator cannot approve their own post if required
-    if (decision === 'Approved' && post.submitted_by && post.submitted_by.toLowerCase() === reviewerName.toLowerCase() && reviewerName.toLowerCase() !== 'admin') {
-      // Allowed for small teams, but warning logged
-    }
-
-    const reviewId = `rev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    let reviewResult;
 
     await withTransaction(async (txQuery) => {
-      // 1. Insert Review record with explicit revision_number
+      // 1. Atomic row-level lock on the post record in PostgreSQL (prevents concurrent race conditions)
+      const postRes = await txQuery(
+        `SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE FOR UPDATE`,
+        [postId]
+      );
+      if (postRes.rowCount === 0) {
+        const err = new Error('Post not found or already archived.');
+        err.statusCode = 404;
+        throw err;
+      }
+      const post = postRes.rows[0];
+      const currentRev = Number(post.revision_number || 1);
+
+      // Concurrency / Stale Revision Guard: Ensure the reviewer is reviewing the exact latest revision
+      if (expectedRevisionNumber !== undefined && expectedRevisionNumber !== null && Number(expectedRevisionNumber) !== currentRev) {
+        const err = new Error(
+          `Concurrent Review Conflict: You are reviewing Revision #${expectedRevisionNumber}, but the artwork has already been updated to Revision #${currentRev}. Please refresh and audit the latest uploaded creative.`
+        );
+        err.statusCode = 409;
+        err.currentRevision = currentRev;
+        err.expectedRevision = Number(expectedRevisionNumber);
+        throw err;
+      }
+
+      // Separation of Duties check: Creator cannot approve their own post if required
+      if (decision === 'Approved' && post.submitted_by && post.submitted_by.toLowerCase() === reviewerName.toLowerCase() && reviewerName.toLowerCase() !== 'admin') {
+        // Allowed for small teams, but logged in audit
+      }
+
+      const reviewId = `rev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+      // 2. Insert Review record with explicit revision_number
       await txQuery(
         `INSERT INTO marketing_post_reviews (
           id, post_id, revision_number, reviewer_name, reviewer_role, decision, remarks,
@@ -1098,7 +1107,7 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
         ]
       );
 
-      // 2. Synchronize the specific revision record in marketing_post_revisions
+      // 3. Synchronize the specific revision record in marketing_post_revisions
       await txQuery(
         `UPDATE marketing_post_revisions SET
           review_status = $1,
@@ -1119,16 +1128,25 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
         ]
       );
 
-      // 3. Update post status
+      // 4. Update post status
       await txQuery(
         `UPDATE marketing_posts SET status = $1, updated_at = NOW() WHERE id = $2`,
         [decision, postId]
       );
+
+      reviewResult = {
+        decision,
+        reviewId,
+        postId,
+        revisionNumber: currentRev,
+        customerId: post.customer_id,
+        title: post.title,
+      };
     });
 
-    await logAuditEvent(post.customer_id, 'review', reviewId, `Decision: ${decision} (Rev #${currentRev})`, reviewerName, {
+    await logAuditEvent(reviewResult.customerId, 'review', reviewResult.reviewId, `Decision: ${decision} (Rev #${reviewResult.revisionNumber})`, reviewerName, {
       postId,
-      revisionNumber: currentRev,
+      revisionNumber: reviewResult.revisionNumber,
       decision,
       remarks,
       rejectionReason,
@@ -1138,12 +1156,20 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
     res.json({
       ok: true,
       message: `Post ${decision === 'Approved' ? 'successfully approved for campaign usage' : decision === 'Rejected' ? 'rejected' : 'returned with change request'}.`,
-      decision,
-      reviewId,
-      postId,
-      revisionNumber: currentRev,
+      decision: reviewResult.decision,
+      reviewId: reviewResult.reviewId,
+      postId: reviewResult.postId,
+      revisionNumber: reviewResult.revisionNumber,
     });
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        ok: false,
+        error: err.message,
+        currentRevision: err.currentRevision,
+        expectedRevision: err.expectedRevision,
+      });
+    }
     console.error('[POST /api/marketing/posts/:id/review]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -1188,9 +1214,16 @@ marketingRouter.post('/media/upload', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Media payload (base64Data) is required.' });
     }
 
-    // Allowed mime types & extensions
-    const allowedMime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'];
-    if (!allowedMime.includes(contentType)) {
+    // Strict MIME-to-Extension allowlist pairing
+    const MIME_MAP = {
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png': ['.png'],
+      'image/webp': ['.webp'],
+      'image/gif': ['.gif'],
+      'video/mp4': ['.mp4'],
+    };
+
+    if (!MIME_MAP[contentType]) {
       return res.status(400).json({
         ok: false,
         error: `Unsupported media format (${contentType}). Allowed formats: JPG, PNG, WEBP, GIF, MP4.`,
@@ -1206,22 +1239,39 @@ marketingRouter.post('/media/upload', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'File size exceeds maximum 15MB limit.' });
     }
 
-    // Deep Content / Magic Bytes Inspection: Disallow executable, script, or polyglot payloads
-    const isExecutableOrScript =
-      (buffer.length >= 2 && buffer[0] === 0x4D && buffer[1] === 0x5A) || // PE / Windows EXE / DLL ('MZ')
-      (buffer.length >= 4 && buffer[0] === 0x7F && buffer[1] === 0x45 && buffer[2] === 0x4C && buffer[3] === 0x46) || // Linux ELF
-      (buffer.length >= 2 && buffer[0] === 0x23 && buffer[1] === 0x21) || // Shell script ('#!')
-      (buffer.length >= 8 && buffer.slice(0, 200).toString('utf8').toLowerCase().includes('<script')); // Embedded HTML/SVG script
-    if (isExecutableOrScript) {
+    // Strict Extension Validation: Enforce that the provided filename's extension matches the declared MIME
+    const allowedExtensions = MIME_MAP[contentType];
+    const extMatch = String(filename || '').match(/\.([a-zA-Z0-9]+)$/);
+    const userExt = extMatch ? `.${extMatch[1].toLowerCase()}` : allowedExtensions[0];
+    if (!allowedExtensions.includes(userExt)) {
       return res.status(400).json({
         ok: false,
-        error: 'Security Violation: Executable binary or script content detected in media payload.',
+        error: `Extension Mismatch: Extension "${userExt}" is not permitted for MIME type "${contentType}".`,
       });
     }
 
-    const extMatch = filename.match(/\.([a-zA-Z0-9]+)$/);
-    const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '.jpg';
-    const safeName = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}${ext}`;
+    // Deep Content / Magic Bytes Inspection:
+    // Block Windows PE ('MZ'), Linux ELF, Shell script ('#!'), and web payloads (<script, <?php, <svg, <html)
+    const headerSample = buffer.slice(0, 300).toString('utf8').toLowerCase();
+    const isMaliciousCode =
+      (buffer.length >= 2 && buffer[0] === 0x4D && buffer[1] === 0x5A) || // PE / Windows EXE / DLL ('MZ')
+      (buffer.length >= 4 && buffer[0] === 0x7F && buffer[1] === 0x45 && buffer[2] === 0x4C && buffer[3] === 0x46) || // Linux ELF
+      (buffer.length >= 2 && buffer[0] === 0x23 && buffer[1] === 0x21) || // Shell script ('#!')
+      headerSample.includes('<script') ||
+      headerSample.includes('<?php') ||
+      headerSample.includes('<svg') ||
+      headerSample.includes('<html') ||
+      headerSample.includes('onerror=') ||
+      headerSample.includes('onload=');
+
+    if (isMaliciousCode) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Security Violation: Executable binary or script code detected in media payload.',
+      });
+    }
+
+    const safeName = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}${userExt}`;
     const filePath = path.join(uploadDir, safeName);
 
     fs.writeFileSync(filePath, buffer);
@@ -1370,161 +1420,183 @@ marketingRouter.post('/campaigns', async (req, res) => {
       }
     }
 
-    // Verify Post exists, belongs to THIS customer, AND has status = 'Approved'
-    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [effectivePostId]);
-    if (postRes.rowCount === 0 || postRes.rows[0].is_deleted) {
-      return res.status(404).json({ ok: false, error: 'Selected creative post not found or archived.' });
-    }
-    const post = postRes.rows[0];
+    let campaignResult;
 
-    if (post.customer_id !== customerId) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Cross-Customer Security Violation: The selected creative post does not belong to this customer.',
-      });
-    }
-
-    if (post.status !== 'Approved') {
-      return res.status(400).json({
-        ok: false,
-        error: `Only verified and Approved posts can be deployed into marketing campaigns. Current post status: ${post.status}`,
-      });
-    }
-
-    if (!post.media_url || !post.media_url.trim()) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Cannot deploy campaign: The selected post does not have uploaded creative artwork.',
-      });
-    }
-
-    // Revision-level verification: Ensure the latest revision is Approved
-    const latestRevRes = await query(
-      `SELECT revision_number, review_status FROM marketing_post_revisions WHERE post_id = $1 ORDER BY revision_number DESC LIMIT 1`,
-      [effectivePostId]
-    );
-    if (latestRevRes.rowCount > 0 && latestRevRes.rows[0].review_status !== 'Approved') {
-      return res.status(400).json({
-        ok: false,
-        error: `Campaign Creative Ineligible: The latest revision (Rev #${latestRevRes.rows[0].revision_number}) is in '${latestRevRes.rows[0].review_status}' status. Only posts whose latest revision is Approved can be deployed.`,
-      });
-    }
-
-    // 3. Verify Customer Wallet Balance from authoritative wallets table
-    const walRes = await query(`SELECT available_balance FROM wallets WHERE customer_id = $1`, [customerId]);
-    const balance = Number(walRes.rows[0]?.available_balance || 0);
-
-    if (balance < Number(dailyBudget)) {
-      return res.status(400).json({
-        ok: false,
-        error: `Insufficient Wallet Balance: Customer available balance (₹${balance.toLocaleString('en-IN')}) is less than campaign daily budget requirement (₹${Number(dailyBudget).toLocaleString('en-IN')}). Please top up wallet first.`,
-      });
-    }
-
-    // 4. External integration check: Meta Ads integration status
-    // If no real META_ACCESS_TOKEN is configured in environment, record explicitly as 'Not Connected'
-    const hasMetaToken = Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
-    const externalStatus = hasMetaToken ? 'Pending Authorization' : 'Not Connected';
-
-    const campaignId = `camp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const finalStart = startDate ? new Date(startDate) : new Date();
-
-    await query(
-      `INSERT INTO marketing_campaigns (
-        id, customer_id, name, objective, post_id, platform,
-        target_audience, start_date, end_date, daily_budget, total_budget,
-        schedule_settings, status, external_platform_status, created_by,
-        last_action, last_actor, last_action_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Created', $15, NOW())`,
-      [
-        campaignId,
-        customerId,
-        name.trim(),
-        objective || 'Lead Generation',
-        effectivePostId,
-        platform,
-        targetAudience,
-        finalStart,
-        endDate ? new Date(endDate) : null,
-        Number(dailyBudget),
-        Number(totalBudget || 0),
-        JSON.stringify(scheduleSettings),
-        status,
-        externalStatus,
-        actor,
-      ]
-    );
-
-    await logAuditEvent(customerId, 'campaign', campaignId, 'Created Marketing Campaign', actor, {
-      name,
-      postId: effectivePostId,
-      dailyBudget,
-      externalStatus,
-    });
-
-    let newBalanceAfterStart = balance;
-    if (status === 'Running') {
-      const walRow = walRes.rows[0];
-      const isAlreadyDeductedToday = walRow?.last_deducted_at &&
-        new Date(walRow.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-        new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-
-      if (!isAlreadyDeductedToday) {
-        const spendAmt = Number(dailyBudget);
-        newBalanceAfterStart = balance - spendAmt;
-        await query(
-          `UPDATE wallets SET
-            available_balance = $1,
-            total_ad_spent = total_ad_spent + $2,
-            ad_campaign_active = TRUE,
-            last_deducted_at = NOW(),
-            updated_at = NOW()
-          WHERE customer_id = $3`,
-          [newBalanceAfterStart, spendAmt, customerId]
-        );
-
-        const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
-        await query(
-          `INSERT INTO wallet_transactions (
-            id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-          ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
-          [
-            txId,
-            customerId,
-            walRow.id,
-            spendAmt,
-            newBalanceAfterStart,
-            refUtr,
-            `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${spendAmt}/day)`,
-          ]
-        );
-      } else {
-        await query(
-          `UPDATE wallets SET ad_campaign_active = TRUE, updated_at = NOW() WHERE customer_id = $1`,
-          [customerId]
-        );
+    await withTransaction(async (txQuery) => {
+      // 1. Exclusive row-level lock on the post in PostgreSQL (prevents race condition with concurrent reuploads)
+      const postRes = await txQuery(
+        `SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE FOR UPDATE`,
+        [effectivePostId]
+      );
+      if (postRes.rowCount === 0) {
+        const err = new Error('Selected creative post not found or archived.');
+        err.statusCode = 404;
+        throw err;
       }
-    }
+      const post = postRes.rows[0];
 
-    res.status(201).json({
-      ok: true,
-      campaignId,
-      campaign: {
-        id: campaignId,
+      if (post.customer_id !== customerId) {
+        const err = new Error('Cross-Customer Security Violation: The selected creative post does not belong to this customer.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (post.status !== 'Approved') {
+        const err = new Error(`Only verified and Approved posts can be deployed into marketing campaigns. Current post status: ${post.status}`);
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (!post.media_url || !post.media_url.trim()) {
+        const err = new Error('Cannot deploy campaign: The selected post does not have uploaded creative artwork.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // 2. Revision-level verification inside transaction lock
+      const latestRevRes = await txQuery(
+        `SELECT revision_number, review_status FROM marketing_post_revisions WHERE post_id = $1 ORDER BY revision_number DESC LIMIT 1`,
+        [effectivePostId]
+      );
+      if (latestRevRes.rowCount > 0 && latestRevRes.rows[0].review_status !== 'Approved') {
+        const err = new Error(
+          `Campaign Creative Ineligible: The latest revision (Rev #${latestRevRes.rows[0].revision_number}) is in '${latestRevRes.rows[0].review_status}' status. Only posts whose latest revision is Approved can be deployed.`
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // 3. Verify Customer Wallet Balance from authoritative wallets table with row lock
+      const walRes = await txQuery(`SELECT * FROM wallets WHERE customer_id = $1 FOR UPDATE`, [customerId]);
+      const walRow = walRes.rows[0];
+      const balance = Number(walRow?.available_balance || 0);
+
+      if (balance < Number(dailyBudget)) {
+        const err = new Error(
+          `Insufficient Wallet Balance: Customer available balance (₹${balance.toLocaleString('en-IN')}) is less than campaign daily budget requirement (₹${Number(dailyBudget).toLocaleString('en-IN')}). Please top up wallet first.`
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // 4. External integration check: Meta Ads integration status
+      const hasMetaToken = Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
+      const externalStatus = hasMetaToken ? 'Pending Authorization' : 'Not Connected';
+
+      const campaignId = `camp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const finalStart = startDate ? new Date(startDate) : new Date();
+
+      await txQuery(
+        `INSERT INTO marketing_campaigns (
+          id, customer_id, name, objective, post_id, platform,
+          target_audience, start_date, end_date, daily_budget, total_budget,
+          schedule_settings, status, external_platform_status, created_by,
+          last_action, last_actor, last_action_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Created', $15, NOW())`,
+        [
+          campaignId,
+          customerId,
+          name.trim(),
+          objective || 'Lead Generation',
+          effectivePostId,
+          platform,
+          targetAudience,
+          finalStart,
+          endDate ? new Date(endDate) : null,
+          Number(dailyBudget),
+          Number(totalBudget || 0),
+          JSON.stringify(scheduleSettings),
+          status,
+          externalStatus,
+          actor,
+        ]
+      );
+
+      let newBalanceAfterStart = balance;
+      if (status === 'Running') {
+        const isAlreadyDeductedToday = walRow?.last_deducted_at &&
+          new Date(walRow.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+          new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+        if (!isAlreadyDeductedToday) {
+          const spendAmt = Number(dailyBudget);
+          newBalanceAfterStart = balance - spendAmt;
+          await txQuery(
+            `UPDATE wallets SET
+              available_balance = $1,
+              total_ad_spent = total_ad_spent + $2,
+              ad_campaign_active = TRUE,
+              last_deducted_at = NOW(),
+              updated_at = NOW()
+            WHERE customer_id = $3`,
+            [newBalanceAfterStart, spendAmt, customerId]
+          );
+
+          const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+          const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
+          await txQuery(
+            `INSERT INTO wallet_transactions (
+              id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+            ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
+            [
+              txId,
+              customerId,
+              walRow.id,
+              spendAmt,
+              newBalanceAfterStart,
+              refUtr,
+              `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${spendAmt}/day)`,
+            ]
+          );
+        } else {
+          await txQuery(
+            `UPDATE wallets SET ad_campaign_active = TRUE, updated_at = NOW() WHERE customer_id = $1`,
+            [customerId]
+          );
+        }
+      }
+
+      campaignResult = {
+        campaignId,
         customerId,
         name: name.trim(),
         status,
-        postId: effectivePostId,
+        effectivePostId,
         dailyBudget: Number(dailyBudget),
+        externalStatus,
+        newBalanceAfterStart,
+        hasMetaToken,
+      };
+    });
+
+    await logAuditEvent(customerId, 'campaign', campaignResult.campaignId, 'Created Marketing Campaign', actor, {
+      name,
+      postId: campaignResult.effectivePostId,
+      dailyBudget,
+      externalStatus: campaignResult.externalStatus,
+    });
+
+    res.status(201).json({
+      ok: true,
+      campaignId: campaignResult.campaignId,
+      campaign: {
+        id: campaignResult.campaignId,
+        customerId,
+        name: campaignResult.name,
+        status: campaignResult.status,
+        postId: campaignResult.effectivePostId,
+        dailyBudget: campaignResult.dailyBudget,
       },
-      externalPlatformStatus: externalStatus,
-      newBalance: newBalanceAfterStart,
-      message: hasMetaToken
+      externalPlatformStatus: campaignResult.externalStatus,
+      newBalance: campaignResult.newBalanceAfterStart,
+      message: campaignResult.hasMetaToken
         ? 'Marketing campaign created and queued for external activation.'
         : 'Marketing campaign created. Notice: External Meta Ads platform is not connected, campaign managed internally.',
     });
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ ok: false, error: err.message });
+    }
     console.error('[POST /api/marketing/campaigns]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
