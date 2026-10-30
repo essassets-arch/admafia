@@ -14,7 +14,6 @@ import {
   MessageSquare,
   Wallet,
   Globe,
-  ArrowLeft,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 
@@ -167,32 +166,6 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
 
   return (
     <div className="auth-fullpage-shell">
-      {/* Top Navigation Bar with Logo and Return to Website */}
-      <header className="auth-fullpage-topbar">
-        <div className="auth-fullpage-topbar-inner">
-          <div className="auth-fullpage-brand" onClick={onBackToWebsite} style={{ cursor: 'pointer' }}>
-            <img
-              src="/AdMafia-Logo.png"
-              alt="AdMafia Marketing"
-              style={{
-                height: '42px',
-                width: 'auto',
-                objectFit: 'contain',
-              }}
-            />
-          </div>
-          <div className="auth-fullpage-topbar-actions">
-            <span className="auth-topbar-Question">Already registered?</span>
-            <button type="button" className="auth-topbar-switch-btn" onClick={onSwitchToLogin}>
-              Sign In
-            </button>
-            <button type="button" className="auth-topbar-back-btn" onClick={onBackToWebsite}>
-              <ArrowLeft size={15} /> Back to Website
-            </button>
-          </div>
-        </div>
-      </header>
-
       {/* Main Full-Page Split Grid */}
       <main className="auth-fullpage-grid">
         {/* LEFT COLUMN: Enterprise Showcase & Value Proposition */}
@@ -593,32 +566,6 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
 
   return (
     <div className="auth-fullpage-shell">
-      {/* Top Navigation Bar with Logo and Return to Website */}
-      <header className="auth-fullpage-topbar">
-        <div className="auth-fullpage-topbar-inner">
-          <div className="auth-fullpage-brand" onClick={onBackToWebsite} style={{ cursor: 'pointer' }}>
-            <img
-              src="/AdMafia-Logo.png"
-              alt="AdMafia Marketing"
-              style={{
-                height: '42px',
-                width: 'auto',
-                objectFit: 'contain',
-              }}
-            />
-          </div>
-          <div className="auth-fullpage-topbar-actions">
-            <span className="auth-topbar-Question">Don&apos;t have an account?</span>
-            <button type="button" className="auth-topbar-switch-btn" onClick={onSwitchToRegister}>
-              Create Account
-            </button>
-            <button type="button" className="auth-topbar-back-btn" onClick={onBackToWebsite}>
-              <ArrowLeft size={15} /> Back to Website
-            </button>
-          </div>
-        </div>
-      </header>
-
       {/* Main Full-Page Split Grid */}
       <main className="auth-fullpage-grid">
         {/* LEFT COLUMN: Customer Portal Command Center Showcase */}
