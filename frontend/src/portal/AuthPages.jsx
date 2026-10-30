@@ -817,58 +817,6 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
               </button>
             </form>
 
-            {/* Divider */}
-            <div className="auth-divider">
-              <span>OR CONTINUE WITH</span>
-            </div>
-
-            {/* Google Authentication */}
-            <div>
-              <button
-                type="button"
-                className="btn-google-sign"
-                onClick={() => {
-                  const googleUser = {
-                    username: 'vikram_google',
-                    phone: '9724916167',
-                    name: 'Vikram Malhotra Solutions',
-                    email: 'vikram.google@growthline.example',
-                    status: 'active',
-                    profileStatus: 'incomplete',
-                    paymentStatus: 'pending',
-                    balance: 0,
-                  };
-                  localStorage.setItem('growthline_active_user', JSON.stringify(googleUser));
-                  if (onLoggedIn) onLoggedIn(googleUser);
-                  else {
-                    window.history.pushState({}, '', '/app/lead#app/dashboard');
-                    window.location.hash = '#app/dashboard';
-                    window.location.href = '/app/lead#app/dashboard';
-                  }
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.9c2.28-2.1 3.645-5.2 3.645-9.15z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.9-3.05c-1.08.72-2.45 1.16-4.03 1.16-3.1 0-5.74-2.1-6.68-4.94H1.28v3.13C3.26 21.3 7.34 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.32 14.26c-.24-.72-.38-1.49-.38-2.26s.14-1.54.38-2.26V6.61H1.28C.46 8.24 0 10.06 0 12s.46 3.76 1.28 5.39l4.04-3.13z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.7 1.28 6.61l4.04 3.13c.94-2.84 3.58-4.99 6.68-4.99z"
-                  />
-                </svg>
-                <span>Continue with Google Business</span>
-              </button>
-            </div>
-
             <div className="auth-switch-link">
               Don&apos;t have a business account?{' '}
               <button type="button" onClick={onSwitchToRegister} className="link-button-bold">
