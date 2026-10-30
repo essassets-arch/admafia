@@ -24,15 +24,6 @@ const LANGUAGES = [
   'Marathi',
 ];
 
-const COMMON_CTAS = [
-  'Enquire Now',
-  'Contact Us',
-  'Book Consultation',
-  'Get Quote',
-  'Send Message',
-  'Learn More',
-];
-
 export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToDesk }) {
   const [customers, setCustomers] = useState([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomerId || '');
@@ -304,31 +295,13 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
           {/* 5. Call to Action (CTA) */}
           <div className="mkt-form-group">
             <label className="mkt-form-label">Call to Action (CTA)</label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <select
-                className="mkt-form-select"
-                style={{ width: '45%' }}
-                value={COMMON_CTAS.includes(callToAction) ? callToAction : 'Custom'}
-                onChange={(e) => {
-                  if (e.target.value !== 'Custom') {
-                    setCallToAction(e.target.value);
-                  }
-                }}
-              >
-                {COMMON_CTAS.map((cta) => (
-                  <option key={cta} value={cta}>{cta}</option>
-                ))}
-                <option value="Custom">Custom CTA</option>
-              </select>
-              <input
-                type="text"
-                className="mkt-form-input"
-                style={{ flex: 1 }}
-                placeholder="Call to action text (e.g. Enquire Now)"
-                value={callToAction}
-                onChange={(e) => setCallToAction(e.target.value)}
-              />
-            </div>
+            <input
+              type="text"
+              className="mkt-form-input"
+              placeholder="Call to action text (e.g. Enquire Now, Contact Us)"
+              value={callToAction}
+              onChange={(e) => setCallToAction(e.target.value)}
+            />
           </div>
 
           {/* 6. Description */}
