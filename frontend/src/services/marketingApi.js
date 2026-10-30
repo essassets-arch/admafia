@@ -47,6 +47,12 @@ export const marketingApi = {
 
   getCustomerWalletTransactions: (id) => request(`/customers/${id}/wallet-transactions`),
 
+  updateCustomerPacing: (customerId, pacingData) =>
+    request(`/customers/${customerId}/pacing`, {
+      method: 'PUT',
+      body: JSON.stringify(pacingData),
+    }),
+
   // Build Ideas
   getIdeas: (params = {}) => {
     const qs = new URLSearchParams();

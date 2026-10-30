@@ -211,6 +211,14 @@ marketingRouter.get('/customers', async (req, res) => {
         COALESCE(w.available_balance, 0)::NUMERIC AS available_balance,
         COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
         COALESCE(w.total_lifetime_paid, 0)::NUMERIC AS total_paid,
+        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
+        COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
+        COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
+        w.last_deducted_at,
+        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
+        COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
+        COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
+        w.last_deducted_at,
         (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Approved') AS approved_posts_count,
         (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Draft') AS draft_posts_count,
         (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Pending Verification') AS pending_posts_count,
@@ -255,6 +263,12 @@ marketingRouter.get('/customers', async (req, res) => {
         availableBalance: Number(r.available_balance || 0),
         dailyAdSpend: Number(r.daily_ad_spend || 300),
         totalPaid: Number(r.total_paid || 0),
+        adCampaignActive: Boolean(r.ad_campaign_active),
+        activeDays: typeof r.active_days === 'string'
+          ? r.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+          : (Array.isArray(r.active_days) ? r.active_days : ['MON', 'TUE', 'WED', 'THU', 'FRI']),
+        schedulePreset: r.schedule_preset || 'weekdays',
+        lastDeductedAt: r.last_deducted_at,
         approvedPostsCount: Number(r.approved_posts_count || 0),
         draftPostsCount: Number(r.draft_posts_count || 0),
         pendingPostsCount: Number(r.pending_posts_count || 0),
@@ -295,6 +309,10 @@ marketingRouter.get('/customers/:id', async (req, res) => {
         COALESCE(w.available_balance, 0)::NUMERIC AS available_balance,
         COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
         COALESCE(w.total_lifetime_paid, 0)::NUMERIC AS total_paid,
+        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
+        COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
+        COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
+        w.last_deducted_at,
         (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Approved') AS approved_posts_count,
         (SELECT COUNT(*)::INT FROM marketing_ideas mi WHERE mi.customer_id = c.id) AS ideas_count
       FROM customers c
@@ -333,6 +351,12 @@ marketingRouter.get('/customers/:id', async (req, res) => {
         availableBalance: Number(c.available_balance || 0),
         dailyAdSpend: Number(c.daily_ad_spend || 300),
         totalPaid: Number(c.total_paid || 0),
+        adCampaignActive: Boolean(c.ad_campaign_active),
+        activeDays: typeof c.active_days === 'string'
+          ? c.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+          : (Array.isArray(c.active_days) ? c.active_days : ['MON', 'TUE', 'WED', 'THU', 'FRI']),
+        schedulePreset: c.schedule_preset || 'weekdays',
+        lastDeductedAt: c.last_deducted_at,
         approvedPostsCount: Number(c.approved_posts_count || 0),
         ideasCount: Number(c.ideas_count || 0),
       },
@@ -1315,15 +1339,50 @@ marketingRouter.post('/campaigns', async (req, res) => {
 
     await logAuditEvent(customerId, 'campaign', campaignId, 'Created Marketing Campaign', actor, {
       name,
-      postId,
+      postId: effectivePostId,
       dailyBudget,
       externalStatus,
     });
+
+    let newBalanceAfterStart = balance;
+    if (status === 'Running') {
+      const spendAmt = Number(dailyBudget);
+      newBalanceAfterStart = balance - spendAmt;
+      const walRow = walRes.rows[0];
+      await query(
+        `UPDATE wallets SET
+          available_balance = $1,
+          total_ad_spent = total_ad_spent + $2,
+          ad_campaign_active = TRUE,
+          last_deducted_at = NOW(),
+          updated_at = NOW()
+        WHERE customer_id = $3`,
+        [newBalanceAfterStart, spendAmt, customerId]
+      );
+
+      const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
+      await query(
+        `INSERT INTO wallet_transactions (
+          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
+        [
+          txId,
+          customerId,
+          walRow.id,
+          spendAmt,
+          newBalanceAfterStart,
+          refUtr,
+          `Daily Meta Ad Spend Campaign Deduction (-₹${spendAmt}/day)`,
+        ]
+      );
+    }
 
     res.status(201).json({
       ok: true,
       campaignId,
       externalPlatformStatus: externalStatus,
+      newBalance: newBalanceAfterStart,
       message: hasMetaToken
         ? 'Marketing campaign created and queued for external activation.'
         : 'Marketing campaign created. Notice: External Meta Ads platform is not connected, campaign managed internally.',
@@ -1358,14 +1417,50 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     }
 
     // Revalidate Customer Wallet Balance
-    const walRes = await query(`SELECT available_balance FROM wallets WHERE customer_id = $1`, [camp.customer_id]);
-    const balance = Number(walRes.rows[0]?.available_balance || 0);
-    if (balance < Number(camp.daily_budget)) {
+    const walRes = await query(`SELECT * FROM wallets WHERE customer_id = $1`, [camp.customer_id]);
+    if (walRes.rowCount === 0) {
+      return res.status(400).json({ ok: false, error: 'Customer wallet not found.' });
+    }
+    const wallet = walRes.rows[0];
+    const balance = Number(wallet.available_balance || 0);
+    const dailySpend = Math.max(300, Number(camp.daily_budget || wallet.daily_ad_spend || 300));
+
+    if (balance < dailySpend) {
       return res.status(400).json({
         ok: false,
-        error: `Cannot start campaign: Customer wallet balance (₹${balance}) is below required daily budget (₹${camp.daily_budget}).`,
+        error: `Cannot start campaign: Customer wallet balance (₹${balance}) is below required daily budget (₹${dailySpend}). Please top up wallet first.`,
       });
     }
+
+    // Cut / deduct price from wallet balance ("when start so cut prive of that")
+    const newBal = balance - dailySpend;
+    await query(
+      `UPDATE wallets SET
+        available_balance = $1,
+        total_ad_spent = total_ad_spent + $2,
+        ad_campaign_active = TRUE,
+        last_deducted_at = NOW(),
+        updated_at = NOW()
+      WHERE customer_id = $3`,
+      [newBal, dailySpend, camp.customer_id]
+    );
+
+    const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
+    await query(
+      `INSERT INTO wallet_transactions (
+        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+      ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
+      [
+        txId,
+        camp.customer_id,
+        wallet.id,
+        dailySpend,
+        newBal,
+        refUtr,
+        `Daily Meta Ad Spend Campaign Deduction (-₹${dailySpend}/day)`,
+      ]
+    );
 
     // Check external platform status
     const hasMetaToken = Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
@@ -1383,21 +1478,20 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
       [extStatus, actor, campaignId]
     );
 
-    // Sync wallet ad_campaign_active flag
-    await query(`UPDATE wallets SET ad_campaign_active = TRUE, updated_at = NOW() WHERE customer_id = $1`, [camp.customer_id]);
-
-    await logAuditEvent(camp.customer_id, 'campaign', campaignId, 'Started Marketing Campaign', actor, {
-      dailyBudget: camp.daily_budget,
+    await logAuditEvent(camp.customer_id, 'campaign', campaignId, `Started Marketing Campaign (Deducted ₹${dailySpend})`, actor, {
+      dailyBudget: dailySpend,
+      deductedAmount: dailySpend,
+      newBalance: newBal,
       externalPlatformStatus: extStatus,
     });
 
     res.json({
       ok: true,
       status: 'Running',
+      deductedAmount: dailySpend,
+      newBalance: newBal,
       externalPlatformStatus: extStatus,
-      message: hasMetaToken
-        ? 'Marketing campaign started and live Meta ad delivery initiated.'
-        : 'Marketing campaign activated in CRM. Notice: External Meta Ads API token is not configured on this server, live external delivery is Not Connected.',
+      message: `Marketing campaign started! ₹${dailySpend} daily ad budget deducted from customer wallet (New Balance: ₹${newBal}).`,
     });
   } catch (err) {
     console.error('[POST /api/marketing/campaigns/:id/start]', err);
@@ -1456,6 +1550,56 @@ marketingRouter.post('/campaigns/:id/stop', async (req, res) => {
     });
   } catch (err) {
     console.error('[POST /api/marketing/campaigns/:id/stop]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// 14. PUT /api/marketing/customers/:id/pacing (Update Customer Daily Burn Rate & Schedule)
+// -----------------------------------------------------------------------------
+marketingRouter.put('/customers/:id/pacing', async (req, res) => {
+  try {
+    const custId = req.params.id;
+    const { dailyAdSpend, activeDays, schedulePreset = 'custom', actor = 'Marketing Operations' } = req.body || {};
+
+    const walRes = await query('SELECT * FROM wallets WHERE customer_id = $1', [custId]);
+    if (walRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer wallet not found.' });
+    }
+    const w = walRes.rows[0];
+
+    const nextDaily = dailyAdSpend !== undefined ? Math.max(300, Number(dailyAdSpend)) : Number(w.daily_ad_spend);
+    const nextDays = activeDays !== undefined
+      ? (Array.isArray(activeDays) ? activeDays.join(',') : String(activeDays))
+      : (w.active_days || 'MON,TUE,WED,THU,FRI');
+    const nextPreset = schedulePreset || w.schedule_preset || 'weekdays';
+
+    await query(
+      `UPDATE wallets SET daily_ad_spend = $1, active_days = $2, schedule_preset = $3, updated_at = NOW() WHERE customer_id = $4`,
+      [nextDaily, nextDays, nextPreset, custId]
+    );
+
+    // Also update daily_budget on active campaign if exists
+    await query(
+      `UPDATE marketing_campaigns SET daily_budget = $1, updated_at = NOW() WHERE customer_id = $2 AND status = 'Running'`,
+      [nextDaily, custId]
+    );
+
+    await logAuditEvent(custId, 'wallet', custId, 'Updated Marketing Pacing & Schedule', actor, {
+      dailyAdSpend: nextDaily,
+      activeDays: nextDays,
+      schedulePreset: nextPreset,
+    });
+
+    res.json({
+      ok: true,
+      dailyAdSpend: nextDaily,
+      activeDays: nextDays.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
+      schedulePreset: nextPreset,
+      message: `Marketing pacing updated: ₹${nextDaily}/day across active schedule.`,
+    });
+  } catch (err) {
+    console.error('[PUT /api/marketing/customers/:id/pacing]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

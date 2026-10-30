@@ -56,6 +56,11 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     payment_status: row.payment_status || (balance > 0 ? 'paid' : 'pending'),
     kycPercent: Number(row.kyc_percent ?? (row.profile_status === 'complete' ? 100 : 25)),
     verified: Boolean(row.verified || row.profile_status === 'complete'),
+    adCampaignActive: Boolean(row.ad_campaign_active),
+    activeDays: typeof row.active_days === 'string'
+      ? row.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+      : (Array.isArray(row.active_days) ? row.active_days : ['MON', 'TUE', 'WED', 'THU', 'FRI']),
+    schedulePreset: row.schedule_preset || 'weekdays',
     balance,
     walletBalance: balance,
     dailyPacing,
@@ -697,16 +702,26 @@ app.patch('/api/customers/:id', async (req, res) => {
       [nextCompany, nextWebsite, nextStatus, nextProfile, nextPayment, nextKyc, cust.id]
     );
 
-    if (updates.dailyAdSpend !== undefined || updates.adCampaignActive !== undefined || updates.balance !== undefined) {
+    if (
+      updates.dailyAdSpend !== undefined ||
+      updates.adCampaignActive !== undefined ||
+      updates.balance !== undefined ||
+      updates.activeDays !== undefined ||
+      updates.schedulePreset !== undefined
+    ) {
       const walRes = await query('SELECT * FROM wallets WHERE customer_id = $1', [cust.id]);
       if (walRes.rowCount > 0) {
         const w = walRes.rows[0];
         const nextDaily = updates.dailyAdSpend !== undefined ? Math.max(300, Number(updates.dailyAdSpend)) : Number(w.daily_ad_spend);
         const nextActive = updates.adCampaignActive !== undefined ? Boolean(updates.adCampaignActive) : Boolean(w.ad_campaign_active);
         const nextBal = updates.balance !== undefined ? Math.max(0, Number(updates.balance)) : Number(w.available_balance);
+        const nextDays = updates.activeDays !== undefined
+          ? (Array.isArray(updates.activeDays) ? updates.activeDays.join(',') : String(updates.activeDays))
+          : (w.active_days || 'MON,TUE,WED,THU,FRI');
+        const nextPreset = updates.schedulePreset || w.schedule_preset || 'weekdays';
         await query(
-          `UPDATE wallets SET daily_ad_spend = $1, ad_campaign_active = $2, available_balance = $3, updated_at = NOW() WHERE customer_id = $4`,
-          [nextDaily, nextActive, nextBal, cust.id]
+          `UPDATE wallets SET daily_ad_spend = $1, ad_campaign_active = $2, available_balance = $3, active_days = $4, schedule_preset = $5, updated_at = NOW() WHERE customer_id = $6`,
+          [nextDaily, nextActive, nextBal, nextDays, nextPreset, cust.id]
         );
       }
     }

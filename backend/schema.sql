@@ -107,6 +107,8 @@ CREATE TABLE IF NOT EXISTS wallets (
     total_ad_spent      NUMERIC(12, 2) NOT NULL DEFAULT 0.00
                         CHECK (total_ad_spent >= 0),
     ad_campaign_active  BOOLEAN NOT NULL DEFAULT FALSE,
+    active_days         VARCHAR(120) NOT NULL DEFAULT 'MON,TUE,WED,THU,FRI',
+    schedule_preset     VARCHAR(64) NOT NULL DEFAULT 'weekdays',
     last_deducted_at    TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -391,6 +393,7 @@ CREATE INDEX IF NOT EXISTS idx_sales_tasks_due_status ON sales_tasks(due_status,
 -- =============================================================================
 
 -- View for Sales Desk 01 (Customer Registrations) & Desk 06 (Wallets & Balances)
+DROP VIEW IF EXISTS vw_sales_customer_accounts CASCADE;
 CREATE OR REPLACE VIEW vw_sales_customer_accounts AS
 SELECT
     c.id,
@@ -420,6 +423,9 @@ SELECT
     COALESCE(w.available_balance, 0) AS wallet_balance,
     COALESCE(w.daily_ad_spend, 300) AS daily_pacing,
     COALESCE(w.total_lifetime_paid, 0) AS amount_paid,
+    COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
+    COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
+    COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
     FLOOR(COALESCE(w.available_balance, 0) / GREATEST(COALESCE(w.daily_ad_spend, 300), 1))::INT AS runway_days,
     (SELECT COUNT(*) FROM leads l WHERE l.customer_id = c.id) AS total_leads_dispatched
 FROM customers c
