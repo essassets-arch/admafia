@@ -2108,10 +2108,10 @@ superadminRouter.post('/users', async (req, res) => {
     const finalPassword = password && password.trim() ? password.trim() : 'User@2026!';
     const userDept = req.body.department || (
       role.includes('Marketing') ? 'Marketing' :
-      (role.includes('Graphic') || role.includes('Creative')) ? 'Graphics' :
-      (role.includes('Sales') || role.includes('Telecaller')) ? 'Sales' :
-      (role.includes('Client') || role.includes('Staff')) ? 'Customer Portal' :
-      'Super Admin'
+        (role.includes('Graphic') || role.includes('Creative')) ? 'Graphics' :
+          (role.includes('Sales') || role.includes('Telecaller')) ? 'Sales' :
+            (role.includes('Client') || role.includes('Staff')) ? 'Customer Portal' :
+              'Super Admin'
     );
 
     // Check duplicate
