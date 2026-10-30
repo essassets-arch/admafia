@@ -167,6 +167,13 @@ export async function initDatabase() {
   await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(140)`);
   await safeExec(`ALTER TABLE marketing_post_reviews ADD COLUMN IF NOT EXISTS revision_number INT NOT NULL DEFAULT 1`);
   await safeExec(`ALTER TABLE marketing_post_revisions ADD COLUMN IF NOT EXISTS correction_instructions TEXT DEFAULT ''`);
+  await safeExec(`ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS contact_name VARCHAR(140)`);
+  await safeExec(`ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS contact_email VARCHAR(160)`);
+  await safeExec(`ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(32)`);
+  await safeExec(`ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS assigned_admin VARCHAR(140)`);
+  await safeExec(`ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS internal_notes TEXT`);
+  await safeExec(`ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS last_replied_at TIMESTAMPTZ`);
+  await safeExec(`ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS last_replied_by VARCHAR(140)`);
 
   // Run schema.sql migration
   const schemaPath = path.join(__dirname, 'schema.sql');
@@ -196,6 +203,18 @@ export async function initDatabase() {
     ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(140);
     ALTER TABLE marketing_post_reviews ADD COLUMN IF NOT EXISTS revision_number INT NOT NULL DEFAULT 1;
     ALTER TABLE marketing_post_revisions ADD COLUMN IF NOT EXISTS correction_instructions TEXT DEFAULT '';
+    ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS contact_name VARCHAR(140) DEFAULT '';
+    ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS contact_email VARCHAR(160) DEFAULT '';
+    ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(32) DEFAULT '';
+    ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS assigned_admin VARCHAR(140) DEFAULT '';
+    ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS internal_notes TEXT DEFAULT '';
+    ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS last_replied_at TIMESTAMPTZ;
+    ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS last_replied_by VARCHAR(140) DEFAULT '';
+    ALTER TABLE support_queries DROP CONSTRAINT IF EXISTS support_queries_status_check;
+    ALTER TABLE support_queries DROP CONSTRAINT IF EXISTS support_queries_priority_check;
+    INSERT INTO system_users (id, full_name, email, username, phone, password_hash, role, permissions, status)
+    VALUES ('user_superadmin_01', 'AdMafia Executive Super Admin', 'admin@admafia.marketing', 'superadmin', '9999999999', 'SuperAdmin@2026!', 'Super Admin', '["all"]', 'active')
+    ON CONFLICT (username) DO NOTHING;
   `);
 
   console.log('[PostgreSQL] Relational schema & views verified (14 tables + vw_sales_customer_accounts)');

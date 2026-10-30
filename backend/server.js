@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
+import { superadminRouter } from './routes/superadmin.js';
 
 // Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
 process.on('uncaughtException', (err) => {
@@ -2041,6 +2042,11 @@ app.use('/api/marketing', marketingRouter);
 // 6C. GRAPHICS DEPARTMENT API ROUTER (/api/graphics/*)
 // =============================================================================
 app.use('/api/graphics', graphicsRouter);
+
+// =============================================================================
+// 6D. SUPER ADMIN CONTROL CENTER API ROUTER (/api/superadmin/*)
+// =============================================================================
+app.use('/api/superadmin', superadminRouter);
 
 // =============================================================================
 // 7. PRODUCTION STATIC FRONTEND SERVING (When frontend/dist is built on VPS)

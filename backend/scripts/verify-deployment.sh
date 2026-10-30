@@ -28,22 +28,28 @@ check() {
 }
 
 echo ""
-echo "[1/4] Checking Core Health & Graphics Summary..."
+echo "[1/5] Checking Core Health, Graphics Summary & Super Admin APIs..."
 HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL/api/health")
 check "$HEALTH_STATUS" 200 "GET /api/health responds 200 OK"
 
 SUMMARY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL/api/graphics/summary")
 check "$SUMMARY_STATUS" 200 "GET /api/graphics/summary responds 200 OK"
 
+SA_SUMMARY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL/api/superadmin/dashboard/summary")
+check "$SA_SUMMARY_STATUS" 200 "GET /api/superadmin/dashboard/summary responds 200 OK"
+
+SA_FINANCE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL/api/superadmin/finance/summary")
+check "$SA_FINANCE_STATUS" 200 "GET /api/superadmin/finance/summary responds 200 OK"
+
 echo ""
-echo "[2/4] Checking Direct SPA Navigation on Graphics routes..."
-for r in "/graphics" "/graphics/post-requests" "/graphics/upload-post" "/graphics/approved-posts" "/graphics/rejected-posts"; do
+echo "[2/5] Checking Direct SPA Navigation on Graphics & Super Admin routes..."
+for r in "/graphics" "/graphics/post-requests" "/graphics/upload-post" "/superadmin" "/superadmin/queries" "/superadmin/finance" "/superadmin/refunds" "/superadmin/topups" "/superadmin/accounts" "/superadmin/add-user"; do
   ROUTE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL$r")
   check "$ROUTE_STATUS" 200 "Direct GET $r responds 200 OK"
 done
 
 echo ""
-echo "[3/4] Verifying Deep Upload Security Gate..."
+echo "[3/5] Verifying Deep Upload Security Gate..."
 # Test rejection of malicious script
 EXPLOIT_PAYLOAD='{"filename":"exploit.png","contentType":"image/png","base64Data":"PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=="}'
 EXPLOIT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d "$EXPLOIT_PAYLOAD" "$TARGET_URL/api/marketing/media/upload")
@@ -55,7 +61,7 @@ MISMATCH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Typ
 check "$MISMATCH_STATUS" 400 "Extension/MIME mismatch (.php on image/png) rejected with HTTP 400"
 
 echo ""
-echo "[4/4] Verifying Campaign Creative & Validation Gates..."
+echo "[4/5] Verifying Campaign Creative & Validation Gates..."
 # Gate A: Sub-minimum budget strictly blocked with HTTP 400
 BUDGET_PAYLOAD='{"customerId":"dummy_cust","name":"Audit Check","dailyBudget":150}'
 BUDGET_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d "$BUDGET_PAYLOAD" "$TARGET_URL/api/marketing/campaigns")

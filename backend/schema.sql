@@ -349,14 +349,19 @@ CREATE TABLE IF NOT EXISTS support_queries (
     customer_id         VARCHAR(64)
                         REFERENCES customers(id) ON DELETE CASCADE,
     company_name        VARCHAR(180) NOT NULL,
+    contact_name        VARCHAR(140) DEFAULT '',
+    contact_email       VARCHAR(160) DEFAULT '',
+    contact_phone       VARCHAR(32) DEFAULT '',
     category            VARCHAR(80) NOT NULL DEFAULT 'Campaign Pacing',
     subject             VARCHAR(255) NOT NULL,
-    priority            VARCHAR(24) NOT NULL DEFAULT 'normal'
-                        CHECK (priority IN ('normal', 'high', 'urgent')),
+    priority            VARCHAR(24) NOT NULL DEFAULT 'Normal',
+    assigned_admin      VARCHAR(140) DEFAULT '',
+    internal_notes      TEXT DEFAULT '',
+    last_replied_at     TIMESTAMPTZ,
+    last_replied_by     VARCHAR(140) DEFAULT '',
     sla_breached        BOOLEAN NOT NULL DEFAULT FALSE,
     hours_open          NUMERIC(6, 1) NOT NULL DEFAULT 0.0,
-    status              VARCHAR(24) NOT NULL DEFAULT 'open'
-                        CHECK (status IN ('open', 'pending', 'resolved')),
+    status              VARCHAR(32) NOT NULL DEFAULT 'Open',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     resolved_at         TIMESTAMPTZ
 );
@@ -585,3 +590,126 @@ CREATE TABLE IF NOT EXISTS marketing_audit_events (
 
 CREATE INDEX IF NOT EXISTS idx_marketing_audit_entity ON marketing_audit_events(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_marketing_audit_customer ON marketing_audit_events(customer_id, created_at DESC);
+
+-- =============================================================================
+-- 15. SUPER ADMIN CONTROL CENTER RELATIONAL TABLES (/superadmin)
+-- =============================================================================
+
+-- 15A. Platform & Business System Users
+CREATE TABLE IF NOT EXISTS system_users (
+    id                  VARCHAR(64) PRIMARY KEY,
+    customer_id         VARCHAR(64) REFERENCES customers(id) ON DELETE SET NULL,
+    full_name           VARCHAR(140) NOT NULL,
+    email               VARCHAR(160) NOT NULL UNIQUE,
+    username            VARCHAR(80) NOT NULL UNIQUE,
+    phone               VARCHAR(32),
+    password_hash       TEXT NOT NULL,
+    role                VARCHAR(40) NOT NULL DEFAULT 'Super Admin'
+                        CHECK (role IN ('Super Admin', 'Operations Manager', 'Finance Auditor', 'Support Agent', 'Business Manager', 'Staff')),
+    permissions         TEXT NOT NULL DEFAULT '["all"]',
+    status              VARCHAR(24) NOT NULL DEFAULT 'active'
+                        CHECK (status IN ('active', 'suspended', 'inactive')),
+    last_login_at       TIMESTAMPTZ,
+    created_by          VARCHAR(140) DEFAULT 'system',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_users_email ON system_users(email);
+CREATE INDEX IF NOT EXISTS idx_system_users_role ON system_users(role, status);
+
+-- 15B. Customer Support Query Conversation Thread Messages
+CREATE TABLE IF NOT EXISTS support_query_messages (
+    id                  VARCHAR(64) PRIMARY KEY,
+    query_id            VARCHAR(64) NOT NULL
+                        REFERENCES support_queries(id) ON DELETE CASCADE,
+    sender_type         VARCHAR(24) NOT NULL
+                        CHECK (sender_type IN ('customer', 'admin', 'internal_note')),
+    sender_name         VARCHAR(140) NOT NULL,
+    message             TEXT NOT NULL,
+    is_internal_note    BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sqm_query ON support_query_messages(query_id, created_at ASC);
+
+-- 15C. Official Refund Requests Queue
+CREATE TABLE IF NOT EXISTS refund_requests (
+    id                  VARCHAR(64) PRIMARY KEY,
+    customer_id         VARCHAR(64) NOT NULL
+                        REFERENCES customers(id) ON DELETE CASCADE,
+    wallet_id           VARCHAR(64)
+                        REFERENCES wallets(id) ON DELETE SET NULL,
+    original_tx_ref     VARCHAR(120),
+    amount              NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+    reason              TEXT NOT NULL,
+    supporting_info     TEXT,
+    status              VARCHAR(32) NOT NULL DEFAULT 'Pending'
+                        CHECK (status IN ('Pending', 'Under Review', 'Approved', 'Rejected', 'Processing', 'Completed', 'Failed')),
+    rejection_reason    TEXT,
+    review_notes        TEXT,
+    reviewed_by         VARCHAR(140),
+    reviewed_at         TIMESTAMPTZ,
+    provider_ref        VARCHAR(120),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_refund_requests_customer ON refund_requests(customer_id, status);
+CREATE INDEX IF NOT EXISTS idx_refund_requests_status ON refund_requests(status);
+
+-- 15D. Customer Wallet Top-Up Requests Queue
+CREATE TABLE IF NOT EXISTS topup_requests (
+    id                  VARCHAR(64) PRIMARY KEY,
+    customer_id         VARCHAR(64) NOT NULL
+                        REFERENCES customers(id) ON DELETE CASCADE,
+    wallet_id           VARCHAR(64)
+                        REFERENCES wallets(id) ON DELETE SET NULL,
+    amount              NUMERIC(12, 2) NOT NULL CHECK (amount >= 300),
+    payment_method      VARCHAR(100) NOT NULL DEFAULT 'Razorpay Secure (UPI/Card)',
+    reference_utr       VARCHAR(120) NOT NULL UNIQUE,
+    payment_evidence_url TEXT,
+    notes               TEXT,
+    status              VARCHAR(32) NOT NULL DEFAULT 'Pending'
+                        CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Processing')),
+    rejection_reason    TEXT,
+    processed_by        VARCHAR(140),
+    processed_at        TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_topup_requests_customer ON topup_requests(customer_id, status);
+CREATE INDEX IF NOT EXISTS idx_topup_requests_status ON topup_requests(status);
+
+-- 15E. Super Admin Comprehensive Audit Event Logs
+CREATE TABLE IF NOT EXISTS superadmin_audit_logs (
+    id                  VARCHAR(64) PRIMARY KEY,
+    actor_id            VARCHAR(64) NOT NULL,
+    actor_name          VARCHAR(140) NOT NULL,
+    actor_role          VARCHAR(64) NOT NULL DEFAULT 'Super Admin',
+    action_type         VARCHAR(80) NOT NULL,
+    target_type         VARCHAR(64) NOT NULL,
+    target_id           VARCHAR(64) NOT NULL,
+    reason              TEXT,
+    details             TEXT DEFAULT '{}',
+    ip_address          VARCHAR(64) DEFAULT '',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_superadmin_audit_target ON superadmin_audit_logs(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_superadmin_audit_created ON superadmin_audit_logs(created_at DESC);
+
+-- 15F. Account Block / Activate Status Change History
+CREATE TABLE IF NOT EXISTS account_status_history (
+    id                  VARCHAR(64) PRIMARY KEY,
+    customer_id         VARCHAR(64) NOT NULL
+                        REFERENCES customers(id) ON DELETE CASCADE,
+    previous_status     VARCHAR(24) NOT NULL,
+    new_status          VARCHAR(24) NOT NULL,
+    reason              TEXT NOT NULL,
+    changed_by          VARCHAR(140) NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ash_customer ON account_status_history(customer_id, created_at DESC);

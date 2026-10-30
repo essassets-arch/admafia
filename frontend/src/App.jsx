@@ -8,6 +8,7 @@ import SalesLoginPage from './sales/SalesLoginPage';
 import SalesExecutiveDashboard from './sales/SalesExecutiveDashboard';
 import MarketingLayout from './marketing/MarketingLayout';
 import GraphicsLayout from './graphics/GraphicsLayout';
+import SuperAdminLayout from './superadmin/SuperAdminLayout';
 import { CustomerLoginPage, CustomerRegisterPage } from './portal/AuthPages';
 import crmApi from './services/crmApi';
 import './portal/portal.css';
@@ -156,18 +157,30 @@ export default function App() {
       return 'login';
     }
 
-    // 4. Sales & Admin Operations Desks
-    if (p.startsWith('/sales') || h.startsWith('#sales') || p.startsWith('/admin') || h.startsWith('#admin')) {
+    // 4A. Super Admin Operations Control Center (/superadmin or /admin)
+    if (
+      p.startsWith('/superadmin') ||
+      h.startsWith('#superadmin') ||
+      h.startsWith('#/superadmin') ||
+      p.startsWith('/admin') ||
+      h.startsWith('#admin') ||
+      h.startsWith('#/admin')
+    ) {
+      return 'superadmin-portal';
+    }
+
+    // 4B. Sales Operations Desks (/sales)
+    if (p.startsWith('/sales') || h.startsWith('#sales')) {
       if (h.includes('login') || h === '#sales/login') return 'sales-login';
       return 'sales-portal';
     }
 
-    // 4B. Marketing Department Operations Panel (/marketing)
+    // 4C. Marketing Department Operations Panel (/marketing)
     if (p.startsWith('/marketing') || h.startsWith('#marketing') || h.startsWith('#/marketing')) {
       return 'marketing-portal';
     }
 
-    // 4C. Graphics Department Creative Ops Panel (/graphics)
+    // 4D. Graphics Department Creative Ops Panel (/graphics)
     if (p.startsWith('/graphics') || h.startsWith('#graphics') || h.startsWith('#/graphics')) {
       return 'graphics-portal';
     }
@@ -357,6 +370,30 @@ export default function App() {
   if (currentView === 'graphics-portal') {
     return (
       <GraphicsLayout
+        onSignOut={() => {
+          try {
+            localStorage.removeItem('growthline_active_user');
+            sessionStorage.clear();
+          } catch (e) {}
+          window.location.hash = '';
+          try { window.history.pushState({}, '', '/'); } catch (e) {}
+          setCurrentView('landing');
+          window.location.href = '/';
+        }}
+        onBackToWebsite={() => {
+          try { window.history.pushState({}, '', '/'); } catch (e) {}
+          window.location.hash = '';
+          setCurrentView('landing');
+          window.location.href = '/';
+        }}
+      />
+    );
+  }
+
+  // View: Super Admin Control Center (/superadmin or /admin)
+  if (currentView === 'superadmin-portal') {
+    return (
+      <SuperAdminLayout
         onSignOut={() => {
           try {
             localStorage.removeItem('growthline_active_user');
