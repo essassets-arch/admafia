@@ -426,3 +426,125 @@ FROM customers c
 LEFT JOIN wallets w ON w.customer_id = c.id
 ORDER BY c.registered_at DESC;
 
+
+
+-- =============================================================================
+-- 13. MARKETING DEPARTMENT TABLES (Ideas, Posts, Reviews, Campaigns, Audit)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS marketing_ideas (
+    id                  VARCHAR(64) PRIMARY KEY,
+    customer_id         VARCHAR(64) NOT NULL
+                        REFERENCES customers(id) ON DELETE CASCADE,
+    title               VARCHAR(255) NOT NULL,
+    objective           VARCHAR(100) NOT NULL
+                        CHECK (objective IN ('brand_awareness', 'lead_generation', 'product_promotion', 'festival_campaign', 'customer_engagement')),
+    concept             TEXT NOT NULL,
+    target_audience     TEXT DEFAULT '',
+    caption_suggestions TEXT DEFAULT '',
+    call_to_action      VARCHAR(255) DEFAULT '',
+    hashtags            TEXT DEFAULT '',
+    creative_brief      TEXT DEFAULT '',
+    platform            VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
+    language            VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
+    campaign_period     VARCHAR(100) DEFAULT '',
+    constraints         TEXT DEFAULT '',
+    status              VARCHAR(32) NOT NULL DEFAULT 'Saved'
+                        CHECK (status IN ('Draft', 'Saved', 'Archived')),
+    created_by          VARCHAR(140) NOT NULL DEFAULT 'Marketing Executive',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketing_ideas_customer ON marketing_ideas(customer_id, status);
+
+CREATE TABLE IF NOT EXISTS marketing_posts (
+    id                  VARCHAR(64) PRIMARY KEY,
+    customer_id         VARCHAR(64) NOT NULL
+                        REFERENCES customers(id) ON DELETE CASCADE,
+    idea_id             VARCHAR(64)
+                        REFERENCES marketing_ideas(id) ON DELETE SET NULL,
+    title               VARCHAR(255) NOT NULL,
+    platform            VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
+    caption             TEXT NOT NULL,
+    hashtags            TEXT DEFAULT '',
+    call_to_action      VARCHAR(255) DEFAULT '',
+    media_url           TEXT DEFAULT '',
+    media_type          VARCHAR(64) DEFAULT 'image',
+    language            VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
+    campaign_association VARCHAR(255) DEFAULT '',
+    intended_publish_at TIMESTAMPTZ,
+    status              VARCHAR(40) NOT NULL DEFAULT 'Draft'
+                        CHECK (status IN ('Draft', 'Pending Verification', 'Approved', 'Rejected', 'Changes Requested')),
+    submitted_by        VARCHAR(140),
+    submitted_at        TIMESTAMPTZ,
+    revision_number     INT NOT NULL DEFAULT 1,
+    created_by          VARCHAR(140) NOT NULL DEFAULT 'Marketing Content Team',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketing_posts_customer ON marketing_posts(customer_id, status);
+CREATE INDEX IF NOT EXISTS idx_marketing_posts_status ON marketing_posts(status);
+
+CREATE TABLE IF NOT EXISTS marketing_post_reviews (
+    id                  VARCHAR(64) PRIMARY KEY,
+    post_id             VARCHAR(64) NOT NULL
+                        REFERENCES marketing_posts(id) ON DELETE CASCADE,
+    reviewer_name       VARCHAR(140) NOT NULL,
+    reviewer_role       VARCHAR(100) NOT NULL DEFAULT 'Marketing Reviewer',
+    decision            VARCHAR(40) NOT NULL
+                        CHECK (decision IN ('Approved', 'Rejected', 'Changes Requested')),
+    remarks             TEXT DEFAULT '',
+    rejection_reason    TEXT DEFAULT '',
+    correction_instructions TEXT DEFAULT '',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketing_reviews_post ON marketing_post_reviews(post_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS marketing_campaigns (
+    id                  VARCHAR(64) PRIMARY KEY,
+    customer_id         VARCHAR(64) NOT NULL
+                        REFERENCES customers(id) ON DELETE CASCADE,
+    name                VARCHAR(255) NOT NULL,
+    objective           VARCHAR(100) NOT NULL,
+    post_id             VARCHAR(64) NOT NULL
+                        REFERENCES marketing_posts(id) ON DELETE RESTRICT,
+    platform            VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
+    target_audience     TEXT DEFAULT '',
+    start_date          TIMESTAMPTZ NOT NULL,
+    end_date            TIMESTAMPTZ,
+    daily_budget        NUMERIC(10, 2) NOT NULL DEFAULT 300.00
+                        CHECK (daily_budget >= 300.00),
+    total_budget        NUMERIC(12, 2) DEFAULT 0.00,
+    schedule_settings   TEXT DEFAULT '{}',
+    status              VARCHAR(40) NOT NULL DEFAULT 'Draft'
+                        CHECK (status IN ('Draft', 'Running', 'Paused', 'Stopped', 'Completed')),
+    external_platform_status VARCHAR(64) NOT NULL DEFAULT 'Not Connected',
+    external_campaign_id VARCHAR(120),
+    created_by          VARCHAR(140) NOT NULL DEFAULT 'Marketing Manager',
+    last_action         VARCHAR(100) DEFAULT 'Created',
+    last_actor          VARCHAR(140) DEFAULT 'Marketing Manager',
+    last_action_at      TIMESTAMPTZ DEFAULT NOW(),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketing_campaigns_customer ON marketing_campaigns(customer_id, status);
+
+CREATE TABLE IF NOT EXISTS marketing_audit_events (
+    id                  VARCHAR(64) PRIMARY KEY,
+    customer_id         VARCHAR(64)
+                        REFERENCES customers(id) ON DELETE CASCADE,
+    entity_type         VARCHAR(64) NOT NULL,
+    entity_id           VARCHAR(64) NOT NULL,
+    action              VARCHAR(100) NOT NULL,
+    actor               VARCHAR(140) NOT NULL,
+    details             TEXT DEFAULT '{}',
+    ip_address          VARCHAR(64) DEFAULT '',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketing_audit_entity ON marketing_audit_events(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_marketing_audit_customer ON marketing_audit_events(customer_id, created_at DESC);

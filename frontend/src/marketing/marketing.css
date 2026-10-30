@@ -1,0 +1,918 @@
+/* =============================================================================
+   ADMAFIA MARKETING DEPARTMENT - STYLESHEET
+   Clean, modern, professional, high-contrast light theme
+   ============================================================================= */
+
+:root {
+  --mkt-primary: #4f46e5;
+  --mkt-primary-hover: #4338ca;
+  --mkt-primary-soft: #eef2ff;
+  --mkt-secondary: #0ea5e9;
+  --mkt-emerald: #10b981;
+  --mkt-emerald-soft: #ecfdf5;
+  --mkt-amber: #f59e0b;
+  --mkt-amber-soft: #fffbeb;
+  --mkt-rose: #f43f5e;
+  --mkt-rose-soft: #fff1f2;
+  --mkt-dark: #0f172a;
+  --mkt-slate-700: #334155;
+  --mkt-slate-500: #64748b;
+  --mkt-slate-300: #cbd5e1;
+  --mkt-slate-100: #f1f5f9;
+  --mkt-slate-50: #f8fafc;
+  --mkt-border: #e2e8f0;
+  --mkt-card-bg: #ffffff;
+  --mkt-radius-lg: 16px;
+  --mkt-radius-md: 12px;
+  --mkt-radius-sm: 8px;
+  --mkt-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --mkt-shadow-md: 0 4px 14px rgba(15, 23, 42, 0.05);
+  --mkt-shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+/* 1. Main Layout & Frame */
+.marketing-layout-root {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: var(--mkt-dark);
+}
+
+.marketing-sidebar {
+  width: 270px;
+  min-width: 270px;
+  background: #ffffff;
+  border-right: 1px solid var(--mkt-border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 40;
+}
+
+.marketing-sidebar-brand {
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--mkt-border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.marketing-sidebar-logo {
+  height: 34px;
+  width: auto;
+  object-fit: contain;
+}
+
+.marketing-brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.marketing-brand-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--mkt-dark);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.marketing-brand-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--mkt-primary);
+  letter-spacing: 0.05em;
+}
+
+.marketing-sidebar-nav {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.marketing-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--mkt-radius-md);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--mkt-slate-700);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.16s ease-in-out;
+  text-decoration: none;
+  text-align: left;
+}
+
+.marketing-nav-item:hover {
+  background: var(--mkt-slate-50);
+  color: var(--mkt-dark);
+}
+
+.marketing-nav-item.active {
+  background: var(--mkt-primary-soft);
+  color: var(--mkt-primary);
+  border-color: rgba(79, 70, 229, 0.2);
+  font-weight: 700;
+}
+
+.marketing-nav-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.marketing-nav-badge {
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+  background: var(--mkt-slate-100);
+  color: var(--mkt-slate-700);
+}
+
+.marketing-nav-item.active .marketing-nav-badge {
+  background: var(--mkt-primary);
+  color: #ffffff;
+}
+
+.marketing-sidebar-footer {
+  padding: 14px 16px;
+  border-top: 1px solid var(--mkt-border);
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.marketing-btn-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--mkt-radius-sm);
+  background: var(--mkt-slate-50);
+  border: 1px solid var(--mkt-border);
+  color: var(--mkt-slate-700);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.marketing-btn-logout:hover {
+  background: var(--mkt-rose-soft);
+  color: var(--mkt-rose);
+  border-color: #fecdd3;
+}
+
+/* 2. Main Content Area */
+.marketing-main-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.marketing-top-bar {
+  height: 64px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--mkt-border);
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.marketing-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--mkt-slate-500);
+}
+
+.marketing-breadcrumbs strong {
+  color: var(--mkt-dark);
+  font-weight: 700;
+}
+
+.marketing-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.marketing-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.marketing-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  animation: pulseLive 2s infinite;
+}
+
+@keyframes pulseLive {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.marketing-clock-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--mkt-slate-700);
+  background: var(--mkt-slate-100);
+  padding: 5px 10px;
+  border-radius: var(--mkt-radius-sm);
+  border: 1px solid var(--mkt-border);
+}
+
+.marketing-page-container {
+  padding: 28px;
+  flex: 1;
+}
+
+/* 3. Page Header Section */
+.marketing-page-header {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.marketing-header-title-col h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0 0 6px 0;
+  color: var(--mkt-dark);
+}
+
+.marketing-header-title-col p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--mkt-slate-500);
+  font-weight: 500;
+}
+
+.marketing-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 4. Stat Overview Cards */
+.marketing-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.marketing-stat-card {
+  background: #ffffff;
+  border: 1px solid var(--mkt-border);
+  border-radius: var(--mkt-radius-lg);
+  padding: 20px;
+  box-shadow: var(--mkt-shadow-sm);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.marketing-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mkt-shadow-md);
+}
+
+.marketing-stat-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--mkt-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.marketing-stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.marketing-stat-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mkt-slate-500);
+  margin-bottom: 4px;
+}
+
+.marketing-stat-value {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--mkt-dark);
+  line-height: 1.1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.marketing-stat-sub {
+  font-size: 0.76rem;
+  color: var(--mkt-slate-500);
+  margin-top: 4px;
+}
+
+/* 5. Control / Filter Bar */
+.marketing-controls-card {
+  background: #ffffff;
+  border: 1px solid var(--mkt-border);
+  border-radius: var(--mkt-radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--mkt-shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.marketing-search-box {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+  max-width: 420px;
+}
+
+.marketing-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--mkt-slate-500);
+  pointer-events: none;
+}
+
+.marketing-search-input {
+  width: 100%;
+  padding: 9px 12px 9px 36px;
+  border-radius: var(--mkt-radius-md);
+  border: 1.5px solid var(--mkt-border);
+  font-size: 0.88rem;
+  color: var(--mkt-dark);
+  background: var(--mkt-slate-50);
+  outline: none;
+  transition: all 0.15s;
+}
+
+.marketing-search-input:focus {
+  background: #ffffff;
+  border-color: var(--mkt-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.marketing-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.marketing-select {
+  padding: 8px 12px;
+  border-radius: var(--mkt-radius-md);
+  border: 1.5px solid var(--mkt-border);
+  background: #ffffff;
+  color: var(--mkt-slate-700);
+  font-size: 0.85rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.marketing-select:focus {
+  border-color: var(--mkt-primary);
+}
+
+.marketing-btn-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--mkt-radius-md);
+  background: var(--mkt-slate-100);
+  border: 1.5px solid var(--mkt-border);
+  color: var(--mkt-slate-700);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.marketing-btn-refresh:hover {
+  background: #e2e8f0;
+  color: var(--mkt-dark);
+}
+
+.marketing-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--mkt-radius-md);
+  background: var(--mkt-primary);
+  border: none;
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+  transition: all 0.15s;
+  text-decoration: none;
+}
+
+.marketing-btn-primary:hover {
+  background: var(--mkt-primary-hover);
+  transform: translateY(-1px);
+}
+
+.marketing-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 6. Clean Authoritative Data Tables */
+.marketing-table-card {
+  background: #ffffff;
+  border: 1px solid var(--mkt-border);
+  border-radius: var(--mkt-radius-lg);
+  box-shadow: var(--mkt-shadow-sm);
+  overflow: hidden;
+}
+
+.marketing-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.marketing-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+.marketing-table th {
+  background: var(--mkt-slate-50);
+  padding: 13px 18px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mkt-slate-500);
+  border-bottom: 1px solid var(--mkt-border);
+  white-space: nowrap;
+}
+
+.marketing-table td {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--mkt-border);
+  color: var(--mkt-dark);
+  vertical-align: middle;
+}
+
+.marketing-table tr:hover td {
+  background: #fafafa;
+}
+
+.marketing-table tr:last-child td {
+  border-bottom: none;
+}
+
+.mkt-cell-primary {
+  font-weight: 700;
+  color: var(--mkt-dark);
+}
+
+.mkt-cell-sub {
+  font-size: 0.78rem;
+  color: var(--mkt-slate-500);
+  margin-top: 2px;
+}
+
+.mkt-badge-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+/* 7. Status Pills */
+.mkt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mkt-pill-green {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.mkt-pill-blue {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.mkt-pill-amber {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.mkt-pill-rose {
+  background: #fff1f2;
+  color: #e11d48;
+  border: 1px solid #fecdd3;
+}
+
+.mkt-pill-slate {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+/* 8. Table Action Buttons */
+.mkt-actions-flex {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mkt-btn-table-action {
+  padding: 6px 12px;
+  border-radius: var(--mkt-radius-sm);
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1.4px solid var(--mkt-border);
+  background: #ffffff;
+  color: var(--mkt-slate-700);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.14s;
+}
+
+.mkt-btn-table-action:hover {
+  background: var(--mkt-slate-100);
+  color: var(--mkt-dark);
+  border-color: #94a3b8;
+}
+
+.mkt-btn-table-action.primary {
+  background: var(--mkt-primary-soft);
+  color: var(--mkt-primary);
+  border-color: rgba(79, 70, 229, 0.3);
+}
+
+.mkt-btn-table-action.primary:hover {
+  background: var(--mkt-primary);
+  color: #ffffff;
+  border-color: var(--mkt-primary);
+}
+
+.mkt-btn-table-action.success {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
+}
+
+.mkt-btn-table-action.success:hover {
+  background: #059669;
+  color: #ffffff;
+}
+
+.mkt-btn-table-action.danger {
+  background: #fff1f2;
+  color: #e11d48;
+  border-color: #fecdd3;
+}
+
+.mkt-btn-table-action.danger:hover {
+  background: #e11d48;
+  color: #ffffff;
+}
+
+/* 9. Pagination Row */
+.marketing-pagination {
+  padding: 14px 20px;
+  border-top: 1px solid var(--mkt-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--mkt-slate-50);
+  font-size: 0.84rem;
+  color: var(--mkt-slate-500);
+}
+
+.marketing-page-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.marketing-page-btn {
+  padding: 5px 12px;
+  border-radius: var(--mkt-radius-sm);
+  border: 1px solid var(--mkt-border);
+  background: #ffffff;
+  color: var(--mkt-dark);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.marketing-page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 10. Modals & Drawers */
+.marketing-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.marketing-modal-box {
+  background: #ffffff;
+  border-radius: var(--mkt-radius-lg);
+  box-shadow: var(--mkt-shadow-lg);
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid var(--mkt-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.marketing-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--mkt-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.marketing-modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--mkt-dark);
+}
+
+.marketing-btn-close {
+  background: transparent;
+  border: none;
+  font-size: 1.3rem;
+  color: var(--mkt-slate-500);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.marketing-modal-body {
+  padding: 24px;
+  flex: 1;
+}
+
+.marketing-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--mkt-border);
+  background: var(--mkt-slate-50);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* 11. Form Elements */
+.mkt-form-group {
+  margin-bottom: 18px;
+}
+
+.mkt-form-label {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--mkt-dark);
+  margin-bottom: 6px;
+}
+
+.mkt-form-label span.req {
+  color: var(--mkt-rose);
+  margin-left: 3px;
+}
+
+.mkt-form-input,
+.mkt-form-textarea,
+.mkt-form-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--mkt-radius-md);
+  border: 1.5px solid var(--mkt-border);
+  background: #ffffff;
+  color: var(--mkt-dark);
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.15s;
+  box-sizing: border-box;
+}
+
+.mkt-form-input:focus,
+.mkt-form-textarea:focus,
+.mkt-form-select:focus {
+  border-color: var(--mkt-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.mkt-form-help {
+  font-size: 0.76rem;
+  color: var(--mkt-slate-500);
+  margin-top: 4px;
+}
+
+/* 12. Creative Feed Preview Card (Meta Ads Simulator) */
+.mkt-feed-preview-card {
+  border: 1px solid var(--mkt-border);
+  border-radius: var(--mkt-radius-md);
+  background: #ffffff;
+  overflow: hidden;
+  max-width: 440px;
+  box-shadow: var(--mkt-shadow-sm);
+  margin: 0 auto;
+}
+
+.mkt-feed-header {
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.mkt-feed-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mkt-feed-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--mkt-primary);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.mkt-feed-author-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--mkt-dark);
+  line-height: 1.2;
+}
+
+.mkt-feed-sponsored {
+  font-size: 0.72rem;
+  color: var(--mkt-slate-500);
+}
+
+.mkt-feed-media-wrap {
+  width: 100%;
+  height: 240px;
+  background: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.mkt-feed-media-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mkt-feed-body {
+  padding: 14px;
+}
+
+.mkt-feed-caption {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--mkt-dark);
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+}
+
+.mkt-feed-hashtags {
+  font-size: 0.82rem;
+  color: var(--mkt-primary);
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.mkt-feed-cta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--mkt-slate-50);
+  padding: 10px 14px;
+  border-radius: var(--mkt-radius-sm);
+  border: 1px solid var(--mkt-border);
+}
+
+.mkt-feed-cta-text {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--mkt-slate-700);
+}
+
+.mkt-feed-cta-btn {
+  padding: 6px 14px;
+  border-radius: var(--mkt-radius-sm);
+  background: var(--mkt-primary);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 800;
+  border: none;
+}
+
+/* 13. Mobile Drawer Responsive */
+@media (max-width: 900px) {
+  .marketing-sidebar {
+    display: none;
+  }
+  .marketing-page-container {
+    padding: 16px;
+  }
+  .marketing-top-bar {
+    padding: 0 16px;
+  }
+}

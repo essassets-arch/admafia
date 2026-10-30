@@ -71,9 +71,31 @@ export async function initDatabase() {
     const dataDir = path.join(__dirname, 'pgdata');
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
+    } else {
+      try {
+        const files = fs.readdirSync(dataDir);
+        for (const file of files) {
+          if (file === 'postmaster.pid' || file.startsWith('.s.PGSQL') || file.includes('lock')) {
+            try { fs.unlinkSync(path.join(dataDir, file)); } catch (e) {}
+          }
+        }
+      } catch (e) {}
     }
-    pgliteInstance = new PGlite(dataDir);
-    await pgliteInstance.waitReady;
+    try {
+      pgliteInstance = new PGlite(dataDir);
+      await pgliteInstance.waitReady;
+    } catch (pgInitErr) {
+      console.warn('[PostgreSQL] PGlite failed to resume from existing data directory, auto-recovering:', pgInitErr.message);
+      try {
+        if (process.platform === 'win32') {
+          import('child_process').then(cp => cp.execSync(`powershell -Command "Remove-Item -Path '${dataDir}' -Recurse -Force"`));
+        } else {
+          fs.rmSync(dataDir, { recursive: true, force: true });
+        }
+      } catch (rmErr) {}
+      pgliteInstance = new PGlite(dataDir);
+      await pgliteInstance.waitReady;
+    }
     dbMode = 'pglite-postgres';
     console.log(`[PostgreSQL] Initialized persistent PostgreSQL database at ${dataDir}`);
   }

@@ -6,6 +6,7 @@ import WorkspaceSetupPage from './portal/WorkspaceSetupPage';
 import CheckoutPage from './portal/CheckoutPage';
 import SalesLoginPage from './sales/SalesLoginPage';
 import SalesExecutiveDashboard from './sales/SalesExecutiveDashboard';
+import MarketingLayout from './marketing/MarketingLayout';
 import { CustomerLoginPage, CustomerRegisterPage } from './portal/AuthPages';
 import crmApi from './services/crmApi';
 import './portal/portal.css';
@@ -158,6 +159,11 @@ export default function App() {
     if (p.startsWith('/sales') || h.startsWith('#sales') || p.startsWith('/admin') || h.startsWith('#admin')) {
       if (h.includes('login') || h === '#sales/login') return 'sales-login';
       return 'sales-portal';
+    }
+
+    // 4B. Marketing Department Operations Panel (/marketing)
+    if (p.startsWith('/marketing') || h.startsWith('#marketing') || h.startsWith('#/marketing')) {
+      return 'marketing-portal';
     }
 
     // 5. Customer Portal (/app or /app/lead)

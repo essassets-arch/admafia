@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
+import { marketingRouter } from './routes/marketing.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,7 +16,13 @@ const app = express();
 const PORT = Number(process.env.PORT || 5000);
 
 app.use(cors());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '25mb' }));
+
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
 
 // Helper: Format DB customer row from vw_sales_customer_accounts to frontend shape
 function mapCustomerRow(row, passwordPlain = '••••••••••••') {
@@ -368,6 +375,7 @@ app.post('/api/auth/register', async (req, res) => {
       state = 'Maharashtra',
       category = 'IT & Software',
       deposit = 0,
+      initialDeposit: reqInitialDeposit,
     } = req.body || {};
 
     const cleanPhone = String(phone || mobile || '').replace(/\D/g, '').slice(-10);
@@ -384,7 +392,7 @@ app.post('/api/auth/register', async (req, res) => {
     const custId = `cust_reg_${cleanPhone}`;
     const walId = `wal_${cleanPhone}`;
     const pvId = `pv_${cleanPhone}`;
-    const initialDeposit = Math.max(0, Number(deposit) || 0);
+    const initialDeposit = Math.max(0, Number(deposit || reqInitialDeposit) || 0);
     const payStatus = initialDeposit >= 300 ? 'paid' : 'pending';
 
     await query(
@@ -422,9 +430,30 @@ app.post('/api/auth/register', async (req, res) => {
       `INSERT INTO wallets (
         id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active
       ) VALUES ($1, $2, $3, 300.00, $3, $4)
-      ON CONFLICT (customer_id) DO NOTHING`,
+      ON CONFLICT (customer_id) DO UPDATE SET
+        available_balance = wallets.available_balance + EXCLUDED.available_balance,
+        total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
+        ad_campaign_active = CASE WHEN (wallets.available_balance + EXCLUDED.available_balance) >= 300 THEN TRUE ELSE wallets.ad_campaign_active END`,
       [walId, custId, initialDeposit, initialDeposit >= 300]
     );
+
+    if (initialDeposit > 0) {
+      await query(
+        `INSERT INTO wallet_transactions (
+          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, 'Razorpay Secure (UPI/Card)', 'Verified ✓')
+        ON CONFLICT (reference_utr) DO UPDATE SET balance_after = EXCLUDED.balance_after`,
+        [
+          `tx_init_${cleanPhone}_${Date.now()}`,
+          custId,
+          walId,
+          initialDeposit,
+          initialDeposit,
+          `INIT_${cleanPhone}`,
+          'Initial Account Opening Ad Wallet Deposit',
+        ]
+      );
+    }
 
     await query(
       `INSERT INTO pending_verifications (
@@ -1978,6 +2007,11 @@ app.patch('/api/lead-assignments/:id', async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// =============================================================================
+// 6B. MARKETING DEPARTMENT API ROUTER (/api/marketing/*)
+// =============================================================================
+app.use('/api/marketing', marketingRouter);
 
 // =============================================================================
 // 7. PRODUCTION STATIC FRONTEND SERVING (When frontend/dist is built on VPS)
