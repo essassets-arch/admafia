@@ -378,3 +378,4 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
     </div>
   );
 }
+

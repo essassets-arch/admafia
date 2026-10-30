@@ -699,3 +699,4 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
     </div>
   );
 }
+
