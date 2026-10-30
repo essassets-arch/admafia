@@ -9,8 +9,6 @@ import {
   Menu,
   X,
   Palette,
-  Sparkles,
-  ArrowRight,
   Paintbrush,
 } from 'lucide-react';
 import GraphicsPostRequestsDesk from './GraphicsPostRequestsDesk';
@@ -246,16 +244,6 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
         </nav>
 
         <div className="graphics-sidebar-footer">
-          {/* Quick link to Marketing Department */}
-          <a
-            href="/marketing"
-            className="graphics-footer-btn-highlight"
-          >
-            <Sparkles size={15} />
-            <span>Marketing Dept</span>
-            <ArrowRight size={13} style={{ marginLeft: 'auto' }} />
-          </a>
-
           <button
             type="button"
             className="graphics-footer-btn"
