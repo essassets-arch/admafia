@@ -323,6 +323,30 @@ export default function App() {
     );
   }
 
+  // View: Marketing Department Operations Workspace (/marketing)
+  if (currentView === 'marketing-portal') {
+    return (
+      <MarketingLayout
+        onSignOut={() => {
+          try {
+            localStorage.removeItem('growthline_active_user');
+            sessionStorage.clear();
+          } catch (e) {}
+          window.location.hash = '';
+          try { window.history.pushState({}, '', '/'); } catch (e) {}
+          setCurrentView('landing');
+          window.location.href = '/';
+        }}
+        onBackToWebsite={() => {
+          try { window.history.pushState({}, '', '/'); } catch (e) {}
+          window.location.hash = '';
+          setCurrentView('landing');
+          window.location.href = '/';
+        }}
+      />
+    );
+  }
+
   // View: Dedicated Standalone Workspace Configuration Page (#workspace-setup)
   if (currentView === 'workspace-setup') {
     return (
@@ -922,6 +946,11 @@ export default function App() {
               style={{ height: '36px', width: 'auto', objectFit: 'contain', background: '#ffffff', padding: '4px 8px', borderRadius: '8px' }}
             />
             <span>&copy; {new Date().getFullYear()} {site.name}.</span>
+          </div>
+          <div style={{ display: 'flex', gap: '14px', alignItems: 'center', fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+            <a href="/sales" style={{ color: 'inherit', textDecoration: 'none' }}>Sales Operations</a>
+            <span>•</span>
+            <a href="/marketing" style={{ color: 'inherit', textDecoration: 'none' }}>Marketing Panel</a>
           </div>
           <span>Facebook and Instagram are trademarks of Meta Platforms, Inc. AdMafia Marketing is not affiliated with Meta.</span>
         </div>
