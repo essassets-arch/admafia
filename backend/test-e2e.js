@@ -426,6 +426,16 @@ async function runTests() {
   assert(emptyCatRes.status === 400 && emptyCatRes.data.ok === false, 'Distribution to category with 0 customers cleanly rejected with HTTP 400');
   assert(emptyCatRes.data.error.includes('No active eligible customers found'), 'Clear error message returned explaining 0 eligible customers');
 
+  // Step F5: Minimal payload with ONLY category and contactNumber
+  const minimalDistRes = await api('/leads/distribute', {
+    method: 'POST',
+    body: JSON.stringify({
+      category: 'Hardware',
+      contactNumber: '9988776655',
+    }),
+  });
+  assert(minimalDistRes.status === 201 && minimalDistRes.data.recipientsCount === 1, 'Simplified lead distribution with only category and contact number succeeded');
+
   // Step G: Acceptance Criterion 5 — Log in as each recipient and verify assigned lead is accessible
   for (let i = 0; i < itCustIds.length; i++) {
     const loginRes = await api('/auth/login', {

@@ -36,15 +36,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
   const [isCreateLeadOpen, setIsCreateLeadOpen] = useState(false);
   const [isDistributing, setIsDistributing] = useState(false);
   const [leadForm, setLeadForm] = useState({
-    title: '',
-    requirement: '',
     category: '',
-    buyerName: '',
-    buyerPhone: '',
-    buyerEmail: '',
-    budget: '',
-    location: '',
-    priority: 'Normal',
+    contactNumber: '',
   });
 
   // Selected Category Live Recipient Preview in Create Lead Form
@@ -198,15 +191,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
   const handleOpenCreateLead = (prefillCategory = '') => {
     const defaultCat = prefillCategory || (categoryOptions[0]?.category || 'IT & Software');
     setLeadForm({
-      title: '',
-      requirement: '',
       category: defaultCat,
-      buyerName: '',
-      buyerPhone: '',
-      buyerEmail: '',
-      budget: '',
-      location: '',
-      priority: 'Normal',
+      contactNumber: '',
     });
     setIsCreateLeadOpen(true);
   };
@@ -214,24 +200,12 @@ export default function CustomerGroupsDesk({ customers = [] }) {
   const handleSubmitDistributeLead = async (e) => {
     e.preventDefault();
 
-    if (!leadForm.title.trim()) {
-      showToast('Lead title is required.', 'error');
-      return;
-    }
-    if (!leadForm.requirement.trim()) {
-      showToast('Lead description / buyer requirement is required.', 'error');
-      return;
-    }
     if (!leadForm.category) {
       showToast('Please select a target category.', 'error');
       return;
     }
-    if (!leadForm.buyerName.trim()) {
-      showToast('Buyer name is required.', 'error');
-      return;
-    }
 
-    const cleanPhone = String(leadForm.buyerPhone || '').replace(/\D/g, '').slice(-10);
+    const cleanPhone = String(leadForm.contactNumber || '').replace(/\D/g, '').slice(-10);
     if (cleanPhone.length !== 10 || !['6', '7', '8', '9'].includes(cleanPhone[0])) {
       showToast('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.', 'error');
       return;
@@ -248,18 +222,15 @@ export default function CustomerGroupsDesk({ customers = [] }) {
     try {
       setIsDistributing(true);
       const payload = {
-        title: leadForm.title.trim(),
-        description: leadForm.requirement.trim(),
-        requirement: leadForm.requirement.trim(),
         category: leadForm.category,
         groupId: selOption?.groupId || null,
-        buyerName: leadForm.buyerName.trim(),
+        contactNumber: cleanPhone,
         buyerPhone: cleanPhone,
-        buyerEmail: leadForm.buyerEmail.trim(),
-        budget: leadForm.budget.trim() || '₹1.5L – ₹3.5L',
-        location: leadForm.location.trim() || 'Pan India',
-        city: leadForm.location.trim() || 'India',
-        priority: leadForm.priority,
+        title: `${leadForm.category} Buyer Requirement`,
+        description: `Direct inbound requirement for ${leadForm.category} products and services.`,
+        requirement: `Direct inbound requirement for ${leadForm.category} products and services.`,
+        buyerName: 'Verified Buyer',
+        priority: 'Normal',
         source: 'Category Lead Distribution',
       };
 
@@ -750,7 +721,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
           <div
             className="sales-modal-card"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 620, width: '100%', borderRadius: 12, padding: 24 }}
+            style={{ maxWidth: 480, width: '100%', borderRadius: 12, padding: 24 }}
           >
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -852,126 +823,30 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 )}
               </div>
 
-              {/* Lead Title */}
+              {/* Contact Number */}
               <div>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                  Lead Title <span style={{ color: '#ef4444' }}>*</span>
+                  Contact Number <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
-                  type="text"
+                  type="tel"
                   required
-                  placeholder="e.g. Enterprise Cloud Infrastructure & Networking Equipment"
-                  value={leadForm.title}
-                  onChange={(e) => setLeadForm({ ...leadForm, title: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  maxLength={10}
+                  placeholder="10-digit mobile number (e.g. 9876543210)"
+                  value={leadForm.contactNumber}
+                  onChange={(e) => setLeadForm({ ...leadForm, contactNumber: e.target.value.replace(/\D/g, '') })}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.92rem',
+                    letterSpacing: '0.5px',
+                  }}
                 />
-              </div>
-
-              {/* Lead Description / Buyer Requirement */}
-              <div>
-                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                  Lead Description / Buyer Requirement <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  placeholder="Detail the specific customer requirement, product specifications, quantities, or commercial scope..."
-                  value={leadForm.requirement}
-                  onChange={(e) => setLeadForm({ ...leadForm, requirement: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1', resize: 'vertical' }}
-                />
-              </div>
-
-              {/* Buyer Name & Buyer Mobile */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Buyer Name <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Ramesh Patel"
-                    value={leadForm.buyerName}
-                    onChange={(e) => setLeadForm({ ...leadForm, buyerName: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Buyer Mobile <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="10-digit mobile (e.g. 9876543210)"
-                    value={leadForm.buyerPhone}
-                    onChange={(e) => setLeadForm({ ...leadForm, buyerPhone: e.target.value.replace(/\D/g, '') })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-              </div>
-
-              {/* Buyer Email & Budget */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Buyer Email <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="buyer@example.com"
-                    value={leadForm.buyerEmail}
-                    onChange={(e) => setLeadForm({ ...leadForm, buyerEmail: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Budget <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. ₹1.5L – ₹3.5L"
-                    value={leadForm.budget}
-                    onChange={(e) => setLeadForm({ ...leadForm, budget: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-              </div>
-
-              {/* Location & Priority */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Location / Market <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Mumbai, Maharashtra"
-                    value={leadForm.location}
-                    onChange={(e) => setLeadForm({ ...leadForm, location: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
-                    Priority
-                  </label>
-                  <select
-                    value={leadForm.priority}
-                    onChange={(e) => setLeadForm({ ...leadForm, priority: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
-                  >
-                    <option value="Normal">Normal</option>
-                    <option value="High">High</option>
-                    <option value="Urgent">Urgent</option>
-                  </select>
-                </div>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4, display: 'block' }}>
+                  Buyer contact number that will be visible to all recipient customers in this category.
+                </span>
               </div>
 
               {/* Action Buttons */}

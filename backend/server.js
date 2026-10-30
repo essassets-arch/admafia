@@ -1561,11 +1561,13 @@ app.post('/api/leads/distribute', async (req, res) => {
       requirement,
       budget = '₹1.5L – ₹3.5L',
       location = '',
-      priority = 'Urgent',
+      priority = 'Normal',
       source = 'Category Lead Distribution',
       deadlineDate = null,
-      buyerName = 'Verified Buyer',
+      buyerName,
       buyerPhone,
+      phone,
+      contactNumber,
       buyerEmail = '',
       city = '',
       id,
@@ -1577,19 +1579,13 @@ app.post('/api/leads/distribute', async (req, res) => {
     if (!targetCat && !targetGroupId) {
       return res.status(400).json({ ok: false, error: 'Target category or customer group is required.' });
     }
-    if (!title || !title.trim()) {
-      return res.status(400).json({ ok: false, error: 'Lead title is required.' });
-    }
-    const reqText = (requirement || description || '').trim();
-    if (!reqText) {
-      return res.status(400).json({ ok: false, error: 'Customer requirement details are required.' });
-    }
 
-    const cleanBuyerDigits = String(buyerPhone || '9876543210').replace(/\D/g, '').slice(-10);
+    const rawPhone = buyerPhone || phone || contactNumber || '';
+    const cleanBuyerDigits = String(rawPhone || '9876543210').replace(/\D/g, '').slice(-10);
     if (cleanBuyerDigits.length !== 10 || !['6', '7', '8', '9'].includes(cleanBuyerDigits[0])) {
       return res.status(400).json({
         ok: false,
-        error: 'Buyer phone number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.',
+        error: 'Contact number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.',
       });
     }
 
@@ -1614,6 +1610,10 @@ app.post('/api/leads/distribute', async (req, res) => {
     const finalCategory = targetCat || (matchedGroup ? (matchedGroup.category || matchedGroup.name) : 'Other');
     const finalGroupId = matchedGroup ? matchedGroup.id : (targetGroupId || null);
     const finalGroupName = matchedGroup ? matchedGroup.name : finalCategory;
+
+    const leadTitle = (title || '').trim() || `${finalCategory} Buyer Requirement`;
+    const reqText = (requirement || description || '').trim() || `Inbound customer requirement for ${finalCategory} products and commercial services.`;
+    const bName = (buyerName || '').trim() || 'Verified Buyer';
 
     // Query active eligible customers for this category or group
     const eligibleRes = await query(
@@ -1674,19 +1674,19 @@ app.post('/api/leads/distribute', async (req, res) => {
          RETURNING *`,
         [
           masterLeadId,
-          title.trim(),
+          leadTitle,
           description || reqText,
           finalCategory,
           finalGroupId,
-          buyerName || displayPhone,
+          bName || displayPhone,
           cleanBuyerDigits,
           buyerEmail || `lead_${cleanBuyerDigits.slice(-4)}@example.com`,
           city || location || '',
           reqText,
           budget || '₹1.5L – ₹3.5L',
           location || city || '',
-          priority || 'Urgent',
-          source || 'Direct Intake',
+          priority || 'Normal',
+          source || 'Category Lead Distribution',
           deadlineDate || null,
         ]
       );
@@ -1722,13 +1722,13 @@ app.post('/api/leads/distribute', async (req, res) => {
             finalCategory,
             cleanBuyerDigits,
             displayPhone,
-            buyerName || displayPhone,
+            bName || displayPhone,
             buyerEmail || `lead_${cleanBuyerDigits.slice(-4)}@example.com`,
             city || cust.city || '',
             reqText,
             budget || '₹1.5L – ₹3.5L',
-            source || 'Direct Intake',
-            priority || 'Urgent',
+            source || 'Category Lead Distribution',
+            priority || 'Normal',
             description || `Category lead dispatched for ${finalGroupName}`,
           ]
         );
