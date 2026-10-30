@@ -483,14 +483,6 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <a
-              href="#register"
-              className="sales-btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem' }}
-              title="Test Client Registration Form"
-            >
-              + Test #register Form
-            </a>
             <button
               type="button"
               className="sales-btn-secondary"
