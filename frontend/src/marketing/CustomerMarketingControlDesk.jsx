@@ -48,6 +48,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
   const [editActiveDays, setEditActiveDays] = useState(['MON', 'TUE', 'WED', 'THU', 'FRI']);
   const [editPreset, setEditPreset] = useState('weekdays');
   const [savingPacing, setSavingPacing] = useState(false);
+  const [processingPacing, setProcessingPacing] = useState(false);
 
   // Today calculation (Monday = 0 ... Sunday = 6)
   const currentDayIdx = (new Date().getDay() + 6) % 7;
@@ -116,6 +117,37 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     setEditActiveDays(days);
     setEditPreset(customer.schedulePreset || (days.length === 7 ? 'all' : days.length === 5 ? 'weekdays' : 'custom'));
     setIsPacingModalOpen(true);
+  };
+
+  // Run or Trigger Automated Daily Ad Spend Pacing
+  const handleProcessDailyPacing = async () => {
+    setProcessingPacing(true);
+    try {
+      const res = await marketingApi.processDailyPacing();
+      if (res && res.ok) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Daily Pacing Processed ⚡',
+          html: `
+            <div style="text-align: left; font-size: 0.88rem; color: #334155; line-height: 1.6;">
+              <div>Today: <strong>${res.todayDayCode}</strong> (${res.todayDateStr})</div>
+              <div style="margin-top: 6px; color: #059669; font-weight: 700;">
+                ✓ <strong>${res.processedCount}</strong> per-day services settled from customer wallets.
+              </div>
+              <div style="margin-top: 4px; color: ${res.autoPausedCount > 0 ? '#dc2626' : '#64748b'}; font-weight: 700;">
+                ● <strong>${res.autoPausedCount}</strong> low-balance accounts automatically paused.
+              </div>
+            </div>
+          `,
+          confirmButtonColor: '#4f46e5',
+        });
+        fetchData(true);
+      }
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Daily Pacing Error', text: err.message });
+    } finally {
+      setProcessingPacing(false);
+    }
   };
 
   // Preset Days Selection
@@ -233,16 +265,17 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     }
   };
 
-  // Start Marketing: Cut / Deduct price from customer wallet and turn marketing ON
+  // Start Marketing: Deducts daily ad spend for today's per-day service (if not already deducted today) & activates pacing
   const handleStartMarketingForCustomer = async (cust, activeCampaign) => {
     const spend = cust.dailyAdSpend || 300;
     const balance = cust.availableBalance || 0;
+    const isAlreadyDeducted = Boolean(cust.isDeductedToday);
 
-    if (balance < spend) {
+    if (!isAlreadyDeducted && balance < spend) {
       Swal.fire({
         icon: 'error',
-        title: 'Insufficient Balance',
-        text: `Customer has ₹${balance.toLocaleString('en-IN')}, needs minimum ₹${spend.toLocaleString('en-IN')} to start marketing. Please top up wallet first.`,
+        title: 'Customer Balance is Low',
+        text: `Customer has ₹${balance.toLocaleString('en-IN')}, needs minimum ₹${spend.toLocaleString('en-IN')} for today's per-day marketing service. Please top up wallet first.`,
       });
       return;
     }
@@ -252,9 +285,16 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
       html: `
         <div style="text-align: left; font-size: 0.88rem; color: #334155; line-height: 1.6;">
           <div>Customer: <strong>${cust.name}</strong></div>
-          <div style="margin-top: 4px;">Daily Ad Spend to Deduct: <strong style="color: #dc2626;">-₹${spend}</strong> (Cut from wallet immediately)</div>
-          <div>Current Wallet Balance: <strong>₹${balance.toLocaleString('en-IN')}</strong></div>
-          <div>Remaining Balance After Deduction: <strong style="color: #059669;">₹${(balance - spend).toLocaleString('en-IN')}</strong></div>
+          <div style="margin-top: 4px;">Service Model: <strong>Per-Day Advertising Service (₹${spend}/day)</strong></div>
+          ${isAlreadyDeducted ? `
+            <div style="margin-top: 6px; padding: 8px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; color: #1e40af; font-size: 0.82rem;">
+              ✓ <strong>Today's per-day service is already settled.</strong> Resuming campaign without charging wallet again today.
+            </div>
+          ` : `
+            <div style="margin-top: 4px;">Per-Day Service to Deduct: <strong style="color: #dc2626;">-₹${spend}</strong> (Cut from wallet for today)</div>
+            <div>Current Wallet Balance: <strong>₹${balance.toLocaleString('en-IN')}</strong></div>
+            <div>Balance After Today's Deduction: <strong style="color: #059669;">₹${(balance - spend).toLocaleString('en-IN')}</strong></div>
+          `}
           <div style="margin-top: 10px; padding: 10px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 0.82rem; color: #065f46;">
             ✓ Marketing will turn <strong>LIVE (ON)</strong> on customer portal &amp; Meta Ads pipeline.
           </div>
@@ -263,7 +303,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#10b981',
-      confirmButtonText: `Yes, Deduct ₹${spend} & Start Marketing`,
+      confirmButtonText: isAlreadyDeducted ? 'Yes, Resume Marketing' : `Yes, Deduct ₹${spend} & Start Marketing`,
     });
 
     if (!confirm.isConfirmed) return;
@@ -275,7 +315,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           await Swal.fire({
             icon: 'success',
             title: 'Marketing Started Live! 🚀',
-            text: res.message || `₹${spend} daily ad spend deducted. Marketing is now active for ${cust.name}!`,
+            text: res.message || `₹${spend} per-day service active for ${cust.name}!`,
             confirmButtonColor: '#4f46e5',
           });
           fetchData(true);
@@ -292,7 +332,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           await Swal.fire({
             icon: 'success',
             title: 'Marketing Started Live! 🚀',
-            text: `₹${spend} daily ad spend deducted from wallet. Marketing is now active for ${cust.name}!`,
+            text: `Per-day marketing service active for ${cust.name}!`,
             confirmButtonColor: '#4f46e5',
           });
           fetchData(true);
@@ -377,6 +417,17 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           </p>
         </div>
         <div className="marketing-header-actions">
+          <button
+            type="button"
+            className="marketing-btn-refresh"
+            onClick={handleProcessDailyPacing}
+            disabled={processingPacing || refreshing}
+            title="Evaluate and process per-day service deductions for today"
+            style={{ borderColor: '#6366f1', color: '#4f46e5' }}
+          >
+            <Sparkles size={14} className={processingPacing ? 'spin' : ''} />
+            <span>{processingPacing ? 'Processing...' : 'Run Daily Service'}</span>
+          </button>
           <button
             type="button"
             className="marketing-btn-primary"
@@ -502,11 +553,14 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                       {/* 3. Marketing Pacing & Scheduled Days (Synced with /app/lead#app/dashboard) */}
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
-                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
                             <strong style={{ fontSize: '0.96rem', color: '#0f172a' }}>
                               ₹{dailySpend}
                             </strong>
                             <span style={{ fontSize: '0.72rem', color: '#64748b' }}>/ active day</span>
+                            <span className="mkt-pill mkt-pill-slate" style={{ fontSize: '0.64rem', fontWeight: 800, padding: '1px 5px' }}>
+                              Per-Day Service
+                            </span>
                           </div>
                           <button
                             type="button"
@@ -556,10 +610,12 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                         {/* Weekly Pacing & Today State */}
                         <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', lineHeight: 1.4 }}>
                           Weekly: <strong>₹{(activeDays.length * dailySpend).toLocaleString('en-IN')}</strong> • Today ({todayItem.label}):{' '}
-                          {isLive && isTodayActive ? (
-                            <strong style={{ color: '#059669' }}>● Active (₹{dailySpend}/day)</strong>
+                          {c.isDeductedToday ? (
+                            <strong style={{ color: '#059669' }}>● Settled for Today (₹{dailySpend}) ✓</strong>
+                          ) : isLive && isTodayActive ? (
+                            <strong style={{ color: '#0284c7' }}>● Active (₹{dailySpend}/day Service)</strong>
                           ) : isLive ? (
-                            <span style={{ color: '#64748b' }}>● Day Off</span>
+                            <span style={{ color: '#64748b' }}>● Scheduled Day Off</span>
                           ) : (
                             <span style={{ color: '#94a3b8' }}>● Campaign Paused</span>
                           )}

@@ -156,6 +156,12 @@ export const marketingApi = {
       method: 'POST',
       body: JSON.stringify({ actor, reason }),
     }),
+
+  // Per-Day Service Pacing Runner
+  processDailyPacing: () =>
+    request('/process-daily-pacing', {
+      method: 'POST',
+    }),
 };
 
 export default marketingApi;

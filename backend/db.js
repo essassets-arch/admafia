@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cp from 'child_process';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import dotenv from 'dotenv';
@@ -88,7 +89,7 @@ export async function initDatabase() {
       console.warn('[PostgreSQL] PGlite failed to resume from existing data directory, auto-recovering:', pgInitErr.message);
       try {
         if (process.platform === 'win32') {
-          import('child_process').then(cp => cp.execSync(`powershell -Command "Remove-Item -Path '${dataDir}' -Recurse -Force"`));
+          cp.execSync(`powershell -Command "Remove-Item -Path '${dataDir}' -Recurse -Force"`, { stdio: 'ignore' });
         } else {
           fs.rmSync(dataDir, { recursive: true, force: true });
         }

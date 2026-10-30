@@ -269,6 +269,12 @@ marketingRouter.get('/customers', async (req, res) => {
           : (Array.isArray(r.active_days) ? r.active_days : ['MON', 'TUE', 'WED', 'THU', 'FRI']),
         schedulePreset: r.schedule_preset || 'weekdays',
         lastDeductedAt: r.last_deducted_at,
+        isDeductedToday: Boolean(
+          r.last_deducted_at &&
+          new Date(r.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+          new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        ),
+        isLowBalance: Number(r.available_balance || 0) < Number(r.daily_ad_spend || 300) || Number(r.available_balance || 0) <= 0,
         approvedPostsCount: Number(r.approved_posts_count || 0),
         draftPostsCount: Number(r.draft_posts_count || 0),
         pendingPostsCount: Number(r.pending_posts_count || 0),
@@ -1346,36 +1352,47 @@ marketingRouter.post('/campaigns', async (req, res) => {
 
     let newBalanceAfterStart = balance;
     if (status === 'Running') {
-      const spendAmt = Number(dailyBudget);
-      newBalanceAfterStart = balance - spendAmt;
       const walRow = walRes.rows[0];
-      await query(
-        `UPDATE wallets SET
-          available_balance = $1,
-          total_ad_spent = total_ad_spent + $2,
-          ad_campaign_active = TRUE,
-          last_deducted_at = NOW(),
-          updated_at = NOW()
-        WHERE customer_id = $3`,
-        [newBalanceAfterStart, spendAmt, customerId]
-      );
+      const isAlreadyDeductedToday = walRow?.last_deducted_at &&
+        new Date(walRow.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+        new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-      const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
-      await query(
-        `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
-        [
-          txId,
-          customerId,
-          walRow.id,
-          spendAmt,
-          newBalanceAfterStart,
-          refUtr,
-          `Daily Meta Ad Spend Campaign Deduction (-₹${spendAmt}/day)`,
-        ]
-      );
+      if (!isAlreadyDeductedToday) {
+        const spendAmt = Number(dailyBudget);
+        newBalanceAfterStart = balance - spendAmt;
+        await query(
+          `UPDATE wallets SET
+            available_balance = $1,
+            total_ad_spent = total_ad_spent + $2,
+            ad_campaign_active = TRUE,
+            last_deducted_at = NOW(),
+            updated_at = NOW()
+          WHERE customer_id = $3`,
+          [newBalanceAfterStart, spendAmt, customerId]
+        );
+
+        const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
+        await query(
+          `INSERT INTO wallet_transactions (
+            id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+          ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
+          [
+            txId,
+            customerId,
+            walRow.id,
+            spendAmt,
+            newBalanceAfterStart,
+            refUtr,
+            `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${spendAmt}/day)`,
+          ]
+        );
+      } else {
+        await query(
+          `UPDATE wallets SET ad_campaign_active = TRUE, updated_at = NOW() WHERE customer_id = $1`,
+          [customerId]
+        );
+      }
     }
 
     res.status(201).json({
@@ -1425,42 +1442,62 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     const balance = Number(wallet.available_balance || 0);
     const dailySpend = Math.max(300, Number(camp.daily_budget || wallet.daily_ad_spend || 300));
 
-    if (balance < dailySpend) {
-      return res.status(400).json({
-        ok: false,
-        error: `Cannot start campaign: Customer wallet balance (₹${balance}) is below required daily budget (₹${dailySpend}). Please top up wallet first.`,
-      });
+    // Per-day service check: Has this customer already been deducted for today's service?
+    const isAlreadyDeductedToday = Boolean(
+      wallet.last_deducted_at &&
+      new Date(wallet.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    );
+
+    let newBal = balance;
+    let deductedAmount = 0;
+
+    if (!isAlreadyDeductedToday) {
+      if (balance < dailySpend) {
+        return res.status(400).json({
+          ok: false,
+          error: `Cannot start campaign: Customer wallet balance (₹${balance}) is below required daily budget for per-day service (₹${dailySpend}/day). Please top up wallet first.`,
+        });
+      }
+
+      // Cut / deduct price from wallet balance for today's per-day service
+      newBal = balance - dailySpend;
+      deductedAmount = dailySpend;
+
+      await query(
+        `UPDATE wallets SET
+          available_balance = $1,
+          total_ad_spent = total_ad_spent + $2,
+          ad_campaign_active = TRUE,
+          last_deducted_at = NOW(),
+          updated_at = NOW()
+        WHERE customer_id = $3`,
+        [newBal, dailySpend, camp.customer_id]
+      );
+
+      const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
+      await query(
+        `INSERT INTO wallet_transactions (
+          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
+        [
+          txId,
+          camp.customer_id,
+          wallet.id,
+          dailySpend,
+          newBal,
+          refUtr,
+          `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${dailySpend}/day)`,
+        ]
+      );
+    } else {
+      // Already deducted today: simply resume campaign without double charging
+      await query(
+        `UPDATE wallets SET ad_campaign_active = TRUE, updated_at = NOW() WHERE customer_id = $1`,
+        [camp.customer_id]
+      );
     }
-
-    // Cut / deduct price from wallet balance ("when start so cut prive of that")
-    const newBal = balance - dailySpend;
-    await query(
-      `UPDATE wallets SET
-        available_balance = $1,
-        total_ad_spent = total_ad_spent + $2,
-        ad_campaign_active = TRUE,
-        last_deducted_at = NOW(),
-        updated_at = NOW()
-      WHERE customer_id = $3`,
-      [newBal, dailySpend, camp.customer_id]
-    );
-
-    const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
-    await query(
-      `INSERT INTO wallet_transactions (
-        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-      ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
-      [
-        txId,
-        camp.customer_id,
-        wallet.id,
-        dailySpend,
-        newBal,
-        refUtr,
-        `Daily Meta Ad Spend Campaign Deduction (-₹${dailySpend}/day)`,
-      ]
-    );
 
     // Check external platform status
     const hasMetaToken = Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
@@ -1478,9 +1515,10 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
       [extStatus, actor, campaignId]
     );
 
-    await logAuditEvent(camp.customer_id, 'campaign', campaignId, `Started Marketing Campaign (Deducted ₹${dailySpend})`, actor, {
+    await logAuditEvent(camp.customer_id, 'campaign', campaignId, `Started Marketing Campaign (Per-Day Service: ₹${dailySpend}/d)`, actor, {
       dailyBudget: dailySpend,
-      deductedAmount: dailySpend,
+      deductedAmount,
+      isAlreadyDeductedToday,
       newBalance: newBal,
       externalPlatformStatus: extStatus,
     });
@@ -1488,10 +1526,13 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     res.json({
       ok: true,
       status: 'Running',
-      deductedAmount: dailySpend,
+      deductedAmount,
+      isAlreadyDeductedToday,
       newBalance: newBal,
       externalPlatformStatus: extStatus,
-      message: `Marketing campaign started! ₹${dailySpend} daily ad budget deducted from customer wallet (New Balance: ₹${newBal}).`,
+      message: isAlreadyDeductedToday
+        ? `Marketing campaign resumed! Today's per-day service (₹${dailySpend}) was already settled earlier today.`
+        : `Marketing campaign started! ₹${dailySpend} daily ad budget deducted from customer wallet for per-day service (New Balance: ₹${newBal}).`,
     });
   } catch (err) {
     console.error('[POST /api/marketing/campaigns/:id/start]', err);
@@ -1600,6 +1641,152 @@ marketingRouter.put('/customers/:id/pacing', async (req, res) => {
     });
   } catch (err) {
     console.error('[PUT /api/marketing/customers/:id/pacing]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// 15. AUTOMATED PER-DAY SERVICE RUNNER & PACING ENGINE
+// Deducts ad spend per day for active campaigns on scheduled days.
+// Auto-pauses and flags accounts if customer balance is low or zero.
+// -----------------------------------------------------------------------------
+export async function processDailyAdSpendPacing() {
+  try {
+    const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
+    const todayDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+    // Find all customers with active campaigns or ad_campaign_active = true
+    const activeCustomers = await query(`
+      SELECT 
+        c.id, c.company_name,
+        w.id AS wallet_id,
+        COALESCE(w.available_balance, 0)::NUMERIC AS balance,
+        COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
+        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
+        COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
+        w.last_deducted_at,
+        (SELECT mc.id FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = 'Running' LIMIT 1) AS running_camp_id
+      FROM customers c
+      JOIN wallets w ON w.customer_id = c.id
+      WHERE w.ad_campaign_active = TRUE 
+         OR EXISTS (SELECT 1 FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = 'Running')
+    `);
+
+    let processedCount = 0;
+    let autoPausedCount = 0;
+    const details = [];
+
+    for (const cust of activeCustomers.rows) {
+      const activeDays = typeof cust.active_days === 'string'
+        ? cust.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+        : (Array.isArray(cust.active_days) ? cust.active_days : ['MON', 'TUE', 'WED', 'THU', 'FRI']);
+
+      // 1. Is today an active day in the customer's weekly schedule?
+      if (!activeDays.includes(todayDayCode)) {
+        continue; // Scheduled day off
+      }
+
+      // 2. Was today's per-day service already deducted earlier today?
+      const alreadyDeducted = cust.last_deducted_at &&
+        new Date(cust.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === todayDateStr;
+
+      if (alreadyDeducted) {
+        continue; // Already settled for today
+      }
+
+      const balance = Number(cust.balance || 0);
+      const spend = Number(cust.daily_ad_spend || 300);
+
+      // 3. Check customer balance
+      if (balance >= spend) {
+        const newBal = balance - spend;
+        await query(
+          `UPDATE wallets SET
+            available_balance = $1,
+            total_ad_spent = total_ad_spent + $2,
+            ad_campaign_active = TRUE,
+            last_deducted_at = NOW(),
+            updated_at = NOW()
+          WHERE customer_id = $3`,
+          [newBal, spend, cust.id]
+        );
+
+        const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        const refUtr = `SYS-DAILY-${Date.now().toString().slice(-6)}`;
+        await query(
+          `INSERT INTO wallet_transactions (
+            id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+          ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
+          [
+            txId,
+            cust.id,
+            cust.wallet_id,
+            spend,
+            newBal,
+            refUtr,
+            `Daily Meta Ad Spend - Per-Day Service (${todayDayCode}) (-₹${spend})`,
+          ]
+        );
+
+        await logAuditEvent(cust.id, 'wallet', cust.wallet_id, `Per-Day Service Deducted: ₹${spend}`, 'System Daily Pacing Engine', {
+          day: todayDayCode,
+          deducted: spend,
+          newBalance: newBal,
+        });
+
+        processedCount++;
+        details.push({ customerId: cust.id, name: cust.company_name, action: 'deducted', amount: spend, newBal });
+      } else {
+        // 4. Low/exhausted balance: Auto-pause campaign and set marketing to OFF!
+        await query(
+          `UPDATE wallets SET ad_campaign_active = FALSE, updated_at = NOW() WHERE customer_id = $1`,
+          [cust.id]
+        );
+
+        await query(
+          `UPDATE marketing_campaigns SET
+            status = 'Stopped',
+            external_platform_status = 'Paused',
+            last_action = 'Auto-Paused: Low Balance',
+            last_actor = 'System Daily Pacing Engine',
+            last_action_at = NOW(),
+            updated_at = NOW()
+          WHERE customer_id = $1 AND status = 'Running'`,
+          [cust.id]
+        );
+
+        await logAuditEvent(cust.id, 'campaign', cust.running_camp_id || cust.id, 'Auto-Paused Marketing: Low Balance', 'System Daily Pacing Engine', {
+          balance,
+          requiredSpend: spend,
+          reason: 'Customer balance too low for per-day service',
+        });
+
+        autoPausedCount++;
+        details.push({ customerId: cust.id, name: cust.company_name, action: 'auto_paused_low_balance', balance, required: spend });
+      }
+    }
+
+    return { ok: true, processedCount, autoPausedCount, todayDayCode, todayDateStr, details };
+  } catch (err) {
+    console.error('[processDailyAdSpendPacing Error]:', err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 16. POST /api/marketing/process-daily-pacing (Trigger or verify daily pacing run)
+// -----------------------------------------------------------------------------
+marketingRouter.post('/process-daily-pacing', async (req, res) => {
+  try {
+    const result = await processDailyAdSpendPacing();
+    res.json({
+      ok: true,
+      ...result,
+      message: `Daily pacing processed: ${result.processedCount} per-day customer services deducted, ${result.autoPausedCount} low balance accounts paused.`,
+    });
+  } catch (err) {
+    console.error('[POST /api/marketing/process-daily-pacing]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

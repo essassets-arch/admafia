@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
-import { marketingRouter } from './routes/marketing.js';
+import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2044,6 +2044,22 @@ app.listen(PORT, () => {
   initDatabase()
     .then((info) => {
       console.log(`🚀 Growthline CRM Backend API listening on http://localhost:${PORT} (DB mode: ${info.mode})`);
+      // Run daily ad spend pacing evaluation 3s after startup, then every 30 minutes
+      setTimeout(() => {
+        processDailyAdSpendPacing()
+          .then((res) => console.log(`[Daily Ad Spend Pacing] Initial run completed (${res.processedCount || 0} deducted, ${res.autoPausedCount || 0} paused)`))
+          .catch((err) => console.warn('[Daily Ad Spend Pacing] Initial run warning:', err.message));
+      }, 3000);
+
+      setInterval(() => {
+        processDailyAdSpendPacing()
+          .then((res) => {
+            if (res.processedCount > 0 || res.autoPausedCount > 0) {
+              console.log(`[Daily Ad Spend Pacing] Auto-run completed (${res.processedCount} deducted, ${res.autoPausedCount} paused)`);
+            }
+          })
+          .catch((err) => console.warn('[Daily Ad Spend Pacing] Auto-run warning:', err.message));
+      }, 30 * 60 * 1000);
     })
     .catch((err) => {
       console.error('Failed to initialize PostgreSQL database:', err);
