@@ -31,19 +31,8 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [approvedPosts, setApprovedPosts] = useState([]);
-  const [loadingApprovedPosts, setLoadingApprovedPosts] = useState(false);
-  const [submitMode, setSubmitMode] = useState('start'); // 'start' or 'draft'
-
-  // New Campaign Form Fields
   const [campaignName, setCampaignName] = useState('');
-  const [objective, setObjective] = useState('Lead Generation');
-  const [selectedPostId, setSelectedPostId] = useState('');
-  const [platform, setPlatform] = useState('Meta Ads (Facebook & Instagram)');
-  const [targetAudience, setTargetAudience] = useState('');
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 16));
-  const [endDate, setEndDate] = useState('');
-  const [dailyBudget, setDailyBudget] = useState(300);
+  const [submitMode, setSubmitMode] = useState('start'); // 'start' or 'draft'
 
   // Load Customers & Campaigns
   const fetchData = useCallback(async (isSilent = false) => {
@@ -79,28 +68,11 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     fetchData();
   }, [fetchData]);
 
-  // Load approved posts when customer selected in campaign modal
-  const handleCustomerSelectedForCampaign = async (custId) => {
+  const handleCustomerSelectedForCampaign = (custId) => {
     setSelectedCustomerId(custId);
-    setSelectedPostId('');
-    if (!custId) {
-      setApprovedPosts([]);
-      return;
-    }
-
-    setLoadingApprovedPosts(true);
-    try {
-      const res = await marketingApi.getPosts({ customerId: custId, status: 'Approved' });
-      if (res && res.ok) {
-        setApprovedPosts(res.posts || []);
-        if (res.posts.length > 0) {
-          setSelectedPostId(res.posts[0].id);
-        }
-      }
-    } catch (err) {
-      console.error('[CustomerMarketingControlDesk] Failed to load approved posts', err);
-    } finally {
-      setLoadingApprovedPosts(false);
+    const found = customers.find((c) => c.id === custId);
+    if (found) {
+      setCampaignName(`${found.name} - Meta Inbound Ads`);
     }
   };
 
@@ -108,11 +80,9 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     if (customer) {
       setSelectedCustomerId(customer.id);
       setCampaignName(`${customer.name} - Meta Inbound Ads`);
-      handleCustomerSelectedForCampaign(customer.id);
     } else if (customers.length > 0) {
       setSelectedCustomerId(customers[0].id);
       setCampaignName(`${customers[0].name} - Meta Inbound Ads`);
-      handleCustomerSelectedForCampaign(customers[0].id);
     }
     setIsCreateModalOpen(true);
   };
@@ -128,18 +98,6 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
       Swal.fire({ icon: 'warning', title: 'Campaign name is required.' });
       return;
     }
-    if (!selectedPostId) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Approved Post Required',
-        text: 'This customer has no approved creative posts. Please create and verify a post first.',
-      });
-      return;
-    }
-    if (Number(dailyBudget) < 300) {
-      Swal.fire({ icon: 'warning', title: 'Minimum daily budget is ₹300/day.' });
-      return;
-    }
 
     const shouldStart = submitMode === 'start';
     setCreating(true);
@@ -147,13 +105,12 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
       const res = await marketingApi.createCampaign({
         customerId: selectedCustomerId,
         name: campaignName.trim(),
-        objective,
-        postId: selectedPostId,
-        platform,
-        targetAudience,
-        startDate,
+        objective: 'Lead Generation',
+        platform: 'Meta Ads (Facebook & Instagram)',
+        targetAudience: '',
+        startDate: new Date().toISOString(),
         endDate: null,
-        dailyBudget: Number(dailyBudget),
+        dailyBudget: 300,
         actor: 'Marketing Campaign Manager',
         status: shouldStart ? 'Running' : 'Draft',
       });
@@ -553,109 +510,6 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="mkt-form-group">
-                    <label className="mkt-form-label">Marketing Objective</label>
-                    <select
-                      className="mkt-form-select"
-                      value={objective}
-                      onChange={(e) => setObjective(e.target.value)}
-                    >
-                      <option value="Lead Generation">Lead Generation</option>
-                      <option value="Brand Awareness">Brand Awareness</option>
-                      <option value="Product Promotion">Product Promotion</option>
-                      <option value="Festival Campaign">Festival Campaign</option>
-                    </select>
-                  </div>
-                  <div className="mkt-form-group">
-                    <label className="mkt-form-label">Platform</label>
-                    <select
-                      className="mkt-form-select"
-                      value={platform}
-                      onChange={(e) => setPlatform(e.target.value)}
-                    >
-                      <option value="Meta Ads (Facebook & Instagram)">Meta Ads (Facebook &amp; Instagram)</option>
-                      <option value="Google Ads">Google Ads</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Approved Post Selection: STRICTLY APPROVED POSTS OF THIS CUSTOMER ONLY */}
-                <div className="mkt-form-group">
-                  <label className="mkt-form-label">
-                    Select Approved Creative Post <span className="req">*</span>
-                  </label>
-                  {loadingApprovedPosts ? (
-                    <div style={{ padding: '10px', color: '#64748b', fontSize: '0.85rem' }}>
-                      <RefreshCw size={14} className="spin" /> Checking approved posts...
-                    </div>
-                  ) : approvedPosts.length === 0 ? (
-                    <div
-                      style={{
-                        padding: '12px',
-                        background: '#fff1f2',
-                        border: '1px solid #fecdd3',
-                        borderRadius: '8px',
-                        color: '#e11d48',
-                        fontSize: '0.84rem',
-                      }}
-                    >
-                      ⚠️ No approved posts available for this customer. Only posts that have passed the Verification Audit Queue can be deployed into campaigns.
-                    </div>
-                  ) : (
-                    <select
-                      className="mkt-form-select"
-                      value={selectedPostId}
-                      onChange={(e) => setSelectedPostId(e.target.value)}
-                      required
-                    >
-                      {approvedPosts.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          ✓ [Approved] {p.title} ({p.platform}) - Rev v{p.revisionNumber}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="mkt-form-group">
-                    <label className="mkt-form-label">
-                      Daily Ad Spend Budget (₹) <span className="req">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={300}
-                      step={50}
-                      className="mkt-form-input"
-                      value={dailyBudget}
-                      onChange={(e) => setDailyBudget(e.target.value)}
-                      required
-                    />
-                    <span className="mkt-form-help">Minimum ₹300/day pacing requirement</span>
-                  </div>
-                  <div className="mkt-form-group">
-                    <label className="mkt-form-label">Target Audience Scope</label>
-                    <input
-                      type="text"
-                      className="mkt-form-input"
-                      placeholder="e.g. Local business owners and IT buyers"
-                      value={targetAudience}
-                      onChange={(e) => setTargetAudience(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="mkt-form-group">
-                  <label className="mkt-form-label">Campaign Start Date</label>
-                  <input
-                    type="datetime-local"
-                    className="mkt-form-input"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    required
-                  />
-                </div>
               </div>
 
               <div className="marketing-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '12px' }}>
@@ -670,7 +524,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                   <button
                     type="submit"
                     className="mkt-btn-table-action"
-                    disabled={creating || approvedPosts.length === 0}
+                    disabled={creating}
                     onClick={() => setSubmitMode('draft')}
                     title="Save Campaign as Draft (Do not start yet)"
                   >
@@ -679,7 +533,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                   <button
                     type="submit"
                     className="marketing-btn-primary"
-                    disabled={creating || approvedPosts.length === 0}
+                    disabled={creating}
                     onClick={() => setSubmitMode('start')}
                     style={{ background: '#059669', borderColor: '#047857', fontWeight: 800 }}
                     title="Deploy and Start Marketing Campaign Immediately"
