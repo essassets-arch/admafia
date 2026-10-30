@@ -288,16 +288,14 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                 <th>Creative Preview</th>
                 <th>Post Information</th>
                 <th>Customer / Business</th>
-                <th>Platform &amp; Rev</th>
                 <th>Status</th>
-                <th>Submitter &amp; Time</th>
                 <th>Verification Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
                       <RefreshCw size={18} className="spin" />
                       <span>Loading review queue...</span>
@@ -306,7 +304,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                 </tr>
               ) : posts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
                     <FileCheck2 size={36} style={{ color: '#cbd5e1', marginBottom: '8px' }} />
                     <h4 style={{ margin: '0 0 6px 0', color: '#0f172a' }}>No posts in this queue</h4>
                     <p style={{ fontSize: '0.84rem', margin: 0 }}>
@@ -373,15 +371,6 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                       <div className="mkt-cell-sub">{post.customerCity || 'India'}</div>
                     </td>
 
-                    {/* Platform & Rev */}
-                    <td>
-                      <div style={{ fontSize: '0.84rem', fontWeight: 600 }}>{post.platform}</div>
-                      <div className="mkt-cell-sub">Revision: v{post.revisionNumber}</div>
-                      {post.callToAction && (
-                        <div className="mkt-cell-sub">CTA: <strong>{post.callToAction}</strong></div>
-                      )}
-                    </td>
-
                     {/* Status */}
                     <td>
                       <span
@@ -399,23 +388,6 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                       >
                         {post.status}
                       </span>
-                    </td>
-
-                    {/* Submitter & Time */}
-                    <td>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{post.submittedBy || 'Creator'}</div>
-                      <div className="mkt-cell-sub" style={{ whiteSpace: 'nowrap' }}>
-                        {post.submittedAt
-                          ? new Date(post.submittedAt).toLocaleString('en-IN', {
-                              timeZone: 'Asia/Kolkata',
-                              day: '2-digit',
-                              month: 'short',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: true,
-                            })
-                          : 'Draft'}
-                      </div>
                     </td>
 
                     {/* Actions */}
