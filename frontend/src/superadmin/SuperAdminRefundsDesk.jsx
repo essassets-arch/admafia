@@ -16,7 +16,7 @@ import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 
 export default function SuperAdminRefundsDesk() {
-  const [refunds, setRefunds] = useState([]);
+  const [refunds, setRefunds] = useState([]); ``
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
@@ -342,13 +342,12 @@ export default function SuperAdminRefundsDesk() {
 
                     <td>
                       <span
-                        className={`sa-pill ${
-                          rf.status === 'Completed' || rf.status === 'Approved'
+                        className={`sa-pill ${rf.status === 'Completed' || rf.status === 'Approved'
                             ? 'sa-pill-green'
                             : rf.status === 'Pending'
-                            ? 'sa-pill-amber'
-                            : 'sa-pill-rose'
-                        }`}
+                              ? 'sa-pill-amber'
+                              : 'sa-pill-rose'
+                          }`}
                       >
                         {rf.status}
                       </span>
