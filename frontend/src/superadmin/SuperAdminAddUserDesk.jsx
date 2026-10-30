@@ -337,7 +337,7 @@ export default function SuperAdminAddUserDesk() {
           <h2>Add User / Business</h2>
           <p>Register authoritative enterprise businesses or provision platform staff with granular role permissions</p>
         </div>
-        <div style="display:flex; gap:8px;">
+        <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
             className="sa-action-btn sa-btn-outline"

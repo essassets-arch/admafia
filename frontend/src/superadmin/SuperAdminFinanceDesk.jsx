@@ -126,7 +126,7 @@ export default function SuperAdminFinanceDesk() {
   };
 
   return (
-    <div>
+    <div className="sa-desk-content">
       {/* 1. Page Header */}
       <div className="sa-page-header">
         <div>

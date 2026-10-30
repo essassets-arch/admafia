@@ -197,7 +197,7 @@ export default function SuperAdminRefundsDesk() {
   };
 
   return (
-    <div>
+    <div className="sa-desk-content">
       {/* 1. Page Header */}
       <div className="sa-page-header">
         <div>

@@ -153,7 +153,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
   ];
 
   return (
-    <div>
+    <div className="sa-desk-content">
       {/* 1. Header with live refresh */}
       <div className="sa-page-header">
         <div>
@@ -169,7 +169,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
           onClick={handleRefresh}
           disabled={refreshing}
         >
-          <RefreshCw size={14} className={refreshing ? 'spin' : ''} />
+          <RefreshCw size={14} className={refreshing ? 'sa-spin' : ''} />
           <span>{refreshing ? 'Syncing...' : 'Live Refresh'}</span>
         </button>
       </div>

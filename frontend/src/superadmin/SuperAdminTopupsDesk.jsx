@@ -182,7 +182,7 @@ export default function SuperAdminTopupsDesk() {
   };
 
   return (
-    <div>
+    <div className="sa-desk-content">
       {/* 1. Header */}
       <div className="sa-page-header">
         <div>

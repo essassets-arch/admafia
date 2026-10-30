@@ -16,7 +16,9 @@ import {
   Bell,
   CheckCircle2,
   Clock,
-  Sparkles
+  Sparkles,
+  Palette,
+  Briefcase
 } from 'lucide-react';
 
 import SuperAdminDashboardDesk from './SuperAdminDashboardDesk';
@@ -240,23 +242,59 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
 
         {/* Sidebar Footer */}
         <div className="sa-sidebar-footer">
-          {onBackToWebsite && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 4 }}>
             <button
               type="button"
               className="sa-footer-link"
-              onClick={onBackToWebsite}
+              style={{ fontSize: 11, padding: '7px 8px', justifyContent: 'center' }}
+              onClick={() => (window.location.href = '/marketing')}
+              title="Switch to Marketing Operations"
             >
-              <ExternalLink size={15} />
-              <span>AdMafia Portal</span>
+              <Sparkles size={13} color="#a855f7" />
+              <span>Marketing</span>
             </button>
-          )}
+            <button
+              type="button"
+              className="sa-footer-link"
+              style={{ fontSize: 11, padding: '7px 8px', justifyContent: 'center' }}
+              onClick={() => (window.location.href = '/graphics')}
+              title="Switch to Graphics Creative Desk"
+            >
+              <Palette size={13} color="#ec4899" />
+              <span>Graphics</span>
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <button
+              type="button"
+              className="sa-footer-link"
+              style={{ fontSize: 11, padding: '7px 8px', justifyContent: 'center' }}
+              onClick={() => (window.location.href = '/app/lead')}
+              title="Open Customer Leads Portal"
+            >
+              <Briefcase size={13} color="#3b82f6" />
+              <span>Leads CRM</span>
+            </button>
+            <button
+              type="button"
+              className="sa-footer-link"
+              style={{ fontSize: 11, padding: '7px 8px', justifyContent: 'center' }}
+              onClick={onBackToWebsite || (() => (window.location.href = '/'))}
+              title="AdMafia Main Website"
+            >
+              <ExternalLink size={13} color="#10b981" />
+              <span>Website</span>
+            </button>
+          </div>
 
           <button
             type="button"
             className="sa-footer-link sa-link-danger"
+            style={{ marginTop: 4, justifyContent: 'center' }}
             onClick={onSignOut || (() => (window.location.href = '/login'))}
           >
-            <LogOut size={15} />
+            <LogOut size={14} />
             <span>Sign Out</span>
           </button>
         </div>
