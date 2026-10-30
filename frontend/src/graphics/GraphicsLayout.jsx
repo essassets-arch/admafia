@@ -37,8 +37,35 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
     }
   };
 
+  const resolveRequestIdFromUrl = () => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const fromSearch = searchParams.get('requestId') || searchParams.get('id');
+      if (fromSearch) return fromSearch;
+
+      const hashParts = (window.location.hash || '').split('?');
+      if (hashParts.length > 1) {
+        const hashParams = new URLSearchParams(hashParts[1]);
+        return hashParams.get('requestId') || hashParams.get('id');
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const normalizeDeskKey = (key) => {
+    if (!key) return 'post_requests';
+    const s = String(key).toLowerCase().replace(/[-/]/g, '_');
+    if (s.includes('upload')) return 'upload_post';
+    if (s.includes('approved')) return 'approved_posts';
+    if (s.includes('rejected')) return 'rejected_posts';
+    if (s.includes('post') || s.includes('request')) return 'post_requests';
+    return 'post_requests';
+  };
+
   const [activeDesk, setActiveDesk] = useState(resolveDeskFromUrl);
-  const [selectedRequestId, setSelectedRequestId] = useState(null);
+  const [selectedRequestId, setSelectedRequestId] = useState(resolveRequestIdFromUrl);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [summary, setSummary] = useState(null);
   const [liveClock, setLiveClock] = useState(() => new Date());
@@ -53,6 +80,8 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
   useEffect(() => {
     const handleUrlChange = () => {
       setActiveDesk(resolveDeskFromUrl());
+      const reqId = resolveRequestIdFromUrl();
+      setSelectedRequestId(reqId || null);
     };
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
@@ -79,31 +108,43 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
     return () => clearInterval(interval);
   }, [activeDesk]);
 
-  const navigateToDesk = (deskKey, requestId = null) => {
-    setActiveDesk(deskKey);
-    if (requestId) setSelectedRequestId(requestId);
+  const navigateToDesk = (deskKey, requestData = null) => {
+    const normalizedKey = normalizeDeskKey(deskKey);
+    setActiveDesk(normalizedKey);
+
+    const reqId = typeof requestData === 'object' && requestData !== null
+      ? (requestData.initialRequestId || requestData.id || requestData.requestId || null)
+      : (requestData || null);
+
+    if (reqId) {
+      setSelectedRequestId(reqId);
+    }
+
     setMobileMenuOpen(false);
 
     let targetPath = '/graphics/post-requests';
     let targetHash = '#graphics/post-requests';
 
-    if (deskKey === 'upload_post') {
-      targetPath = '/graphics/upload-post';
-      targetHash = '#graphics/upload-post';
-    } else if (deskKey === 'approved_posts') {
+    if (normalizedKey === 'upload_post') {
+      targetPath = reqId ? `/graphics/upload-post?requestId=${encodeURIComponent(reqId)}` : '/graphics/upload-post';
+      targetHash = reqId ? `#graphics/upload-post?requestId=${encodeURIComponent(reqId)}` : '#graphics/upload-post';
+    } else if (normalizedKey === 'approved_posts') {
       targetPath = '/graphics/approved-posts';
       targetHash = '#graphics/approved-posts';
-    } else if (deskKey === 'rejected_posts') {
+    } else if (normalizedKey === 'rejected_posts') {
       targetPath = '/graphics/rejected-posts';
       targetHash = '#graphics/rejected-posts';
-    } else if (deskKey === 'post_requests') {
+    } else {
       targetPath = '/graphics/post-requests';
       targetHash = '#graphics/post-requests';
     }
 
     try {
-      window.history.pushState({}, '', targetPath);
-      window.location.hash = targetHash;
+      if (window.location.hash && window.location.hash.toLowerCase().includes('graphics')) {
+        window.location.hash = targetHash;
+      } else {
+        window.history.pushState({ desk: normalizedKey, requestId: reqId }, '', targetPath);
+      }
     } catch (e) {}
   };
 

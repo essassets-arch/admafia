@@ -68,7 +68,7 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
 
   const handleOpenUploadForRequest = (req) => {
     if (onNavigateToDesk) {
-      onNavigateToDesk('upload-post', { initialRequestId: req.id });
+      onNavigateToDesk('upload_post', req?.id || req);
     }
   };
 
@@ -274,16 +274,21 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
                         </button>
 
                         {r.isEligibleForUpload && (
-                          <button
-                            type="button"
+                          <a
+                            href={`/graphics/upload-post?requestId=${encodeURIComponent(r.id)}`}
                             className="graphics-btn-primary"
-                            style={{ padding: '5px 12px', fontSize: '0.78rem' }}
-                            onClick={() => handleOpenUploadForRequest(r)}
+                            style={{ padding: '6px 14px', fontSize: '0.78rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                            onClick={(e) => {
+                              if (onNavigateToDesk) {
+                                e.preventDefault();
+                                handleOpenUploadForRequest(r);
+                              }
+                            }}
                             title="Upload Creative Artwork"
                           >
                             <UploadCloud size={13} />
                             <span>Upload</span>
-                          </button>
+                          </a>
                         )}
                       </div>
                     </td>

@@ -346,8 +346,8 @@ graphicsRouter.post('/upload', async (req, res) => {
     }
     const post = postRes.rows[0];
 
-    // Cannot upload directly to already approved post without starting revision
-    if (post.status === 'Approved') {
+    // Cannot upload directly to already approved post that already has verified artwork
+    if (post.status === 'Approved' && post.media_url) {
       return res.status(400).json({
         ok: false,
         error: 'This post is already Approved for live campaigns. Use revision reupload if changes are needed.',

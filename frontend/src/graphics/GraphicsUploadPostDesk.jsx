@@ -50,13 +50,17 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
 
           if (initialRequestId) {
             setSelectedRequestId(initialRequestId);
-            const match = list.find((r) => r.id === initialRequestId);
-            if (match) setSelectedRequest(match);
+            const match = list.find((r) => String(r.id).trim() === String(initialRequestId).trim());
+            if (match) {
+              setSelectedRequest(match);
+              if (match.creativeFormat) setCreativeFormat(match.creativeFormat);
+            }
           } else if (list.length > 0 && !selectedRequestId) {
             // Pick first pending request if available
             const firstPending = list.find((r) => r.isEligibleForUpload) || list[0];
             setSelectedRequestId(firstPending.id);
             setSelectedRequest(firstPending);
+            if (firstPending.creativeFormat) setCreativeFormat(firstPending.creativeFormat);
           }
         }
       } catch (err) {
@@ -68,10 +72,22 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
     loadRequests();
   }, [initialRequestId]);
 
+  // 1b. React to dynamic initialRequestId updates
+  useEffect(() => {
+    if (initialRequestId && requests.length > 0) {
+      setSelectedRequestId(initialRequestId);
+      const match = requests.find((r) => String(r.id).trim() === String(initialRequestId).trim());
+      if (match) {
+        setSelectedRequest(match);
+        if (match.creativeFormat) setCreativeFormat(match.creativeFormat);
+      }
+    }
+  }, [initialRequestId, requests]);
+
   // 2. Handle request selection change
   const handleSelectRequest = (id) => {
     setSelectedRequestId(id);
-    const found = requests.find((r) => r.id === id);
+    const found = requests.find((r) => String(r.id).trim() === String(id).trim());
     setSelectedRequest(found || null);
     if (found?.creativeFormat) {
       setCreativeFormat(found.creativeFormat);
