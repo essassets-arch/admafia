@@ -8473,7 +8473,7 @@
 /* Header Row */
 .list-view-table-header {
   display: grid;
-  grid-template-columns: minmax(220px, 2fr) 160px 165px 508px;
+  grid-template-columns: minmax(240px, 1fr) 150px 160px minmax(460px, auto);
   align-items: center;
   padding: 14px 24px;
   gap: 16px;
@@ -8485,7 +8485,6 @@
   color: #64748b;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  min-width: 1070px;
   box-sizing: border-box;
 }
 
@@ -8509,15 +8508,14 @@
 /* List Item Row */
 .proper-list-row {
   display: grid;
-  grid-template-columns: minmax(220px, 2fr) 160px 165px 508px;
+  grid-template-columns: minmax(240px, 1fr) 150px 160px minmax(460px, auto);
   align-items: center;
   padding: 16px 24px;
   gap: 16px;
   border-bottom: 1px solid #f1f5f9;
   border-left: 4px solid transparent;
   background: #ffffff;
-  transition: background 0.15s ease, border-left-color 0.15s ease;
-  min-width: 1070px;
+  transition: background 0.15s ease, border-left-color 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
 }
 
@@ -8527,6 +8525,7 @@
 
 .proper-list-row:hover {
   background: #f8fafc;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
 }
 
 .proper-list-row.is-unread-row {
@@ -8547,26 +8546,34 @@
 }
 
 .phone-icon-circle {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   background: #eff6ff;
+  border: 1px solid #dbeafe;
   color: #2563eb;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.08);
+  transition: transform 0.15s ease;
+}
+
+.proper-list-row:hover .phone-icon-circle {
+  transform: scale(1.04);
 }
 
 .phone-icon-circle.fup {
   background: #fdf2f8;
+  border-color: #fbcfe8;
   color: #be185d;
 }
 
 .phone-text-wrap {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  justify-content: center;
   min-width: 0;
 }
 
@@ -8577,12 +8584,13 @@
 }
 
 .phone-strong {
-  font-size: 1.12rem;
+  font-size: 1.2rem;
   font-weight: 800;
   color: #0f172a;
-  letter-spacing: -0.01em;
-  font-family: inherit;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
 .btn-phone-eye-toggle {
@@ -8632,7 +8640,7 @@
   color: #b45309;
   font-size: 0.76rem;
   font-weight: 700;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 9999px;
   white-space: nowrap;
 }
@@ -8648,8 +8656,8 @@
   align-items: center;
   gap: 6px;
   color: #64748b;
-  font-size: 0.88rem;
-  font-weight: 500;
+  font-size: 0.86rem;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -8661,21 +8669,12 @@
   width: 100%;
 }
 
-/* Actions Precision Grid:
-   1. Call: 78px
-   2. Chat: 78px
-   3. In Follow-up: 128px
-   4. Mark Read / Read: 114px (fixed cell width ensures 0 horizontal shifting)
-   5. Drop: 78px
-   Total: 78 + 8 + 78 + 8 + 128 + 8 + 114 + 8 + 78 = 508px
-*/
 .list-actions-group {
-  display: grid;
-  grid-template-columns: 78px 78px 128px 114px 78px;
-  gap: 8px;
+  display: flex;
   align-items: center;
-  width: 508px;
-  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
   margin: 0;
   padding: 0;
 }
@@ -8686,18 +8685,17 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 36px;
-  width: 100%;
-  font-size: 0.83rem;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 0.82rem;
   font-weight: 700;
   font-family: inherit;
-  border-radius: 10px;
+  border-radius: 8px;
   text-decoration: none;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
   box-sizing: border-box;
-  padding: 0;
 }
 
 .btn-list-action svg {
@@ -8714,13 +8712,13 @@
   background: #4f46e5;
   color: #ffffff;
   border: 1.5px solid #4338ca;
-  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
+  box-shadow: 0 2px 5px rgba(79, 70, 229, 0.2);
 }
 
 .btn-list-action.call:hover {
   background: #4338ca;
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
 }
 
 /* 2. Chat: Solid WhatsApp Green */
@@ -8728,13 +8726,33 @@
   background: #059669;
   color: #ffffff;
   border: 1.5px solid #047857;
-  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.2);
+  box-shadow: 0 2px 5px rgba(5, 150, 105, 0.2);
 }
 
 .btn-list-action.chat:hover {
   background: #047857;
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);
+  box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
+}
+
+/* 2B. Interested */
+.btn-list-action.interested {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #334155;
+}
+
+.btn-list-action.interested:hover {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
+}
+
+.btn-list-action.interested.is-interested {
+  background: #ecfdf5;
+  border: 1.5px solid #a7f3d0;
+  color: #059669;
+  font-weight: 800;
 }
 
 /* 3. In Follow-up: Mint Green Outline */
@@ -8762,7 +8780,7 @@
   transform: translateY(-1px);
 }
 
-/* 4. Read / Mark Read: Fixed 114px, Clean White/Slate */
+/* 4. Read / Mark Read */
 .btn-list-action.read {
   background: #ffffff;
   border: 1.5px solid #cbd5e1;

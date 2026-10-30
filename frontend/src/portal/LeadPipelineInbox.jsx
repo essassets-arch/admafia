@@ -10,10 +10,28 @@ function formatMinimalMaskedPhone(phone, maskedPhone) {
 }
 
 function formatMinimalDateTime(createdAt) {
-  if (createdAt && (createdAt.includes('pm') || createdAt.includes('am'))) {
-    return createdAt;
+  if (!createdAt) {
+    return new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
   }
-  return 'Today, 01:57 pm';
+  const d = new Date(createdAt);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+  return createdAt;
 }
 
 export default function LeadPipelineInbox({
