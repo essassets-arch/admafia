@@ -632,13 +632,9 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
 
     setIsPaymentModalOpen(false);
 
-    // If profile is not complete yet, transition seamlessly to Step 2 of 2 (Business Profile Registration)
-    if (customer.profileStatus !== 'complete' && customer.profile_status !== 'complete') {
-      setIsBusinessProfileModalOpen(true);
-    } else {
-      // Once payment and profile are done, land cleanly on http://localhost:5173/app/lead#app/dashboard
-      handleSwitchTab('dashboard');
-    }
+    // Per User Request: "when payment complete thann open information all submit page and than submit"
+    // Open the complete business information submission page/modal
+    setIsBusinessProfileModalOpen(true);
   };
 
   

@@ -2048,9 +2048,9 @@ export function BusinessProfileModal({
                   <span className="biz-pulsing-dot" /> Profile Completion: 100% Ready
                 </span>
               </div>
-              <h2 className="biz-modal-main-title">Business Profile &amp; Contact Details</h2>
+              <h2 className="biz-modal-main-title">Business Profile &amp; Information Submission</h2>
               <p className="biz-modal-subtitle">
-                Please enter your organization details and point of contact to configure your CRM.
+                Payment verified ✓ Please complete all required organization and contact details below, then click submit to launch your CRM dashboard.
               </p>
             </div>
           </div>
@@ -2335,7 +2335,7 @@ export function BusinessProfileModal({
                 className="btn-biz-complete-submit"
                 disabled={isSubmitting}
               >
-                <span>{isSubmitting ? 'Saving Profile & Syncing...' : 'Save Business Profile & Complete Workspace Setup'}</span>
+                <span>{isSubmitting ? 'Submitting All Information...' : 'Submit All Information & Open Dashboard'}</span>
                 <ArrowRight size={18} className="biz-submit-arrow" />
               </button>
             </div>
