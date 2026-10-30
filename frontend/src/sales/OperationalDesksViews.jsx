@@ -41,6 +41,28 @@ const formatINR = (val) =>
     maximumFractionDigits: 0,
   }).format(val || 0);
 
+export const getLiveNowFormatted = (dateInput = new Date()) => {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) {
+    return new Date().toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+  return d.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
+
 /* ==========================================================================
    DESK 1: CUSTOMER REGISTRATIONS (Real Intake from http://localhost:5173/#register)
    ========================================================================== */
@@ -129,7 +151,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
       isBeFirst: true,
       unmasked: true,
       dateGroup: 'today',
-      createdAt: 'Today (Just now)',
+      createdAt: getLiveNowFormatted(),
       notes: `Direct intake via Sales Desk 01 for ${targetCompany}`,
     };
 
@@ -298,7 +320,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
       runwayDays: Math.floor((Number(newCust.deposit) || 0) / 300),
       verified: false,
       isSelfRegistered: true,
-      registeredAt: 'Just Now (Manual Entry)',
+      registeredAt: getLiveNowFormatted(),
       registeredFrom: 'http://localhost:5173/#register',
     };
     setCustomers((prev) => [added, ...prev.filter(c => c.phone !== added.phone)]);
@@ -544,7 +566,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                       {c.name || 'Workspace'}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      {c.city} • Registered: {c.registeredAt || 'Today'}
+                      {c.city} • Registered: {c.registeredAt || getLiveNowFormatted()}
                     </div>
                   </td>
 
@@ -1278,7 +1300,7 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Intake Submission Time</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{selectedDetail.submittedAt || cust.registeredAt || 'Today'}</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{selectedDetail.submittedAt || cust.registeredAt || getLiveNowFormatted()}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>KYC Audit Progress</div>
@@ -1449,7 +1471,7 @@ export function LeadManagementDesk() {
       isBeFirst: true,
       unmasked: true,
       dateGroup: 'today',
-      createdAt: 'Today (Just now)',
+      createdAt: getLiveNowFormatted(),
       notes: `Direct intake via Lead Management Desk for ${targetCompany}`,
       speedSlaMinutes: 1,
     };
@@ -2343,7 +2365,7 @@ export function PaymentCollectionDesk({
               total: amt,
               paymentMode: 'Razorpay UPI (Live)',
               utr: `rzp_live_${(c.phone || '').slice(-6)}`,
-              date: c.registeredAt || 'Today, Just now',
+              date: c.registeredAt || getLiveNowFormatted(),
               status: 'paid',
               runwayAdded: c.runwayDays || Math.floor(amt / 300),
               notes: 'Self-Registered Customer Intake (#register)',
@@ -2444,7 +2466,7 @@ export function PaymentCollectionDesk({
       total: Math.round(amt * 1.18),
       paymentMode: newPayData.paymentMode,
       utr: newPayData.utr || `UTR-PAY-${Date.now().toString().slice(-6)}`,
-      date: 'Today, Just now',
+      date: getLiveNowFormatted(),
       status: 'paid',
       runwayAdded: addedDays,
       notes: newPayData.notes || `Payment of ₹${amt.toLocaleString('en-IN')} completed for ${compName}`,
@@ -3221,7 +3243,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
         total: topupAmount,
         paymentMode: 'Bank Transfer (IMPS/NEFT)',
         utr: utrRef,
-        date: 'Today, Just now',
+        date: getLiveNowFormatted(),
         status: 'paid',
         runwayAdded: addedDays,
         notes: `Wallet Credit by Sub-Admin`,
@@ -3239,7 +3261,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
         customerPhone: topupCust.phone,
         customerUsername: topupCust.username,
         company: topupCust.companyName || topupCust.name,
-        date: 'Today, Just now',
+        date: getLiveNowFormatted(),
         ref: utrRef,
         desc: `Sub-Admin Wallet Top-Up Credit (₹${topupAmount.toLocaleString('en-IN')})`,
         type: 'Credit',

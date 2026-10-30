@@ -15,6 +15,7 @@ import {
   Shield,
   Sparkles,
   LayoutDashboard,
+  Clock,
 } from 'lucide-react';
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import {
@@ -105,6 +106,13 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   const [queries, setQueries] = useState(INITIAL_QUERIES);
   const [tasks, setTasks] = useState(INITIAL_TASKS);
   const [newRegAlert, setNewRegAlert] = useState(null);
+  const [liveNow, setLiveNow] = useState(() => new Date());
+
+  // Real-time 1-second clock updater
+  useEffect(() => {
+    const timer = setInterval(() => setLiveNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Wrapper to save customers persistently
   const setCustomers = useCallback((updater) => {
@@ -482,7 +490,68 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Live Real-Time Date & Time Clock */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                color: '#0f172a',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              <Clock size={15} color="#4f46e5" />
+              <span>
+                {liveNow.toLocaleDateString('en-IN', {
+                  weekday: 'short',
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                })}{' '}
+                •{' '}
+                {liveNow.toLocaleTimeString('en-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: true,
+                })}
+              </span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: '0.68rem',
+                  fontWeight: 800,
+                  color: '#059669',
+                  background: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  marginLeft: 4,
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: '#10b981',
+                    boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.25)',
+                  }}
+                />
+                LIVE
+              </span>
+            </div>
+
             <button
               type="button"
               className="sales-btn-secondary"

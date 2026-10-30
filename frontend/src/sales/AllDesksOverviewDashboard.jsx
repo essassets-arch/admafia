@@ -63,6 +63,14 @@ export default function AllDesksOverviewDashboard({
     return [];
   });
 
+  const [liveClock, setLiveClock] = useState(() => new Date());
+
+  // 1-second interval clock for real-time timestamp display
+  useEffect(() => {
+    const timer = setInterval(() => setLiveClock(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     const handleLeadAdded = (e) => {
       const newLead = e?.detail;
@@ -290,6 +298,65 @@ export default function AllDesksOverviewDashboard({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Live Indian Standard Time Real-Time Clock Badge */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              background: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              padding: '6px 14px',
+              borderRadius: 8,
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              color: '#0f172a',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            <Clock size={15} color="#4f46e5" />
+            <span>
+              {liveClock.toLocaleDateString('en-IN', {
+                weekday: 'short',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              })}{' '}
+              •{' '}
+              {liveClock.toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+              })}
+            </span>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: '0.66rem',
+                fontWeight: 800,
+                color: '#059669',
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                padding: '2px 6px',
+                borderRadius: 4,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: '#10b981',
+                }}
+              />
+              REAL-TIME
+            </span>
+          </div>
+
           <button
             type="button"
             className="sales-btn-secondary"
@@ -585,7 +652,7 @@ export default function AllDesksOverviewDashboard({
                         )}
                       </div>
                       <div style={{ fontSize: '0.76rem', color: '#1e40af', marginTop: 2, fontWeight: 600 }}>
-                        🏢 {l.company || 'Client Workspace'} • Category: {l.category || 'General Inbound'}
+                        🏢 {l.company || 'Client Workspace'} • Category: {l.category || 'General Inbound'} • ⏱️ {l.createdAt ? (l.createdAt.includes(':') ? l.createdAt : new Date(l.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })) : liveClock.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
                       </div>
                     </div>
 
@@ -661,7 +728,7 @@ export default function AllDesksOverviewDashboard({
                       {c.companyName || c.name}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      👤 {c.contactPerson || c.contact} • +91 {c.phone} • {c.city || 'India'}
+                      👤 {c.contactPerson || c.contact} • +91 {c.phone} • {c.city || 'India'} • ⏱️ {c.completedAt ? new Date(c.completedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : (c.registeredAt || liveClock.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -796,7 +863,7 @@ export default function AllDesksOverviewDashboard({
                       {item.customerName || item.client || 'Client Account'}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      Ref: <span style={{ fontFamily: 'monospace' }}>{item.receiptNumber || item.invoiceNumber || item.utr || 'REC-SETTLED'}</span>
+                      Ref: <span style={{ fontFamily: 'monospace' }}>{item.receiptNumber || item.invoiceNumber || item.utr || 'REC-SETTLED'}</span> • ⏱️ {item.date || liveClock.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>

@@ -93,7 +93,14 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       verified: true,
       isSelfRegistered: true,
       completedAt: new Date().toISOString(),
-      registeredAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      registeredAt: new Date().toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }),
       registeredFrom: 'https://admafia.marketing/#register',
     };
 
@@ -138,7 +145,14 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         paymentStatus: 'pending',
         profileStatus: 'incomplete',
         queueType: 'Payment Pending',
-        submittedAt: 'Just Now (Web Intake)',
+        submittedAt: new Date().toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
       };
       const rawPV = localStorage.getItem('growthline_pending_verifications');
       const storedPV = rawPV ? JSON.parse(rawPV) : [];
