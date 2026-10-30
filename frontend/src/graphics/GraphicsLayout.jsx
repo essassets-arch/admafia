@@ -11,6 +11,7 @@ import {
   Palette,
   Sparkles,
   ArrowRight,
+  Paintbrush,
 } from 'lucide-react';
 import GraphicsPostRequestsDesk from './GraphicsPostRequestsDesk';
 import GraphicsUploadPostDesk from './GraphicsUploadPostDesk';
@@ -144,58 +145,33 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
       {/* 1. Sidebar */}
       <aside
         className={`graphics-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}
-        style={mobileMenuOpen ? { display: 'flex', position: 'fixed', zIndex: 100, width: '280px' } : undefined}
       >
         <div className="graphics-sidebar-brand">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: 38,
-              height: 38,
-              borderRadius: 10,
-              background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              boxShadow: '0 4px 12px rgba(236,72,153,0.3)',
-            }}>
-              <Palette size={20} />
-            </div>
-            <div className="graphics-brand-text">
-              <span className="graphics-brand-title">AdMafia Creative</span>
-              <span className="graphics-brand-tag">Graphics Department</span>
-            </div>
+          <div className="graphics-brand-icon-box">
+            <Palette size={20} />
+          </div>
+          <div className="graphics-brand-text">
+            <span className="graphics-brand-title">AdMafia Creative</span>
+            <span className="graphics-brand-tag">Graphics Department</span>
           </div>
         </div>
 
         {/* Live IST clock */}
-        <div style={{
-          padding: '10px 14px',
-          margin: '0 16px 12px 16px',
-          background: 'rgba(255,255,255,0.04)',
-          borderRadius: 8,
-          border: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: '0.74rem',
-          color: '#94a3b8',
-        }}>
+        <div className="graphics-sidebar-clock-card">
           <span>India Standard Time</span>
-          <strong style={{ color: '#f1f5f9', fontFamily: 'monospace' }}>
-            {liveClock.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+          <strong>
+            {liveClock.toLocaleTimeString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: true,
+            })}
           </strong>
         </div>
 
         <nav className="graphics-sidebar-nav">
-          <div style={{
-            fontSize: '0.7rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: '#64748b',
-            padding: '8px 16px 4px 16px',
-            fontWeight: 700,
-          }}>
+          <div className="graphics-nav-category-header">
             Creative Desks
           </div>
 
@@ -209,23 +185,16 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
                 className={`graphics-nav-item ${isActive ? 'active' : ''}`}
                 onClick={() => navigateToDesk(item.id)}
               >
-                <div className="graphics-nav-label">
-                  <Icon size={18} />
-                  <div>
-                    <div>{item.label}</div>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 400 }}>{item.sublabel}</div>
+                <div className="graphics-nav-label-box">
+                  <Icon size={18} className="graphics-nav-icon" />
+                  <div className="graphics-nav-text-col">
+                    <span className="graphics-nav-title">{item.label}</span>
+                    <span className="graphics-nav-desc">{item.sublabel}</span>
                   </div>
                 </div>
                 {item.badge !== null && item.badge !== undefined && (
                   <span
-                    className="graphics-nav-badge"
-                    style={
-                      item.urgent
-                        ? { background: '#ef4444', color: '#ffffff', fontWeight: 800 }
-                        : item.color
-                        ? { background: 'rgba(16,185,129,0.2)', color: '#34d399' }
-                        : undefined
-                    }
+                    className={`graphics-nav-badge ${item.urgent ? 'urgent' : ''} ${item.color ? 'emerald' : ''}`}
                   >
                     {item.badge}
                   </span>
@@ -239,8 +208,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
           {/* Quick link to Marketing Department */}
           <a
             href="/marketing"
-            className="graphics-btn-footer"
-            style={{ textDecoration: 'none', background: 'rgba(99, 102, 241, 0.12)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.25)' }}
+            className="graphics-footer-btn-highlight"
           >
             <Sparkles size={15} />
             <span>Marketing Dept</span>
@@ -249,7 +217,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
 
           <button
             type="button"
-            className="graphics-btn-footer"
+            className="graphics-footer-btn"
             onClick={() => {
               if (onBackToWebsite) onBackToWebsite();
               else window.location.href = '/';
@@ -261,7 +229,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
 
           <button
             type="button"
-            className="graphics-btn-footer"
+            className="graphics-footer-btn logout"
             onClick={() => {
               if (onSignOut) onSignOut();
               else {
@@ -276,32 +244,57 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
         </div>
       </aside>
 
-      {/* 2. Main Content Area */}
-      <div className="graphics-main-area">
+      {/* 2. Main Workspace Wrap */}
+      <div className="graphics-main-wrap">
         {/* Top Header */}
-        <header className="graphics-top-header">
-          <button
-            type="button"
-            className="graphics-mobile-menu-btn"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+        <header className="graphics-top-bar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <button
+              type="button"
+              className="gfx-mobile-toggle-btn"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              title="Toggle Navigation Menu"
+            >
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
 
-          <div className="graphics-top-title">
-            <span style={{ color: '#94a3b8' }}>Graphics Department /</span>{' '}
-            <strong style={{ color: '#0f172a' }}>
-              {activeDesk === 'post_requests' && 'Post Requests'}
-              {activeDesk === 'upload_post' && 'Upload Finished Artwork'}
-              {activeDesk === 'approved_posts' && 'Approved Posts Registry'}
-              {activeDesk === 'rejected_posts' && 'Rejected Posts & Reupload Queue'}
-            </strong>
+            <div className="graphics-breadcrumbs">
+              <span className="graphics-bc-dept">Graphics Department</span>
+              <span className="graphics-bc-sep">/</span>
+              <strong className="graphics-bc-current">
+                {activeDesk === 'post_requests' && 'Post Requests'}
+                {activeDesk === 'upload_post' && 'Upload Finished Artwork'}
+                {activeDesk === 'approved_posts' && 'Approved Posts Registry'}
+                {activeDesk === 'rejected_posts' && 'Rejected Posts & Reupload Queue'}
+              </strong>
+            </div>
           </div>
 
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-              Logged in as <strong style={{ color: '#0f172a' }}>Senior Graphics Designer</strong>
-            </span>
+          <div className="graphics-top-actions">
+            <div className="graphics-live-pill">
+              <span className="graphics-live-dot" />
+              <span>PostgreSQL Live Sync</span>
+            </div>
+
+            <div className="graphics-clock-tag">
+              {liveClock.toLocaleTimeString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+              })} IST
+            </div>
+
+            <div className="graphics-user-profile">
+              <div className="graphics-user-avatar">
+                <Paintbrush size={16} />
+              </div>
+              <div className="graphics-user-meta">
+                <span className="graphics-user-title">Senior Graphics Designer</span>
+                <span className="graphics-user-dept">AdMafia Creative Production</span>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -336,4 +329,3 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
     </div>
   );
 }
-
