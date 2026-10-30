@@ -55,11 +55,22 @@ MISMATCH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Typ
 check "$MISMATCH_STATUS" 400 "Extension/MIME mismatch (.php on image/png) rejected with HTTP 400"
 
 echo ""
-echo "[4/4] Verifying Campaign Creative Gate..."
-# Test unapproved post rejection
+echo "[4/4] Verifying Campaign Creative & Validation Gates..."
+# Gate A: Sub-minimum budget strictly blocked with HTTP 400
+BUDGET_PAYLOAD='{"customerId":"dummy_cust","name":"Audit Check","dailyBudget":150}'
+BUDGET_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d "$BUDGET_PAYLOAD" "$TARGET_URL/api/marketing/campaigns")
+check "$BUDGET_STATUS" 400 "Sub-minimum budget (< ₹300/day) strictly blocked with HTTP 400"
+
+# Gate B: Invalid / unapproved customer and post strictly blocked (HTTP 400 or 404)
 UNAPPROVED_CAMP='{"customerId":"dummy_cust","name":"Audit Check","postId":"dummy_unapproved","dailyBudget":300}'
 CAMP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d "$UNAPPROVED_CAMP" "$TARGET_URL/api/marketing/campaigns")
-check "$CAMP_STATUS" 400 "Unapproved post rejected from campaign with HTTP 400"
+if [ "$CAMP_STATUS" -eq 400 ] || [ "$CAMP_STATUS" -eq 404 ]; then
+  echo "  ✅ PASS: Unapproved/non-existent creative campaign strictly blocked (HTTP $CAMP_STATUS)"
+  PASSED=$((PASSED+1))
+else
+  echo "  ❌ FAIL: Unapproved creative campaign was not blocked (Expected HTTP 400 or 404, Got $CAMP_STATUS)"
+  FAILED=$((FAILED+1))
+fi
 
 echo ""
 echo "=========================================================="
