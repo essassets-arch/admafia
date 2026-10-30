@@ -230,9 +230,29 @@ async function runSuperAdminE2ETests() {
     const approveRefundData = await approveRefundRes.json();
     assert(approveRefundData.ok === true, 'Refund approved and wallet debited');
 
+    // Concurrency Safeguard: Attempting to re-approve the already processed refund must return 409 Conflict
+    const reApproveRes = await fetch(`${baseUrl}/refunds/${testRefundId}/review`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Approved', adminName: 'Second Admin' }),
+    });
+    assert(reApproveRes.status === 409, 'Concurrent / duplicate refund approval strictly blocked with HTTP 409 Conflict');
+
     // Verify balance decreased from 2000 to 1500
     const walletAfterRefund = await query('SELECT available_balance FROM wallets WHERE customer_id = $1', [testCustomerId]);
     assert(Number(walletAfterRefund.rows[0].available_balance) === 1500, 'Wallet balance atomically debited to ₹1500');
+
+    // Test Refund Reconciliation Ledger
+    const reconRes = await fetch(`${baseUrl}/refunds/reconciliation`);
+    const reconData = await reconRes.json();
+    assert(reconData.ok === true, 'Refund reconciliation ledger returned');
+    assert(Array.isArray(reconData.records), 'Reconciliation trace records returned');
+    assert(typeof reconData.summary.total_customer_deposits !== 'undefined', 'Reconciliation global financial summary calculated');
+
+    // Test Reconciliation CSV Export
+    const reconExportRes = await fetch(`${baseUrl}/refunds/reconciliation/export`);
+    assert(reconExportRes.status === 200, 'Refund reconciliation CSV export responds 200 OK');
+    assert(reconExportRes.headers.get('content-type')?.includes('text/csv'), 'Reconciliation export returns text/csv');
 
     // -------------------------------------------------------------------------
     // 7. Account Block / Activate & Governance

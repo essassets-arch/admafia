@@ -629,9 +629,10 @@ superadminRouter.get('/refunds/paid-customers', async (req, res) => {
     const conditions = [];
     const params = [];
 
-    // Filter to customers who completed payment OR have lifetime paid > 0 OR available balance > 0
+    // Financial Safeguard 1: Genuinely verified paid customer check
+    // Active wallet balance alone does not prove customer paid - must have verified deposits
     conditions.push(
-      `(c.payment_status = 'paid' OR COALESCE(w.total_lifetime_paid, 0) > 0 OR COALESCE(w.available_balance, 0) > 0 OR EXISTS (SELECT 1 FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid'))`
+      `(c.payment_status = 'paid' OR COALESCE(w.total_lifetime_paid, 0) > 0 OR EXISTS (SELECT 1 FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid') OR EXISTS (SELECT 1 FROM wallet_transactions wt WHERE wt.customer_id = c.id AND wt.tx_type = 'Credit' AND wt.status = 'Verified ✓'))`
     );
 
     if (search && search.trim()) {
@@ -663,7 +664,24 @@ superadminRouter.get('/refunds/paid-customers', async (req, res) => {
         (SELECT MAX(pr.paid_at) FROM payment_records pr WHERE pr.customer_id = c.id) AS last_payment_date,
         (SELECT pr.utr_reference FROM payment_records pr WHERE pr.customer_id = c.id ORDER BY pr.paid_at DESC LIMIT 1) AS last_utr_ref,
         (SELECT COUNT(*)::INT FROM refund_requests rf WHERE rf.customer_id = c.id) AS total_refund_requests,
-        (SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status IN ('Approved', 'Completed')) AS total_refunded_amount
+        (SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status IN ('Approved', 'Completed')) AS total_refunded_amount,
+        (SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status = 'Pending') AS pending_refund_amount,
+        -- Financial Safeguard: Strict bank-refundable eligibility calculation
+        -- Capped at MIN(available_balance, total_lifetime_paid - already_refunded - pending_refunds)
+        GREATEST(0, LEAST(
+          COALESCE(w.available_balance, 0),
+          GREATEST(0, COALESCE(w.total_lifetime_paid, 0) - COALESCE((SELECT SUM(amount) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status IN ('Approved', 'Completed')), 0) - COALESCE((SELECT SUM(amount) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status = 'Pending'), 0))
+        ))::NUMERIC(12,2) AS eligible_bank_refundable,
+        -- Verified deposits array for tracing exact payment UTRs
+        (SELECT COALESCE(json_agg(
+          json_build_object(
+            'receipt_number', pr.receipt_number,
+            'utr_reference', pr.utr_reference,
+            'amount', pr.amount,
+            'paid_at', pr.paid_at,
+            'payment_mode', pr.payment_mode
+          ) ORDER BY pr.paid_at DESC
+        ), '[]'::json) FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid') AS verified_deposits
        FROM customers c
        LEFT JOIN wallets w ON w.customer_id = c.id
        ${whereClause}
@@ -672,15 +690,16 @@ superadminRouter.get('/refunds/paid-customers', async (req, res) => {
       [...params, limitNum, offset]
     );
 
-    // Summary stats for paid customers
+    // Authoritative Summary stats
     const statRes = await query(
       `SELECT
         COUNT(DISTINCT c.id)::INT AS total_paid_customers,
         COALESCE(SUM(w.total_lifetime_paid), 0)::NUMERIC(12,2) AS total_amount_paid,
-        COALESCE(SUM(w.available_balance), 0)::NUMERIC(12,2) AS total_refundable_balance
+        COALESCE(SUM(w.available_balance), 0)::NUMERIC(12,2) AS total_refundable_balance,
+        COALESCE((SELECT SUM(amount) FROM refund_requests WHERE status IN ('Approved', 'Completed')), 0)::NUMERIC(12,2) AS total_refunded_amount
        FROM customers c
        LEFT JOIN wallets w ON w.customer_id = c.id
-       WHERE (c.payment_status = 'paid' OR COALESCE(w.total_lifetime_paid, 0) > 0 OR COALESCE(w.available_balance, 0) > 0)`
+       WHERE (c.payment_status = 'paid' OR COALESCE(w.total_lifetime_paid, 0) > 0 OR EXISTS (SELECT 1 FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid'))`
     );
 
     res.json({
@@ -690,6 +709,7 @@ superadminRouter.get('/refunds/paid-customers', async (req, res) => {
         totalPaidCustomers: statRes.rows[0]?.total_paid_customers || 0,
         totalAmountPaid: Number(statRes.rows[0]?.total_amount_paid || 0),
         totalRefundableBalance: Number(statRes.rows[0]?.total_refundable_balance || 0),
+        totalRefundedAmount: Number(statRes.rows[0]?.total_refunded_amount || 0),
       },
       pagination: {
         total: totalCount,
@@ -769,7 +789,7 @@ superadminRouter.get('/refunds', async (req, res) => {
   }
 });
 
-// Submit a new refund request
+// Submit a new refund request (with Authoritative Eligibility & Overdraft Protection)
 superadminRouter.post('/refunds', async (req, res) => {
   try {
     const {
@@ -791,9 +811,17 @@ superadminRouter.post('/refunds', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Refund reason is mandatory.' });
     }
 
-    const [custRes, walletRes] = await Promise.all([
+    const [custRes, walletRes, prevRefundsRes, pendingRefundsRes] = await Promise.all([
       query(`SELECT * FROM customers WHERE id = $1`, [customerId]),
       query(`SELECT * FROM wallets WHERE customer_id = $1`, [customerId]),
+      query(
+        `SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) AS total FROM refund_requests WHERE customer_id = $1 AND status IN ('Approved', 'Completed')`,
+        [customerId]
+      ),
+      query(
+        `SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) AS total FROM refund_requests WHERE customer_id = $1 AND status = 'Pending'`,
+        [customerId]
+      ),
     ]);
 
     if (custRes.rowCount === 0) {
@@ -801,11 +829,28 @@ superadminRouter.post('/refunds', async (req, res) => {
     }
 
     const currentBal = Number(walletRes.rows[0]?.available_balance || 0);
+    const totalLifetimePaid = Number(walletRes.rows[0]?.total_lifetime_paid || 0);
+    const totalPreviouslyRefunded = Number(prevRefundsRes.rows[0]?.total || 0);
+    const totalPendingRefunds = Number(pendingRefundsRes.rows[0]?.total || 0);
+
+    // Safeguard 1: Separate wallet balance from bank refund eligibility
+    // Refund cannot exceed current wallet available balance
     if (refundAmount > currentBal) {
       return res.status(400).json({
         ok: false,
         error: `Requested refund (₹${refundAmount.toFixed(2)}) exceeds current wallet available balance (₹${currentBal.toFixed(2)}).`,
       });
+    }
+
+    // Safeguard 2: Refund cannot exceed actual deposited money minus already refunded minus pending claims
+    if (totalLifetimePaid > 0) {
+      const eligibleBankRefundable = Math.max(0, totalLifetimePaid - totalPreviouslyRefunded - totalPendingRefunds);
+      if (refundAmount > eligibleBankRefundable) {
+        return res.status(400).json({
+          ok: false,
+          error: `Requested refund (₹${refundAmount.toFixed(2)}) exceeds eligible bank-refundable cap (₹${eligibleBankRefundable.toFixed(2)}). Total lifetime deposited: ₹${totalLifetimePaid.toFixed(2)}, Already refunded: ₹${totalPreviouslyRefunded.toFixed(2)}, Pending requests: ₹${totalPendingRefunds.toFixed(2)}.`,
+        });
+      }
     }
 
     const refundId = `ref_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
@@ -840,7 +885,7 @@ superadminRouter.post('/refunds', async (req, res) => {
   }
 });
 
-// Review refund decision (Approve or Reject with atomic safeguards)
+// Review refund decision (Approve or Reject with atomic safeguards and concurrency row locks)
 superadminRouter.patch('/refunds/:id/review', async (req, res) => {
   try {
     const { id } = req.params;
@@ -862,54 +907,49 @@ superadminRouter.patch('/refunds/:id/review', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Mandatory rejection reason must be provided.' });
     }
 
-    const refundCheck = await query(`SELECT * FROM refund_requests WHERE id = $1`, [id]);
-    if (refundCheck.rowCount === 0) {
-      return res.status(404).json({ ok: false, error: 'Refund request not found.' });
-    }
-
-    const refund = refundCheck.rows[0];
-    if (refund.status === 'Completed' || refund.status === 'Approved') {
-      return res.status(409).json({ ok: false, error: 'This refund has already been approved and processed.' });
-    }
-    if (refund.status === 'Rejected') {
-      return res.status(409).json({ ok: false, error: 'This refund has already been rejected.' });
-    }
-
-    const refundAmount = Number(refund.amount);
-
-    if (finalDecision === 'Rejected') {
-      await query(
-        `UPDATE refund_requests
-         SET status = 'Rejected',
-             rejection_reason = $1,
-             review_notes = $2,
-             reviewed_by = $3,
-             reviewed_at = NOW(),
-             updated_at = NOW()
-         WHERE id = $4`,
-        [reason.trim(), reviewNotes.trim(), adminName, id]
-      );
-
-      await logSuperAdminAudit({
-        actorId: adminId,
-        actorName: adminName,
-        actionType: 'REFUND_REJECTED',
-        targetType: 'refund',
-        targetId: id,
-        reason: reason.trim(),
-        details: { customerId: refund.customer_id, amount: refundAmount },
-      });
-
-      return res.json({ ok: true, message: 'Refund request rejected with recorded reason.' });
-    }
-
-    // Process Approved Refund atomically
-    const providerRef = `REF_PAY_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    let reviewResult = null;
 
     await withTransaction(async (tx) => {
-      // 1. Lock wallet row for update
+      // Concurrency Safeguard: Row-level lock on refund_requests
+      const refundCheck = await tx(`SELECT * FROM refund_requests WHERE id = $1 FOR UPDATE`, [id]);
+      if (refundCheck.rowCount === 0) {
+        throw new Error('NOT_FOUND: Refund request not found.');
+      }
+
+      const refund = refundCheck.rows[0];
+      if (refund.status === 'Completed' || refund.status === 'Approved') {
+        throw new Error('ALREADY_PROCESSED: This refund request has already been approved and completed.');
+      }
+      if (refund.status === 'Rejected') {
+        throw new Error('ALREADY_PROCESSED: This refund request has already been rejected.');
+      }
+
+      const refundAmount = Number(refund.amount);
+
+      if (finalDecision === 'Rejected') {
+        await tx(
+          `UPDATE refund_requests
+           SET status = 'Rejected',
+               rejection_reason = $1,
+               review_notes = $2,
+               reviewed_by = $3,
+               reviewed_at = NOW(),
+               updated_at = NOW()
+           WHERE id = $4`,
+          [reason.trim(), reviewNotes.trim(), adminName, id]
+        );
+
+        reviewResult = {
+          ok: true,
+          status: 'Rejected',
+          message: 'Refund request rejected with recorded reason.',
+        };
+        return;
+      }
+
+      // Concurrency Safeguard: Row-level lock on customer's wallet
       const walletRes = await tx(
-        `SELECT id, available_balance FROM wallets WHERE customer_id = $1 FOR UPDATE`,
+        `SELECT id, available_balance, total_lifetime_paid FROM wallets WHERE customer_id = $1 FOR UPDATE`,
         [refund.customer_id]
       );
 
@@ -926,7 +966,7 @@ superadminRouter.patch('/refunds/:id/review', async (req, res) => {
 
       const balanceAfter = Number((currentBalance - refundAmount).toFixed(2));
 
-      // 2. Deduct from wallet
+      // 1. Deduct wallet atomically
       await tx(
         `UPDATE wallets
          SET available_balance = $1,
@@ -935,7 +975,8 @@ superadminRouter.patch('/refunds/:id/review', async (req, res) => {
         [balanceAfter, refund.customer_id]
       );
 
-      // 3. Record debit in wallet transactions ledger
+      // 2. Insert immutable debit transaction in ledger
+      const providerRef = `REF_PAY_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
       const txId = `tx_refund_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
       await tx(
         `INSERT INTO wallet_transactions (
@@ -952,7 +993,7 @@ superadminRouter.patch('/refunds/:id/review', async (req, res) => {
         ]
       );
 
-      // 4. Update refund record
+      // 3. Mark refund as Completed
       await tx(
         `UPDATE refund_requests
          SET status = 'Completed',
@@ -964,25 +1005,237 @@ superadminRouter.patch('/refunds/:id/review', async (req, res) => {
          WHERE id = $4`,
         [reviewNotes.trim() || 'Approved by Super Admin', adminName, providerRef, id]
       );
+
+      reviewResult = {
+        ok: true,
+        status: 'Completed',
+        providerRef,
+        message: `Refund of ₹${refundAmount.toFixed(2)} approved and deducted atomically from wallet.`,
+      };
     });
 
-    await logSuperAdminAudit({
-      actorId: adminId,
-      actorName: adminName,
-      actionType: 'REFUND_APPROVED',
-      targetType: 'refund',
-      targetId: id,
-      reason: reason || 'Approved and credited back to customer banking source',
-      details: { customerId: refund.customer_id, amount: refundAmount, providerRef },
-    });
+    if (reviewResult && reviewResult.status === 'Completed') {
+      await logSuperAdminAudit({
+        actorId: adminId,
+        actorName: adminName,
+        actionType: 'REFUND_APPROVED',
+        targetType: 'refund',
+        targetId: id,
+        reason: reason || 'Approved and credited back to customer banking source',
+        details: { providerRef: reviewResult.providerRef },
+      });
+    } else if (reviewResult && reviewResult.status === 'Rejected') {
+      await logSuperAdminAudit({
+        actorId: adminId,
+        actorName: adminName,
+        actionType: 'REFUND_REJECTED',
+        targetType: 'refund',
+        targetId: id,
+        reason: reason.trim(),
+        details: {},
+      });
+    }
+
+    res.json(reviewResult);
+  } catch (err) {
+    console.error('[PATCH /api/superadmin/refunds/:id/review]', err);
+    if (err.message && err.message.startsWith('ALREADY_PROCESSED')) {
+      return res.status(409).json({ ok: false, error: err.message.replace('ALREADY_PROCESSED: ', '') });
+    }
+    if (err.message && err.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ ok: false, error: err.message.replace('NOT_FOUND: ', '') });
+    }
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// =============================================================================
+// 4B. REFUND RECONCILIATION & AUDIT HISTORY
+// Original Deposit (UTR) ➔ Eligible Cap ➔ Refund Request ➔ Provider Ref ➔ Final State
+// =============================================================================
+superadminRouter.get('/refunds/reconciliation', async (req, res) => {
+  try {
+    const { search, status = 'all', page = 1, limit = 25 } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const offset = (pageNum - 1) * limitNum;
+
+    const conditions = [];
+    const params = [];
+
+    if (status && status !== 'all') {
+      params.push(status);
+      conditions.push(`rf.status = $${params.length}`);
+    }
+
+    if (search && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      const idx = params.length;
+      conditions.push(
+        `(LOWER(c.company_name) LIKE $${idx} OR LOWER(rf.id) LIKE $${idx} OR LOWER(COALESCE(rf.original_tx_ref, '')) LIKE $${idx} OR LOWER(COALESCE(rf.provider_ref, '')) LIKE $${idx})`
+      );
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countRes = await query(
+      `SELECT COUNT(*)::INT AS total
+       FROM refund_requests rf
+       JOIN customers c ON c.id = rf.customer_id
+       ${whereClause}`,
+      params
+    );
+    const totalCount = countRes.rows[0]?.total || 0;
+
+    const listRes = await query(
+      `SELECT
+        rf.id AS refund_id,
+        rf.customer_id,
+        c.company_name,
+        c.contact_person,
+        c.phone,
+        c.email,
+        COALESCE(w.available_balance, 0)::NUMERIC(12,2) AS available_balance,
+        COALESCE(w.total_lifetime_paid, 0)::NUMERIC(12,2) AS total_lifetime_paid,
+        COALESCE(w.total_ad_spent, 0)::NUMERIC(12,2) AS total_ad_spent,
+        rf.original_tx_ref AS verified_utr,
+        rf.amount AS requested_amount,
+        rf.status AS refund_status,
+        rf.provider_ref,
+        rf.reason,
+        rf.review_notes,
+        rf.reviewed_by,
+        rf.reviewed_at,
+        rf.created_at AS request_date,
+        -- Reconciliation trace: original deposit info from payment_records
+        (SELECT json_build_object('receipt_number', pr.receipt_number, 'paid_at', pr.paid_at, 'amount', pr.amount, 'payment_mode', pr.payment_mode)
+         FROM payment_records pr
+         WHERE pr.customer_id = rf.customer_id AND (pr.utr_reference = rf.original_tx_ref OR pr.status = 'paid')
+         ORDER BY pr.paid_at DESC LIMIT 1) AS original_deposit_info,
+        -- Calculated Reconciliation State
+        CASE
+          WHEN rf.status = 'Completed' AND w.available_balance = 0 THEN 'Fully Refunded (Zero Balance)'
+          WHEN rf.status = 'Completed' AND w.available_balance > 0 THEN 'Partially Refunded (Active Balance)'
+          WHEN rf.status = 'Rejected' THEN 'Rejected by Auditor'
+          WHEN rf.status = 'Pending' THEN 'Pending Audit Decision'
+          ELSE rf.status
+        END AS reconciliation_state
+       FROM refund_requests rf
+       JOIN customers c ON c.id = rf.customer_id
+       LEFT JOIN wallets w ON w.customer_id = rf.customer_id
+       ${whereClause}
+       ORDER BY rf.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limitNum, offset]
+    );
+
+    // Global Financial Summary
+    const summaryRes = await query(
+      `SELECT
+        COALESCE(SUM(w.total_lifetime_paid), 0)::NUMERIC(12,2) AS total_customer_deposits,
+        COALESCE(SUM(w.total_ad_spent), 0)::NUMERIC(12,2) AS total_delivered_ad_spend,
+        COALESCE(SUM(w.available_balance), 0)::NUMERIC(12,2) AS total_current_liability,
+        COALESCE((SELECT SUM(amount) FROM refund_requests WHERE status IN ('Approved', 'Completed')), 0)::NUMERIC(12,2) AS total_refunded_to_bank,
+        COALESCE((SELECT SUM(amount) FROM refund_requests WHERE status = 'Pending'), 0)::NUMERIC(12,2) AS total_pending_claims,
+        COALESCE((SELECT COUNT(*) FROM refund_requests WHERE status IN ('Approved', 'Completed')), 0)::INT AS completed_refund_count,
+        COALESCE((SELECT COUNT(*) FROM refund_requests WHERE status = 'Rejected'), 0)::INT AS rejected_refund_count
+       FROM wallets w`
+    );
 
     res.json({
       ok: true,
-      message: `Refund of ₹${refundAmount.toFixed(2)} approved and deducted atomically from wallet.`,
-      providerRef,
+      records: listRes.rows,
+      summary: summaryRes.rows[0] || {},
+      pagination: {
+        total: totalCount,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(totalCount / limitNum) || 1,
+      },
     });
   } catch (err) {
-    console.error('[PATCH /api/superadmin/refunds/:id/review]', err);
+    console.error('[GET /api/superadmin/refunds/reconciliation]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Export Refund Reconciliation Ledger as CSV
+superadminRouter.get('/refunds/reconciliation/export', async (req, res) => {
+  try {
+    const listRes = await query(
+      `SELECT
+        rf.id AS refund_id,
+        c.company_name,
+        c.contact_person,
+        c.phone,
+        rf.original_tx_ref AS verified_utr,
+        rf.amount AS refunded_amount,
+        w.available_balance AS remaining_wallet_balance,
+        w.total_lifetime_paid AS total_deposited,
+        w.total_ad_spent AS delivered_ad_spend,
+        rf.provider_ref AS banking_reversal_ref,
+        rf.status,
+        rf.reason,
+        rf.reviewed_by,
+        rf.reviewed_at,
+        rf.created_at
+       FROM refund_requests rf
+       JOIN customers c ON c.id = rf.customer_id
+       LEFT JOIN wallets w ON w.customer_id = rf.customer_id
+       ORDER BY rf.created_at DESC`
+    );
+
+    const headers = [
+      'Refund ID',
+      'Company Name',
+      'Contact Person',
+      'Phone',
+      'Verified Deposit UTR',
+      'Refund Amount (INR)',
+      'Remaining Wallet Balance',
+      'Total Lifetime Deposited',
+      'Delivered Ad Spend',
+      'Banking Reversal Ref',
+      'Status',
+      'Reason',
+      'Reviewed By',
+      'Reviewed At',
+      'Request Date',
+    ];
+
+    const escapeCsv = (str) => {
+      if (str === null || str === undefined) return '""';
+      const s = String(str).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
+    let csv = headers.join(',') + '\n';
+    listRes.rows.forEach((r) => {
+      csv +=
+        [
+          escapeCsv(r.refund_id),
+          escapeCsv(r.company_name),
+          escapeCsv(r.contact_person),
+          escapeCsv(r.phone),
+          escapeCsv(r.verified_utr),
+          escapeCsv(r.refunded_amount),
+          escapeCsv(r.remaining_wallet_balance),
+          escapeCsv(r.total_deposited),
+          escapeCsv(r.delivered_ad_spend),
+          escapeCsv(r.banking_reversal_ref),
+          escapeCsv(r.status),
+          escapeCsv(r.reason),
+          escapeCsv(r.reviewed_by),
+          escapeCsv(r.reviewed_at),
+          escapeCsv(r.created_at),
+        ].join(',') + '\n';
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="admafia_refund_reconciliation_${Date.now()}.csv"`);
+    res.status(200).send(csv);
+  } catch (err) {
+    console.error('[GET /api/superadmin/refunds/reconciliation/export]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

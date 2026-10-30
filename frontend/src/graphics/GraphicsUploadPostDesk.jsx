@@ -132,6 +132,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
     reader.onload = async () => {
       try {
         const base64Data = reader.result;
+        setLocalPreview(base64Data);
         const uploadRes = await graphicsApi.uploadMedia(base64Data, file.name, file.type);
         if (uploadRes && uploadRes.ok) {
           setMediaUrl(uploadRes.url);
@@ -310,6 +311,11 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                       src={localPreview || mediaUrl}
                       alt="Artwork Preview"
                       style={{ maxHeight: 180, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', objectFit: 'contain' }}
+                      onError={(e) => {
+                        if (localPreview && e.currentTarget.src !== localPreview) {
+                          e.currentTarget.src = localPreview;
+                        }
+                      }}
                     />
                     <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>
                       ✓ Artwork Uploaded Successfully (Click or drag to replace)

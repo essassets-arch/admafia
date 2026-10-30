@@ -20,32 +20,47 @@ import {
   ArrowUpRight,
   TrendingDown,
   FileCheck,
-  Receipt
+  Receipt,
+  Download,
+  FileSpreadsheet,
+  ArrowRight,
+  ShieldCheck,
+  CheckCheck
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 
 export default function SuperAdminRefundsDesk() {
-  const [activeTab, setActiveTab] = useState('paid_customers'); // 'paid_customers' | 'refund_queue'
+  const [activeTab, setActiveTab] = useState('paid_customers'); // 'paid_customers' | 'refund_queue' | 'reconciliation'
 
-  // Paid Customers State
+  // Tab 1: Paid Customers State
   const [paidCustomers, setPaidCustomers] = useState([]);
   const [paidSummary, setPaidSummary] = useState({
     totalPaidCustomers: 0,
     totalAmountPaid: 0,
     totalRefundableBalance: 0,
+    totalRefundedAmount: 0,
   });
   const [paidLoading, setPaidLoading] = useState(true);
   const [paidSearch, setPaidSearch] = useState('');
   const [paidPagination, setPaidPagination] = useState({ page: 1, total: 0, totalPages: 1 });
 
-  // Refund Requests Queue State
+  // Tab 2: Refund Requests Queue State
   const [refunds, setRefunds] = useState([]);
   const [refundsLoading, setRefundsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refundSearch, setRefundSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [refundPagination, setRefundPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+
+  // Tab 3: Reconciliation & Audit History State
+  const [reconRecords, setReconRecords] = useState([]);
+  const [reconSummary, setReconSummary] = useState({});
+  const [reconLoading, setReconLoading] = useState(false);
+  const [reconSearch, setReconSearch] = useState('');
+  const [reconStatusFilter, setReconStatusFilter] = useState('all');
+  const [reconPagination, setReconPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+  const [selectedReconDetail, setSelectedReconDetail] = useState(null);
 
   // Rejection Modal State
   const [rejectingRefund, setRejectingRefund] = useState(null);
@@ -64,7 +79,7 @@ export default function SuperAdminRefundsDesk() {
   });
   const [submittingCreate, setSubmittingCreate] = useState(false);
 
-  // Fetch Paid Customers
+  // 1. Fetch Paid Customers
   const fetchPaidCustomers = useCallback(async () => {
     try {
       setPaidLoading(true);
@@ -85,7 +100,7 @@ export default function SuperAdminRefundsDesk() {
     }
   }, [paidSearch, paidPagination.page]);
 
-  // Fetch Refund Requests Queue
+  // 2. Fetch Refund Requests Queue
   const fetchRefunds = useCallback(async () => {
     try {
       setRefundsLoading(true);
@@ -107,6 +122,28 @@ export default function SuperAdminRefundsDesk() {
     }
   }, [statusFilter, refundSearch, refundPagination.page]);
 
+  // 3. Fetch Reconciliation & Audit Ledger
+  const fetchReconciliation = useCallback(async () => {
+    try {
+      setReconLoading(true);
+      const res = await superadminApi.getRefundReconciliation({
+        search: reconSearch,
+        status: reconStatusFilter,
+        page: reconPagination.page,
+        limit: 25,
+      });
+      if (res && res.ok) {
+        setReconRecords(res.records || []);
+        if (res.summary) setReconSummary(res.summary);
+        if (res.pagination) setReconPagination(res.pagination);
+      }
+    } catch (err) {
+      console.error('Failed to load refund reconciliation:', err);
+    } finally {
+      setReconLoading(false);
+    }
+  }, [reconSearch, reconStatusFilter, reconPagination.page]);
+
   useEffect(() => {
     fetchPaidCustomers();
   }, [fetchPaidCustomers]);
@@ -115,18 +152,27 @@ export default function SuperAdminRefundsDesk() {
     fetchRefunds();
   }, [fetchRefunds]);
 
+  useEffect(() => {
+    if (activeTab === 'reconciliation') {
+      fetchReconciliation();
+    }
+  }, [activeTab, fetchReconciliation]);
+
   const handleRefreshAll = () => {
     setRefreshing(true);
     fetchPaidCustomers();
     fetchRefunds();
+    if (activeTab === 'reconciliation') fetchReconciliation();
   };
 
   // Open Issue Refund Modal for a specific customer
   const handleOpenIssueRefundForCustomer = (cust) => {
     setSelectedCustomerForRefund(cust);
+    const eligibleBankRefund = Number(cust.eligible_bank_refundable || cust.available_balance || 0);
+
     setCreateForm({
       customerId: cust.id,
-      amount: cust.available_balance > 0 ? String(cust.available_balance) : '',
+      amount: eligibleBankRefund > 0 ? String(eligibleBankRefund) : '',
       reason: '',
       supportingInfo: '',
       originalTxRef: cust.last_utr_ref || '',
@@ -138,15 +184,17 @@ export default function SuperAdminRefundsDesk() {
   const handleSelectCustomerInModal = (custId) => {
     const cust = paidCustomers.find((c) => c.id === custId);
     setSelectedCustomerForRefund(cust || null);
+    const eligibleBankRefund = cust ? Number(cust.eligible_bank_refundable || cust.available_balance || 0) : 0;
+
     setCreateForm((prev) => ({
       ...prev,
       customerId: custId,
-      amount: cust && cust.available_balance > 0 ? String(cust.available_balance) : '',
+      amount: eligibleBankRefund > 0 ? String(eligibleBankRefund) : '',
       originalTxRef: cust?.last_utr_ref || '',
     }));
   };
 
-  // Handle Approve Refund (Atomic Transaction)
+  // Handle Approve Refund (Atomic Transaction with Row-Level Locking)
   const handleApproveRefund = async (refund) => {
     const currentBal = Number(refund.available_balance || 0);
     const refundAmt = Number(refund.amount || 0);
@@ -168,7 +216,7 @@ export default function SuperAdminRefundsDesk() {
           <div>Refund Amount: <strong style="color: #dc2626;">₹${refundAmt.toFixed(2)}</strong></div>
           <div>Current Balance: <strong>₹${currentBal.toFixed(2)}</strong></div>
           <div style="margin-top: 10px; padding: 10px; background: #fff1f2; border-radius: 8px; color: #9f1239; font-size: 0.82rem;">
-            ⚠️ This will atomically deduct ₹${refundAmt.toFixed(2)} from the customer's wallet and generate an official refund debit in the transaction ledger.
+            ⚠️ <strong>Financial Integrity Safeguard:</strong> This will lock the wallet row, deduct ₹${refundAmt.toFixed(2)} atomically, and generate an official banking reversal record in the transaction ledger.
           </div>
         </div>
       `,
@@ -192,13 +240,16 @@ export default function SuperAdminRefundsDesk() {
         Swal.fire({
           icon: 'success',
           title: 'Refund Approved! 🚀',
-          text: `Refund completed. Provider Ref: ${res.providerRef || 'N/A'}`,
+          text: `Refund completed. Banking Provider Ref: ${res.providerRef || 'N/A'}`,
         });
         fetchRefunds();
         fetchPaidCustomers();
+        if (activeTab === 'reconciliation') fetchReconciliation();
+      } else {
+        Swal.fire({ icon: 'error', title: 'Approval Failed', text: res?.error || 'Could not process refund.' });
       }
     } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Refund Approval Failed', text: err.message });
+      Swal.fire({ icon: 'error', title: 'Refund Approval Failed', text: err.response?.data?.error || err.message });
     }
   };
 
@@ -222,6 +273,7 @@ export default function SuperAdminRefundsDesk() {
         setRejectingRefund(null);
         setRejectionReason('');
         fetchRefunds();
+        fetchPaidCustomers();
         Swal.fire({
           icon: 'info',
           title: 'Refund Rejected',
@@ -229,13 +281,13 @@ export default function SuperAdminRefundsDesk() {
         });
       }
     } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Rejection Failed', text: err.message });
+      Swal.fire({ icon: 'error', title: 'Rejection Failed', text: err.response?.data?.error || err.message });
     } finally {
       setSubmittingReject(false);
     }
   };
 
-  // Submit Create Refund
+  // Submit Create Refund (with Backend Eligibility Validation)
   const handleCreateRefund = async (e) => {
     e.preventDefault();
     const amt = parseFloat(createForm.amount);
@@ -248,11 +300,15 @@ export default function SuperAdminRefundsDesk() {
       return;
     }
 
-    if (selectedCustomerForRefund && amt > Number(selectedCustomerForRefund.available_balance || 0)) {
+    const maxEligible = selectedCustomerForRefund
+      ? Number(selectedCustomerForRefund.eligible_bank_refundable || selectedCustomerForRefund.available_balance || 0)
+      : null;
+
+    if (maxEligible !== null && amt > maxEligible) {
       Swal.fire({
         icon: 'warning',
-        title: 'Amount Exceeds Balance',
-        text: `Requested refund (₹${amt.toFixed(2)}) cannot exceed customer's current available wallet balance (₹${Number(selectedCustomerForRefund.available_balance || 0).toFixed(2)}).`,
+        title: 'Amount Exceeds Eligible Cap',
+        text: `Requested refund (₹${amt.toFixed(2)}) cannot exceed eligible bank-refundable cap (₹${maxEligible.toFixed(2)}).`,
       });
       return;
     }
@@ -289,11 +345,13 @@ export default function SuperAdminRefundsDesk() {
         Swal.fire({
           icon: 'success',
           title: 'Refund Request Created',
-          text: 'The refund request has been submitted to the review queue for final approval and ledger debit.',
+          text: 'Submitted to review queue. A Super Admin can approve it with atomic ledger verification.',
         });
+      } else {
+        Swal.fire({ icon: 'error', title: 'Creation Failed', text: res.error || 'Could not register refund.' });
       }
     } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Creation Failed', text: err.message });
+      Swal.fire({ icon: 'error', title: 'Creation Failed', text: err.response?.data?.error || err.message });
     } finally {
       setSubmittingCreate(false);
     }
@@ -306,13 +364,25 @@ export default function SuperAdminRefundsDesk() {
       {/* 1. Page Header */}
       <div className="sa-page-header">
         <div>
-          <h1>Check Refunds &amp; Paid Customers</h1>
+          <h1>Check Refunds &amp; Reconciliation</h1>
           <p>
-            Review all registered businesses with completed payments, inspect wallet balances, issue authorized refunds, and audit processed reversals.
+            Verify paid customer financial eligibility, process atomic wallet reversals with concurrency protection, and inspect end-to-end audit reconciliation trails.
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
+          {activeTab === 'reconciliation' && (
+            <button
+              type="button"
+              className="sa-btn-primary"
+              onClick={() => window.open(superadminApi.getRefundReconciliationExportUrl(), '_blank')}
+              title="Export CSV Reconciliation Report"
+            >
+              <Download size={14} />
+              <span>Export CSV</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="sa-btn-primary"
@@ -351,7 +421,7 @@ export default function SuperAdminRefundsDesk() {
           style={{ cursor: 'pointer' }}
         >
           <div className="sa-stat-top">
-            <span className="sa-stat-title">Registered Paid Customers</span>
+            <span className="sa-stat-title">Verified Paid Customers</span>
             <div className="sa-stat-icon-wrap" style={{ background: '#ecfdf5', color: '#059669' }}>
               <Users size={18} />
             </div>
@@ -360,7 +430,7 @@ export default function SuperAdminRefundsDesk() {
             {paidSummary.totalPaidCustomers}
           </div>
           <div className="sa-stat-sub">
-            <span>Completed payment &amp; active wallets</span>
+            <span>Authoritative completed payments</span>
           </div>
         </div>
 
@@ -375,7 +445,7 @@ export default function SuperAdminRefundsDesk() {
             ₹{Number(paidSummary.totalAmountPaid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="sa-stat-sub">
-            <span>Total verified customer deposits</span>
+            <span>Verified cumulative customer deposits</span>
           </div>
         </div>
 
@@ -390,7 +460,7 @@ export default function SuperAdminRefundsDesk() {
             ₹{Number(paidSummary.totalRefundableBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="sa-stat-sub">
-            <span>Current available balance across accounts</span>
+            <span>Active available wallet liabilities</span>
           </div>
         </div>
 
@@ -441,6 +511,14 @@ export default function SuperAdminRefundsDesk() {
           <RotateCcw size={15} />
           Refund Requests Queue {pendingRefundsCount > 0 && <span className="sa-nav-badge sa-badge-danger">{pendingRefundsCount}</span>}
         </button>
+        <button
+          type="button"
+          className={`sa-tab-pill ${activeTab === 'reconciliation' ? 'active' : ''}`}
+          onClick={() => setActiveTab('reconciliation')}
+        >
+          <FileCheck size={15} />
+          Reconciliation &amp; Audit History
+        </button>
       </div>
 
       {/* =====================================================================
@@ -475,9 +553,9 @@ export default function SuperAdminRefundsDesk() {
                     <th>BUSINESS &amp; CUSTOMER</th>
                     <th>PAYMENT STATUS</th>
                     <th>TOTAL LIFETIME PAID</th>
-                    <th>REFUNDABLE BALANCE</th>
-                    <th>AD SPEND</th>
-                    <th>LAST PAYMENT / UTR</th>
+                    <th>AVAILABLE WALLET</th>
+                    <th>BANK-REFUNDABLE CAP</th>
+                    <th>LAST VERIFIED DEPOSIT</th>
                     <th style={{ textAlign: 'right' }}>ACTION</th>
                   </tr>
                 </thead>
@@ -499,8 +577,8 @@ export default function SuperAdminRefundsDesk() {
                     paidCustomers.map((cust) => {
                       const availBal = Number(cust.available_balance || 0);
                       const lifetimePaid = Number(cust.total_lifetime_paid || 0);
-                      const adSpent = Number(cust.total_ad_spent || 0);
-                      const hasRefundableBalance = availBal > 0;
+                      const bankRefundCap = Number(cust.eligible_bank_refundable || 0);
+                      const hasRefundableBalance = bankRefundCap > 0;
 
                       return (
                         <tr key={cust.id}>
@@ -520,7 +598,7 @@ export default function SuperAdminRefundsDesk() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                               <span className="sa-badge sa-badge-success">
                                 <CheckCircle2 size={11} style={{ display: 'inline', marginRight: 4 }} />
-                                Payment Completed
+                                Payment Verified ✓
                               </span>
                               {cust.paid_receipts_count > 0 && (
                                 <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
@@ -534,7 +612,7 @@ export default function SuperAdminRefundsDesk() {
                                 }`}
                                 style={{ fontSize: '0.68rem', padding: '2px 6px' }}
                               >
-                                {cust.status === 'active' ? 'Account Active' : 'Account Suspended'}
+                                {cust.status === 'active' ? 'Active' : 'Suspended'}
                               </span>
                             </div>
                           </td>
@@ -549,6 +627,15 @@ export default function SuperAdminRefundsDesk() {
                           </td>
 
                           <td>
+                            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.90rem' }}>
+                              ₹{availBal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                              Ad Spent: ₹{Number(cust.total_ad_spent || 0).toFixed(0)}
+                            </div>
+                          </td>
+
+                          <td>
                             <div
                               style={{
                                 fontWeight: 800,
@@ -556,19 +643,10 @@ export default function SuperAdminRefundsDesk() {
                                 fontSize: '0.95rem',
                               }}
                             >
-                              ₹{availBal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              ₹{bankRefundCap.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                             <div style={{ fontSize: '0.72rem', color: hasRefundableBalance ? '#059669' : '#94a3b8', marginTop: 2 }}>
-                              {hasRefundableBalance ? 'Eligible for Refund' : 'Zero Balance'}
-                            </div>
-                          </td>
-
-                          <td>
-                            <div style={{ fontWeight: 600, color: '#4f46e5', fontSize: '0.88rem' }}>
-                              ₹{adSpent.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
-                              Ad Budget Delivered
+                              {hasRefundableBalance ? 'Eligible for Bank Return' : 'Zero Refund Cap'}
                             </div>
                           </td>
 
@@ -603,7 +681,7 @@ export default function SuperAdminRefundsDesk() {
                                 opacity: hasRefundableBalance ? 1 : 0.6,
                               }}
                               disabled={!hasRefundableBalance}
-                              title={hasRefundableBalance ? 'Issue refund from available balance' : 'Customer has zero refundable balance'}
+                              title={hasRefundableBalance ? 'Issue refund from bank-eligible balance' : 'Customer has zero bank-refundable balance'}
                               onClick={() => handleOpenIssueRefundForCustomer(cust)}
                             >
                               <RotateCcw size={13} />
@@ -825,7 +903,7 @@ export default function SuperAdminRefundsDesk() {
                               </div>
                             ) : (
                               <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                                {rf.status === 'Approved' ? '✓ Completed' : 'Closed'}
+                                {rf.status === 'Approved' || rf.status === 'Completed' ? '✓ Completed' : 'Closed'}
                               </span>
                             )}
                           </td>
@@ -868,6 +946,195 @@ export default function SuperAdminRefundsDesk() {
       )}
 
       {/* =====================================================================
+          TAB 3: REFUND RECONCILIATION & AUDIT HISTORY
+          (Original Deposit → Verified UTR → Eligible Cap → Refund Request → Provider Ref → Final Amount)
+          ===================================================================== */}
+      {activeTab === 'reconciliation' && (
+        <div>
+          {/* Controls & Search */}
+          <div className="sa-controls-card">
+            <div className="sa-search-wrap">
+              <Search size={16} />
+              <input
+                type="text"
+                placeholder="Search reconciliation records by business, UTR reference, refund ID, or banking provider ref..."
+                value={reconSearch}
+                onChange={(e) => setReconSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="sa-filter-group">
+              <select
+                className="sa-select"
+                value={reconStatusFilter}
+                onChange={(e) => setReconStatusFilter(e.target.value)}
+              >
+                <option value="all">All Reconciliation Statuses</option>
+                <option value="Completed">Completed / Reconciled</option>
+                <option value="Pending">Pending Audit Decision</option>
+                <option value="Rejected">Rejected Claims</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Reconciliation Table */}
+          <div className="sa-table-card">
+            <div className="sa-table-wrap">
+              <table className="sa-table">
+                <thead>
+                  <tr>
+                    <th>CUSTOMER &amp; BUSINESS</th>
+                    <th>ORIGINAL DEPOSIT (UTR)</th>
+                    <th>LIFETIME PAID</th>
+                    <th>AD SPEND</th>
+                    <th>REFUND REQUEST</th>
+                    <th>BANK REVERSAL REF</th>
+                    <th>RECONCILIATION STATE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reconLoading ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                        <RefreshCw size={20} className="sa-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
+                        Loading authoritative refund reconciliation ledger...
+                      </td>
+                    </tr>
+                  ) : reconRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                        No refund reconciliation records found.
+                      </td>
+                    </tr>
+                  ) : (
+                    reconRecords.map((r) => {
+                      const deposit = r.original_deposit_info || {};
+                      const isCompleted = r.refund_status === 'Completed';
+
+                      return (
+                        <tr key={r.refund_id}>
+                          <td>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.company_name}</div>
+                            <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                              <code>{r.customer_id}</code> &bull; {r.contact_person}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                              📞 +91 {r.phone}
+                            </div>
+                          </td>
+
+                          <td>
+                            {r.verified_utr ? (
+                              <div>
+                                <code>{r.verified_utr}</code>
+                                {deposit.receipt_number && (
+                                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                                    Receipt: {deposit.receipt_number}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: '0.76rem' }}>Direct Account Credit</span>
+                            )}
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 800, color: '#059669', fontSize: '0.90rem' }}>
+                              ₹{Number(r.total_lifetime_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                              Avail: ₹{Number(r.available_balance || 0).toFixed(2)}
+                            </div>
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 600, color: '#4f46e5', fontSize: '0.88rem' }}>
+                              ₹{Number(r.total_ad_spent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                              Delivered Ad Spend
+                            </div>
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 800, color: '#e11d48', fontSize: '0.92rem' }}>
+                              ₹{Number(r.requested_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                              <code>{r.refund_id}</code>
+                            </div>
+                          </td>
+
+                          <td>
+                            {r.provider_ref ? (
+                              <div>
+                                <span className="sa-badge sa-badge-primary" style={{ fontFamily: 'monospace' }}>
+                                  {r.provider_ref}
+                                </span>
+                                {r.reviewed_by && (
+                                  <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 2 }}>
+                                    By: {r.reviewed_by}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: '0.76rem' }}>Awaiting Approval</span>
+                            )}
+                          </td>
+
+                          <td>
+                            <span
+                              className={`sa-status-pill ${
+                                isCompleted
+                                  ? 'sa-status-resolved'
+                                  : r.refund_status === 'Rejected'
+                                  ? 'sa-status-closed'
+                                  : 'sa-status-open'
+                              }`}
+                            >
+                              <ShieldCheck size={11} style={{ display: 'inline', marginRight: 4 }} />
+                              {r.reconciliation_state}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {reconPagination.totalPages > 1 && (
+              <div className="sa-pagination">
+                <span>
+                  Showing page {reconPagination.page} of {reconPagination.totalPages} ({reconPagination.total} audit records)
+                </span>
+                <div className="sa-page-controls">
+                  <button
+                    type="button"
+                    className="sa-page-btn"
+                    disabled={reconPagination.page <= 1}
+                    onClick={() => setReconPagination((p) => ({ ...p, page: p.page - 1 }))}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="sa-page-btn"
+                    disabled={reconPagination.page >= reconPagination.totalPages}
+                    onClick={() => setReconPagination((p) => ({ ...p, page: p.page + 1 }))}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
           4. INITIATE / ISSUE REFUND MODAL
           ===================================================================== */}
       {showCreateModal && (
@@ -894,7 +1161,7 @@ export default function SuperAdminRefundsDesk() {
                     Issue Customer Refund
                   </h3>
                   <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b' }}>
-                    Authoritative wallet deduction &amp; reversal entry in ledger
+                    Authoritative bank return with ledger deduction &amp; reconciliation
                   </p>
                 </div>
               </div>
@@ -922,11 +1189,14 @@ export default function SuperAdminRefundsDesk() {
                     onChange={(e) => handleSelectCustomerInModal(e.target.value)}
                   >
                     <option value="">-- Choose a customer who completed payment --</option>
-                    {paidCustomers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.company_name} (Avail: ₹{Number(c.available_balance || 0).toFixed(2)}) &bull; +91 {c.phone}
-                      </option>
-                    ))}
+                    {paidCustomers.map((c) => {
+                      const bankCap = Number(c.eligible_bank_refundable || c.available_balance || 0);
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.company_name} (Bank Cap: ₹{bankCap.toFixed(2)} | Avail: ₹{Number(c.available_balance || 0).toFixed(2)}) &bull; +91 {c.phone}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -937,28 +1207,56 @@ export default function SuperAdminRefundsDesk() {
                       background: '#f8fafc',
                       border: '1px solid #e2e8f0',
                       borderRadius: 10,
-                      padding: '12px 16px',
+                      padding: '14px 16px',
                       marginBottom: 16,
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.88rem' }}>
+                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.90rem' }}>
                           {selectedCustomerForRefund.company_name}
                         </div>
-                        <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
                           Contact: {selectedCustomerForRefund.contact_person} &bull; +91 {selectedCustomerForRefund.phone}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#059669', marginTop: 2 }}>
+                          Total Lifetime Paid: ₹{Number(selectedCustomerForRefund.total_lifetime_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>
-                          MAX REFUNDABLE
+                          MAX BANK-REFUNDABLE
                         </div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#059669' }}>
-                          ₹{Number(selectedCustomerForRefund.available_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>
+                          ₹{Number(selectedCustomerForRefund.eligible_bank_refundable || selectedCustomerForRefund.available_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div style={{ fontSize: '0.70rem', color: '#64748b' }}>
+                          Wallet Avail: ₹{Number(selectedCustomerForRefund.available_balance || 0).toFixed(2)}
                         </div>
                       </div>
                     </div>
+
+                    {/* Verified Deposits Trace */}
+                    {Array.isArray(selectedCustomerForRefund.verified_deposits) && selectedCustomerForRefund.verified_deposits.length > 0 && (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', marginBottom: 4 }}>
+                          VERIFIED BANK PAYMENTS ON FILE:
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {selectedCustomerForRefund.verified_deposits.map((dep, idx) => (
+                            <span
+                              key={idx}
+                              className="sa-badge sa-badge-neutral"
+                              style={{ cursor: 'pointer', fontSize: 10 }}
+                              onClick={() => setCreateForm((f) => ({ ...f, originalTxRef: dep.utr_reference }))}
+                              title="Click to select this UTR reference"
+                            >
+                              <code>{dep.utr_reference}</code> (₹{Number(dep.amount).toFixed(0)})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -968,7 +1266,7 @@ export default function SuperAdminRefundsDesk() {
                     <label className="sa-form-label" style={{ margin: 0 }}>
                       <IndianRupee size={13} /> Refund Amount (₹) *
                     </label>
-                    {selectedCustomerForRefund && Number(selectedCustomerForRefund.available_balance) > 0 && (
+                    {selectedCustomerForRefund && Number(selectedCustomerForRefund.eligible_bank_refundable || selectedCustomerForRefund.available_balance) > 0 && (
                       <button
                         type="button"
                         style={{
@@ -980,14 +1278,12 @@ export default function SuperAdminRefundsDesk() {
                           cursor: 'pointer',
                           padding: 0,
                         }}
-                        onClick={() =>
-                          setCreateForm((p) => ({
-                            ...p,
-                            amount: String(selectedCustomerForRefund.available_balance),
-                          }))
-                        }
+                        onClick={() => {
+                          const cap = Number(selectedCustomerForRefund.eligible_bank_refundable || selectedCustomerForRefund.available_balance);
+                          setCreateForm((p) => ({ ...p, amount: String(cap) }));
+                        }}
                       >
-                        Refund Full Balance (₹{Number(selectedCustomerForRefund.available_balance).toFixed(2)})
+                        Refund Full Eligible Balance (₹{Number(selectedCustomerForRefund.eligible_bank_refundable || selectedCustomerForRefund.available_balance).toFixed(2)})
                       </button>
                     )}
                   </div>

@@ -117,6 +117,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
     reader.onload = async () => {
       try {
         const base64Data = reader.result;
+        setLocalPreview(base64Data);
         const uploadRes = await graphicsApi.uploadMedia(base64Data, file.name, file.type);
         if (uploadRes && uploadRes.ok) {
           setNewMediaUrl(uploadRes.url);
@@ -476,6 +477,11 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                           src={localPreview || newMediaUrl}
                           alt="Corrected Preview"
                           style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', objectFit: 'contain' }}
+                          onError={(e) => {
+                            if (localPreview && e.currentTarget.src !== localPreview) {
+                              e.currentTarget.src = localPreview;
+                            }
+                          }}
                         />
                         <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>
                           ✓ Corrected File Ready for Resubmission (Click to change)

@@ -70,6 +70,8 @@ export const superadminApi = {
   // 4. Check Refunds
   getRefunds: (params) => request(`/superadmin/refunds${buildQuery(params)}`),
   getPaidCustomersForRefund: (params) => request(`/superadmin/refunds/paid-customers${buildQuery(params)}`),
+  getRefundReconciliation: (params) => request(`/superadmin/refunds/reconciliation${buildQuery(params)}`),
+  getRefundReconciliationExportUrl: () => `${BASE_URL}/superadmin/refunds/reconciliation/export`,
   createRefund: (data) =>
     request('/superadmin/refunds', {
       method: 'POST',
