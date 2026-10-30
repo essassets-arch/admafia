@@ -43,6 +43,8 @@ services:
       NODE_ENV: production
     ports:
       - "127.0.0.1:5000:5000"
+    volumes:
+      - ./backend/uploads:/app/uploads
     networks:
       - admafia-net
 
