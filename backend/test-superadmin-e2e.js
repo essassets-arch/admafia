@@ -193,6 +193,15 @@ async function runSuperAdminE2ETests() {
     // 6. Check Refunds & Atomic Wallet Deduction
     // -------------------------------------------------------------------------
     console.log('\n[6/8] Testing Refund Queue & Atomic Wallet Deduction...');
+    
+    // Test paid customers list for refunds
+    const paidCustRes = await fetch(`${baseUrl}/refunds/paid-customers`);
+    const paidCustData = await paidCustRes.json();
+    assert(paidCustData.ok === true, 'Paid customers endpoint responds with ok: true');
+    assert(Array.isArray(paidCustData.paidCustomers), 'Paid customers array returned');
+    assert(typeof paidCustData.summary.totalPaidCustomers === 'number', 'Summary contains totalPaidCustomers');
+    assert(typeof paidCustData.summary.totalRefundableBalance === 'number', 'Summary contains totalRefundableBalance');
+
     const refundReqRes = await fetch(`${baseUrl}/refunds`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

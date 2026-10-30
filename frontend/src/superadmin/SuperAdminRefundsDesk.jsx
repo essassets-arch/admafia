@@ -11,25 +11,50 @@ import {
   ShieldAlert,
   PlusCircle,
   X,
+  Users,
+  IndianRupee,
+  Building2,
+  Phone,
+  Mail,
+  Wallet,
+  ArrowUpRight,
+  TrendingDown,
+  FileCheck,
+  Receipt
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 
 export default function SuperAdminRefundsDesk() {
-  const [refunds, setRefunds] = useState([]); ``
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+  const [activeTab, setActiveTab] = useState('paid_customers'); // 'paid_customers' | 'refund_queue'
 
-  // Rejection Modal
+  // Paid Customers State
+  const [paidCustomers, setPaidCustomers] = useState([]);
+  const [paidSummary, setPaidSummary] = useState({
+    totalPaidCustomers: 0,
+    totalAmountPaid: 0,
+    totalRefundableBalance: 0,
+  });
+  const [paidLoading, setPaidLoading] = useState(true);
+  const [paidSearch, setPaidSearch] = useState('');
+  const [paidPagination, setPaidPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+
+  // Refund Requests Queue State
+  const [refunds, setRefunds] = useState([]);
+  const [refundsLoading, setRefundsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refundSearch, setRefundSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [refundPagination, setRefundPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+
+  // Rejection Modal State
   const [rejectingRefund, setRejectingRefund] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [submittingReject, setSubmittingReject] = useState(false);
 
-  // Create Refund Modal
+  // Issue Refund Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedCustomerForRefund, setSelectedCustomerForRefund] = useState(null);
   const [createForm, setCreateForm] = useState({
     customerId: '',
     amount: '',
@@ -39,30 +64,87 @@ export default function SuperAdminRefundsDesk() {
   });
   const [submittingCreate, setSubmittingCreate] = useState(false);
 
+  // Fetch Paid Customers
+  const fetchPaidCustomers = useCallback(async () => {
+    try {
+      setPaidLoading(true);
+      const res = await superadminApi.getPaidCustomersForRefund({
+        search: paidSearch,
+        page: paidPagination.page,
+        limit: 25,
+      });
+      if (res && res.ok) {
+        setPaidCustomers(res.paidCustomers || []);
+        if (res.summary) setPaidSummary(res.summary);
+        if (res.pagination) setPaidPagination(res.pagination);
+      }
+    } catch (err) {
+      console.error('Failed to load paid customers:', err);
+    } finally {
+      setPaidLoading(false);
+    }
+  }, [paidSearch, paidPagination.page]);
+
+  // Fetch Refund Requests Queue
   const fetchRefunds = useCallback(async () => {
     try {
-      setRefreshing(true);
+      setRefundsLoading(true);
       const res = await superadminApi.getRefunds({
         status: statusFilter,
-        search,
-        page: pagination.page,
+        search: refundSearch,
+        page: refundPagination.page,
         limit: 20,
       });
       if (res && res.ok) {
         setRefunds(res.refunds || []);
-        if (res.pagination) setPagination(res.pagination);
+        if (res.pagination) setRefundPagination(res.pagination);
       }
     } catch (err) {
-      console.error('Failed to load refunds:', err);
+      console.error('Failed to load refund requests:', err);
     } finally {
-      setLoading(false);
+      setRefundsLoading(false);
       setRefreshing(false);
     }
-  }, [statusFilter, search, pagination.page]);
+  }, [statusFilter, refundSearch, refundPagination.page]);
+
+  useEffect(() => {
+    fetchPaidCustomers();
+  }, [fetchPaidCustomers]);
 
   useEffect(() => {
     fetchRefunds();
   }, [fetchRefunds]);
+
+  const handleRefreshAll = () => {
+    setRefreshing(true);
+    fetchPaidCustomers();
+    fetchRefunds();
+  };
+
+  // Open Issue Refund Modal for a specific customer
+  const handleOpenIssueRefundForCustomer = (cust) => {
+    setSelectedCustomerForRefund(cust);
+    setCreateForm({
+      customerId: cust.id,
+      amount: cust.available_balance > 0 ? String(cust.available_balance) : '',
+      reason: '',
+      supportingInfo: '',
+      originalTxRef: cust.last_utr_ref || '',
+    });
+    setShowCreateModal(true);
+  };
+
+  // Handle Customer Selection in Modal
+  const handleSelectCustomerInModal = (custId) => {
+    const cust = paidCustomers.find((c) => c.id === custId);
+    setSelectedCustomerForRefund(cust || null);
+    setCreateForm((prev) => ({
+      ...prev,
+      customerId: custId,
+      amount: cust && cust.available_balance > 0 ? String(cust.available_balance) : '',
+      originalTxRef: cust?.last_utr_ref || '',
+    }));
+  };
 
   // Handle Approve Refund (Atomic Transaction)
   const handleApproveRefund = async (refund) => {
@@ -81,7 +163,7 @@ export default function SuperAdminRefundsDesk() {
     const confirm = await Swal.fire({
       title: 'Approve & Process Refund?',
       html: `
-        <div style="text-align: left; font-size: 0.90rem; line-height: 1.5;">
+        <div style="text-align: left; font-size: 0.90rem; line-height: 1.6;">
           <div>Business: <strong>${refund.company_name}</strong></div>
           <div>Refund Amount: <strong style="color: #dc2626;">₹${refundAmt.toFixed(2)}</strong></div>
           <div>Current Balance: <strong>₹${currentBal.toFixed(2)}</strong></div>
@@ -113,6 +195,7 @@ export default function SuperAdminRefundsDesk() {
           text: `Refund completed. Provider Ref: ${res.providerRef || 'N/A'}`,
         });
         fetchRefunds();
+        fetchPaidCustomers();
       }
     } catch (err) {
       Swal.fire({ icon: 'error', title: 'Refund Approval Failed', text: err.message });
@@ -157,13 +240,23 @@ export default function SuperAdminRefundsDesk() {
     e.preventDefault();
     const amt = parseFloat(createForm.amount);
     if (!createForm.customerId.trim()) {
-      Swal.fire({ icon: 'warning', title: 'Customer ID is required.' });
+      Swal.fire({ icon: 'warning', title: 'Customer selection is required.' });
       return;
     }
     if (!amt || amt <= 0) {
       Swal.fire({ icon: 'warning', title: 'Enter a valid refund amount.' });
       return;
     }
+
+    if (selectedCustomerForRefund && amt > Number(selectedCustomerForRefund.available_balance || 0)) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Amount Exceeds Balance',
+        text: `Requested refund (₹${amt.toFixed(2)}) cannot exceed customer's current available wallet balance (₹${Number(selectedCustomerForRefund.available_balance || 0).toFixed(2)}).`,
+      });
+      return;
+    }
+
     if (!createForm.reason.trim()) {
       Swal.fire({ icon: 'warning', title: 'Refund reason is mandatory.' });
       return;
@@ -172,8 +265,11 @@ export default function SuperAdminRefundsDesk() {
     setSubmittingCreate(true);
     try {
       const res = await superadminApi.createRefund({
-        ...createForm,
+        customerId: createForm.customerId,
         amount: amt,
+        reason: createForm.reason.trim(),
+        supportingInfo: createForm.supportingInfo.trim(),
+        originalTxRef: createForm.originalTxRef.trim(),
         adminName: 'Super Admin',
       });
 
@@ -186,8 +282,15 @@ export default function SuperAdminRefundsDesk() {
           supportingInfo: '',
           originalTxRef: '',
         });
+        setSelectedCustomerForRefund(null);
         fetchRefunds();
-        Swal.fire({ icon: 'success', title: 'Refund Request Created', text: 'Submitted to review queue.' });
+        fetchPaidCustomers();
+        setActiveTab('refund_queue');
+        Swal.fire({
+          icon: 'success',
+          title: 'Refund Request Created',
+          text: 'The refund request has been submitted to the review queue for final approval and ledger debit.',
+        });
       }
     } catch (err) {
       Swal.fire({ icon: 'error', title: 'Creation Failed', text: err.message });
@@ -196,14 +299,16 @@ export default function SuperAdminRefundsDesk() {
     }
   };
 
+  const pendingRefundsCount = refunds.filter((r) => r.status === 'Pending').length;
+
   return (
     <div className="sa-desk-content">
       {/* 1. Page Header */}
       <div className="sa-page-header">
         <div>
-          <h1>Check Refunds &amp; Reversals</h1>
+          <h1>Check Refunds &amp; Paid Customers</h1>
           <p>
-            Verify incoming refund requests, validate original transactions, check current wallet liabilities, and process atomic wallet deductions with full audit compliance.
+            Review all registered businesses with completed payments, inspect wallet balances, issue authorized refunds, and audit processed reversals.
           </p>
         </div>
 
@@ -211,7 +316,17 @@ export default function SuperAdminRefundsDesk() {
           <button
             type="button"
             className="sa-btn-primary"
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              setSelectedCustomerForRefund(null);
+              setCreateForm({
+                customerId: '',
+                amount: '',
+                reason: '',
+                supportingInfo: '',
+                originalTxRef: '',
+              });
+              setShowCreateModal(true);
+            }}
           >
             <PlusCircle size={15} />
             <span>Initiate Refund</span>
@@ -219,196 +334,756 @@ export default function SuperAdminRefundsDesk() {
           <button
             type="button"
             className="sa-btn-secondary"
-            onClick={fetchRefunds}
+            onClick={handleRefreshAll}
             disabled={refreshing}
           >
-            <RefreshCw size={14} className={refreshing ? 'spin' : ''} />
+            <RefreshCw size={14} className={refreshing ? 'sa-spin' : ''} />
             <span>{refreshing ? 'Syncing...' : 'Live Refresh'}</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Controls & Filter */}
-      <div className="sa-controls-card">
-        <div className="sa-search-box">
-          <Search size={16} className="sa-search-icon" />
-          <input
-            type="text"
-            className="sa-search-input"
-            placeholder="Search by company name, refund ID, original UTR, or reason..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {/* 2. Top Metric Cards */}
+      <div className="sa-stats-grid">
+        <div
+          className="sa-stat-card"
+          onClick={() => setActiveTab('paid_customers')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="sa-stat-top">
+            <span className="sa-stat-title">Registered Paid Customers</span>
+            <div className="sa-stat-icon-wrap" style={{ background: '#ecfdf5', color: '#059669' }}>
+              <Users size={18} />
+            </div>
+          </div>
+          <div className="sa-stat-val" style={{ color: '#059669' }}>
+            {paidSummary.totalPaidCustomers}
+          </div>
+          <div className="sa-stat-sub">
+            <span>Completed payment &amp; active wallets</span>
+          </div>
         </div>
 
-        <div className="sa-filter-group">
-          <select
-            className="sa-select"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+        <div className="sa-stat-card">
+          <div className="sa-stat-top">
+            <span className="sa-stat-title">Total Lifetime Deposited</span>
+            <div className="sa-stat-icon-wrap" style={{ background: '#eff6ff', color: '#2563eb' }}>
+              <ArrowUpRight size={18} />
+            </div>
+          </div>
+          <div className="sa-stat-val" style={{ color: '#2563eb' }}>
+            ₹{Number(paidSummary.totalAmountPaid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="sa-stat-sub">
+            <span>Total verified customer deposits</span>
+          </div>
+        </div>
+
+        <div className="sa-stat-card">
+          <div className="sa-stat-top">
+            <span className="sa-stat-title">Total Refundable Balance</span>
+            <div className="sa-stat-icon-wrap" style={{ background: '#fffbeb', color: '#d97706' }}>
+              <Wallet size={18} />
+            </div>
+          </div>
+          <div className="sa-stat-val" style={{ color: '#d97706' }}>
+            ₹{Number(paidSummary.totalRefundableBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="sa-stat-sub">
+            <span>Current available balance across accounts</span>
+          </div>
+        </div>
+
+        <div
+          className="sa-stat-card"
+          onClick={() => setActiveTab('refund_queue')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="sa-stat-top">
+            <span className="sa-stat-title">Refund Review Queue</span>
+            <div
+              className="sa-stat-icon-wrap"
+              style={{
+                background: pendingRefundsCount > 0 ? '#fff1f2' : '#f1f5f9',
+                color: pendingRefundsCount > 0 ? '#e11d48' : '#64748b',
+              }}
+            >
+              <RotateCcw size={18} />
+            </div>
+          </div>
+          <div
+            className="sa-stat-val"
+            style={{ color: pendingRefundsCount > 0 ? '#e11d48' : '#0f172a' }}
           >
-            <option value="all">All Refund Statuses</option>
-            <option value="Pending">Pending Review</option>
-            <option value="Completed">Completed / Approved</option>
-            <option value="Rejected">Rejected</option>
-          </select>
+            {pendingRefundsCount}
+          </div>
+          <div className="sa-stat-sub">
+            <span>{pendingRefundsCount > 0 ? 'Pending admin action' : 'Queue clear'}</span>
+          </div>
         </div>
       </div>
 
-      {/* 3. Refunds Table */}
-      <div className="sa-table-card">
-        <div style={{ overflowX: 'auto' }}>
-          <table className="sa-table">
-            <thead>
-              <tr>
-                <th style={{ width: '14%' }}>Refund ID &amp; Date</th>
-                <th style={{ width: '22%' }}>Business Account</th>
-                <th style={{ width: '12%' }}>Requested Amount</th>
-                <th style={{ width: '12%' }}>Wallet Balance</th>
-                <th style={{ width: '22%' }}>Reason &amp; Original Ref</th>
-                <th style={{ width: '10%' }}>Status</th>
-                <th style={{ width: '8%', textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
-                    <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
-                    <div>Loading refund requests...</div>
-                  </td>
-                </tr>
-              ) : refunds.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
-                    <RotateCcw size={32} style={{ marginBottom: 8 }} />
-                    <div style={{ fontWeight: 700, color: '#0f172a' }}>No refund requests found</div>
-                    <div style={{ fontSize: '0.80rem' }}>No items match the current filter selection.</div>
-                  </td>
-                </tr>
-              ) : (
-                refunds.map((rf) => (
-                  <tr key={rf.id}>
-                    <td>
-                      <span style={{ fontFamily: 'monospace', fontSize: '0.80rem', fontWeight: 700, color: '#4f46e5' }}>
-                        {rf.id}
-                      </span>
-                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
-                        {new Date(rf.created_at).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </div>
-                    </td>
+      {/* 3. Sub-Tab Navigation */}
+      <div className="sa-tab-pills">
+        <button
+          type="button"
+          className={`sa-tab-pill ${activeTab === 'paid_customers' ? 'active' : ''}`}
+          onClick={() => setActiveTab('paid_customers')}
+        >
+          <Users size={15} />
+          Registered Paid Customers ({paidSummary.totalPaidCustomers})
+        </button>
+        <button
+          type="button"
+          className={`sa-tab-pill ${activeTab === 'refund_queue' ? 'active' : ''}`}
+          onClick={() => setActiveTab('refund_queue')}
+        >
+          <RotateCcw size={15} />
+          Refund Requests Queue {pendingRefundsCount > 0 && <span className="sa-nav-badge sa-badge-danger">{pendingRefundsCount}</span>}
+        </button>
+      </div>
 
-                    <td>
-                      <strong style={{ color: '#0f172a' }}>{rf.company_name}</strong>
-                      <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                        {rf.contact_person} • 📞 {rf.phone}
-                      </div>
-                    </td>
+      {/* =====================================================================
+          TAB 1: REGISTERED PAID CUSTOMERS & REFUND ELIGIBILITY
+          ===================================================================== */}
+      {activeTab === 'paid_customers' && (
+        <div>
+          {/* Controls & Search */}
+          <div className="sa-controls-card">
+            <div className="sa-search-wrap">
+              <Search size={16} />
+              <input
+                type="text"
+                placeholder="Search paid customers by business name, contact person, phone, email, or customer ID..."
+                value={paidSearch}
+                onChange={(e) => setPaidSearch(e.target.value)}
+              />
+            </div>
+            <div className="sa-filter-group">
+              <span className="sa-badge sa-badge-neutral">
+                {paidCustomers.length} Accounts Displayed
+              </span>
+            </div>
+          </div>
 
-                    <td>
-                      <div style={{ fontWeight: 800, fontSize: '0.96rem', color: '#e11d48' }}>
-                        ₹{Number(rf.amount).toFixed(2)}
-                      </div>
-                    </td>
-
-                    <td>
-                      <div style={{ fontWeight: 700, color: Number(rf.available_balance) >= Number(rf.amount) ? '#059669' : '#dc2626' }}>
-                        ₹{Number(rf.available_balance || 0).toFixed(2)}
-                      </div>
-                      <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
-                        {Number(rf.available_balance) >= Number(rf.amount) ? 'Sufficient' : 'Low Balance'}
-                      </div>
-                    </td>
-
-                    <td>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
-                        {rf.reason}
-                      </div>
-                      {rf.original_tx_ref && (
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace', marginTop: 2 }}>
-                          UTR: {rf.original_tx_ref}
-                        </div>
-                      )}
-                      {rf.rejection_reason && (
-                        <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: 2, fontStyle: 'italic' }}>
-                          Rejected: "{rf.rejection_reason}"
-                        </div>
-                      )}
-                    </td>
-
-                    <td>
-                      <span
-                        className={`sa-pill ${rf.status === 'Completed' || rf.status === 'Approved'
-                            ? 'sa-pill-green'
-                            : rf.status === 'Pending'
-                              ? 'sa-pill-amber'
-                              : 'sa-pill-rose'
-                          }`}
-                      >
-                        {rf.status}
-                      </span>
-                    </td>
-
-                    <td style={{ textAlign: 'right' }}>
-                      {rf.status === 'Pending' ? (
-                        <div style={{ display: 'inline-flex', gap: 6 }}>
-                          <button
-                            type="button"
-                            className="sa-btn-success"
-                            style={{ padding: '5px 10px', fontSize: '0.74rem' }}
-                            onClick={() => handleApproveRefund(rf)}
-                            title="Approve Refund & Deduct Balance"
-                          >
-                            <CheckCircle2 size={13} />
-                            <span>Approve</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="sa-btn-danger"
-                            style={{ padding: '5px 10px', fontSize: '0.74rem' }}
-                            onClick={() => {
-                              setRejectingRefund(rf);
-                              setRejectionReason('');
-                            }}
-                            title="Reject Refund"
-                          >
-                            <XCircle size={13} />
-                            <span>Reject</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-                          {rf.reviewed_by ? `By ${rf.reviewed_by}` : 'Processed'}
-                        </span>
-                      )}
-                    </td>
+          {/* Paid Customers Table */}
+          <div className="sa-table-card">
+            <div className="sa-table-wrap">
+              <table className="sa-table">
+                <thead>
+                  <tr>
+                    <th>BUSINESS &amp; CUSTOMER</th>
+                    <th>PAYMENT STATUS</th>
+                    <th>TOTAL LIFETIME PAID</th>
+                    <th>REFUNDABLE BALANCE</th>
+                    <th>AD SPEND</th>
+                    <th>LAST PAYMENT / UTR</th>
+                    <th style={{ textAlign: 'right' }}>ACTION</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody>
+                  {paidLoading ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                        <RefreshCw size={20} className="sa-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
+                        Loading registered paid customers...
+                      </td>
+                    </tr>
+                  ) : paidCustomers.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                        No registered paid customers found matching your search.
+                      </td>
+                    </tr>
+                  ) : (
+                    paidCustomers.map((cust) => {
+                      const availBal = Number(cust.available_balance || 0);
+                      const lifetimePaid = Number(cust.total_lifetime_paid || 0);
+                      const adSpent = Number(cust.total_ad_spent || 0);
+                      const hasRefundableBalance = availBal > 0;
 
-      {/* 4. Mandatory Rejection Reason Modal */}
+                      return (
+                        <tr key={cust.id}>
+                          <td>
+                            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.92rem' }}>
+                              {cust.company_name}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+                              <code>{cust.id}</code> &bull; {cust.contact_person}
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: 2 }}>
+                              📞 +91 {cust.phone} {cust.email ? `• ✉️ ${cust.email}` : ''} {cust.city ? `• 📍 ${cust.city}` : ''}
+                            </div>
+                          </td>
+
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                              <span className="sa-badge sa-badge-success">
+                                <CheckCircle2 size={11} style={{ display: 'inline', marginRight: 4 }} />
+                                Payment Completed
+                              </span>
+                              {cust.paid_receipts_count > 0 && (
+                                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                  <Receipt size={11} style={{ display: 'inline', marginRight: 3 }} />
+                                  {cust.paid_receipts_count} receipts recorded
+                                </span>
+                              )}
+                              <span
+                                className={`sa-status-pill ${
+                                  cust.status === 'active' ? 'sa-status-resolved' : 'sa-status-closed'
+                                }`}
+                                style={{ fontSize: '0.68rem', padding: '2px 6px' }}
+                              >
+                                {cust.status === 'active' ? 'Account Active' : 'Account Suspended'}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 800, color: '#059669', fontSize: '0.95rem' }}>
+                              ₹{lifetimePaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                              Cumulative Deposited
+                            </div>
+                          </td>
+
+                          <td>
+                            <div
+                              style={{
+                                fontWeight: 800,
+                                color: hasRefundableBalance ? '#d97706' : '#94a3b8',
+                                fontSize: '0.95rem',
+                              }}
+                            >
+                              ₹{availBal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: hasRefundableBalance ? '#059669' : '#94a3b8', marginTop: 2 }}>
+                              {hasRefundableBalance ? 'Eligible for Refund' : 'Zero Balance'}
+                            </div>
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 600, color: '#4f46e5', fontSize: '0.88rem' }}>
+                              ₹{adSpent.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                              Ad Budget Delivered
+                            </div>
+                          </td>
+
+                          <td>
+                            {cust.last_payment_date ? (
+                              <div>
+                                <div style={{ fontSize: '0.78rem', color: '#0f172a', fontWeight: 600 }}>
+                                  {new Date(cust.last_payment_date).toLocaleDateString('en-IN', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </div>
+                                {cust.last_utr_ref && (
+                                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                                    <code>{cust.last_utr_ref}</code>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>Verified Initial Credit</span>
+                            )}
+                          </td>
+
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="sa-btn-primary"
+                              style={{
+                                fontSize: '0.78rem',
+                                padding: '7px 12px',
+                                opacity: hasRefundableBalance ? 1 : 0.6,
+                              }}
+                              disabled={!hasRefundableBalance}
+                              title={hasRefundableBalance ? 'Issue refund from available balance' : 'Customer has zero refundable balance'}
+                              onClick={() => handleOpenIssueRefundForCustomer(cust)}
+                            >
+                              <RotateCcw size={13} />
+                              <span>Issue Refund</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {paidPagination.totalPages > 1 && (
+              <div className="sa-pagination">
+                <span>
+                  Showing page {paidPagination.page} of {paidPagination.totalPages} ({paidPagination.total} paid accounts)
+                </span>
+                <div className="sa-page-controls">
+                  <button
+                    type="button"
+                    className="sa-page-btn"
+                    disabled={paidPagination.page <= 1}
+                    onClick={() => setPaidPagination((p) => ({ ...p, page: p.page - 1 }))}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="sa-page-btn"
+                    disabled={paidPagination.page >= paidPagination.totalPages}
+                    onClick={() => setPaidPagination((p) => ({ ...p, page: p.page + 1 }))}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          TAB 2: REFUND REQUESTS QUEUE
+          ===================================================================== */}
+      {activeTab === 'refund_queue' && (
+        <div>
+          {/* Controls & Filter */}
+          <div className="sa-controls-card">
+            <div className="sa-search-wrap">
+              <Search size={16} />
+              <input
+                type="text"
+                placeholder="Search refund requests by company name, request ID, original UTR, or reason..."
+                value={refundSearch}
+                onChange={(e) => setRefundSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="sa-filter-group">
+              <select
+                className="sa-select"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All Refund Statuses</option>
+                <option value="Pending">Pending Review</option>
+                <option value="Approved">Approved / Completed</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Refunds Table */}
+          <div className="sa-table-card">
+            <div className="sa-table-wrap">
+              <table className="sa-table">
+                <thead>
+                  <tr>
+                    <th>REFUND ID</th>
+                    <th>BUSINESS / CUSTOMER</th>
+                    <th>REQUESTED REFUND</th>
+                    <th>AVAILABLE WALLET</th>
+                    <th>ORIGINAL TX / UTR</th>
+                    <th>REASON &amp; NOTES</th>
+                    <th>STATUS</th>
+                    <th style={{ textAlign: 'right' }}>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {refundsLoading ? (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                        <RefreshCw size={20} className="sa-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
+                        Loading refund requests queue...
+                      </td>
+                    </tr>
+                  ) : refunds.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                        No refund requests found matching the selected filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    refunds.map((rf) => {
+                      const availBal = Number(rf.available_balance || 0);
+                      const amt = Number(rf.amount || 0);
+                      const hasSufficientBal = availBal >= amt;
+
+                      return (
+                        <tr key={rf.id}>
+                          <td>
+                            <code style={{ fontSize: '0.80rem' }}>{rf.id}</code>
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                              {new Date(rf.created_at).toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </div>
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{rf.company_name}</div>
+                            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                              {rf.contact_person} &bull; {rf.phone}
+                            </div>
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 800, color: '#e11d48', fontSize: '0.95rem' }}>
+                              ₹{amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 700, color: hasSufficientBal ? '#059669' : '#e11d48' }}>
+                              ₹{availBal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            {!hasSufficientBal && rf.status === 'Pending' && (
+                              <div style={{ fontSize: '0.68rem', color: '#e11d48', fontWeight: 700 }}>
+                                ⚠️ Insufficient Balance
+                              </div>
+                            )}
+                          </td>
+
+                          <td>
+                            {rf.original_tx_ref ? (
+                              <code>{rf.original_tx_ref}</code>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>None Provided</span>
+                            )}
+                          </td>
+
+                          <td>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
+                              {rf.reason}
+                            </div>
+                            {rf.supporting_info && (
+                              <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                                {rf.supporting_info}
+                              </div>
+                            )}
+                            {rf.rejection_reason && (
+                              <div style={{ fontSize: '0.74rem', color: '#e11d48', marginTop: 4, background: '#fff1f2', padding: '3px 6px', borderRadius: 4 }}>
+                                Rejection: {rf.rejection_reason}
+                              </div>
+                            )}
+                          </td>
+
+                          <td>
+                            <span
+                              className={`sa-status-pill ${
+                                rf.status === 'Approved' || rf.status === 'Completed'
+                                  ? 'sa-status-resolved'
+                                  : rf.status === 'Rejected'
+                                  ? 'sa-status-closed'
+                                  : 'sa-status-open'
+                              }`}
+                            >
+                              {rf.status}
+                            </span>
+                            {rf.reviewed_by && (
+                              <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 3 }}>
+                                By: {rf.reviewed_by}
+                              </div>
+                            )}
+                          </td>
+
+                          <td style={{ textAlign: 'right' }}>
+                            {rf.status === 'Pending' ? (
+                              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                <button
+                                  type="button"
+                                  className="sa-btn-success"
+                                  style={{ padding: '6px 10px', fontSize: '0.76rem' }}
+                                  disabled={!hasSufficientBal}
+                                  onClick={() => handleApproveRefund(rf)}
+                                  title={hasSufficientBal ? 'Approve & Deduct Wallet' : 'Customer has insufficient balance'}
+                                >
+                                  <CheckCircle2 size={13} />
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="sa-btn-danger"
+                                  style={{ padding: '6px 10px', fontSize: '0.76rem' }}
+                                  onClick={() => {
+                                    setRejectingRefund(rf);
+                                    setRejectionReason('');
+                                  }}
+                                >
+                                  <XCircle size={13} />
+                                  <span>Reject</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                                {rf.status === 'Approved' ? '✓ Completed' : 'Closed'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {refundPagination.totalPages > 1 && (
+              <div className="sa-pagination">
+                <span>
+                  Showing page {refundPagination.page} of {refundPagination.totalPages} ({refundPagination.total} records)
+                </span>
+                <div className="sa-page-controls">
+                  <button
+                    type="button"
+                    className="sa-page-btn"
+                    disabled={refundPagination.page <= 1}
+                    onClick={() => setRefundPagination((p) => ({ ...p, page: p.page - 1 }))}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="sa-page-btn"
+                    disabled={refundPagination.page >= refundPagination.totalPages}
+                    onClick={() => setRefundPagination((p) => ({ ...p, page: p.page + 1 }))}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          4. INITIATE / ISSUE REFUND MODAL
+          ===================================================================== */}
+      {showCreateModal && (
+        <div className="sa-modal-backdrop" onClick={() => setShowCreateModal(false)}>
+          <div className="sa-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="sa-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 9,
+                    background: '#fef2f2',
+                    color: '#e11d48',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <RotateCcw size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
+                    Issue Customer Refund
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b' }}>
+                    Authoritative wallet deduction &amp; reversal entry in ledger
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="sa-modal-close-btn"
+                onClick={() => setShowCreateModal(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateRefund}>
+              <div className="sa-modal-body">
+                {/* Select Customer */}
+                <div className="sa-form-group">
+                  <label className="sa-form-label">
+                    <Building2 size={13} /> Select Registered Paid Customer *
+                  </label>
+                  <select
+                    required
+                    className="sa-select"
+                    style={{ width: '100%' }}
+                    value={createForm.customerId}
+                    onChange={(e) => handleSelectCustomerInModal(e.target.value)}
+                  >
+                    <option value="">-- Choose a customer who completed payment --</option>
+                    {paidCustomers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.company_name} (Avail: ₹{Number(c.available_balance || 0).toFixed(2)}) &bull; +91 {c.phone}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Selected Customer Balance Card */}
+                {selectedCustomerForRefund && (
+                  <div
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 10,
+                      padding: '12px 16px',
+                      marginBottom: 16,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.88rem' }}>
+                          {selectedCustomerForRefund.company_name}
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                          Contact: {selectedCustomerForRefund.contact_person} &bull; +91 {selectedCustomerForRefund.phone}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>
+                          MAX REFUNDABLE
+                        </div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#059669' }}>
+                          ₹{Number(selectedCustomerForRefund.available_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Amount */}
+                <div className="sa-form-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <label className="sa-form-label" style={{ margin: 0 }}>
+                      <IndianRupee size={13} /> Refund Amount (₹) *
+                    </label>
+                    {selectedCustomerForRefund && Number(selectedCustomerForRefund.available_balance) > 0 && (
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#4f46e5',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
+                        onClick={() =>
+                          setCreateForm((p) => ({
+                            ...p,
+                            amount: String(selectedCustomerForRefund.available_balance),
+                          }))
+                        }
+                      >
+                        Refund Full Balance (₹{Number(selectedCustomerForRefund.available_balance).toFixed(2)})
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    required
+                    placeholder="Enter amount to refund"
+                    className="sa-form-input"
+                    value={createForm.amount}
+                    onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })}
+                  />
+                </div>
+
+                {/* Mandatory Reason */}
+                <div className="sa-form-group">
+                  <label className="sa-form-label">
+                    Mandatory Refund Reason *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Client requested surplus budget withdrawal, campaign cancelled, double deposit"
+                    className="sa-form-input"
+                    value={createForm.reason}
+                    onChange={(e) => setCreateForm({ ...createForm, reason: e.target.value })}
+                  />
+                </div>
+
+                {/* Original Payment / UTR Reference */}
+                <div className="sa-form-group">
+                  <label className="sa-form-label">
+                    Original Payment UTR / Transaction Reference
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. UTR123456789 or BANK_REF_987"
+                    className="sa-form-input"
+                    value={createForm.originalTxRef}
+                    onChange={(e) => setCreateForm({ ...createForm, originalTxRef: e.target.value })}
+                  />
+                </div>
+
+                {/* Supporting Info */}
+                <div className="sa-form-group">
+                  <label className="sa-form-label">
+                    Supporting Notes &amp; Bank Transfer Details
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="IMPS reference, beneficiary bank account confirmation, or ticket reference..."
+                    className="sa-form-textarea"
+                    value={createForm.supportingInfo}
+                    onChange={(e) => setCreateForm({ ...createForm, supportingInfo: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="sa-modal-footer">
+                <button
+                  type="button"
+                  className="sa-btn-secondary"
+                  onClick={() => setShowCreateModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingCreate}
+                  className="sa-btn-primary"
+                >
+                  {submittingCreate ? 'Creating Request...' : 'Submit Refund Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          5. REJECTION REASON MODAL
+          ===================================================================== */}
       {rejectingRefund && (
         <div className="sa-modal-backdrop" onClick={() => setRejectingRefund(null)}>
           <div className="sa-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="sa-modal-header">
               <div>
-                <span className="sa-pill sa-pill-rose">Policy Governance</span>
+                <span className="sa-badge sa-badge-danger">Rejection Required</span>
                 <h3 style={{ margin: '4px 0 0 0', fontSize: '1.1rem', fontWeight: 800 }}>
                   Reject Refund Request
                 </h3>
               </div>
               <button
                 type="button"
-                className="sa-footer-btn"
-                style={{ width: 'auto', padding: 6, borderRadius: '50%' }}
+                className="sa-modal-close-btn"
                 onClick={() => setRejectingRefund(null)}
               >
                 <X size={16} />
@@ -417,19 +1092,32 @@ export default function SuperAdminRefundsDesk() {
 
             <form onSubmit={handleSubmitReject}>
               <div className="sa-modal-body">
-                <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
-                  <div style={{ fontSize: '0.82rem', color: '#9f1239' }}>
-                    Rejecting refund for <strong>{rejectingRefund.company_name}</strong> (Amount: ₹{Number(rejectingRefund.amount).toFixed(2)}).
+                <div
+                  style={{
+                    background: '#fff1f2',
+                    border: '1px solid #fecdd3',
+                    borderRadius: 8,
+                    padding: '12px 14px',
+                    marginBottom: 16,
+                  }}
+                >
+                  <div style={{ fontSize: '0.86rem', color: '#9f1239', fontWeight: 700 }}>
+                    Target Request: {rejectingRefund.id} ({rejectingRefund.company_name})
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4 }}>
+                    Requested Amount: <strong>₹{Number(rejectingRefund.amount || 0).toFixed(2)}</strong>
                   </div>
                 </div>
 
                 <div className="sa-form-group">
-                  <label className="sa-form-label">Mandatory Rejection Reason *</label>
+                  <label className="sa-form-label">
+                    Mandatory Rejection Reason *
+                  </label>
                   <textarea
                     rows={4}
                     required
                     className="sa-form-textarea"
-                    placeholder="Provide specific reason for rejection (e.g. Services already rendered, duplicate submission, non-refundable campaign ad spend)..."
+                    placeholder="e.g. Original payment already consumed in ad spend, invalid banking details provided, request unauthorized..."
                     value={rejectionReason}
                     onChange={(e) => setRejectionReason(e.target.value)}
                   />
@@ -449,96 +1137,7 @@ export default function SuperAdminRefundsDesk() {
                   disabled={submittingReject || !rejectionReason.trim()}
                   className="sa-btn-danger"
                 >
-                  {submittingReject ? 'Recording...' : 'Confirm Rejection'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 5. Create Refund Modal */}
-      {showCreateModal && (
-        <div className="sa-modal-backdrop" onClick={() => setShowCreateModal(false)}>
-          <div className="sa-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="sa-modal-header">
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Initiate Refund Request</h3>
-              <button
-                type="button"
-                className="sa-footer-btn"
-                style={{ width: 'auto', padding: 6, borderRadius: '50%' }}
-                onClick={() => setShowCreateModal(false)}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateRefund}>
-              <div className="sa-modal-body">
-                <div className="sa-form-group">
-                  <label className="sa-form-label">Customer ID *</label>
-                  <input
-                    type="text"
-                    required
-                    className="sa-form-input"
-                    placeholder="e.g. cust_1793350779161_..."
-                    value={createForm.customerId}
-                    onChange={(e) => setCreateForm({ ...createForm, customerId: e.target.value })}
-                  />
-                </div>
-
-                <div className="sa-form-group">
-                  <label className="sa-form-label">Refund Amount (INR) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="1"
-                    required
-                    className="sa-form-input"
-                    placeholder="0.00"
-                    value={createForm.amount}
-                    onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })}
-                  />
-                </div>
-
-                <div className="sa-form-group">
-                  <label className="sa-form-label">Original Payment Reference / UTR</label>
-                  <input
-                    type="text"
-                    className="sa-form-input"
-                    placeholder="Original payment UTR or Razorpay ID"
-                    value={createForm.originalTxRef}
-                    onChange={(e) => setCreateForm({ ...createForm, originalTxRef: e.target.value })}
-                  />
-                </div>
-
-                <div className="sa-form-group">
-                  <label className="sa-form-label">Reason for Refund *</label>
-                  <textarea
-                    rows={3}
-                    required
-                    className="sa-form-textarea"
-                    placeholder="Customer cancellation, disputed charge, service modification..."
-                    value={createForm.reason}
-                    onChange={(e) => setCreateForm({ ...createForm, reason: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="sa-modal-footer">
-                <button
-                  type="button"
-                  className="sa-btn-secondary"
-                  onClick={() => setShowCreateModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingCreate}
-                  className="sa-btn-primary"
-                >
-                  {submittingCreate ? 'Initiating...' : 'Submit Request'}
+                  {submittingReject ? 'Rejecting...' : 'Confirm Rejection'}
                 </button>
               </div>
             </form>

@@ -69,6 +69,7 @@ export const superadminApi = {
 
   // 4. Check Refunds
   getRefunds: (params) => request(`/superadmin/refunds${buildQuery(params)}`),
+  getPaidCustomersForRefund: (params) => request(`/superadmin/refunds/paid-customers${buildQuery(params)}`),
   createRefund: (data) =>
     request('/superadmin/refunds', {
       method: 'POST',

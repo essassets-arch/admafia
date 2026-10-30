@@ -617,6 +617,93 @@ superadminRouter.get('/finance/export', async (req, res) => {
 // =============================================================================
 // 4. CHECK REFUNDS (/api/superadmin/refunds/*)
 // =============================================================================
+
+// Get all registered customers who completed payment with refund eligibility
+superadminRouter.get('/refunds/paid-customers', async (req, res) => {
+  try {
+    const { search, page = 1, limit = 25 } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const offset = (pageNum - 1) * limitNum;
+
+    const conditions = [];
+    const params = [];
+
+    // Filter to customers who completed payment OR have lifetime paid > 0 OR available balance > 0
+    conditions.push(
+      `(c.payment_status = 'paid' OR COALESCE(w.total_lifetime_paid, 0) > 0 OR COALESCE(w.available_balance, 0) > 0 OR EXISTS (SELECT 1 FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid'))`
+    );
+
+    if (search && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      const idx = params.length;
+      conditions.push(
+        `(LOWER(c.company_name) LIKE $${idx} OR LOWER(c.contact_person) LIKE $${idx} OR c.phone LIKE $${idx} OR LOWER(COALESCE(c.email, '')) LIKE $${idx} OR LOWER(c.id) LIKE $${idx})`
+      );
+    }
+
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+    const countRes = await query(
+      `SELECT COUNT(*)::INT AS total
+       FROM customers c
+       LEFT JOIN wallets w ON w.customer_id = c.id
+       ${whereClause}`,
+      params
+    );
+    const totalCount = countRes.rows[0]?.total || 0;
+
+    const listRes = await query(
+      `SELECT
+        c.id, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.status, c.payment_status, c.registered_at,
+        COALESCE(w.available_balance, 0)::NUMERIC(12,2) AS available_balance,
+        COALESCE(w.total_lifetime_paid, 0)::NUMERIC(12,2) AS total_lifetime_paid,
+        COALESCE(w.total_ad_spent, 0)::NUMERIC(12,2) AS total_ad_spent,
+        (SELECT COUNT(*)::INT FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid') AS paid_receipts_count,
+        (SELECT MAX(pr.paid_at) FROM payment_records pr WHERE pr.customer_id = c.id) AS last_payment_date,
+        (SELECT pr.utr_reference FROM payment_records pr WHERE pr.customer_id = c.id ORDER BY pr.paid_at DESC LIMIT 1) AS last_utr_ref,
+        (SELECT COUNT(*)::INT FROM refund_requests rf WHERE rf.customer_id = c.id) AS total_refund_requests,
+        (SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status IN ('Approved', 'Completed')) AS total_refunded_amount
+       FROM customers c
+       LEFT JOIN wallets w ON w.customer_id = c.id
+       ${whereClause}
+       ORDER BY w.available_balance DESC, w.total_lifetime_paid DESC, c.registered_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limitNum, offset]
+    );
+
+    // Summary stats for paid customers
+    const statRes = await query(
+      `SELECT
+        COUNT(DISTINCT c.id)::INT AS total_paid_customers,
+        COALESCE(SUM(w.total_lifetime_paid), 0)::NUMERIC(12,2) AS total_amount_paid,
+        COALESCE(SUM(w.available_balance), 0)::NUMERIC(12,2) AS total_refundable_balance
+       FROM customers c
+       LEFT JOIN wallets w ON w.customer_id = c.id
+       WHERE (c.payment_status = 'paid' OR COALESCE(w.total_lifetime_paid, 0) > 0 OR COALESCE(w.available_balance, 0) > 0)`
+    );
+
+    res.json({
+      ok: true,
+      paidCustomers: listRes.rows,
+      summary: {
+        totalPaidCustomers: statRes.rows[0]?.total_paid_customers || 0,
+        totalAmountPaid: Number(statRes.rows[0]?.total_amount_paid || 0),
+        totalRefundableBalance: Number(statRes.rows[0]?.total_refundable_balance || 0),
+      },
+      pagination: {
+        total: totalCount,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(totalCount / limitNum) || 1,
+      },
+    });
+  } catch (err) {
+    console.error('[GET /api/superadmin/refunds/paid-customers]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 superadminRouter.get('/refunds', async (req, res) => {
   try {
     const { status, search, page = 1, limit = 20 } = req.query;
