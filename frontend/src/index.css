@@ -593,21 +593,24 @@ details p {
   font-weight: 600;
 }
 
-form {
+.contact form,
+#contact form {
   background: #fff;
   color: var(--text);
   padding: 32px;
   border-radius: var(--r-lg);
 }
 
-label {
+.contact label,
+#contact label {
   display: block;
   font-weight: 600;
   font-size: 0.93rem;
   margin: 0 0 6px;
 }
 
-input {
+.contact input,
+#contact input {
   width: 100%;
   padding: 13px 14px;
   border: 2px solid #d4d6ee;
@@ -616,7 +619,8 @@ input {
   margin-bottom: 16px;
 }
 
-input:focus {
+.contact input:focus,
+#contact input:focus {
   border-color: var(--ink2);
   outline: none;
 }
@@ -643,7 +647,8 @@ input:focus {
   color: #8a1f17;
 }
 
-form .btn {
+.contact form .btn,
+#contact form .btn {
   width: 100%;
 }
 

@@ -195,6 +195,7 @@ export default function AdminLoginPage({
               return (
                 <div
                   key={dept.id}
+                  data-dept={dept.id}
                   className={`adm-dept-card ${isSelected ? 'selected' : ''}`}
                   onClick={() => handleSelectDept(dept)}
                 >
@@ -271,11 +272,11 @@ export default function AdminLoginPage({
           )}
 
           {/* Login Form */}
-          <form onSubmit={handleSubmit}>
+          <form className="adm-form-inner" onSubmit={handleSubmit}>
             <div className="adm-form-group">
               <div className="adm-form-label">
                 <span>Account Identifier</span>
-                <span style={{ fontSize: 11, color: '#64748b' }}>Username / Email / Mobile</span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>Username / Email / Mobile</span>
               </div>
               <div className="adm-input-wrap">
                 <User size={16} className="adm-input-icon" />
@@ -294,7 +295,7 @@ export default function AdminLoginPage({
             <div className="adm-form-group">
               <div className="adm-form-label">
                 <span>Password</span>
-                <span style={{ fontSize: 11, color: '#64748b' }}>Authoritative Password</span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>Authoritative Password</span>
               </div>
               <div className="adm-input-wrap">
                 <Key size={16} className="adm-input-icon" />
@@ -331,7 +332,13 @@ export default function AdminLoginPage({
               ) : (
                 <>
                   <Lock size={16} />
-                  <span>Sign In &amp; Open {currentDept?.name ? currentDept.name.split(' ')[0] : 'Panel'}</span>
+                  <span>
+                    {selectedDeptId === 'superadmin' ? 'Sign In to Super Admin Panel' :
+                     selectedDeptId === 'marketing' ? 'Sign In to Marketing Ops' :
+                     selectedDeptId === 'graphics' ? 'Sign In to Graphics Ops' :
+                     selectedDeptId === 'sales' ? 'Sign In to Sales Executive Desk' :
+                     `Sign In to ${currentDept?.name || 'Department'}`}
+                  </span>
                 </>
               )}
             </button>
