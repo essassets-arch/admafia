@@ -207,6 +207,26 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     }
   }, [customer?.id, customer?.phone]);
 
+  // Real-time synchronization when returning to browser tab or regaining focus
+  useEffect(() => {
+    let lastSyncTime = 0;
+    const handleSync = () => {
+      const now = Date.now();
+      // Throttle to avoid excessive requests (minimum 5s between re-syncs)
+      if (now - lastSyncTime < 5000) return;
+      lastSyncTime = now;
+      if (document.visibilityState === 'visible' && (customer?.id || customer?.phone)) {
+        crmApi.syncStateFromPostgres().catch(() => {});
+      }
+    };
+    window.addEventListener('focus', handleSync);
+    document.addEventListener('visibilitychange', handleSync);
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleSync);
+    };
+  }, [customer?.id, customer?.phone]);
+
   useEffect(() => {
     const syncCustomerLeads = (activeCust) => {
       try {

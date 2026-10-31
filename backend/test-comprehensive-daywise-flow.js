@@ -372,6 +372,27 @@ async function runTestSuite() {
     assert(debitTx?.type === 'Debit' && Number(debitTx?.amount) === customizedSpend, `Ledger records Debit transaction of ₹${customizedSpend}`);
     assert(debitTx?.status === 'Settled ✓', 'Debit transaction status is "Settled ✓"');
 
+    // 7B. Financial Safety & Idempotency: Calling deduct AGAIN today must NOT charge customer twice
+    const secondDeduct = await api('/wallets/deduct', {
+      method: 'POST',
+      body: JSON.stringify({
+        customerId,
+        amount: customizedSpend,
+      }),
+    });
+    assert(secondDeduct.status === 200, 'Second deduction call returns HTTP 200');
+    assert(secondDeduct.data?.alreadyDeducted === true, 'Second deduction recognized as already deducted today');
+    assert(Number(secondDeduct.data?.balance) === 688, 'Wallet balance remains strictly ₹688 without double-charge');
+    assert(Number(secondDeduct.data?.deducted) === 0, 'Zero extra amount deducted on duplicate call');
+
+    // 7C. Booked Day Cannot Be Removed via Direct API Call
+    const tryRemoveBooked = await api(`/customers/${customerId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ activeDays: ['MON', 'TUE'] }),
+    });
+    assert(tryRemoveBooked.status === 200, 'Day update API returns HTTP 200');
+    assert(tryRemoveBooked.data?.customer?.activeDays.includes(todayDayCode), `Backend strictly preserves booked day (${todayDayCode}) against direct API removal`);
+
     // -------------------------------------------------------------------------
     // PHASE 8: AUTOMATED DAILY PACING RUNNER VERIFICATION
     // -------------------------------------------------------------------------

@@ -3,6 +3,44 @@ import Swal from 'sweetalert2';
 import emperorBannerImg from '../assets/emperor-banner.jpg';
 
 // Formatting Helpers
+export function getKolkataWeekDays(weekOffset = 0) {
+  // Current time in Asia/Kolkata
+  const kolkataNowStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  const now = new Date(kolkataNowStr);
+
+  const currentDayOfWeek = now.getDay(); // 0 is SUN, 1 is MON, ..., 6 is SAT
+  const distToMonday = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + distToMonday + (weekOffset * 7));
+  monday.setHours(0, 0, 0, 0);
+
+  const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const dayCodes = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const dateNum = d.getDate();
+    const monthShort = d.toLocaleString('en-US', { month: 'short' });
+    const isToday = (weekOffset === 0 && d.toDateString() === now.toDateString());
+    const isPast = d < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    days.push({
+      code: dayCodes[i],
+      label: dayNames[i],
+      dateNumber: dateNum,
+      month: monthShort,
+      dateFormatted: `${dateNum} ${monthShort}`,
+      fullDateString: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      isToday,
+      isPast,
+    });
+  }
+  return days;
+}
+
 function formatMinimalMaskedPhone(phone, maskedPhone) {
   if (phone) {
     const digits = phone.replace(/\D/g, '').slice(-10);
@@ -47,20 +85,13 @@ export default function LeadHubOverview({
     }
   }, [customer?.activeDays]);
 
-  const todayIdx = new Date().getDay(); // 0 is SUN, 1 is MON, 2 is TUE, 3 is WED, 4 is THU, 5 is FRI, 6 is SAT
-  const daysList = [
-    { code: 'MON', label: 'Monday', isToday: todayIdx === 1 },
-    { code: 'TUE', label: 'Tuesday', isToday: todayIdx === 2 },
-    { code: 'WED', label: 'Wednesday', isToday: todayIdx === 3 },
-    { code: 'THU', label: 'Thursday', isToday: todayIdx === 4 },
-    { code: 'FRI', label: 'Friday', isToday: todayIdx === 5 },
-    { code: 'SAT', label: 'Saturday', isToday: todayIdx === 6 },
-    { code: 'SUN', label: 'Sunday', isToday: todayIdx === 0 },
-  ];
-
+  const [weekOffset, setWeekOffset] = useState(0);
+  const daysList = getKolkataWeekDays(weekOffset);
   const dailySpend = customer.dailyAdSpend || 300;
   const weeklyPacing = activeDays.length * dailySpend;
-  const currentTodayItem = daysList.find((d) => d.isToday) || daysList[todayIdx === 0 ? 6 : todayIdx - 1];
+  const currentTodayItem = daysList.find((d) => d.isToday) || daysList[5];
+  const weekRangeStr = `${daysList[0].dateFormatted} – ${daysList[6].dateFormatted} ${daysList[6].fullDateString.split(' ')[2]}`;
+
   const isMarketingLiveToday = Boolean(customer.adCampaignActive && activeDays.includes(currentTodayItem.code));
   const isTodayBooked = Boolean(
     (customer.isDeductedToday || isMarketingLiveToday) ||
@@ -81,11 +112,9 @@ export default function LeadHubOverview({
       const dayObj = daysList.find((d) => d.code === code);
       Swal.fire({
         icon: 'info',
-        title: `🎯 Ad Booked for ${dayObj?.label || code}!`,
-        html: `Marketing campaign is <strong>active &amp; running</strong> for <strong>${dayObj?.label || code}</strong>.<br/><br/>
-        Daily ad spend budget of <strong>₹${dailySpend.toLocaleString('en-IN')}</strong> is booked for Meta verified ads.<br/><br/>
-        <em>Once marketing starts on this day, the ad slot is booked and cannot be de-selected.</em>`,
-        confirmButtonText: 'Understood (Ad Booked)',
+        title: 'Marketing Day Already Booked',
+        html: `Advertising has already been started or booked for <strong>${dayObj?.label || code} (${dayObj?.dateFormatted || ''})</strong>.<br/><br/>This booking is locked and cannot be removed from your marketing schedule.`,
+        confirmButtonText: 'Understood',
         confirmButtonColor: '#059669',
       });
       return;
@@ -134,9 +163,9 @@ export default function LeadHubOverview({
       if (preset === 'clear') {
         Swal.fire({
           icon: 'info',
-          title: `🎯 ${currentTodayItem.label} Remains Ad Booked`,
-          html: `All other days cleared.<br/><br/><strong>${currentTodayItem.label}</strong> remains active because marketing has started and today is <strong>Ad Booked</strong>.`,
-          confirmButtonText: 'OK',
+          title: 'Marketing Day Already Booked',
+          html: `All other eligible days cleared.<br/><br/><strong>${currentTodayItem.label} (${currentTodayItem.dateFormatted})</strong> remains active because advertising has already been started or booked for this day.`,
+          confirmButtonText: 'Understood',
           confirmButtonColor: '#059669',
         });
       }
@@ -547,6 +576,52 @@ export default function LeadHubOverview({
             </div>
           </div>
 
+          {/* Real-Time Weekly Calendar Navigation Toolbar */}
+          <div className="engine-week-calendar-toolbar">
+            <div className="week-nav-left-group">
+              <button
+                type="button"
+                className="btn-week-step-nav"
+                onClick={() => setWeekOffset((prev) => prev - 1)}
+                title="View Previous Week"
+              >
+                ‹ Prev Week
+              </button>
+              <div className="week-range-indicator-badge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.4">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <span className="week-range-text">Week of {weekRangeStr}</span>
+                {weekOffset === 0 ? (
+                  <span className="live-week-pill">● Current Week (IST)</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-jump-current-week"
+                    onClick={() => setWeekOffset(0)}
+                  >
+                    Jump to Current Week ↺
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn-week-step-nav"
+                onClick={() => setWeekOffset((prev) => prev + 1)}
+                title="View Next Week"
+              >
+                Next Week ›
+              </button>
+            </div>
+
+            <div className="week-timezone-badge" title="Dynamic real calendar dates computed in Asia/Kolkata">
+              <span>Timezone: Asia/Kolkata</span>
+            </div>
+          </div>
+
           {/* 7 Day Cards (Selected with green border and checkmark, Unselected with grey border and lock, Ad Booked & Locked when marketing is active) */}
           <div className="seven-days-cards-grid-exact">
             {daysList.map((d) => {
@@ -561,13 +636,14 @@ export default function LeadHubOverview({
                   key={d.code}
                   className={`seven-day-card-exact ${isBooked ? 'is-ad-booked is-selected' : isSelected ? 'is-selected' : 'is-unselected'} ${d.isToday ? 'is-today' : ''}`}
                   onClick={() => toggleDay(d.code)}
-                  title={isBooked ? `${d.label}: Ad Booked & Running (Cannot be de-selected)` : isSelected ? `Click to disable ${d.label}` : `Click to enable ${d.label}`}
+                  title={isBooked ? `${d.label} (${d.dateFormatted}): Advertising already booked & locked` : isSelected ? `Click to disable ${d.label} (${d.dateFormatted})` : `Click to enable ${d.label} (${d.dateFormatted})`}
                 >
                   {/* If today, floating blue badge */}
                   {d.isToday && <span className="today-floating-pill">Today</span>}
-                  {isBooked && <span className="ad-booked-floating-badge">🎯 Ad Booked</span>}
+                  {isBooked && <span className="ad-booked-floating-badge">🎯 AD BOOKED</span>}
 
                   <div className="day-code-title">{d.code}</div>
+                  <div className="day-calendar-date">{d.dateFormatted}</div>
                   <div className="day-sub-label">{d.label}</div>
                   
                   {/* Price tag */}
@@ -575,24 +651,30 @@ export default function LeadHubOverview({
                     ₹{dailySpend}
                   </div>
 
-                  {isBooked && <div className="day-booked-sub-pill">Marketing Booked</div>}
+                  {isBooked ? (
+                    <div className="day-booked-sub-pill">🔒 MARKETING BOOKED</div>
+                  ) : isSelected ? (
+                    <div className="day-status-micro-text selected">Active Day</div>
+                  ) : (
+                    <div className="day-status-micro-text available">Available</div>
+                  )}
 
                   {/* Bottom Status Wrap */}
                   <div className="day-bottom-status-wrap">
                     {isBooked ? (
-                      <div className="day-ad-booked-pill" title={`${d.label} marketing is active and ad slot is booked`}>
+                      <div className="day-ad-booked-pill" title={`${d.label} (${d.dateFormatted}): Advertising has already been started or booked`}>
                         <span className="badge-lock-icon">🔒</span>
                         <span className="badge-booked-text">Ad Booked ✓</span>
                       </div>
                     ) : isSelected ? (
-                      <div className="day-check-circle">
+                      <div className="day-check-circle" title={`${d.label} (${d.dateFormatted}) is selected & scheduled`}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       </div>
                     ) : (
-                      <div className="day-lock-icon">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.3">
+                      <div className="day-lock-icon" title="Click to schedule this day">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.3">
                           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                           <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>

@@ -1046,9 +1046,28 @@ const handleUpdateCustomerRecord = async (req, res) => {
         const nextDaily = updates.dailyAdSpend !== undefined ? Math.max(300, Number(updates.dailyAdSpend)) : Number(w.daily_ad_spend);
         const nextActive = updates.adCampaignActive !== undefined ? Boolean(updates.adCampaignActive) : Boolean(w.ad_campaign_active);
         const nextBal = updates.balance !== undefined ? Math.max(0, Number(updates.balance)) : Number(w.available_balance);
-        const nextDays = updates.activeDays !== undefined
-          ? (Array.isArray(updates.activeDays) ? updates.activeDays.join(',') : String(updates.activeDays))
-          : (w.active_days || 'MON,TUE,WED,THU,FRI');
+
+        // Security / Financial Safety Rule: Enforce that booked days cannot be removed via direct API call
+        const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        const todayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
+        const isDeductedToday = Boolean(
+          w.last_deducted_at &&
+          new Date(w.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+          kolkataNow.toLocaleDateString('en-CA')
+        );
+
+        let finalDaysArray = updates.activeDays !== undefined
+          ? (Array.isArray(updates.activeDays)
+              ? updates.activeDays.map(d => String(d).trim().toUpperCase()).filter(Boolean)
+              : String(updates.activeDays).split(',').map(d => d.trim().toUpperCase()).filter(Boolean))
+          : (w.active_days ? w.active_days.split(',').map(d => d.trim().toUpperCase()).filter(Boolean) : ['MON', 'TUE', 'WED', 'THU', 'FRI']);
+
+        // If today is booked / deducted, ensure todayCode CANNOT be removed!
+        if (isDeductedToday && !finalDaysArray.includes(todayCode)) {
+          finalDaysArray.push(todayCode);
+        }
+
+        const nextDays = finalDaysArray.join(',');
         const nextPreset = updates.schedulePreset || w.schedule_preset || 'weekdays';
         await query(
           `UPDATE wallets SET daily_ad_spend = $1::NUMERIC, ad_campaign_active = $2::BOOLEAN, available_balance = $3::NUMERIC, active_days = $4::VARCHAR, schedule_preset = $5::VARCHAR, updated_at = NOW() WHERE customer_id = $6`,
@@ -1259,11 +1278,50 @@ app.post('/api/wallets/deduct', async (req, res) => {
       });
     }
 
-    const nextBal = currentBal - spendAmt;
-
-    // Determine today's day code (Asia/Kolkata timezone)
     const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
+
+    // Financial Safety & Idempotency: Check if ad spend was already deducted for today in Asia/Kolkata
+    const isAlreadyDeductedToday = Boolean(
+      wallet?.last_deducted_at &&
+      new Date(wallet.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+      kolkataNow.toLocaleDateString('en-CA')
+    );
+
+    if (isAlreadyDeductedToday) {
+      // Idempotent: Do not double-deduct wallet balance!
+      let finalActiveDays = wallet?.active_days || 'MON,TUE,WED,THU,FRI';
+      const daySet = new Set(
+        (Array.isArray(activeDays) && activeDays.length > 0 ? activeDays : finalActiveDays.split(','))
+          .map(d => String(d).trim().toUpperCase()).filter(Boolean)
+      );
+      daySet.add(todayDayCode);
+      finalActiveDays = Array.from(daySet).join(',');
+
+      await query(
+        `UPDATE wallets SET
+          daily_ad_spend = $1::NUMERIC,
+          ad_campaign_active = TRUE,
+          active_days = $2::VARCHAR,
+          updated_at = NOW()
+        WHERE customer_id = $3`,
+        [spendAmt, finalActiveDays, cust.id]
+      );
+
+      return res.json({
+        ok: true,
+        alreadyDeducted: true,
+        balance: currentBal,
+        deducted: 0,
+        dailyAdSpend: spendAmt,
+        activeDays: Array.from(daySet),
+        isDeductedToday: true,
+        lastDeductedAt: wallet.last_deducted_at,
+        message: "Today's ad budget is already booked and running. No duplicate deduction made.",
+      });
+    }
+
+    const nextBal = currentBal - spendAmt;
 
     let finalActiveDays = wallet?.active_days || 'MON,TUE,WED,THU,FRI';
     if (Array.isArray(activeDays) && activeDays.length > 0) {
