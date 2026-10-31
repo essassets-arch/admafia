@@ -30,9 +30,15 @@ echo "📦 3/4 Verifying backend dependencies..."
 cd "$APP_DIR/backend"
 npm install
 
-# 4. Restart PM2 Daemon
-echo "🚀 4/4 Restarting PM2 application..."
-pm2 restart all || pm2 restart admafia
+# 4. Restart Application Daemon (Docker Compose or PM2)
+if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
+  echo "🚀 4/4 Rebuilding and restarting Docker Compose containers..."
+  cd "$APP_DIR"
+  docker compose up -d --build
+else
+  echo "🚀 4/4 Restarting PM2 application..."
+  pm2 restart all || pm2 restart admafia 2>/dev/null || true
+fi
 
 echo "======================================================================"
 echo "✅ Update complete! Fresh build is now active on https://admafia.marketing"

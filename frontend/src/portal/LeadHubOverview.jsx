@@ -82,23 +82,11 @@ export default function LeadHubOverview({
   onUpdateLead,
   t,
 }) {
-  const [activeDays, setActiveDays] = useState(customer.activeDays || ['MON', 'TUE', 'WED', 'THU', 'FRI']);
-  const [unmaskedLeads, setUnmaskedLeads] = useState({});
-
-  React.useEffect(() => {
-    if (customer?.activeDays && Array.isArray(customer.activeDays)) {
-      setActiveDays(customer.activeDays);
-    }
-  }, [customer?.activeDays]);
-
   const [weekOffset, setWeekOffset] = useState(0);
   const daysList = getKolkataWeekDays(weekOffset);
   const dailySpend = customer.dailyAdSpend || 300;
-  const weeklyPacing = activeDays.length * dailySpend;
   const currentTodayItem = daysList.find((d) => d.isToday) || daysList[5];
-  const weekRangeStr = `${daysList[0].dateFormatted} – ${daysList[6].dateFormatted} ${daysList[6].fullDateString.split(' ')[2]}`;
 
-  const isMarketingLiveToday = Boolean(customer.adCampaignActive && activeDays.includes(currentTodayItem.code));
   const isTodayBooked = Boolean(
     customer.isDeductedToday ||
     (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(currentTodayItem.isoDate)) ||
@@ -114,6 +102,33 @@ export default function LeadHubOverview({
       (dayObj.isToday && Array.isArray(customer.bookedDays) && customer.bookedDays.includes(dayObj.code))
     );
   };
+
+  const [activeDays, setActiveDays] = useState(() => {
+    const base = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
+      ? customer.activeDays
+      : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+    const merged = new Set(base);
+    if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
+    if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
+    if (customer.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
+    return Array.from(merged);
+  });
+  const [unmaskedLeads, setUnmaskedLeads] = useState({});
+
+  React.useEffect(() => {
+    if (customer?.activeDays && Array.isArray(customer.activeDays)) {
+      const merged = new Set(customer.activeDays);
+      if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
+      if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
+      if (customer.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
+      setActiveDays(Array.from(merged));
+    }
+  }, [customer?.activeDays, customer?.bookedDays, customer?.lockedDays, customer?.isDeductedToday, currentTodayItem?.code]);
+
+  const weeklyPacing = activeDays.length * dailySpend;
+  const weekRangeStr = `${daysList[0].dateFormatted} – ${daysList[6].dateFormatted} ${daysList[6].fullDateString.split(' ')[2]}`;
+
+  const isMarketingLiveToday = Boolean(customer.adCampaignActive && activeDays.includes(currentTodayItem.code));
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
   const isProfileDone = customer.profileStatus === 'complete' || customer.profile_status === 'complete' || customer.kycPercent === 100;
@@ -644,8 +659,8 @@ export default function LeadHubOverview({
           {/* 7 Day Cards (Selected with green border and checkmark, Unselected with grey border and lock, Ad Booked & Locked when marketing is active) */}
           <div className="seven-days-cards-grid-exact">
             {daysList.map((d) => {
-              const isSelected = activeDays.includes(d.code);
               const isBooked = isDayBooked(d);
+              const isSelected = activeDays.includes(d.code) || isBooked;
               return (
                 <div
                   key={d.code}
