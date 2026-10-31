@@ -655,7 +655,6 @@ export default function LeadHubOverview({
                 >
                   {/* If today, floating blue badge */}
                   {d.isToday && <span className="today-floating-pill">Today</span>}
-                  {isBooked && <span className="ad-booked-floating-badge">🎯 AD BOOKED</span>}
 
                   <div className="day-code-title">{d.code}</div>
                   <div className="day-calendar-date">{d.dateFormatted}</div>
@@ -676,13 +675,8 @@ export default function LeadHubOverview({
 
                   {/* Bottom Status Wrap */}
                   <div className="day-bottom-status-wrap">
-                    {isBooked ? (
-                      <div className="day-ad-booked-pill" title={`${d.label} (${d.dateFormatted}): Advertising has already been started or booked`}>
-                        <span className="badge-lock-icon">🔒</span>
-                        <span className="badge-booked-text">Ad Booked ✓</span>
-                      </div>
-                    ) : isSelected ? (
-                      <div className="day-check-circle" title={`${d.label} (${d.dateFormatted}) is selected & scheduled`}>
+                    {isSelected ? (
+                      <div className="day-check-circle" title={isBooked ? `${d.label} (${d.dateFormatted}) is marketing booked` : `${d.label} (${d.dateFormatted}) is selected & scheduled`}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
