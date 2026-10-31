@@ -17,6 +17,46 @@ let activePool = null;
 let pgliteInstance = null;
 let dbMode = 'uninitialized'; // 'postgres-server' | 'pglite-postgres'
 
+export const VW_SALES_CUSTOMER_ACCOUNTS_SQL = `
+CREATE OR REPLACE VIEW vw_sales_customer_accounts AS
+SELECT
+    c.id,
+    c.username,
+    c.company_name AS name,
+    c.company_name,
+    c.contact_person AS contact,
+    c.contact_person,
+    c.phone,
+    c.email,
+    c.personal_email,
+    c.category,
+    c.industry,
+    c.website,
+    c.city,
+    c.state,
+    c.country,
+    c.status,
+    c.profile_status,
+    c.payment_status,
+    c.kyc_percent,
+    c.verified,
+    c.registered_from,
+    c.registered_at,
+    c.completed_at,
+    COALESCE(w.available_balance, 0) AS balance,
+    COALESCE(w.available_balance, 0) AS wallet_balance,
+    COALESCE(w.daily_ad_spend, 300) AS daily_pacing,
+    COALESCE(w.total_lifetime_paid, 0) AS amount_paid,
+    COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
+    COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
+    COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
+    FLOOR(COALESCE(w.available_balance, 0) / GREATEST(COALESCE(w.daily_ad_spend, 300), 1))::INT AS runway_days,
+    (SELECT COUNT(*) FROM leads l WHERE l.customer_id = c.id) AS total_leads_dispatched
+FROM customers c
+LEFT JOIN wallets w ON w.customer_id = c.id
+ORDER BY c.registered_at DESC;
+`;
+
 /**
  * Ensures the target PostgreSQL database exists on the external server,
  * or falls back cleanly to persistent disk-backed PGlite PostgreSQL.
@@ -228,6 +268,9 @@ export async function initDatabase() {
       status = 'active';
   `);
 
+  // Ensure unified view vw_sales_customer_accounts is always compiled and live
+  await safeExec(VW_SALES_CUSTOMER_ACCOUNTS_SQL);
+
   console.log('[PostgreSQL] Relational schema & views verified (14 tables + vw_sales_customer_accounts)');
 
   return { mode: dbMode };
@@ -235,20 +278,45 @@ export async function initDatabase() {
 
 /**
  * Execute parameterized SQL query ($1, $2, ...) against PostgreSQL
+ * Includes auto-recovery for relational views if dropped or out of sync.
  */
 export async function query(text, params = []) {
   if (dbMode === 'uninitialized') {
     await initDatabase();
   }
-  if (dbMode === 'postgres-server') {
-    return activePool.query(text, params);
+
+  try {
+    if (dbMode === 'postgres-server') {
+      return await activePool.query(text, params);
+    }
+    const res = await pgliteInstance.query(text, params);
+    const rows = res.rows || [];
+    return {
+      rows,
+      rowCount: rows.length > 0 ? rows.length : (res.affectedRows || 0),
+    };
+  } catch (err) {
+    if (err && err.message && err.message.includes('vw_sales_customer_accounts') && err.message.includes('does not exist')) {
+      console.warn('[PostgreSQL] Auto-recovering missing view vw_sales_customer_accounts on the fly...');
+      try {
+        if (dbMode === 'postgres-server') {
+          await activePool.query(VW_SALES_CUSTOMER_ACCOUNTS_SQL);
+          return await activePool.query(text, params);
+        } else {
+          await pgliteInstance.exec(VW_SALES_CUSTOMER_ACCOUNTS_SQL);
+          const res = await pgliteInstance.query(text, params);
+          const rows = res.rows || [];
+          return {
+            rows,
+            rowCount: rows.length > 0 ? rows.length : (res.affectedRows || 0),
+          };
+        }
+      } catch (recoveryErr) {
+        console.error('[PostgreSQL] View auto-recovery failed:', recoveryErr.message);
+      }
+    }
+    throw err;
   }
-  const res = await pgliteInstance.query(text, params);
-  const rows = res.rows || [];
-  return {
-    rows,
-    rowCount: rows.length > 0 ? rows.length : (res.affectedRows || 0),
-  };
 }
 
 /**
