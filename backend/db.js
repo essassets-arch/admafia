@@ -18,6 +18,7 @@ let pgliteInstance = null;
 let dbMode = 'uninitialized'; // 'postgres-server' | 'pglite-postgres'
 
 export const VW_SALES_CUSTOMER_ACCOUNTS_SQL = `
+DROP VIEW IF EXISTS vw_sales_customer_accounts CASCADE;
 CREATE OR REPLACE VIEW vw_sales_customer_accounts AS
 SELECT
     c.id,
@@ -47,9 +48,12 @@ SELECT
     COALESCE(w.available_balance, 0) AS wallet_balance,
     COALESCE(w.daily_ad_spend, 300) AS daily_pacing,
     COALESCE(w.total_lifetime_paid, 0) AS amount_paid,
+    COALESCE(w.total_ad_spent, 0) AS total_ad_spent,
     COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
     COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
     COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
+    w.last_deducted_at,
+    COALESCE(w.booked_dates, '') AS booked_dates,
     FLOOR(COALESCE(w.available_balance, 0) / GREATEST(COALESCE(w.daily_ad_spend, 300), 1))::INT AS runway_days,
     (SELECT COUNT(*) FROM leads l WHERE l.customer_id = c.id) AS total_leads_dispatched
 FROM customers c
@@ -197,6 +201,8 @@ export async function initDatabase() {
   await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS active_days VARCHAR(120) DEFAULT 'MON,TUE,WED,THU,FRI'`);
   await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS schedule_preset VARCHAR(64) DEFAULT 'weekdays'`);
   await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS ad_campaign_active BOOLEAN DEFAULT FALSE`);
+  await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS booked_dates TEXT DEFAULT ''`);
+  await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS last_deducted_at TIMESTAMPTZ`);
   await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post'`);
   await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_notes TEXT DEFAULT ''`);
   await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_name VARCHAR(140) DEFAULT 'Graphics Designer'`);

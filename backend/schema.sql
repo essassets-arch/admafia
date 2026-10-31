@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS wallets (
     active_days         VARCHAR(120) NOT NULL DEFAULT 'MON,TUE,WED,THU,FRI',
     schedule_preset     VARCHAR(64) NOT NULL DEFAULT 'weekdays',
     last_deducted_at    TIMESTAMPTZ,
+    booked_dates        TEXT NOT NULL DEFAULT '',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -428,9 +429,12 @@ SELECT
     COALESCE(w.available_balance, 0) AS wallet_balance,
     COALESCE(w.daily_ad_spend, 300) AS daily_pacing,
     COALESCE(w.total_lifetime_paid, 0) AS amount_paid,
+    COALESCE(w.total_ad_spent, 0) AS total_ad_spent,
     COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
     COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
     COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
+    w.last_deducted_at,
+    COALESCE(w.booked_dates, '') AS booked_dates,
     FLOOR(COALESCE(w.available_balance, 0) / GREATEST(COALESCE(w.daily_ad_spend, 300), 1))::INT AS runway_days,
     (SELECT COUNT(*) FROM leads l WHERE l.customer_id = c.id) AS total_leads_dispatched
 FROM customers c

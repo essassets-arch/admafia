@@ -85,22 +85,84 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
       new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
       new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
     ),
-    lockedDays: (
-      (row.last_deducted_at &&
-        new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-        new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) ||
-      Boolean(row.ad_campaign_active)
-    )
-      ? [['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay()]]
-      : [],
-    bookedDates: (
-      (row.last_deducted_at &&
-        new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-        new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) ||
-      Boolean(row.ad_campaign_active)
-    )
-      ? [new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })]
-      : [],
+    bookedDates: (() => {
+      const kToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const bSet = new Set(
+        (row.booked_dates || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      if (
+        row.last_deducted_at &&
+        new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === kToday
+      ) {
+        bSet.add(kToday);
+      }
+      return Array.from(bSet);
+    })(),
+    lockedDays: (() => {
+      const kNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const kToday = kNow.toLocaleDateString('en-CA');
+      const bSet = new Set(
+        (row.booked_dates || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      const isDed = Boolean(
+        row.last_deducted_at &&
+        new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === kToday
+      );
+      if (isDed) bSet.add(kToday);
+
+      const lSet = new Set();
+      const dow = kNow.getDay();
+      const dToMon = dow === 0 ? -6 : 1 - dow;
+      const mon = new Date(kNow);
+      mon.setDate(kNow.getDate() + dToMon);
+      mon.setHours(0, 0, 0, 0);
+
+      const codes = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+      for (let i = 0; i < 7; i++) {
+        const cur = new Date(mon);
+        cur.setDate(mon.getDate() + i);
+        const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+        if (bSet.has(iso)) lSet.add(codes[i]);
+      }
+      return Array.from(lSet);
+    })(),
+    bookedDays: (() => {
+      const kNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const kToday = kNow.toLocaleDateString('en-CA');
+      const bSet = new Set(
+        (row.booked_dates || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      const isDed = Boolean(
+        row.last_deducted_at &&
+        new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === kToday
+      );
+      if (isDed) bSet.add(kToday);
+
+      const lSet = new Set();
+      const dow = kNow.getDay();
+      const dToMon = dow === 0 ? -6 : 1 - dow;
+      const mon = new Date(kNow);
+      mon.setDate(kNow.getDate() + dToMon);
+      mon.setHours(0, 0, 0, 0);
+
+      const codes = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+      for (let i = 0; i < 7; i++) {
+        const cur = new Date(mon);
+        cur.setDate(mon.getDate() + i);
+        const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+        if (bSet.has(iso)) lSet.add(codes[i]);
+      }
+      return Array.from(lSet);
+    })(),
     isSelfRegistered: true,
     registeredFrom: row.registered_from || 'http://localhost:5173/#register',
     registeredAt: row.registered_at
@@ -1073,9 +1135,28 @@ const handleUpdateCustomerRecord = async (req, res) => {
               : String(updates.activeDays).split(',').map(d => d.trim().toUpperCase()).filter(Boolean))
           : (w.active_days ? w.active_days.split(',').map(d => d.trim().toUpperCase()).filter(Boolean) : ['MON', 'TUE', 'WED', 'THU', 'FRI']);
 
-        // If today is booked / deducted, ensure todayCode CANNOT be removed!
-        if (isDeductedToday && !finalDaysArray.includes(todayCode)) {
-          finalDaysArray.push(todayCode);
+        const bookedDatesList = (w.booked_dates || '').split(',').map((s) => s.trim()).filter(Boolean);
+        if (isDeductedToday) {
+          bookedDatesList.push(kolkataNow.toLocaleDateString('en-CA'));
+        }
+
+        const dayOfWeek = kolkataNow.getDay();
+        const distToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const monday = new Date(kolkataNow);
+        monday.setDate(kolkataNow.getDate() + distToMonday);
+        monday.setHours(0, 0, 0, 0);
+
+        const weekDayCodes = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+        for (let i = 0; i < 7; i++) {
+          const cur = new Date(monday);
+          cur.setDate(monday.getDate() + i);
+          const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+          if (bookedDatesList.includes(iso)) {
+            const lockedCode = weekDayCodes[i];
+            if (!finalDaysArray.includes(lockedCode)) {
+              finalDaysArray.push(lockedCode);
+            }
+          }
         }
 
         const nextDays = finalDaysArray.join(',');
@@ -1277,128 +1358,145 @@ app.post('/api/wallets/deduct', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
     }
     const cust = custRes.rows[0];
-    const walRes = await query('SELECT * FROM wallets WHERE customer_id = $1', [cust.id]);
-    const wallet = walRes.rows[0];
-    const spendAmt = Math.max(300, Number(amount || wallet?.daily_ad_spend || 300));
-    const currentBal = Number(wallet?.available_balance || 0);
 
-    if (currentBal < spendAmt) {
-      return res.status(400).json({
-        ok: false,
-        error: `Insufficient wallet balance (₹${currentBal}) for ₹${spendAmt} daily ad spend.`,
-      });
-    }
+    const result = await withTransaction(async (txQuery) => {
+      const walRes = await txQuery('SELECT * FROM wallets WHERE customer_id = $1 FOR UPDATE', [cust.id]);
+      if (walRes.rowCount === 0) {
+        throw new Error('Wallet not found');
+      }
+      const wallet = walRes.rows[0];
+      const spendAmt = Math.max(300, Number(amount || wallet?.daily_ad_spend || 300));
+      const currentBal = Number(wallet?.available_balance || 0);
 
-    const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-    const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
+      const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
+      const kolkataTodayStr = kolkataNow.toLocaleDateString('en-CA');
 
-    // Financial Safety & Idempotency: Check if ad spend was already deducted for today in Asia/Kolkata
-    const isAlreadyDeductedToday = Boolean(
-      wallet?.last_deducted_at &&
-      new Date(wallet.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-      kolkataNow.toLocaleDateString('en-CA')
-    );
+      // Financial Safety & Idempotency: Check if ad spend was already deducted for today in Asia/Kolkata
+      const isAlreadyDeductedToday = Boolean(
+        wallet?.last_deducted_at &&
+        new Date(wallet.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === kolkataTodayStr
+      );
 
-    if (isAlreadyDeductedToday) {
-      // Idempotent: Do not double-deduct wallet balance!
+      const bookedDatesSet = new Set(
+        (wallet?.booked_dates || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      bookedDatesSet.add(kolkataTodayStr);
+      const nextBookedDates = Array.from(bookedDatesSet).join(',');
+
       let finalActiveDays = wallet?.active_days || 'MON,TUE,WED,THU,FRI';
       const daySet = new Set(
         (Array.isArray(activeDays) && activeDays.length > 0 ? activeDays : finalActiveDays.split(','))
-          .map(d => String(d).trim().toUpperCase()).filter(Boolean)
+          .map((d) => String(d).trim().toUpperCase())
+          .filter(Boolean)
       );
       daySet.add(todayDayCode);
       finalActiveDays = Array.from(daySet).join(',');
 
-      await query(
+      if (isAlreadyDeductedToday) {
+        // Idempotent: Do not double-deduct wallet balance!
+        await txQuery(
+          `UPDATE wallets SET
+            daily_ad_spend = $1::NUMERIC,
+            ad_campaign_active = TRUE,
+            active_days = $2::VARCHAR,
+            booked_dates = $4::TEXT,
+            updated_at = NOW()
+          WHERE customer_id = $3`,
+          [spendAmt, finalActiveDays, cust.id, nextBookedDates]
+        );
+
+        return {
+          alreadyDeducted: true,
+          balance: currentBal,
+          walletBalance: currentBal,
+          deducted: 0,
+          dailyAdSpend: spendAmt,
+          activeDays: Array.from(daySet),
+          isDeductedToday: true,
+          lastDeductedAt: wallet.last_deducted_at,
+          message: "Today's ad budget is already booked and running. No duplicate deduction made.",
+        };
+      }
+
+      if (currentBal < spendAmt) {
+        const err = new Error(`Insufficient wallet balance (₹${currentBal}) for ₹${spendAmt} daily ad spend.`);
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const nextBal = currentBal - spendAmt;
+
+      await txQuery(
         `UPDATE wallets SET
-          daily_ad_spend = $1::NUMERIC,
+          available_balance = $1::NUMERIC,
+          daily_ad_spend = $2::NUMERIC,
+          total_ad_spent = total_ad_spent + $2::NUMERIC,
           ad_campaign_active = TRUE,
-          active_days = $2::VARCHAR,
+          active_days = $4::VARCHAR,
+          last_deducted_at = NOW(),
+          booked_dates = $5::TEXT,
           updated_at = NOW()
         WHERE customer_id = $3`,
-        [spendAmt, finalActiveDays, cust.id]
+        [nextBal, spendAmt, cust.id, String(finalActiveDays), nextBookedDates]
       );
 
-      return res.json({
-        ok: true,
-        alreadyDeducted: true,
-        balance: currentBal,
-        deducted: 0,
+      // Also activate or update marketing campaigns if existing
+      await txQuery(
+        `UPDATE marketing_campaigns SET
+          status = 'Running',
+          external_platform_status = 'Active',
+          daily_budget = $1,
+          last_action = 'Campaign Live: Daily Spend Deducted',
+          last_actor = 'Customer Self-Service Portal',
+          last_action_at = NOW(),
+          updated_at = NOW()
+        WHERE customer_id = $2`,
+        [spendAmt, cust.id]
+      ).catch(() => {});
+
+      const txId = `tx_deb_${Date.now()}`;
+      const refUtr = `AUTO-AD-${Date.now()}`;
+      const txInsert = await txQuery(
+        `INSERT INTO wallet_transactions (
+          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')
+        RETURNING *`,
+        [
+          txId,
+          cust.id,
+          wallet.id,
+          spendAmt,
+          nextBal,
+          refUtr,
+          `Daily Meta Ads Campaign Spend Deduction (-₹${spendAmt}/day)`,
+        ]
+      );
+
+      return {
+        alreadyDeducted: false,
+        balance: nextBal,
+        walletBalance: nextBal,
+        deducted: spendAmt,
         dailyAdSpend: spendAmt,
         activeDays: Array.from(daySet),
         isDeductedToday: true,
-        lastDeductedAt: wallet.last_deducted_at,
-        message: "Today's ad budget is already booked and running. No duplicate deduction made.",
-      });
-    }
-
-    const nextBal = currentBal - spendAmt;
-
-    let finalActiveDays = wallet?.active_days || 'MON,TUE,WED,THU,FRI';
-    if (Array.isArray(activeDays) && activeDays.length > 0) {
-      const set = new Set(activeDays.map((d) => String(d).trim().toUpperCase()));
-      set.add(todayDayCode);
-      finalActiveDays = Array.from(set).join(',');
-    } else {
-      const set = new Set(finalActiveDays.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean));
-      set.add(todayDayCode);
-      finalActiveDays = Array.from(set).join(',');
-    }
-
-    await query(
-      `UPDATE wallets SET
-        available_balance = $1::NUMERIC,
-        daily_ad_spend = $2::NUMERIC,
-        total_ad_spent = total_ad_spent + $2::NUMERIC,
-        ad_campaign_active = TRUE,
-        active_days = $4::VARCHAR,
-        last_deducted_at = NOW(),
-        updated_at = NOW()
-      WHERE customer_id = $3`,
-      [nextBal, spendAmt, cust.id, String(finalActiveDays)]
-    );
-
-    // Also activate or update marketing campaigns if existing
-    await query(
-      `UPDATE marketing_campaigns SET
-        status = 'Running',
-        external_platform_status = 'Active',
-        daily_budget = $1,
-        last_action = 'Campaign Live: Daily Spend Deducted',
-        last_actor = 'Customer Self-Service Portal',
-        last_action_at = NOW(),
-        updated_at = NOW()
-      WHERE customer_id = $2`,
-      [spendAmt, cust.id]
-    ).catch(() => { });
-
-    const txId = `tx_deb_${Date.now()}`;
-    const refUtr = `AUTO-AD-${Date.now()}`;
-    const txInsert = await query(
-      `INSERT INTO wallet_transactions (
-        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-      ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')
-      RETURNING *`,
-      [
-        txId,
-        cust.id,
-        wallet.id,
-        spendAmt,
-        nextBal,
-        refUtr,
-        `Daily Meta Ads Campaign Spend Deduction (-₹${spendAmt}/day)`,
-      ]
-    );
+        transaction: mapWalletTxRow(txInsert.rows[0]),
+      };
+    });
 
     const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
     res.json({
       ok: true,
-      walletBalance: nextBal,
+      ...result,
       customer: mapCustomerRow(viewRes.rows[0]),
-      transaction: mapWalletTxRow(txInsert.rows[0]),
     });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    const status = err.statusCode || (err.message && err.message.includes('Insufficient wallet balance') ? 400 : 500);
+    res.status(status).json({ ok: false, error: err.message });
   }
 });
 

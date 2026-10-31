@@ -1046,11 +1046,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       if (!confirmStop.isConfirmed) return;
     }
 
-    // 5. Automatic Booking: Compute Kolkata Date & Day Code
+    // 5. Authoritative Backend Transaction
     const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const todayDayCode = dayCodes[kolkataNow.getDay()];
-    const todayIsoDate = `${kolkataNow.getFullYear()}-${String(kolkataNow.getMonth() + 1).padStart(2, '0')}-${String(kolkataNow.getDate()).padStart(2, '0')}`;
 
     const currentDays = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
       ? customer.activeDays
@@ -1060,59 +1059,75 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       ? [...currentDays, todayDayCode]
       : currentDays;
 
-    const currentBookedDays = Array.isArray(customer.bookedDays) ? customer.bookedDays : [];
-    const nextBookedDays = nextActive && !currentBookedDays.includes(todayDayCode)
-      ? [...currentBookedDays, todayDayCode]
-      : currentBookedDays;
-
-    const currentBookedDates = Array.isArray(customer.bookedDates) ? customer.bookedDates : [];
-    const nextBookedDates = nextActive && !currentBookedDates.includes(todayIsoDate)
-      ? [...currentBookedDates, todayIsoDate]
-      : currentBookedDates;
-
-    setCustomer((prev) => {
-      const updated = {
-        ...prev,
-        adCampaignActive: nextActive,
-        activeDays: nextActiveDays,
-        bookedDays: nextBookedDays,
-        bookedDates: nextBookedDates,
-        isDeductedToday: nextActive ? true : prev.isDeductedToday,
-      };
-      try {
-        localStorage.setItem('growthline_active_user', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    try {
-      await crmApi.patchCustomer(customer.id, {
-        adCampaignActive: nextActive,
-        activeDays: nextActiveDays,
-        bookedDays: nextBookedDays,
-        bookedDates: nextBookedDates,
-      });
-    } catch (e) {
-      console.warn('Sync campaign state note:', e.message);
-    }
-
-    // 6. SweetAlert2 Success Notice
     if (nextActive) {
-      Swal.fire({
-        icon: 'success',
-        title: 'Marketing is LIVE & Ad Booked!',
-        html: `Your marketing campaign is now active and pacing at <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong>.<br/><br/>Today's advertising slot is <strong>🎯 AD BOOKED</strong>.`,
-        timer: 2600,
-        showConfirmButton: false,
-      });
+      try {
+        const deductRes = await crmApi.deductDailyAdSpend({
+          customerId: customer.id,
+          phone: customer.phone,
+          username: customer.username,
+          amount: dailyLimit,
+          activeDays: nextActiveDays,
+        });
+
+        if (deductRes && deductRes.ok) {
+          if (deductRes.customer) {
+            setCustomer(deductRes.customer);
+            try {
+              localStorage.setItem('growthline_active_user', JSON.stringify(deductRes.customer));
+            } catch (e) {}
+          }
+          if (typeof deductRes.walletBalance === 'number') {
+            setWalletBalance(deductRes.walletBalance);
+          } else if (typeof deductRes.balance === 'number') {
+            setWalletBalance(deductRes.balance);
+          }
+
+          // Trigger state sync for fresh wallet transaction ledger
+          crmApi.syncStateFromPostgres().catch(() => {});
+
+          Swal.fire({
+            icon: 'success',
+            title: 'Marketing is LIVE & Ad Booked!',
+            html: `Your marketing campaign is now active and pacing at <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong>.<br/><br/>Today's advertising slot is <strong>🎯 AD BOOKED</strong>.`,
+            timer: 2600,
+            showConfirmButton: false,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to deduct and start campaign:', err);
+        Swal.fire({
+          icon: 'error',
+          title: 'Could Not Start Campaign',
+          text: err.message || 'An error occurred while starting the campaign. Please check your wallet balance.',
+          confirmButtonColor: '#059669',
+        });
+      }
     } else {
-      Swal.fire({
-        icon: 'info',
-        title: 'Marketing Paused (Off)',
-        html: `Your campaign has been paused. Daily ad spend will not be deducted until you start it again.`,
-        timer: 2200,
-        showConfirmButton: false,
-      });
+      // Stopping Campaign: Pause in PostgreSQL
+      try {
+        const patchRes = await crmApi.patchCustomer(customer.id, {
+          adCampaignActive: false,
+        });
+
+        if (patchRes && patchRes.customer) {
+          setCustomer(patchRes.customer);
+          try {
+            localStorage.setItem('growthline_active_user', JSON.stringify(patchRes.customer));
+          } catch (e) {}
+        } else {
+          setCustomer((prev) => ({ ...prev, adCampaignActive: false }));
+        }
+
+        Swal.fire({
+          icon: 'info',
+          title: 'Marketing Paused (Off)',
+          html: `Your campaign has been paused. Daily ad spend will not be deducted until you start it again.`,
+          timer: 2200,
+          showConfirmButton: false,
+        });
+      } catch (err) {
+        console.error('Failed to pause campaign:', err);
+      }
     }
   };
 

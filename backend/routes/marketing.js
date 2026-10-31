@@ -2072,6 +2072,7 @@ export async function processDailyAdSpendPacing() {
         COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
         COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
         COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
+        COALESCE(w.booked_dates, '') AS booked_dates,
         w.last_deducted_at,
         (SELECT mc.id FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = 'Running' LIMIT 1) AS running_camp_id
       FROM customers c
@@ -2108,15 +2109,25 @@ export async function processDailyAdSpendPacing() {
       // 3. Check customer balance
       if (balance >= spend) {
         const newBal = balance - spend;
+        const bSet = new Set(
+          (cust.booked_dates || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        );
+        bSet.add(todayDateStr);
+        const nextBookedDates = Array.from(bSet).join(',');
+
         await query(
           `UPDATE wallets SET
             available_balance = $1,
             total_ad_spent = total_ad_spent + $2,
             ad_campaign_active = TRUE,
             last_deducted_at = NOW(),
+            booked_dates = $4,
             updated_at = NOW()
           WHERE customer_id = $3`,
-          [newBal, spend, cust.id]
+          [newBal, spend, cust.id, nextBookedDates]
         );
 
         const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;

@@ -394,6 +394,84 @@ async function runTestSuite() {
     assert(tryRemoveBooked.data?.customer?.activeDays.includes(todayDayCode), `Backend strictly preserves booked day (${todayDayCode}) against direct API removal`);
 
     // -------------------------------------------------------------------------
+    // PHASE 7D: REGRESSION TESTS — AUTHORITATIVE BOOKING LIFECYCLE
+    // -------------------------------------------------------------------------
+    console.log('\n▶ PHASE 7D: Regression Tests — Authoritative Booking Lifecycle & Persistence');
+
+    // 1. Selecting an available unbooked day remains possible
+    const unbookedDay = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].find((d) => d !== todayDayCode && !tryRemoveBooked.data?.customer?.activeDays.includes(d)) || 'SUN';
+    const addAvailableDay = await api(`/customers/${customerId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ activeDays: [...tryRemoveBooked.data?.customer?.activeDays, unbookedDay] }),
+    });
+    assert(addAvailableDay.status === 200, 'Selecting an available unbooked day returns HTTP 200');
+    assert(addAvailableDay.data?.customer?.activeDays.includes(unbookedDay), `Available unbooked day (${unbookedDay}) added successfully`);
+
+    // 2. Deselecting an ordinary, unbooked day remains possible
+    const removeAvailableDay = await api(`/customers/${customerId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ activeDays: addAvailableDay.data?.customer?.activeDays.filter((d) => d !== unbookedDay) }),
+    });
+    assert(removeAvailableDay.status === 200, 'Deselecting an unbooked day returns HTTP 200');
+    assert(!removeAvailableDay.data?.customer?.activeDays.includes(unbookedDay), `Ordinary unbooked day (${unbookedDay}) removed successfully`);
+
+    // 3. A successfully booked day cannot be deselected via preset or empty array
+    const clearPresetAttempt = await api(`/customers/${customerId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ activeDays: [], schedulePreset: 'clear' }),
+    });
+    assert(clearPresetAttempt.status === 200, 'Clear preset request returns HTTP 200');
+    assert(clearPresetAttempt.data?.customer?.activeDays.includes(todayDayCode), `Clear preset preserves booked day (${todayDayCode})`);
+
+    // 4. Page refresh restores the lock authoritative from PostgreSQL
+    const refreshedCust = await api(`/customers/${customerId}`);
+    assert(refreshedCust.status === 200, 'Page refresh (GET /customers/:id) returns HTTP 200');
+    assert(refreshedCust.data?.customer?.isDeductedToday === true, 'Page refresh restores isDeductedToday: true');
+    assert(refreshedCust.data?.customer?.bookedDays.includes(todayDayCode), `Page refresh restores bookedDays containing ${todayDayCode}`);
+    assert(refreshedCust.data?.customer?.bookedDates.length >= 1, 'Page refresh restores authoritative bookedDates array from PostgreSQL');
+
+    // 5. Campaign Stop does not erase booking history
+    const stopCampaignRes = await api(`/customers/${customerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adCampaignActive: false }),
+    });
+    assert(stopCampaignRes.status === 200, 'Campaign Stop returns HTTP 200');
+    assert(stopCampaignRes.data?.customer?.adCampaignActive === false, 'Campaign status is now Paused (Off)');
+    assert(stopCampaignRes.data?.customer?.isDeductedToday === true, 'Campaign Stop preserves isDeductedToday: true');
+    assert(stopCampaignRes.data?.customer?.bookedDays.includes(todayDayCode), 'Campaign Stop preserves bookedDays');
+    assert(stopCampaignRes.data?.customer?.bookedDates.length >= 1, 'Campaign Stop preserves bookedDates');
+
+    // Re-activate campaign for subsequent pacing tests
+    await api(`/customers/${customerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adCampaignActive: true }),
+    });
+
+    // 6. Insufficient funds do not create a false booking (Customer with 0 balance who has not been deducted today)
+    const testInsufficientBalRes = await api('/wallets/deduct', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone: '9820011999', // Non-deducted phone or new test customer
+        amount: 500,
+      }),
+    });
+    assert(testInsufficientBalRes.status === 400 || testInsufficientBalRes.status === 404 || testInsufficientBalRes.data?.ok === false, 'Insufficient funds or unbooked account deduction is rejected (HTTP 400/404)');
+
+    // 7. Concurrent requests cannot double-charge
+    const [c1, c2] = await Promise.all([
+      api('/wallets/deduct', { method: 'POST', body: JSON.stringify({ customerId, amount: customizedSpend }) }),
+      api('/wallets/deduct', { method: 'POST', body: JSON.stringify({ customerId, amount: customizedSpend }) }),
+    ]);
+    assert(c1.status === 200 && c2.status === 200, 'Concurrent deduct calls return HTTP 200');
+    assert(Number(c1.data?.deducted || 0) === 0 && Number(c2.data?.deducted || 0) === 0, 'Concurrent calls enforce idempotency: 0 additional deduction');
+    assert(Number(c1.data?.balance || c2.data?.balance) === 688, 'Balance remains strictly ₹688 after concurrent calls');
+
+    // 8. IST / Asia/Kolkata calendar day boundaries verified
+    const istNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const istDateString = istNow.toLocaleDateString('en-CA'); // YYYY-MM-DD
+    assert(refreshedCust.data?.customer?.bookedDates.includes(istDateString), `Booked date matches exact Asia/Kolkata date: ${istDateString}`);
+
+    // -------------------------------------------------------------------------
     // PHASE 8: AUTOMATED DAILY PACING RUNNER VERIFICATION
     // -------------------------------------------------------------------------
     console.log('\n▶ PHASE 8: Automated Daily Pacing Engine (No Double-Deduction & Off-Day Rules)');
@@ -465,6 +543,17 @@ async function runTestSuite() {
     assert(bWorkspaceInitial.status === 200, 'Customer B workspace retrieved successfully');
     const bLeadsInitial = bWorkspaceInitial.data?.leads || [];
     assert(bLeadsInitial.length === 0, 'Customer B workspace initially has 0 leads (Clean isolation)');
+    assert((bWorkspaceInitial.data?.customer?.bookedDates || []).length === 0, "STRICT ISOLATION VERIFIED: Customer B has 0 booked dates (Customer A's booking cannot leak to Customer B)");
+
+    // Customer B has ₹0 balance: verify deduction fails with HTTP 400 and NO false booking is created
+    const bDeductInsufficient = await api('/wallets/deduct', {
+      method: 'POST',
+      body: JSON.stringify({ customerId: customerBId, amount: 300 }),
+    });
+    assert(bDeductInsufficient.status === 400, 'Customer B with ₹0 balance cannot deduct (HTTP 400 Insufficient wallet balance)');
+    assert(bDeductInsufficient.data?.ok === false, 'Customer B deduction fails cleanly with ok: false');
+    const bAfterFailedDeduct = await api(`/customers/${testMobileB}`);
+    assert((bAfterFailedDeduct.data?.customer?.bookedDates || []).length === 0, 'Failed deduction creates NO false booking');
 
     // Dispatch a unique lead specifically targeted to Customer A
     const leadForAId = `lead_iso_a_${Date.now()}`;

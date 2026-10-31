@@ -100,10 +100,20 @@ export default function LeadHubOverview({
 
   const isMarketingLiveToday = Boolean(customer.adCampaignActive && activeDays.includes(currentTodayItem.code));
   const isTodayBooked = Boolean(
-    (customer.isDeductedToday || isMarketingLiveToday) ||
+    customer.isDeductedToday ||
+    (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(currentTodayItem.isoDate)) ||
     (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(currentTodayItem.code)) ||
     (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(currentTodayItem.code))
   );
+
+  const isDayBooked = (dayObj) => {
+    if (!dayObj) return false;
+    return Boolean(
+      (dayObj.isToday && isTodayBooked) ||
+      (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(dayObj.isoDate)) ||
+      (dayObj.isToday && Array.isArray(customer.bookedDays) && customer.bookedDays.includes(dayObj.code))
+    );
+  };
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
   const isProfileDone = customer.profileStatus === 'complete' || customer.profile_status === 'complete' || customer.kycPercent === 100;
@@ -112,11 +122,7 @@ export default function LeadHubOverview({
   const toggleDay = (dayTarget) => {
     const code = typeof dayTarget === 'string' ? dayTarget : dayTarget?.code;
     const dayObj = typeof dayTarget === 'object' ? dayTarget : daysList.find((d) => d.code === code);
-    const isTargetBooked = Boolean(
-      (dayObj?.isToday && isTodayBooked) ||
-      (dayObj?.isoDate && Array.isArray(customer.bookedDates) && customer.bookedDates.includes(dayObj.isoDate)) ||
-      (code === currentTodayItem.code && isTodayBooked)
-    );
+    const isTargetBooked = dayObj ? isDayBooked(dayObj) : (code === currentTodayItem.code && isTodayBooked);
 
     if (isTargetBooked) {
       Swal.fire({
@@ -166,18 +172,22 @@ export default function LeadHubOverview({
     if (preset === 'weekends') next = ['SAT', 'SUN'];
     if (preset === 'clear') next = [];
 
-    // Once today is Ad Booked / Started, it CANNOT be de-selected by presets
-    if (isTodayBooked && !next.includes(currentTodayItem.code)) {
-      next.push(currentTodayItem.code);
-      if (preset === 'clear') {
-        Swal.fire({
-          icon: 'info',
-          title: 'Marketing Day Already Booked',
-          html: `All other eligible days cleared.<br/><br/><strong>${currentTodayItem.label} (${currentTodayItem.dateFormatted})</strong> remains active because advertising has already been started or booked for this day.`,
-          confirmButtonText: 'Understood',
-          confirmButtonColor: '#059669',
-        });
+    // All booked days in current view CANNOT be deselected by presets
+    const bookedCodesInView = daysList.filter((d) => isDayBooked(d)).map((d) => d.code);
+    for (const bCode of bookedCodesInView) {
+      if (!next.includes(bCode)) {
+        next.push(bCode);
       }
+    }
+
+    if (preset === 'clear' && bookedCodesInView.length > 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Marketing Day Already Booked',
+        text: 'All unbooked days cleared. Successfully booked days remain locked in your schedule.',
+        confirmButtonText: 'Understood',
+        confirmButtonColor: '#059669',
+      });
     }
 
     setActiveDays(next);
@@ -635,10 +645,7 @@ export default function LeadHubOverview({
           <div className="seven-days-cards-grid-exact">
             {daysList.map((d) => {
               const isSelected = activeDays.includes(d.code);
-              const isBooked = Boolean(
-                (d.isToday && isTodayBooked) ||
-                (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(d.isoDate))
-              );
+              const isBooked = isDayBooked(d);
               return (
                 <div
                   key={d.code}
