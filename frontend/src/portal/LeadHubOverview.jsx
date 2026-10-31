@@ -62,8 +62,9 @@ export default function LeadHubOverview({
   const weeklyPacing = activeDays.length * dailySpend;
   const currentTodayItem = daysList.find((d) => d.isToday) || daysList[todayIdx === 0 ? 6 : todayIdx - 1];
   const isMarketingLiveToday = Boolean(customer.adCampaignActive && activeDays.includes(currentTodayItem.code));
-  const isTodayLocked = Boolean(
+  const isTodayBooked = Boolean(
     (customer.isDeductedToday || isMarketingLiveToday) ||
+    (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(currentTodayItem.code)) ||
     (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(currentTodayItem.code))
   );
 
@@ -72,17 +73,20 @@ export default function LeadHubOverview({
   const isFullyComplete = isPaymentDone && isProfileDone;
 
   const toggleDay = (code) => {
-    const isTargetLocked = (code === currentTodayItem.code && (customer.isDeductedToday || isMarketingLiveToday)) ||
+    const isTargetBooked = (code === currentTodayItem.code && isTodayBooked) ||
+      (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(code)) ||
       (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(code));
 
-    if (isTargetLocked) {
+    if (isTargetBooked) {
       const dayObj = daysList.find((d) => d.code === code);
       Swal.fire({
         icon: 'info',
-        title: `${dayObj?.label || code} Marketing is Settled & Locked`,
-        html: `Today's daily spend budget of <strong>₹${dailySpend.toLocaleString('en-IN')}</strong> has been deducted and Meta ads are actively running.<br/><br/>This day is locked to ensure continuous campaign pacing and prevent duplicate daily deductions.`,
-        confirmButtonText: 'Understood',
-        confirmButtonColor: '#4f46e5',
+        title: `🎯 Ad Booked for ${dayObj?.label || code}!`,
+        html: `Marketing campaign is <strong>active &amp; running</strong> for <strong>${dayObj?.label || code}</strong>.<br/><br/>
+        Daily ad spend budget of <strong>₹${dailySpend.toLocaleString('en-IN')}</strong> is booked for Meta verified ads.<br/><br/>
+        <em>Once marketing starts on this day, the ad slot is booked and cannot be de-selected.</em>`,
+        confirmButtonText: 'Understood (Ad Booked)',
+        confirmButtonColor: '#059669',
       });
       return;
     }
@@ -123,6 +127,21 @@ export default function LeadHubOverview({
     if (preset === 'weekdays') next = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
     if (preset === 'weekends') next = ['SAT', 'SUN'];
     if (preset === 'clear') next = [];
+
+    // Once today is Ad Booked / Started, it CANNOT be de-selected by presets
+    if (isTodayBooked && !next.includes(currentTodayItem.code)) {
+      next.push(currentTodayItem.code);
+      if (preset === 'clear') {
+        Swal.fire({
+          icon: 'info',
+          title: `🎯 ${currentTodayItem.label} Remains Ad Booked`,
+          html: `All other days cleared.<br/><br/><strong>${currentTodayItem.label}</strong> remains active because marketing has started and today is <strong>Ad Booked</strong>.`,
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#059669',
+        });
+      }
+    }
+
     setActiveDays(next);
 
     const activatesToday = next.includes(currentTodayItem.code);
@@ -528,39 +547,42 @@ export default function LeadHubOverview({
             </div>
           </div>
 
-          {/* 7 Day Cards (Selected with green border and checkmark, Unselected with grey border and lock, Settled & Locked when marketing is done) */}
+          {/* 7 Day Cards (Selected with green border and checkmark, Unselected with grey border and lock, Ad Booked & Locked when marketing is active) */}
           <div className="seven-days-cards-grid-exact">
             {daysList.map((d) => {
               const isSelected = activeDays.includes(d.code);
-              const isLocked = Boolean(
-                (d.isToday && (customer.isDeductedToday || isMarketingLiveToday)) ||
+              const isBooked = Boolean(
+                (d.isToday && isTodayBooked) ||
+                (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(d.code)) ||
                 (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(d.code))
               );
               return (
                 <div
                   key={d.code}
-                  className={`seven-day-card-exact ${isLocked ? 'is-locked-settled is-selected' : isSelected ? 'is-selected' : 'is-unselected'} ${d.isToday ? 'is-today' : ''}`}
+                  className={`seven-day-card-exact ${isBooked ? 'is-ad-booked is-selected' : isSelected ? 'is-selected' : 'is-unselected'} ${d.isToday ? 'is-today' : ''}`}
                   onClick={() => toggleDay(d.code)}
-                  title={isLocked ? `${d.label} marketing is settled & locked for today` : isSelected ? `Click to disable ${d.label}` : `Click to enable ${d.label}`}
+                  title={isBooked ? `${d.label}: Ad Booked & Running (Cannot be de-selected)` : isSelected ? `Click to disable ${d.label}` : `Click to enable ${d.label}`}
                 >
                   {/* If today, floating blue badge */}
                   {d.isToday && <span className="today-floating-pill">Today</span>}
-                  {isLocked && <span className="locked-done-floating-badge">🔒 Locked</span>}
+                  {isBooked && <span className="ad-booked-floating-badge">🎯 Ad Booked</span>}
 
                   <div className="day-code-title">{d.code}</div>
                   <div className="day-sub-label">{d.label}</div>
                   
                   {/* Price tag */}
-                  <div className={`day-price-badge ${isLocked ? 'locked' : isSelected ? 'selected' : 'unselected'}`}>
+                  <div className={`day-price-badge ${isBooked ? 'booked' : isSelected ? 'selected' : 'unselected'}`}>
                     ₹{dailySpend}
                   </div>
 
+                  {isBooked && <div className="day-booked-sub-pill">Marketing Booked</div>}
+
                   {/* Bottom Status Wrap */}
                   <div className="day-bottom-status-wrap">
-                    {isLocked ? (
-                      <div className="day-lock-settled-pill" title={`${d.label} marketing is settled and locked for today`}>
+                    {isBooked ? (
+                      <div className="day-ad-booked-pill" title={`${d.label} marketing is active and ad slot is booked`}>
                         <span className="badge-lock-icon">🔒</span>
-                        <span className="badge-lock-text">Done</span>
+                        <span className="badge-booked-text">Ad Booked ✓</span>
                       </div>
                     ) : isSelected ? (
                       <div className="day-check-circle">
@@ -589,16 +611,16 @@ export default function LeadHubOverview({
               <span className={`today-campaign-state ${isMarketingLiveToday ? 'state-live' : 'state-off'}`}>
                 <span className="bullet-dot">●</span>
                 {isMarketingLiveToday
-                  ? (isTodayLocked
-                    ? `Marketing is LIVE & Locked (Meta Ads Running • Settled ₹${dailySpend})`
+                  ? (isTodayBooked
+                    ? `Marketing is LIVE (Meta Ads Running • Ad Booked ₹${dailySpend})`
                     : 'Marketing is LIVE (Meta Ads Running)')
                   : walletBalance < dailySpend
                   ? 'Marketing is OFF (Customer Balance is Low - Needs Top Up)'
                   : 'Marketing is OFF (Campaign Paused)'}
               </span>
-              {isTodayLocked && (
-                <span className="pill-settled-today-locked">
-                  🔒 Marketing Done &amp; Locked
+              {isTodayBooked && (
+                <span className="pill-ad-booked-badge">
+                  🎯 Marketing Booked &amp; Running
                 </span>
               )}
             </div>

@@ -8181,6 +8181,96 @@
   box-shadow: 0 6px 18px rgba(16, 185, 129, 0.22) !important;
 }
 
+/* Ad Booked & Marketing Booked State */
+.seven-day-card-exact.is-ad-booked {
+  border: 2px solid #059669 !important;
+  background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%) !important;
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.2) !important;
+  cursor: pointer;
+}
+
+.seven-day-card-exact.is-ad-booked:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(5, 150, 105, 0.28) !important;
+}
+
+.ad-booked-floating-badge {
+  position: absolute;
+  top: -10px;
+  right: 6px;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2.5px 8px;
+  border-radius: 9999px;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.4);
+  white-space: nowrap;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.day-price-badge.booked {
+  background: #d1fae5;
+  border: 1.5px solid #10b981;
+  color: #065f46;
+  font-weight: 800;
+}
+
+.day-booked-sub-pill {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.day-ad-booked-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #059669;
+  color: #ffffff;
+  padding: 3.5px 10px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  box-shadow: 0 2px 5px rgba(5, 150, 105, 0.25);
+}
+
+.day-ad-booked-pill .badge-lock-icon {
+  font-size: 0.72rem;
+}
+
+.day-ad-booked-pill .badge-booked-text {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pill-ad-booked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1.5px solid #10b981;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 12px;
+  border-radius: 9999px;
+  margin-left: 8px;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.15);
+}
+
 .locked-done-floating-badge {
   position: absolute;
   top: -10px;

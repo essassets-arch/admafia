@@ -871,6 +871,12 @@ export function SetDailyLimitModal({
   ];
   const todayItem = dayDefinitions.find((d) => d.isToday) || dayDefinitions[5];
 
+  const isTodayAlreadyBooked = Boolean(
+    (customer?.isDeductedToday || customer?.adCampaignActive) ||
+    (Array.isArray(customer?.bookedDays) && customer.bookedDays.includes(todayItem.code)) ||
+    (Array.isArray(customer?.lockedDays) && customer.lockedDays.includes(todayItem.code))
+  );
+
   React.useEffect(() => {
     if (isOpen) {
       setAmount(currentLimit || 300);
@@ -899,6 +905,16 @@ export function SetDailyLimitModal({
   ];
 
   const toggleDaySelection = (dayCode) => {
+    if (dayCode === todayItem.code && isTodayAlreadyBooked) {
+      Swal.fire({
+        icon: 'info',
+        title: `🎯 ${todayItem.label} is Already Ad Booked!`,
+        html: `Marketing is actively running for <strong>${todayItem.label}</strong>.<br/><br/>Once started, this day cannot be de-selected.`,
+        confirmButtonColor: '#059669',
+      });
+      return;
+    }
+
     if (selectedDays.includes(dayCode)) {
       if (selectedDays.length <= 1) {
         Swal.fire({
@@ -981,7 +997,7 @@ export function SetDailyLimitModal({
     // 5. Fire rich, prominent SweetAlert2 Confirmation Dialog
     Swal.fire({
       icon: 'success',
-      title: `Daily Ad Budget Set: ₹${finalAmount.toLocaleString('en-IN')}/day`,
+      title: `🎯 Ad Booked: ₹${finalAmount.toLocaleString('en-IN')}/day`,
       html: `
         <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 16px; margin: 12px 0; font-family: inherit;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
@@ -995,9 +1011,9 @@ export function SetDailyLimitModal({
             </span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Target Day Status:</span>
-            <span style="background:#fef3c7; color:#b45309; font-weight:800; font-size:0.82rem; padding: 3px 10px; border-radius:9999px;">
-              🔒 ${todayItem.label} Settled &amp; Locked
+            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Booking Status:</span>
+            <span style="background:#ecfdf5; color:#065f46; border: 1px solid #a7f3d0; font-weight:800; font-size:0.82rem; padding: 3px 10px; border-radius:9999px;">
+              🎯 ${todayItem.label} Ad Booked ✓
             </span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
@@ -1009,15 +1025,15 @@ export function SetDailyLimitModal({
             <strong style="color:#059669; font-size:1.1rem; font-weight:800;">₹${remainingWallet.toLocaleString('en-IN')} (${calculatedRunway}d runway)</strong>
           </div>
         </div>
-        <div style="background: #eef2ff; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 8px; text-align: left;">
-          <span style="font-size: 1.15rem;">🔒</span>
-          <span style="font-size: 0.84rem; color: #3730a3; font-weight: 600;">
-            <strong>${todayItem.label}</strong> marketing is locked as completed. Meta Verified Ads &amp; local buyer lead capture are now live.
+        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 8px; text-align: left;">
+          <span style="font-size: 1.15rem;">🎯</span>
+          <span style="font-size: 0.84rem; color: #065f46; font-weight: 600;">
+            <strong>${todayItem.label}</strong> is <strong>Ad Booked &amp; Locked</strong>. Meta Verified Ads &amp; local buyer lead capture are now live. Once started, this day cannot be de-selected.
           </span>
         </div>
       `,
       confirmButtonText: 'Done & View Dashboard',
-      confirmButtonColor: '#4f46e5',
+      confirmButtonColor: '#059669',
       buttonsStyling: true,
     });
   };
@@ -1346,7 +1362,7 @@ export function SetDailyLimitModal({
             type="button"
             onClick={handleProceed}
             style={{
-              background: '#4f46e5',
+              background: '#059669',
               color: '#ffffff',
               border: 'none',
               fontWeight: 700,
@@ -1357,10 +1373,10 @@ export function SetDailyLimitModal({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              boxShadow: '0 4px 6px -1px rgba(79, 70, 229, 0.3)',
+              boxShadow: '0 4px 6px -1px rgba(5, 150, 105, 0.3)',
             }}
           >
-            <span>🔒 Set Ad Budget &amp; Lock Marketing →</span>
+            <span>🎯 Set Ad Budget &amp; Confirm Booking →</span>
           </button>
         </div>
       </div>
