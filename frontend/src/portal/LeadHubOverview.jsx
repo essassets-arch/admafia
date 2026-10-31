@@ -40,21 +40,27 @@ export default function LeadHubOverview({
   const [activeDays, setActiveDays] = useState(customer.activeDays || ['MON', 'TUE', 'WED', 'THU', 'FRI']);
   const [unmaskedLeads, setUnmaskedLeads] = useState({});
 
+  React.useEffect(() => {
+    if (customer?.activeDays && Array.isArray(customer.activeDays)) {
+      setActiveDays(customer.activeDays);
+    }
+  }, [customer?.activeDays]);
+
   const todayIdx = new Date().getDay(); // 0 is SUN, 1 is MON, 2 is TUE, 3 is WED, 4 is THU, 5 is FRI, 6 is SAT
   const daysList = [
     { code: 'MON', label: 'Monday', isToday: todayIdx === 1 },
     { code: 'TUE', label: 'Tuesday', isToday: todayIdx === 2 },
     { code: 'WED', label: 'Wednesday', isToday: todayIdx === 3 },
-    { code: 'THU', label: 'Thursday', isToday: todayIdx === 4 || todayIdx === 0 },
+    { code: 'THU', label: 'Thursday', isToday: todayIdx === 4 },
     { code: 'FRI', label: 'Friday', isToday: todayIdx === 5 },
     { code: 'SAT', label: 'Saturday', isToday: todayIdx === 6 },
-    { code: 'SUN', label: 'Sunday', isToday: false },
+    { code: 'SUN', label: 'Sunday', isToday: todayIdx === 0 },
   ];
 
   const dailySpend = customer.dailyAdSpend || 300;
   const weeklyPacing = activeDays.length * dailySpend;
-  const currentTodayItem = daysList.find((d) => d.isToday) || daysList[3];
-  const isMarketingLiveToday = customer.adCampaignActive && activeDays.includes(currentTodayItem.code);
+  const currentTodayItem = daysList.find((d) => d.isToday) || daysList[todayIdx === 0 ? 6 : todayIdx - 1];
+  const isMarketingLiveToday = Boolean(customer.adCampaignActive && activeDays.includes(currentTodayItem.code));
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
   const isProfileDone = customer.profileStatus === 'complete' || customer.profile_status === 'complete' || customer.kycPercent === 100;
@@ -62,14 +68,23 @@ export default function LeadHubOverview({
 
   const toggleDay = (code) => {
     let next;
+    const isTogglingToday = (code === currentTodayItem.code);
+    let shouldActivate = false;
+
     if (activeDays.includes(code)) {
       next = activeDays.filter((d) => d !== code);
     } else {
       next = [...activeDays, code];
+      if (isTogglingToday && walletBalance >= dailySpend) {
+        shouldActivate = true;
+      }
     }
     setActiveDays(next);
     if (onUpdateCustomer) {
-      onUpdateCustomer({ activeDays: next });
+      onUpdateCustomer({
+        activeDays: next,
+        ...(shouldActivate ? { adCampaignActive: true } : {}),
+      });
     }
   };
 
@@ -80,8 +95,16 @@ export default function LeadHubOverview({
     if (preset === 'weekends') next = ['SAT', 'SUN'];
     if (preset === 'clear') next = [];
     setActiveDays(next);
+
+    const activatesToday = next.includes(currentTodayItem.code);
+    const shouldActivate = activatesToday && walletBalance >= dailySpend;
+
     if (onUpdateCustomer) {
-      onUpdateCustomer({ activeDays: next });
+      onUpdateCustomer({
+        activeDays: next,
+        schedulePreset: preset,
+        ...(shouldActivate ? { adCampaignActive: true } : {}),
+      });
     }
   };
 

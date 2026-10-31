@@ -59,6 +59,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     const cId = String(cust.id || '').trim();
     const cPhone = String(cust.phone || '').replace(/\D/g, '').slice(-10);
     const cUser = String(cust.username || '').trim().toLowerCase();
+    const cComp = String(cust.companyName || cust.name || '').trim().toLowerCase();
 
     // 1. Authoritative Customer ID match
     if (cId && item.customerId && String(item.customerId).trim() === cId) return true;
@@ -67,6 +68,12 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     if (cPhone && item.phone && String(item.phone).replace(/\D/g, '').slice(-10) === cPhone && (item.type === 'topup' || item.type === 'wallet')) return true;
     // 3. Authoritative username match
     if (cUser && item.customerUsername && String(item.customerUsername).trim().toLowerCase() === cUser) return true;
+    // 4. Company Name match (when sales assigns lead by Company Name)
+    if (cComp) {
+      if (item.company && String(item.company).trim().toLowerCase() === cComp) return true;
+      if (item.customerCompanyName && String(item.customerCompanyName).trim().toLowerCase() === cComp) return true;
+      if (item.assignedCompany && String(item.assignedCompany).trim().toLowerCase() === cComp) return true;
+    }
 
     return false;
   };
@@ -553,12 +560,24 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   const handleDeductDailyAdSpend = (overrideSpend) => {
     const spend = overrideSpend ? Number(overrideSpend) : (customer.dailyAdSpend || 300);
     if (walletBalance >= spend) {
+      // Current day code in India / local time
+      const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const todayDayCode = dayCodes[new Date().getDay()];
+
+      const currentDays = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
+        ? customer.activeDays
+        : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+      const nextActiveDays = currentDays.includes(todayDayCode)
+        ? currentDays
+        : [...currentDays, todayDayCode];
+
       crmApi
         .deductDailyAdSpend({
           customerId: customer?.id,
           phone: customer?.phone,
           username: customer?.username,
           amount: spend,
+          activeDays: nextActiveDays,
         })
         .then(() => crmApi.syncStateFromPostgres())
         .catch(() => {});
@@ -594,7 +613,9 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           balance: newBal,
           walletBalance: newBal,
           dailyAdSpend: spend,
+          dailyPacing: spend,
           adCampaignActive: true,
+          activeDays: nextActiveDays,
         };
         try {
           localStorage.setItem('growthline_active_user', JSON.stringify(updated));
@@ -889,17 +910,43 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     }
   };
 
-  const handleToggleCampaign = async () => {
+  const handleToggleCampaign = async (forceState) => {
     const dailyLimit = Number(customer.dailyAdSpend || 300);
-    if (!customer.adCampaignActive && walletBalance < dailyLimit) {
+    const nextActive = typeof forceState === 'boolean' ? forceState : !customer.adCampaignActive;
+
+    if (nextActive && walletBalance < dailyLimit) {
       alert(`⚠️ Customer Balance is Low:\nYour Ad Wallet balance (₹${walletBalance.toLocaleString('en-IN')}) is below daily ad spend pacing (₹${dailyLimit.toLocaleString('en-IN')}).\n\nPlease top up your wallet to run marketing campaigns.`);
       setIsPaymentModalOpen(true);
       return;
     }
-    const nextActive = !customer.adCampaignActive;
-    setCustomer((prev) => ({ ...prev, adCampaignActive: nextActive }));
+
+    const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const todayDayCode = dayCodes[new Date().getDay()];
+    const currentDays = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
+      ? customer.activeDays
+      : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+
+    const nextActiveDays = nextActive && !currentDays.includes(todayDayCode)
+      ? [...currentDays, todayDayCode]
+      : currentDays;
+
+    setCustomer((prev) => {
+      const updated = {
+        ...prev,
+        adCampaignActive: nextActive,
+        activeDays: nextActiveDays,
+      };
+      try {
+        localStorage.setItem('growthline_active_user', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
     try {
-      await crmApi.patchCustomer(customer.id, { adCampaignActive: nextActive });
+      await crmApi.patchCustomer(customer.id, {
+        adCampaignActive: nextActive,
+        activeDays: nextActiveDays,
+      });
     } catch (e) {
       console.warn('Sync campaign state note:', e.message);
     }

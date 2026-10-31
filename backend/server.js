@@ -1216,7 +1216,7 @@ app.post('/api/wallets/topup', async (req, res) => {
 
 app.post('/api/wallets/deduct', async (req, res) => {
   try {
-    const { customerId, phone, username, amount } = req.body || {};
+    const { customerId, phone, username, amount, activeDays } = req.body || {};
     const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
 
     const custRes = await query(
@@ -1240,17 +1240,48 @@ app.post('/api/wallets/deduct', async (req, res) => {
     }
 
     const nextBal = currentBal - spendAmt;
+
+    // Determine today's day code (Asia/Kolkata timezone)
+    const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
+
+    let finalActiveDays = wallet?.active_days || 'MON,TUE,WED,THU,FRI';
+    if (Array.isArray(activeDays) && activeDays.length > 0) {
+      const set = new Set(activeDays.map((d) => String(d).trim().toUpperCase()));
+      set.add(todayDayCode);
+      finalActiveDays = Array.from(set).join(',');
+    } else {
+      const set = new Set(finalActiveDays.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean));
+      set.add(todayDayCode);
+      finalActiveDays = Array.from(set).join(',');
+    }
+
     await query(
       `UPDATE wallets SET
         available_balance = $1,
         daily_ad_spend = $2,
         total_ad_spent = total_ad_spent + $2,
-        ad_campaign_active = ($1 >= $2),
+        ad_campaign_active = TRUE,
+        active_days = $4,
         last_deducted_at = NOW(),
         updated_at = NOW()
       WHERE customer_id = $3`,
-      [nextBal, spendAmt, cust.id]
+      [nextBal, spendAmt, cust.id, finalActiveDays]
     );
+
+    // Also activate or update marketing campaigns if existing
+    await query(
+      `UPDATE marketing_campaigns SET
+        status = 'Running',
+        external_platform_status = 'Active',
+        daily_budget = $1,
+        last_action = 'Campaign Live: Daily Spend Deducted',
+        last_actor = 'Customer Self-Service Portal',
+        last_action_at = NOW(),
+        updated_at = NOW()
+      WHERE customer_id = $2`,
+      [spendAmt, cust.id]
+    ).catch(() => {});
 
     const txId = `tx_deb_${Date.now()}`;
     const refUtr = `AUTO-AD-${Date.now()}`;
