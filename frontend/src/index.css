@@ -104,7 +104,9 @@ header {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: rgba(26, 21, 80, 0.94);
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
   backdrop-filter: blur(8px);
 }
 
@@ -112,12 +114,12 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 64px;
+  height: 68px;
 }
 
 .logo {
   font: 800 1.35rem var(--h);
-  color: #fff;
+  color: #0f172a;
   text-decoration: none;
 }
 
@@ -128,6 +130,21 @@ header {
 .nav .btn {
   padding: 10px 20px;
   font-size: 0.95rem;
+}
+
+header .btn.alt,
+.nav .btn.alt {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1.5px solid #cbd5e1;
+  transition: all 0.2s ease;
+}
+
+header .btn.alt:hover,
+.nav .btn.alt:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0284c7;
 }
 
 /* hero */

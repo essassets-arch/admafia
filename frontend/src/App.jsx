@@ -639,7 +639,7 @@ export default function App() {
 
   return (
     <>
-      <header>
+      <header style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(15, 23, 42, 0.05)' }}>
         <div className="wrap nav">
           <a
             className="logo"
@@ -700,6 +700,10 @@ export default function App() {
                     fontSize: '0.86rem',
                     fontWeight: 600,
                     cursor: 'pointer',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    border: '1.5px solid #cbd5e1',
+                    borderRadius: '8px',
                   }}
                 >
                   Create Account
@@ -722,6 +726,9 @@ export default function App() {
                     fontSize: '0.84rem',
                     fontWeight: 600,
                     color: '#64748b',
+                    background: '#ffffff',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '8px',
                     cursor: 'pointer',
                   }}
                 >
@@ -743,6 +750,10 @@ export default function App() {
                     fontSize: '0.88rem',
                     fontWeight: 600,
                     cursor: 'pointer',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    border: '1.5px solid #cbd5e1',
+                    borderRadius: '8px',
                   }}
                 >
                   Login
@@ -767,6 +778,9 @@ export default function App() {
                     background: '#ffb800',
                     color: '#171347',
                     cursor: 'pointer',
+                    border: 'none',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(255, 184, 0, 0.35)',
                   }}
                 >
                   Create Account
