@@ -46,18 +46,31 @@ const writeTable = (key, rows) => {
  */
 export function recordBelongsToCustomer(record, customer) {
   if (!record || !customer) return false;
-  if (customer.id && record.customerId && record.customerId === customer.id) return true;
-  if (customer.phone && record.customerPhone && record.customerPhone === customer.phone) return true;
-  if (
-    customer.username &&
-    record.customerUsername &&
-    record.customerUsername.toLowerCase() === customer.username.toLowerCase()
-  ) {
-    return true;
-  }
+  const cId = String(customer.id || '').trim();
+  const cPhone = String(customer.phone || '').replace(/\D/g, '').slice(-10);
+  const cUser = String(customer.username || '').trim().toLowerCase();
+
+  const recCustId = String(record.customerId || '').trim();
+  const recCustPhone = String(record.customerPhone || '').replace(/\D/g, '').slice(-10);
+  const recCustUser = String(record.customerUsername || '').trim().toLowerCase();
+
+  // Strict conflict guard: if record explicitly belongs to a different customer identity, reject immediately
+  if (recCustId && cId && recCustId !== cId) return false;
+  if (recCustPhone && cPhone && recCustPhone !== cPhone) return false;
+  if (recCustUser && cUser && recCustUser !== cUser) return false;
+
+  // 1. Authoritative Customer ID match
+  if (cId && recCustId && recCustId === cId) return true;
+  // 2. Authoritative Phone match
+  if (cPhone && recCustPhone && recCustPhone === cPhone) return true;
+  if (cPhone && record.phone && String(record.phone).replace(/\D/g, '').slice(-10) === cPhone && (record.type === 'topup' || record.type === 'wallet')) return true;
+  // 3. Authoritative Username match
+  if (cUser && recCustUser && recCustUser === cUser) return true;
+
+  // 4. Company Name match (only fallback when record has no conflicting customer identity)
   const custCompany = (customer.companyName || customer.name || '').trim().toLowerCase();
   const recCompany = (record.company || record.assignedCompany || record.customerCompanyName || '').trim().toLowerCase();
-  if (custCompany && recCompany && custCompany === recCompany) return true;
+  if (custCompany && recCompany && custCompany.length > 2 && custCompany === recCompany) return true;
   return false;
 }
 

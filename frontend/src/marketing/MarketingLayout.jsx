@@ -11,7 +11,6 @@ import {
   Menu,
   X,
   Sparkles,
-  Palette,
 } from 'lucide-react';
 import MarketingDashboard from './MarketingDashboard';
 import MarketingCustomersDesk from './MarketingCustomersDesk';
@@ -116,8 +115,11 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
 
     try {
       window.history.pushState({}, '', targetPath);
-      window.location.hash = targetHash;
-    } catch (e) {}
+    } catch (e) {
+      try {
+        window.location.hash = targetHash;
+      } catch (err) {}
+    }
   };
 
   const navItems = [
@@ -199,14 +201,6 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
         </nav>
 
         <div className="marketing-sidebar-footer">
-          <a
-            href="/graphics"
-            className="marketing-btn-logout"
-            style={{ textDecoration: 'none', background: 'rgba(236, 72, 153, 0.1)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.25)' }}
-          >
-            <Palette size={15} />
-            <span>Graphics Department</span>
-          </a>
           <button
             type="button"
             className="marketing-btn-logout"

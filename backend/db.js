@@ -233,6 +233,134 @@ export async function initDatabase() {
     ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64);
     ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software';
+
+    CREATE TABLE IF NOT EXISTS marketing_ideas (
+      id VARCHAR(64) PRIMARY KEY,
+      customer_id VARCHAR(64) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      objective VARCHAR(100) NOT NULL DEFAULT 'Lead Generation',
+      concept TEXT NOT NULL,
+      target_audience TEXT DEFAULT '',
+      caption_suggestions TEXT DEFAULT '',
+      call_to_action VARCHAR(255) DEFAULT '',
+      hashtags TEXT DEFAULT '',
+      creative_brief TEXT DEFAULT '',
+      platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
+      language VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
+      campaign_period VARCHAR(100) DEFAULT '',
+      constraints TEXT DEFAULT '',
+      status VARCHAR(32) NOT NULL DEFAULT 'Saved',
+      created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Executive',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_marketing_ideas_customer ON marketing_ideas(customer_id, status);
+
+    CREATE TABLE IF NOT EXISTS marketing_posts (
+      id VARCHAR(64) PRIMARY KEY,
+      customer_id VARCHAR(64) NOT NULL,
+      idea_id VARCHAR(64),
+      title VARCHAR(255) NOT NULL,
+      platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
+      caption TEXT NOT NULL,
+      hashtags TEXT DEFAULT '',
+      call_to_action VARCHAR(255) DEFAULT '',
+      media_url TEXT DEFAULT '',
+      media_type VARCHAR(64) DEFAULT 'image',
+      language VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
+      campaign_association VARCHAR(255) DEFAULT '',
+      intended_publish_at TIMESTAMPTZ,
+      status VARCHAR(40) NOT NULL DEFAULT 'Draft',
+      submitted_by VARCHAR(140),
+      submitted_at TIMESTAMPTZ,
+      revision_number INT NOT NULL DEFAULT 1,
+      creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post',
+      designer_notes TEXT DEFAULT '',
+      designer_name VARCHAR(140) DEFAULT 'Graphics Designer',
+      creative_instructions TEXT DEFAULT '',
+      priority VARCHAR(40) DEFAULT 'Normal',
+      is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+      deleted_at TIMESTAMPTZ,
+      deleted_by VARCHAR(140),
+      created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Content Team',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_marketing_posts_customer ON marketing_posts(customer_id, status);
+
+    CREATE TABLE IF NOT EXISTS marketing_post_revisions (
+      id VARCHAR(64) PRIMARY KEY,
+      post_id VARCHAR(64) NOT NULL,
+      revision_number INT NOT NULL DEFAULT 1,
+      media_url TEXT NOT NULL,
+      media_type VARCHAR(64) DEFAULT 'image',
+      creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post',
+      designer_notes TEXT DEFAULT '',
+      uploaded_by VARCHAR(140) NOT NULL DEFAULT 'Graphics Designer',
+      uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      review_status VARCHAR(40) DEFAULT 'Pending Verification',
+      reviewer_name VARCHAR(140),
+      review_remarks TEXT DEFAULT '',
+      rejection_reason TEXT DEFAULT '',
+      correction_instructions TEXT DEFAULT '',
+      reviewed_at TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS marketing_post_reviews (
+      id VARCHAR(64) PRIMARY KEY,
+      post_id VARCHAR(64) NOT NULL,
+      revision_number INT NOT NULL DEFAULT 1,
+      reviewer_name VARCHAR(140) NOT NULL,
+      reviewer_role VARCHAR(100) NOT NULL DEFAULT 'Marketing Reviewer',
+      decision VARCHAR(40) NOT NULL,
+      remarks TEXT DEFAULT '',
+      rejection_reason TEXT DEFAULT '',
+      correction_instructions TEXT DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS marketing_campaigns (
+      id VARCHAR(64) PRIMARY KEY,
+      customer_id VARCHAR(64) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      objective VARCHAR(100) NOT NULL,
+      post_id VARCHAR(64),
+      platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
+      target_audience TEXT DEFAULT '',
+      start_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      end_date TIMESTAMPTZ,
+      daily_budget NUMERIC(10, 2) NOT NULL DEFAULT 300.00,
+      total_budget NUMERIC(12, 2) DEFAULT 0.00,
+      schedule_settings TEXT DEFAULT '{}',
+      status VARCHAR(40) NOT NULL DEFAULT 'Draft',
+      external_platform_status VARCHAR(64) NOT NULL DEFAULT 'Not Connected',
+      external_campaign_id VARCHAR(120),
+      created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Manager',
+      last_action VARCHAR(100) DEFAULT 'Created',
+      last_actor VARCHAR(140) DEFAULT 'Marketing Manager',
+      last_action_at TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS marketing_audit_events (
+      id VARCHAR(64) PRIMARY KEY,
+      customer_id VARCHAR(64),
+      entity_type VARCHAR(64) NOT NULL,
+      entity_id VARCHAR(64) NOT NULL,
+      action VARCHAR(100) NOT NULL,
+      actor VARCHAR(140) NOT NULL,
+      details TEXT DEFAULT '{}',
+      ip_address VARCHAR(64) DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_objective_check;
+    ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_status_check;
+    ALTER TABLE marketing_posts DROP CONSTRAINT IF EXISTS marketing_posts_status_check;
+    ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_status_check;
+    ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_daily_budget_check;
+
     ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post';
     ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_notes TEXT DEFAULT '';
     ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_name VARCHAR(140) DEFAULT 'Graphics Designer';

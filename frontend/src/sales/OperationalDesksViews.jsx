@@ -170,17 +170,37 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
 
   // Available Companies list (Strictly real registered customers only)
   const availableCompanies = Array.from(
-    new Set(customers.map((c) => c.name || c.companyName || c.username).filter(Boolean))
+    new Set(customers.map((c) => c.companyName || c.name || c.username).filter(Boolean))
   );
 
-  const handleOpenAddLead = (compName) => {
+  const handleOpenAddLead = (compOrCust) => {
     setLeadPhoneDigits('');
-    const defaultComp = compName || availableCompanies[0] || '';
+    let matched = null;
+    if (typeof compOrCust === 'object' && compOrCust !== null) {
+      matched = compOrCust;
+    } else if (typeof compOrCust === 'string' && compOrCust) {
+      matched = customers.find(
+        (c) =>
+          c.id === compOrCust ||
+          c.phone === compOrCust ||
+          c.username === compOrCust ||
+          (c.companyName && c.companyName.toLowerCase() === compOrCust.toLowerCase()) ||
+          (c.name && c.name.toLowerCase() === compOrCust.toLowerCase())
+      );
+    }
+    if (!matched && customers.length > 0) {
+      matched = customers[0];
+    }
+
+    const defaultComp = matched ? (matched.companyName || matched.name || `@${matched.username}`) : (availableCompanies[0] || '');
+    const defaultKey = matched ? (matched.id || matched.phone || matched.username) : '';
+
     setLeadFormData({
+      selectedCustomerKey: defaultKey,
       company: defaultComp,
       customCompany: '',
       name: '',
-      city: '',
+      city: matched?.city || '',
       requirement: 'Inbound Meta Ads Campaign Enquiry',
       budget: '₹1.5L – ₹3.5L',
     });
@@ -191,13 +211,22 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
     e.preventDefault();
     if (!isPhoneComplete) return;
 
+    const targetKey = leadFormData.selectedCustomerKey;
     const targetCompany = leadFormData.company;
 
-    if (!targetCompany) return;
-
     const matchedCust = customers.find(
-      (c) => (c.name || c.companyName) === targetCompany || c.username === targetCompany
+      (c) =>
+        (targetKey && (String(c.id) === String(targetKey) || String(c.phone) === String(targetKey) || c.username === targetKey)) ||
+        (targetCompany && (
+          (c.companyName && c.companyName.toLowerCase() === targetCompany.toLowerCase()) ||
+          (c.name && c.name.toLowerCase() === targetCompany.toLowerCase()) ||
+          c.username === targetCompany
+        ))
     );
+
+    const finalCompany = matchedCust
+      ? (matchedCust.companyName || matchedCust.name || `@${matchedCust.username}`)
+      : (targetCompany || 'Client Account');
 
     const cleanDigits = leadPhoneDigits.replace(/\D/g, '').slice(-10);
     const formattedPhone = `+91 ${cleanDigits}`;
@@ -205,9 +234,9 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
     const newLead = {
       id: `lead_${Date.now()}`,
       name: formattedPhone,
-      company: targetCompany,
-      assignedCompany: targetCompany,
-      customerCompanyName: targetCompany,
+      company: finalCompany,
+      assignedCompany: finalCompany,
+      customerCompanyName: finalCompany,
       customerId: matchedCust?.id || '',
       customerPhone: matchedCust?.phone || '',
       customerUsername: matchedCust?.username || '',
@@ -216,7 +245,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
       maskedPhone: formattedPhone,
       email: `lead_${cleanDigits.slice(-4)}@example.com`,
       city: matchedCust?.city || '',
-      requirement: `Inbound Lead for ${targetCompany}`,
+      requirement: `Inbound Lead for ${finalCompany}`,
       budget: '₹1.5L – ₹3.5L',
       source: 'Direct Intake',
       status: 'new',
@@ -227,7 +256,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
       unmasked: true,
       dateGroup: 'today',
       createdAt: getLiveNowFormatted(),
-      notes: `Direct intake via Sales Desk 01 for ${targetCompany}`,
+      notes: `Direct intake via Sales Desk 01 for ${finalCompany}`,
     };
 
     try {
@@ -248,7 +277,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
           customerId: newLead.customerId,
           customerPhone: newLead.customerPhone,
           customerUsername: newLead.customerUsername,
-          company: targetCompany,
+          company: finalCompany,
           phone: cleanDigits,
           name: formattedPhone,
           city: newLead.city,
@@ -934,17 +963,27 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
             <form onSubmit={handleSubmitLead}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 
-                {/* 1. Select Company * */}
+                {/* 1. Select Customer Account * */}
                 <div>
                   <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', marginBottom: 6, display: 'block' }}>
-                    Select Company <span style={{ color: '#ef4444' }}>*</span>
+                    Target Customer Account <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <div style={{ position: 'relative' }}>
                     <select
                       className="desk-form-input"
                       required
-                      value={leadFormData.company}
-                      onChange={(e) => setLeadFormData({ ...leadFormData, company: e.target.value })}
+                      value={leadFormData.selectedCustomerKey || ''}
+                      onChange={(e) => {
+                        const selKey = e.target.value;
+                        const matched = customers.find(
+                          (c) => String(c.id) === selKey || String(c.phone) === selKey || c.username === selKey
+                        );
+                        setLeadFormData({
+                          ...leadFormData,
+                          selectedCustomerKey: selKey,
+                          company: matched ? (matched.companyName || matched.name || `@${matched.username}`) : '',
+                        });
+                      }}
                       style={{
                         padding: '11px 14px',
                         fontSize: '0.94rem',
@@ -957,15 +996,28 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                         cursor: 'pointer'
                       }}
                     >
-                      {availableCompanies.length === 0 ? (
-                        <option value="">-- No registered companies yet --</option>
+                      {customers.length === 0 ? (
+                        <option value="">-- No registered customer accounts yet --</option>
                       ) : (
-                        availableCompanies.map((comp) => (
-                          <option key={comp} value={comp}>🏢 {comp}</option>
-                        ))
+                        customers.map((c) => {
+                          const key = c.id || c.phone || c.username;
+                          const compDisplay = c.companyName || c.name || `@${c.username}`;
+                          const phoneDisplay = c.phone ? `+91 ${c.phone}` : '';
+                          const paidStatus = c.paymentStatus === 'paid' ? 'PAID ✓' : 'PENDING';
+                          return (
+                            <option key={key} value={key}>
+                              🏢 {compDisplay} {phoneDisplay ? `(${phoneDisplay})` : ''} - @{c.username} [{paidStatus}]
+                            </option>
+                          );
+                        })
                       )}
                     </select>
                   </div>
+                  {leadFormData.selectedCustomerKey && (
+                    <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: 5, fontWeight: 600 }}>
+                      ✓ Strictly isolated to selected account. Only this customer will see this lead in their Lead Hub.
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. Phone Number * */}
@@ -1478,31 +1530,45 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
    ========================================================================== */
 export const DEFAULT_DESK_LEADS = [];
 
-export function LeadManagementDesk() {
+export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
   // Add Lead Modal State
   const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
   const [leadPhoneDigits, setLeadPhoneDigits] = useState('');
   const [leadFormData, setLeadFormData] = useState({
+    selectedCustomerKey: '',
     company: '',
     customCompany: '',
   });
   const [leadSuccessToast, setLeadSuccessToast] = useState(null);
 
-  const getRegisteredCustomerList = () => {
+  const [deskCustomers, setDeskCustomers] = useState(() => {
+    if (Array.isArray(propsCustomers) && propsCustomers.length > 0) return propsCustomers;
     try {
       const raw = localStorage.getItem('growthline_registered_customers');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {}
     return [];
-  };
+  });
 
-  const getAvailableCompanies = () => {
-    const list = getRegisteredCustomerList();
-    return Array.from(new Set(list.map((c) => c.name || c.companyName || c.username).filter(Boolean)));
-  };
+  useEffect(() => {
+    if (Array.isArray(propsCustomers) && propsCustomers.length > 0) {
+      setDeskCustomers(propsCustomers);
+    }
+  }, [propsCustomers]);
+
+  useEffect(() => {
+    crmApi
+      .syncStateFromPostgres()
+      .then((state) => {
+        if (Array.isArray(state?.customers) && state.customers.length > 0) {
+          setDeskCustomers(state.customers);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handlePhoneChange = (e) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -1512,10 +1578,12 @@ export function LeadManagementDesk() {
   const isPhoneComplete = leadPhoneDigits.length === 10 && isPhoneValidStart;
 
   const handleOpenAddLead = () => {
-    const comps = getAvailableCompanies();
     setLeadPhoneDigits('');
+    const firstCust = deskCustomers[0] || null;
+    const firstKey = firstCust ? (firstCust.id || firstCust.phone || firstCust.username) : '';
     setLeadFormData({
-      company: comps[0] || '',
+      selectedCustomerKey: firstKey,
+      company: firstCust ? (firstCust.companyName || firstCust.name || `@${firstCust.username}`) : '',
       customCompany: '',
     });
     setIsAddLeadModalOpen(true);
@@ -1525,14 +1593,22 @@ export function LeadManagementDesk() {
     e.preventDefault();
     if (!isPhoneComplete) return;
 
+    const targetKey = leadFormData.selectedCustomerKey;
     const targetCompany = leadFormData.company;
 
-    if (!targetCompany) return;
-
-    const regList = getRegisteredCustomerList();
-    const matchedCust = regList.find(
-      (c) => (c.name || c.companyName) === targetCompany || c.username === targetCompany
+    const matchedCust = deskCustomers.find(
+      (c) =>
+        (targetKey && (String(c.id) === String(targetKey) || String(c.phone) === String(targetKey) || c.username === targetKey)) ||
+        (targetCompany && (
+          (c.companyName && c.companyName.toLowerCase() === targetCompany.toLowerCase()) ||
+          (c.name && c.name.toLowerCase() === targetCompany.toLowerCase()) ||
+          c.username === targetCompany
+        ))
     );
+
+    const finalCompany = matchedCust
+      ? (matchedCust.companyName || matchedCust.name || `@${matchedCust.username}`)
+      : (targetCompany || 'Client Account');
 
     const cleanDigits = leadPhoneDigits.replace(/\D/g, '').slice(-10);
     const formattedPhone = `+91 ${cleanDigits}`;
@@ -1540,9 +1616,9 @@ export function LeadManagementDesk() {
     const newLead = {
       id: `lead_${Date.now()}`,
       name: formattedPhone,
-      company: targetCompany,
-      assignedCompany: targetCompany,
-      customerCompanyName: targetCompany,
+      company: finalCompany,
+      assignedCompany: finalCompany,
+      customerCompanyName: finalCompany,
       customerId: matchedCust?.id || '',
       customerPhone: matchedCust?.phone || '',
       customerUsername: matchedCust?.username || '',
@@ -1551,7 +1627,7 @@ export function LeadManagementDesk() {
       maskedPhone: formattedPhone,
       email: `lead_${cleanDigits.slice(-4)}@example.com`,
       city: matchedCust?.city || '',
-      requirement: `Inbound Lead for ${targetCompany}`,
+      requirement: `Inbound Lead for ${finalCompany}`,
       budget: '₹1.5L – ₹3.5L',
       source: 'Direct Intake',
       priority: 'Urgent',
@@ -1563,7 +1639,7 @@ export function LeadManagementDesk() {
       unmasked: true,
       dateGroup: 'today',
       createdAt: getLiveNowFormatted(),
-      notes: `Direct intake via Lead Management Desk for ${targetCompany}`,
+      notes: `Direct intake via Lead Management Desk for ${finalCompany}`,
       speedSlaMinutes: 1,
     };
 
@@ -1587,7 +1663,7 @@ export function LeadManagementDesk() {
           customerId: newLead.customerId,
           customerPhone: newLead.customerPhone,
           customerUsername: newLead.customerUsername,
-          company: targetCompany,
+          company: finalCompany,
           phone: cleanDigits,
           name: formattedPhone,
           city: newLead.city,
@@ -1604,7 +1680,7 @@ export function LeadManagementDesk() {
 
     setIsAddLeadModalOpen(false);
     setLeadSuccessToast({
-      company: targetCompany,
+      company: finalCompany,
       phone: leadPhoneDigits,
       leadId: newLead.id,
     });
@@ -1974,17 +2050,27 @@ export function LeadManagementDesk() {
             <form onSubmit={handleSubmitLead}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 
-                {/* 1. Select Company * */}
+                {/* 1. Select Customer Account * */}
                 <div>
                   <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', marginBottom: 6, display: 'block' }}>
-                    Select Company <span style={{ color: '#ef4444' }}>*</span>
+                    Target Customer Account <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <div style={{ position: 'relative' }}>
                     <select
                       className="desk-form-input"
                       required
-                      value={leadFormData.company}
-                      onChange={(e) => setLeadFormData({ ...leadFormData, company: e.target.value })}
+                      value={leadFormData.selectedCustomerKey || ''}
+                      onChange={(e) => {
+                        const selKey = e.target.value;
+                        const matched = deskCustomers.find(
+                          (c) => String(c.id) === selKey || String(c.phone) === selKey || c.username === selKey
+                        );
+                        setLeadFormData({
+                          ...leadFormData,
+                          selectedCustomerKey: selKey,
+                          company: matched ? (matched.companyName || matched.name || `@${matched.username}`) : '',
+                        });
+                      }}
                       style={{
                         padding: '11px 14px',
                         fontSize: '0.94rem',
@@ -1997,15 +2083,28 @@ export function LeadManagementDesk() {
                         cursor: 'pointer'
                       }}
                     >
-                      {getAvailableCompanies().length === 0 ? (
-                        <option value="">-- No registered companies yet --</option>
+                      {deskCustomers.length === 0 ? (
+                        <option value="">-- No registered customer accounts yet --</option>
                       ) : (
-                        getAvailableCompanies().map((comp) => (
-                          <option key={comp} value={comp}>🏢 {comp}</option>
-                        ))
+                        deskCustomers.map((c) => {
+                          const key = c.id || c.phone || c.username;
+                          const compDisplay = c.companyName || c.name || `@${c.username}`;
+                          const phoneDisplay = c.phone ? `+91 ${c.phone}` : '';
+                          const paidStatus = c.paymentStatus === 'paid' ? 'PAID ✓' : 'PENDING';
+                          return (
+                            <option key={key} value={key}>
+                              🏢 {compDisplay} {phoneDisplay ? `(${phoneDisplay})` : ''} - @{c.username} [{paidStatus}]
+                            </option>
+                          );
+                        })
                       )}
                     </select>
                   </div>
+                  {leadFormData.selectedCustomerKey && (
+                    <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: 5, fontWeight: 600 }}>
+                      ✓ Strictly isolated to selected account. Only this customer will see this lead in their Lead Hub.
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. Phone Number * */}

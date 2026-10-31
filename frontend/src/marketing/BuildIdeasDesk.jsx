@@ -65,17 +65,19 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
     if (!custId) return;
     setLoading(true);
     try {
-      const [custData, ideasData] = await Promise.all([
+      const [custRes, ideasRes] = await Promise.allSettled([
         marketingApi.getCustomerDetail(custId),
         marketingApi.getIdeas({ customerId: custId }),
       ]);
 
-      if (custData && custData.ok) {
-        setSelectedCustomer(custData.customer);
+      if (custRes.status === 'fulfilled' && custRes.value?.ok) {
+        setSelectedCustomer(custRes.value.customer);
       }
 
-      if (ideasData && ideasData.ok) {
-        setCustomerIdeas(ideasData.ideas || []);
+      if (ideasRes.status === 'fulfilled' && ideasRes.value?.ok) {
+        setCustomerIdeas(ideasRes.value.ideas || []);
+      } else {
+        setCustomerIdeas([]);
       }
     } catch (err) {
       console.error('[BuildIdeasDesk] Failed to load customer detail', err);

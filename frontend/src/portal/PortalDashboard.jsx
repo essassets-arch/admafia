@@ -61,15 +61,24 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     const cUser = String(cust.username || '').trim().toLowerCase();
     const cComp = String(cust.companyName || cust.name || '').trim().toLowerCase();
 
+    const itemCustId = String(item.customerId || '').trim();
+    const itemCustPhone = String(item.customerPhone || '').replace(/\D/g, '').slice(-10);
+    const itemCustUser = String(item.customerUsername || '').trim().toLowerCase();
+
+    // Strict conflict guard: if item explicitly belongs to a different customer identity, reject immediately
+    if (itemCustId && cId && itemCustId !== cId) return false;
+    if (itemCustPhone && cPhone && itemCustPhone !== cPhone) return false;
+    if (itemCustUser && cUser && itemCustUser !== cUser) return false;
+
     // 1. Authoritative Customer ID match
-    if (cId && item.customerId && String(item.customerId).trim() === cId) return true;
+    if (cId && itemCustId && itemCustId === cId) return true;
     // 2. Authoritative 10-digit mobile number match
-    if (cPhone && item.customerPhone && String(item.customerPhone).replace(/\D/g, '').slice(-10) === cPhone) return true;
+    if (cPhone && itemCustPhone && itemCustPhone === cPhone) return true;
     if (cPhone && item.phone && String(item.phone).replace(/\D/g, '').slice(-10) === cPhone && (item.type === 'topup' || item.type === 'wallet')) return true;
     // 3. Authoritative username match
-    if (cUser && item.customerUsername && String(item.customerUsername).trim().toLowerCase() === cUser) return true;
-    // 4. Company Name match (when sales assigns lead by Company Name)
-    if (cComp) {
+    if (cUser && itemCustUser && itemCustUser === cUser) return true;
+    // 4. Company Name match (only fallback when item has no conflicting customer identity)
+    if (cComp && cComp.length > 2) {
       if (item.company && String(item.company).trim().toLowerCase() === cComp) return true;
       if (item.customerCompanyName && String(item.customerCompanyName).trim().toLowerCase() === cComp) return true;
       if (item.assignedCompany && String(item.assignedCompany).trim().toLowerCase() === cComp) return true;
@@ -180,9 +189,18 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             });
             setWalletBalance(Number(res.customer.walletBalance ?? res.customer.balance ?? 0));
           }
-          if (Array.isArray(res?.leads)) setLeads(res.leads);
-          if (Array.isArray(res?.transactions)) setTransactions(res.transactions);
-          if (Array.isArray(res?.invoices)) setInvoices(res.invoices);
+          if (Array.isArray(res?.leads)) {
+            const activeCustObj = res.customer || customer;
+            setLeads(res.leads.filter((item) => belongsToCustomer(item, activeCustObj)));
+          }
+          if (Array.isArray(res?.transactions)) {
+            const activeCustObj = res.customer || customer;
+            setTransactions(res.transactions.filter((tx) => belongsToCustomer(tx, activeCustObj)));
+          }
+          if (Array.isArray(res?.invoices)) {
+            const activeCustObj = res.customer || customer;
+            setInvoices(res.invoices.filter((inv) => belongsToCustomer(inv, activeCustObj)));
+          }
         })
         .catch(() => {});
     }

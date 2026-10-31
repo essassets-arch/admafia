@@ -890,7 +890,13 @@ app.get('/api/customers/:identifier', async (req, res) => {
 
     const customer = mapCustomerRow(viewRes.rows[0]);
     const [leadsRes, txRes, invRes] = await Promise.all([
-      query('SELECT * FROM leads WHERE customer_id = $1 ORDER BY created_at DESC', [customer.id]),
+      query(
+        `SELECT * FROM leads 
+         WHERE customer_id = $1 
+            OR (customer_phone <> '' AND customer_phone = $2)
+         ORDER BY created_at DESC`,
+        [customer.id, customer.phone]
+      ),
       query('SELECT * FROM wallet_transactions WHERE customer_id = $1 ORDER BY created_at DESC', [customer.id]),
       query('SELECT * FROM tax_invoices WHERE customer_id = $1 ORDER BY created_at DESC', [customer.id]),
     ]);
@@ -1380,7 +1386,7 @@ app.post('/api/leads', async (req, res) => {
           OR ($4 <> '' AND LOWER(company_name) = LOWER($4))
        ORDER BY registered_at DESC
        LIMIT 1`,
-      [customerId || '', cleanCustPhone, customerUsername || targetCompany, targetCompany]
+      [customerId || '', cleanCustPhone, customerUsername || '', targetCompany]
     );
 
     if (custRes.rowCount === 0) {

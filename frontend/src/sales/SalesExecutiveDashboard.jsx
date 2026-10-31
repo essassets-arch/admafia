@@ -648,7 +648,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             />
           )}
 
-          {activeTab === 'leads' && <LeadManagementDesk />}
+          {activeTab === 'leads' && <LeadManagementDesk customers={customers} />}
 
           {activeTab === 'profiles' && (
             <ProfileCompletionDesk

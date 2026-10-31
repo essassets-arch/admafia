@@ -408,9 +408,150 @@ async function runTestSuite() {
     assert(Number(lowBalCust.data?.customer?.balance) === 100, 'Customer balance updated to ₹100');
 
     // -------------------------------------------------------------------------
-    // PHASE 9: CLEANUP & TEARDOWN
+    // PHASE 9: MULTI-CUSTOMER STRICT ACCOUNT & LEAD ISOLATION VERIFICATION
     // -------------------------------------------------------------------------
-    console.log('\n▶ PHASE 9: Cleanup & Teardown');
+    console.log('\n▶ PHASE 9: Strict Multi-Customer Lead Isolation Verification');
+
+    const testMobileB = '9820099888';
+    const testUsernameB = 'isolation_beta_buyer';
+    const testCompanyB = 'Beta Isolation Logistics Pvt Ltd';
+    const testEmailB = 'beta@isolation-corp.example';
+
+    // Cleanup stale Customer B if any
+    await api(`/customers/${testMobileB}`, { method: 'DELETE' }).catch(() => {});
+
+    // Register Customer B
+    const regCustB = await api('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: testUsernameB,
+        phone: testMobileB,
+        email: testEmailB,
+        password: 'Password123!',
+        companyName: testCompanyB,
+        contactPerson: 'Beta Manager',
+        city: 'Pune',
+        category: 'Logistics',
+        deposit: 0,
+      }),
+    });
+    assert(regCustB.status === 201 || regCustB.status === 200, 'Customer B registers successfully with HTTP 201/200');
+    const customerBId = regCustB.data?.customer?.id;
+    assert(Boolean(customerBId), 'Customer B receives unique primary ID', `ID: ${customerBId}`);
+
+    // Verify Customer B initial workspace has 0 leads
+    const bWorkspaceInitial = await api(`/customers/${testMobileB}`);
+    assert(bWorkspaceInitial.status === 200, 'Customer B workspace retrieved successfully');
+    const bLeadsInitial = bWorkspaceInitial.data?.leads || [];
+    assert(bLeadsInitial.length === 0, 'Customer B workspace initially has 0 leads (Clean isolation)');
+
+    // Dispatch a unique lead specifically targeted to Customer A
+    const leadForAId = `lead_iso_a_${Date.now()}`;
+    const leadForARes = await api('/leads', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: leadForAId,
+        customerId: customerId,
+        customerPhone: testMobile,
+        customerUsername: testUsername,
+        company: testCompany,
+        phone: '9876543210',
+        name: '+91 9876543210',
+        city: 'Mumbai',
+        requirement: 'Exclusive Lead for Customer A',
+      }),
+    });
+    assert(leadForARes.status === 201, 'Exclusive lead for Customer A dispatched via /api/leads');
+
+    // Query Customer A workspace: must have the lead
+    const aWorkspaceAfterDispatch = await api(`/customers/${customerId}`);
+    const aLeads = aWorkspaceAfterDispatch.data?.leads || [];
+    const hasLeadInA = aLeads.some((l) => l.id === leadForAId);
+    assert(hasLeadInA, 'Customer A workspace contains exclusively assigned lead', `Lead ID: ${leadForAId}`);
+
+    // CRITICAL ISOLATION CHECK: Query Customer B workspace - must NOT contain Customer A's lead!
+    const bWorkspaceAfterADispatch = await api(`/customers/${testMobileB}`);
+    const bLeadsAfterA = bWorkspaceAfterADispatch.data?.leads || [];
+    const hasLeadInB = bLeadsAfterA.some((l) => l.id === leadForAId);
+    assert(!hasLeadInB, 'STRICT ISOLATION VERIFIED: Customer A lead does NOT appear in Customer B workspace');
+    assert(bLeadsAfterA.length === 0, 'Customer B leads list remains exactly 0');
+
+    // Now dispatch a unique lead specifically targeted to Customer B
+    const leadForBId = `lead_iso_b_${Date.now()}`;
+    const leadForBRes = await api('/leads', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: leadForBId,
+        customerId: customerBId,
+        customerPhone: testMobileB,
+        customerUsername: testUsernameB,
+        company: testCompanyB,
+        phone: '9988776655',
+        name: '+91 9988776655',
+        city: 'Pune',
+        requirement: 'Exclusive Lead for Customer B',
+      }),
+    });
+    assert(leadForBRes.status === 201, 'Exclusive lead for Customer B dispatched via /api/leads');
+
+    // Query Customer B workspace: must contain leadForBId and NOT leadForAId
+    const bWorkspaceFinal = await api(`/customers/${testMobileB}`);
+    const bLeadsFinal = bWorkspaceFinal.data?.leads || [];
+    assert(bLeadsFinal.some((l) => l.id === leadForBId), 'Customer B workspace contains their exclusive lead', `Lead ID: ${leadForBId}`);
+    assert(!bLeadsFinal.some((l) => l.id === leadForAId), 'Customer B workspace does NOT contain Customer A lead');
+
+    // Query Customer A workspace: must contain leadForAId and NOT leadForBId
+    const aWorkspaceFinal = await api(`/customers/${customerId}`);
+    const aLeadsFinal = aWorkspaceFinal.data?.leads || [];
+    assert(aLeadsFinal.some((l) => l.id === leadForAId), 'Customer A workspace retains their exclusive lead');
+    assert(!aLeadsFinal.some((l) => l.id === leadForBId), 'Customer A workspace does NOT contain Customer B lead');
+
+    // Clean up Customer B
+    await api(`/customers/${customerBId}`, { method: 'DELETE' }).catch(() => {});
+
+    // -------------------------------------------------------------------------
+    // PHASE 9B: MARKETING DEPARTMENT IDEAS & BUILD IDEAS FLOW (/api/marketing/ideas)
+    // -------------------------------------------------------------------------
+    console.log('\n▶ PHASE 9B: Marketing Department Ideas & Build Ideas Verification');
+    const ideasListRes1 = await api('/marketing/ideas');
+    assert(ideasListRes1.status === 200, 'GET /api/marketing/ideas returns HTTP 200 with valid schema');
+    assert(Array.isArray(ideasListRes1.data?.ideas), 'GET /api/marketing/ideas returns array of ideas');
+
+    // Create a new Marketing Idea for Customer A
+    const ideaTitle = 'Q4 Festival Mega Lead Inbound Campaign';
+    const createIdeaRes = await api('/marketing/ideas', {
+      method: 'POST',
+      body: JSON.stringify({
+        customerId: customerId,
+        title: ideaTitle,
+        objective: 'Lead Generation',
+        concept: 'Targeted Instagram & Facebook lead campaign for high-intent corporate buyers',
+        platform: 'Instagram & Facebook (Meta Ads)',
+        language: 'English / Hinglish',
+        callToAction: 'Enquire Now',
+        status: 'Saved',
+      }),
+    });
+    assert(createIdeaRes.status === 201, 'POST /api/marketing/ideas creates idea with HTTP 201');
+    const createdIdeaId = createIdeaRes.data?.idea?.id;
+    assert(Boolean(createdIdeaId), 'Created idea receives unique primary ID', `ID: ${createdIdeaId}`);
+
+    // Query ideas for Customer A
+    const custIdeasRes = await api(`/marketing/ideas?customerId=${customerId}`);
+    assert(custIdeasRes.status === 200, 'GET /api/marketing/ideas?customerId=... returns HTTP 200');
+    const foundIdea = (custIdeasRes.data?.ideas || []).find((i) => i.id === createdIdeaId);
+    assert(Boolean(foundIdea), 'Created marketing idea successfully retrieved in customer ideas queue', `Title: ${foundIdea?.title}`);
+    assert(foundIdea?.objective === 'Lead Generation', 'Idea objective matches "Lead Generation"');
+
+    // Verify Marketing Summary aggregates include the idea
+    const mktSummaryRes = await api('/marketing/summary');
+    assert(mktSummaryRes.status === 200, 'GET /api/marketing/summary returns HTTP 200');
+    assert((mktSummaryRes.data?.summary?.totalIdeasCount || 0) >= 1, 'Marketing Summary reflects at least 1 total idea');
+
+    // -------------------------------------------------------------------------
+    // PHASE 10: CLEANUP & TEARDOWN
+    // -------------------------------------------------------------------------
+    console.log('\n▶ PHASE 10: Cleanup & Teardown');
     const delRes = await api(`/customers/${customerId}`, { method: 'DELETE' });
     assert(delRes.status === 200, 'Test customer account deleted cleanly');
 
