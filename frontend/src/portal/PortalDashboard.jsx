@@ -28,6 +28,7 @@ import {
   BusinessProfileModal,
 } from './PortalModals';
 import crmApi from '../services/crmApi';
+import Swal from 'sweetalert2';
 
 export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab }) {
   const getTabFromHash = () => {
@@ -932,10 +933,45 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     const dailyLimit = Number(customer.dailyAdSpend || 300);
     const nextActive = typeof forceState === 'boolean' ? forceState : !customer.adCampaignActive;
 
+    // 1. Low Balance Check with SweetAlert2
     if (nextActive && walletBalance < dailyLimit) {
-      alert(`⚠️ Customer Balance is Low:\nYour Ad Wallet balance (₹${walletBalance.toLocaleString('en-IN')}) is below daily ad spend pacing (₹${dailyLimit.toLocaleString('en-IN')}).\n\nPlease top up your wallet to run marketing campaigns.`);
-      setIsPaymentModalOpen(true);
+      Swal.fire({
+        icon: 'warning',
+        title: 'Ad Wallet Balance is Low',
+        html: `Your available Ad Wallet balance is <strong>₹${walletBalance.toLocaleString('en-IN')}</strong>, which is below your daily spend pacing of <strong>₹${dailyLimit.toLocaleString('en-IN')}</strong>.<br/><br/>Please top up your wallet to start marketing campaigns.`,
+        showCancelButton: true,
+        confirmButtonText: 'Top Up Wallet Now',
+        confirmButtonColor: '#059669',
+        cancelButtonText: 'Cancel',
+      }).then((res) => {
+        if (res.isConfirmed) setIsPaymentModalOpen(true);
+      });
       return;
+    }
+
+    // 2. SweetAlert2 Confirmation Dialog before Start or Stop
+    if (nextActive) {
+      const confirmStart = await Swal.fire({
+        icon: 'question',
+        title: 'Start Marketing Campaign?',
+        html: `Daily spend of <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong> will be scheduled.<br/>Meta &amp; local buyer lead capture will become active on scheduled days.<br/><br/>Current Wallet Balance: <strong style="color:#059669;">₹${walletBalance.toLocaleString('en-IN')}</strong>`,
+        showCancelButton: true,
+        confirmButtonText: '▶ Yes, Start Marketing',
+        confirmButtonColor: '#059669',
+        cancelButtonText: 'Cancel',
+      });
+      if (!confirmStart.isConfirmed) return;
+    } else {
+      const confirmStop = await Swal.fire({
+        icon: 'warning',
+        title: 'Stop Marketing Campaign?',
+        html: `Are you sure you want to stop/pause your marketing campaigns?<br/><br/>Daily ad deductions and active Meta buyer lead capture will be <strong>paused</strong>.`,
+        showCancelButton: true,
+        confirmButtonText: '⏹ Yes, Stop Marketing',
+        confirmButtonColor: '#e11d48',
+        cancelButtonText: 'Keep Running',
+      });
+      if (!confirmStop.isConfirmed) return;
     }
 
     const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -967,6 +1003,25 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       });
     } catch (e) {
       console.warn('Sync campaign state note:', e.message);
+    }
+
+    // 3. SweetAlert2 Success Notice
+    if (nextActive) {
+      Swal.fire({
+        icon: 'success',
+        title: 'Marketing is LIVE!',
+        html: `Your marketing campaign is now active and pacing at <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong>.`,
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    } else {
+      Swal.fire({
+        icon: 'info',
+        title: 'Marketing Paused (Off)',
+        html: `Your campaign has been paused. Daily ad spend will not be deducted until you start it again.`,
+        timer: 2000,
+        showConfirmButton: false,
+      });
     }
   };
 

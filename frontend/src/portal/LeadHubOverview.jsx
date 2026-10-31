@@ -263,7 +263,12 @@ export default function LeadHubOverview({
 
           {/* Right: MARKETING STATUS Paused (Off) + Start / Stop Action Button */}
           <div className="pacing-status-toggle-cluster">
-            <div className="pacing-status-text-stack">
+            <div
+              className="pacing-status-text-stack"
+              onClick={() => onToggleCampaign && onToggleCampaign(!customer.adCampaignActive)}
+              style={{ cursor: 'pointer' }}
+              title={customer.adCampaignActive ? 'Click to Stop Marketing Campaign' : 'Click to Start Marketing Campaign'}
+            >
               <span className="pacing-status-mini-label">MARKETING STATUS</span>
               <strong
                 className="pacing-status-state-text"
