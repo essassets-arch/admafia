@@ -294,32 +294,34 @@ export default function LeadHubOverview({
               )}
             </div>
 
-            {/* Explicit Master Start / Stop Button */}
-            {customer.adCampaignActive ? (
+            {/* Start and Stop Proper Dual Action Buttons */}
+            <div className="pacing-start-stop-dual-buttons">
               <button
                 type="button"
-                className="btn-marketing-master-action stop"
-                onClick={() => onToggleCampaign && onToggleCampaign(false)}
-                title="Click to Stop / Pause Marketing Campaign"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="4" y="4" width="16" height="16" rx="2" />
-                </svg>
-                <span>Stop Marketing</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn-marketing-master-action start"
+                className={`btn-proper-pacing-start ${customer.adCampaignActive ? 'is-active' : ''}`}
                 onClick={() => onToggleCampaign && onToggleCampaign(true)}
                 title="Click to Start Marketing Campaign"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                   <polygon points="5 3 19 12 5 21 5 3" />
                 </svg>
-                <span>Start Marketing</span>
+                <span>Start</span>
+                {customer.adCampaignActive && <span className="btn-status-badge on">LIVE</span>}
               </button>
-            )}
+
+              <button
+                type="button"
+                className={`btn-proper-pacing-stop ${!customer.adCampaignActive ? 'is-active' : ''}`}
+                onClick={() => onToggleCampaign && onToggleCampaign(false)}
+                title="Click to Stop Marketing Campaign"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                </svg>
+                <span>Stop</span>
+                {!customer.adCampaignActive && <span className="btn-status-badge off">STOPPED</span>}
+              </button>
+            </div>
           </div>
         </div>
 

@@ -7603,47 +7603,91 @@
   color: #334155;
 }
 
-/* Master Start / Stop Action Button for Marketing Campaign */
-.btn-marketing-master-action {
-  display: inline-flex;
+/* Dual Proper Start and Stop Buttons */
+.pacing-start-stop-dual-buttons {
+  display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  padding: 9px 18px;
-  border-radius: 9px;
-  font-size: 0.88rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  outline: none;
-  white-space: nowrap;
-  letter-spacing: 0.02em;
 }
 
-.btn-marketing-master-action.start {
+.btn-proper-pacing-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+  line-height: 1.2;
+}
+
+.btn-proper-pacing-start:hover {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+  color: #065f46;
+  transform: translateY(-1px);
+}
+
+.btn-proper-pacing-start.is-active {
   background: linear-gradient(135deg, #059669 0%, #10b981 100%);
   color: #ffffff;
   border: 1px solid #059669;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
 }
 
-.btn-marketing-master-action.start:hover {
-  background: linear-gradient(135deg, #047857 0%, #059669 100%);
+.btn-proper-pacing-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+  line-height: 1.2;
+}
+
+.btn-proper-pacing-stop:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.45);
 }
 
-.btn-marketing-master-action.stop {
+.btn-proper-pacing-stop.is-active {
   background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
   color: #ffffff;
   border: 1px solid #be123c;
-  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.35);
+  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.4);
 }
 
-.btn-marketing-master-action.stop:hover {
-  background: linear-gradient(135deg, #be123c 0%, #9f1239 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.45);
+.btn-status-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.btn-status-badge.on {
+  background: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+
+.btn-status-badge.off {
+  background: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
 }
 
 /* Start / Stop Button Controls for Marketing Campaign */
