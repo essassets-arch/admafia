@@ -3843,10 +3843,6 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [balanceFilter, setBalanceFilter] = useState('all'); // 'all' | 'healthy' | 'low' | 'zero'
   const [selectedMember, setSelectedMember] = useState(null);
-  const [topupCust, setTopupCust] = useState(null);
-  const [topupAmount, setTopupAmount] = useState(1500);
-  const [isProcessingTopup, setIsProcessingTopup] = useState(false);
-  const [actionSuccessMsg, setActionSuccessMsg] = useState(null);
 
   // Criteria: Member who has completed both Gate 1 Payment and Gate 2 Profile Submission
   const isApproved = (c) => {
@@ -3911,154 +3907,15 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
   }).length;
   const zeroCount = approvedList.filter((c) => (c.balance || 0) <= 0).length;
 
-  const handleApplyTopup = async () => {
-    if (!topupCust || !topupAmount || topupAmount <= 0) return;
-    setIsProcessingTopup(true);
-
-    try {
-      const added = Number(topupAmount);
-      const prevBal = Number(topupCust.balance || topupCust.walletBalance || 0);
-      const newBal = prevBal + added;
-      const addedDays = Math.floor(added / 300);
-      const newRunway = Math.floor(newBal / 300);
-      const utrRef = `TXN-TOPUP-${Date.now().toString().slice(-6)}`;
-
-      // 1. Sync with PostgreSQL Backend API if available
-      try {
-        await crmApi.topupCustomerWallet(topupCust.id, added);
-      } catch (err) {
-        console.warn('Backend topup API note:', err.message);
-      }
-
-      // 2. Update local state
-      if (setCustomers) {
-        setCustomers((prev) =>
-          prev.map((c) => {
-            if (c.id === topupCust.id || c.phone === topupCust.phone) {
-              return {
-                ...c,
-                balance: newBal,
-                walletBalance: newBal,
-                runwayDays: newRunway,
-                paymentStatus: 'paid',
-                amountPaid: Number(c.amountPaid || 0) + added,
-              };
-            }
-            return c;
-          })
-        );
-      }
-
-      // 3. Record transaction in growthline_wallet_transactions
-      const rawTx = localStorage.getItem('growthline_wallet_transactions');
-      const txList = rawTx ? JSON.parse(rawTx) : [];
-      const newTx = {
-        id: `tx_${Date.now()}`,
-        customerId: topupCust.id,
-        customerPhone: topupCust.phone,
-        customerUsername: topupCust.username,
-        company: topupCust.companyName || topupCust.name,
-        date: getLiveNowFormatted(),
-        ref: utrRef,
-        desc: `Sub-Admin Direct Wallet Credit (+₹${added.toLocaleString('en-IN')})`,
-        type: 'Credit',
-        amount: added,
-        balance: newBal,
-        method: 'Sub-Admin Instant Credit',
-        status: 'Verified ✓',
-      };
-      localStorage.setItem('growthline_wallet_transactions', JSON.stringify([newTx, ...txList]));
-
-      // 4. Record payment receipt in growthline_payment_records
-      const rawPay = localStorage.getItem('growthline_payment_records');
-      const payList = rawPay ? JSON.parse(rawPay) : [];
-      const newPayment = {
-        id: `pay_${Date.now()}`,
-        receiptNumber: `REC-${Date.now().toString().slice(-6)}`,
-        customerName: topupCust.companyName || topupCust.name,
-        contact: topupCust.contactPerson || topupCust.contact,
-        phone: topupCust.phone,
-        typeLabel: 'Wallet Top-Up',
-        amount: added,
-        gstAmount: Math.round(added * 0.18),
-        total: added,
-        paymentMode: 'Sub-Admin Instant Credit',
-        utr: utrRef,
-        date: getLiveNowFormatted(),
-        status: 'paid',
-        runwayAdded: addedDays,
-        notes: `Sub-Admin instant topup credit for ${topupCust.companyName || topupCust.name}`,
-      };
-      localStorage.setItem('growthline_payment_records', JSON.stringify([newPayment, ...payList]));
-      window.dispatchEvent(new CustomEvent('growthline_payment_recorded', { detail: newPayment }));
-
-      setActionSuccessMsg(`Successfully credited ₹${added.toLocaleString('en-IN')} to ${topupCust.companyName || topupCust.name}. New Live Balance: ₹${newBal.toLocaleString('en-IN')}`);
-      setTimeout(() => setActionSuccessMsg(null), 5000);
-      setTopupCust(null);
-    } catch (err) {
-      console.error('Failed to apply topup', err);
-    } finally {
-      setIsProcessingTopup(false);
-    }
-  };
-
   return (
-    <div className="desk-page-container">
-      {/* Toast Notification */}
-      {actionSuccessMsg && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 20,
-            right: 20,
-            zIndex: 9999,
-            background: '#064e3b',
-            color: '#ecfdf5',
-            padding: '12px 20px',
-            borderRadius: 10,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            border: '1px solid #059669',
-          }}
-        >
-          <CheckCircle2 size={18} color="#34d399" />
-          <span>{actionSuccessMsg}</span>
-          <button
-            type="button"
-            onClick={() => setActionSuccessMsg(null)}
-            style={{ background: 'transparent', border: 'none', color: '#a7f3d0', cursor: 'pointer', marginLeft: 10 }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
+    <div className="desk-page-container appr-desk-container">
       {/* Desk Header */}
       <div className="desk-header">
         <div>
           <div className="desk-breadcrumb">SUB ADMIN OPERATIONS / CLIENT COMPLIANCE &amp; ACCOUNTS</div>
           <h1 className="desk-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span>Approved Client Members</span>
-            <span
-              style={{
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                color: '#059669',
-                background: '#ecfdf5',
-                border: '1px solid #a7f3d0',
-                padding: '3px 10px',
-                borderRadius: 9999,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-              }}
-            >
+            <span className="appr-badge-verified">
               <span className="sales-pulse-dot" style={{ width: 7, height: 7 }} /> Gate 1 (Payment) &amp; Gate 2 (Profile) Complete
             </span>
           </h1>
@@ -4090,167 +3947,138 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
       </div>
 
       {/* KPI Ribbon */}
-      <div className="desk-kpi-grid">
-        <div className="desk-kpi-card">
-          <div className="desk-kpi-header">
-            <span className="desk-kpi-label">TOTAL APPROVED MEMBERS</span>
-            <UserCheck size={18} color="#059669" />
+      <div className="appr-kpi-grid">
+        <div className="appr-kpi-card">
+          <div className="appr-kpi-header">
+            <span className="appr-kpi-label">TOTAL APPROVED MEMBERS</span>
+            <div className="appr-kpi-icon-wrap emerald">
+              <UserCheck size={18} />
+            </div>
           </div>
-          <div className="desk-kpi-val text-emerald">{totalApproved}</div>
-          <div className="desk-kpi-sub">
+          <div className="appr-kpi-val text-emerald">{totalApproved}</div>
+          <div className="appr-kpi-sub">
             <span className="text-emerald" style={{ fontWeight: 700 }}>100% KYC &amp; Payment Passed</span>
           </div>
         </div>
 
-        <div className="desk-kpi-card">
-          <div className="desk-kpi-header">
-            <span className="desk-kpi-label">COLLECTIVE LIVE RESERVES</span>
-            <Wallet size={18} color="#4f46e5" />
+        <div className="appr-kpi-card">
+          <div className="appr-kpi-header">
+            <span className="appr-kpi-label">COLLECTIVE LIVE RESERVES</span>
+            <div className="appr-kpi-icon-wrap indigo">
+              <Wallet size={18} />
+            </div>
           </div>
-          <div className="desk-kpi-val text-indigo">{formatINR(totalReserves)}</div>
-          <div className="desk-kpi-sub">
+          <div className="appr-kpi-val text-indigo">{formatINR(totalReserves)}</div>
+          <div className="appr-kpi-sub">
             <span className="text-indigo" style={{ fontWeight: 700 }}>Live Real-Time Wallet Balance</span>
           </div>
         </div>
 
-        <div className="desk-kpi-card">
-          <div className="desk-kpi-header">
-            <span className="desk-kpi-label">DAILY AD SPEND PACING</span>
-            <Clock size={18} color="#0284c7" />
+        <div className="appr-kpi-card">
+          <div className="appr-kpi-header">
+            <span className="appr-kpi-label">DAILY AD SPEND PACING</span>
+            <div className="appr-kpi-icon-wrap cyan">
+              <Clock size={18} />
+            </div>
           </div>
-          <div className="desk-kpi-val text-cyan">{formatINR(totalDailyBurn)}/day</div>
-          <div className="desk-kpi-sub">
+          <div className="appr-kpi-val text-cyan">{formatINR(totalDailyBurn)}/day</div>
+          <div className="appr-kpi-sub">
             <span>₹300/day pacing across all active accounts</span>
           </div>
         </div>
 
-        <div className="desk-kpi-card">
-          <div className="desk-kpi-header">
-            <span className="desk-kpi-label">AVERAGE RUNWAY HEALTH</span>
-            <CheckCircle2 size={18} color="#10b981" />
+        <div className="appr-kpi-card">
+          <div className="appr-kpi-header">
+            <span className="appr-kpi-label">AVERAGE RUNWAY HEALTH</span>
+            <div className="appr-kpi-icon-wrap emerald">
+              <CheckCircle2 size={18} />
+            </div>
           </div>
-          <div className="desk-kpi-val text-emerald">{avgRunwayDays} Days</div>
-          <div className="desk-kpi-sub">
+          <div className="appr-kpi-val text-emerald">{avgRunwayDays} Days</div>
+          <div className="appr-kpi-sub">
             <span>{healthyCount} Healthy • {lowCount} Low Alert • {zeroCount} Depleted</span>
           </div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div
-        style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: 12,
-          padding: '16px 20px',
-          marginBottom: 20,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 16,
-          flexWrap: 'wrap',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-        }}
-      >
-        {/* Search */}
-        <div style={{ position: 'relative', flex: '1 1 300px', maxWidth: '420px' }}>
-          <Search
-            size={16}
-            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}
-          />
+      <div className="appr-filter-bar">
+        {/* Search Input */}
+        <div className="appr-search-wrap">
+          <Search size={16} className="appr-search-icon" />
           <input
             type="text"
             placeholder="Search by company, contact person, phone, city..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="clean-input"
-            style={{ paddingLeft: 36, height: 38, fontSize: '0.84rem' }}
+            className="appr-search-input"
           />
+          {search && (
+            <button
+              type="button"
+              className="appr-search-clear"
+              onClick={() => setSearch('')}
+              title="Clear search"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
-        {/* Filters */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {/* Filters Group */}
+        <div className="appr-filters-group">
           {/* Category Dropdown */}
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="clean-input"
-            style={{ height: 38, fontSize: '0.82rem', padding: '0 12px', minWidth: 160 }}
-          >
-            <option value="all">All Categories ({categories.length})</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
+          <div className="appr-select-wrap">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="appr-select-input"
+            >
+              <option value="all">All Categories ({categories.length})</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Runway Filter Tabs */}
-          <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: 3, borderRadius: 8 }}>
+          <div className="appr-tabs-wrap">
             <button
               type="button"
+              className={`appr-tab-btn ${balanceFilter === 'all' ? 'active' : ''}`}
               onClick={() => setBalanceFilter('all')}
-              style={{
-                border: 'none',
-                padding: '6px 12px',
-                borderRadius: 6,
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                background: balanceFilter === 'all' ? '#ffffff' : 'transparent',
-                color: balanceFilter === 'all' ? '#0f172a' : '#64748b',
-                boxShadow: balanceFilter === 'all' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-              }}
             >
-              All ({totalApproved})
+              All <span className="appr-tab-count">{totalApproved}</span>
             </button>
             <button
               type="button"
+              className={`appr-tab-btn tab-healthy ${balanceFilter === 'healthy' ? 'active' : ''}`}
               onClick={() => setBalanceFilter('healthy')}
-              style={{
-                border: 'none',
-                padding: '6px 12px',
-                borderRadius: 6,
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                background: balanceFilter === 'healthy' ? '#ffffff' : 'transparent',
-                color: balanceFilter === 'healthy' ? '#059669' : '#64748b',
-                boxShadow: balanceFilter === 'healthy' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-              }}
             >
-              Healthy Runway ({healthyCount})
+              Healthy <span className="appr-tab-count">{healthyCount}</span>
             </button>
             <button
               type="button"
+              className={`appr-tab-btn tab-low ${balanceFilter === 'low' ? 'active' : ''}`}
               onClick={() => setBalanceFilter('low')}
-              style={{
-                border: 'none',
-                padding: '6px 12px',
-                borderRadius: 6,
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                background: balanceFilter === 'low' ? '#ffffff' : 'transparent',
-                color: balanceFilter === 'low' ? '#d97706' : '#64748b',
-                boxShadow: balanceFilter === 'low' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-              }}
             >
-              Low Alert ({lowCount})
+              Low Alert <span className="appr-tab-count">{lowCount}</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Approved Members List Table */}
-      <div className="desk-table-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="desk-table">
+      <div className="appr-table-card">
+        <table>
           <thead>
             <tr>
-              <th style={{ width: '28%' }}>Approved Client &amp; Entity</th>
-              <th style={{ width: '22%' }}>Verification &amp; Compliance</th>
+              <th style={{ width: '30%' }}>Approved Client &amp; Entity</th>
+              <th style={{ width: '24%' }}>Verification &amp; Compliance</th>
               <th style={{ width: '26%' }}>Live Wallet Balance &amp; Burn Pacing</th>
-              <th style={{ width: '24%', textAlign: 'right' }}>Direct Operations Actions</th>
+              <th style={{ width: '20%', textAlign: 'right' }}>Direct Operations Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -4278,37 +4106,24 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                   <tr key={m.id || m.phone}>
                     {/* 1. Client & Entity Details */}
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                        <div
-                          style={{
-                            width: 38,
-                            height: 38,
-                            borderRadius: 10,
-                            background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
-                            color: '#ffffff',
-                            fontWeight: 800,
-                            display: 'grid',
-                            placeItems: 'center',
-                            fontSize: '0.9rem',
-                            flexShrink: 0,
-                          }}
-                        >
+                      <div className="appr-client-cell">
+                        <div className="appr-client-avatar">
                           {(m.companyName || m.name || 'AM').slice(0, 2).toUpperCase()}
                         </div>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span>{m.companyName || m.name}</span>
+                        <div className="appr-client-info">
+                          <div className="appr-client-name-row">
+                            <span className="appr-client-name">{m.companyName || m.name}</span>
                             {isLowBalance && (
-                              <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
+                              <span className="desk-pill pill-rose appr-low-pill">
                                 ⚠️ Low Balance
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>
+                          <div className="appr-client-lead">
                             👤 <b>{m.contactPerson || m.contact || 'Authorized Lead'}</b> • +91{' '}
-                            <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{cleanPhone}</span>
+                            <span className="appr-phone">{cleanPhone}</span>
                           </div>
-                          <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                          <div className="appr-client-meta">
                             ✉️ {m.email || 'Registered via Web Portal'} • 📍 {m.city || 'India'}
                           </div>
                         </div>
@@ -4317,25 +4132,19 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
 
                     {/* 2. Verification Badges */}
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span
-                            className="desk-pill pill-emerald"
-                            style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          >
+                      <div className="appr-compliance-stack">
+                        <div className="appr-badge-row">
+                          <span className="desk-pill pill-emerald">
                             <CheckCircle2 size={12} /> Gate 1: Paid (₹{Number(m.amountPaid || bal).toLocaleString('en-IN')})
                           </span>
-                          <span
-                            className="desk-pill pill-indigo"
-                            style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          >
+                          <span className="desk-pill pill-indigo">
                             <ShieldCheck size={12} /> Gate 2: 100% KYC Complete
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#0369a1', fontWeight: 600, marginTop: 2 }}>
+                        <div className="appr-category-line">
                           Category: <b>{m.category || 'Meta Ads Lead Generation'}</b>
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                        <div className="appr-timestamp">
                           Approved: {formatIndianDateTime(m.completedAt || m.registeredAt, m.completedAt || m.registeredAtRaw || m.registered_at)}
                         </div>
                       </div>
@@ -4343,122 +4152,64 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
 
                     {/* 3. Live Wallet Balance */}
                     <td>
-                      <div
-                        style={{
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: 10,
-                          padding: '8px 14px',
-                          display: 'inline-block',
-                          minWidth: '200px',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-                            Live Ad Balance
-                          </span>
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              fontSize: '0.66rem',
-                              fontWeight: 800,
-                              color: !isLowBalance ? '#059669' : '#e11d48',
-                            }}
-                          >
+                      <div className={`appr-wallet-card ${isLowBalance ? 'is-low' : 'is-healthy'}`}>
+                        <div className="appr-wallet-header">
+                          <span className="appr-wallet-tag">Live Ad Balance</span>
+                          <span className={`appr-status-badge ${!isLowBalance ? 'badge-live' : 'badge-low'}`}>
                             <span className="sales-pulse-dot" style={{ width: 6, height: 6, background: !isLowBalance ? '#059669' : '#e11d48' }} />
                             {!isLowBalance ? 'LIVE' : 'LOW BALANCE'}
                           </span>
                         </div>
 
-                        <div style={{ fontSize: '1.25rem', fontWeight: 900, color: !isLowBalance ? '#059669' : '#e11d48', marginTop: 2 }}>
+                        <div className={`appr-wallet-amount ${!isLowBalance ? 'text-emerald' : 'text-rose'}`}>
                           {formatINR(bal)}
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, fontSize: '0.74rem' }}>
-                          <span style={{ color: '#475569' }}>
+                        <div className="appr-wallet-footer">
+                          <span className="appr-daily-rate">
                             Daily: <b>₹{pacing}/day</b>
                           </span>
-                          <span
-                            className={`desk-pill ${isHealthy ? 'pill-emerald' : !isLowBalance ? 'pill-amber' : 'pill-rose'}`}
-                            style={{ fontSize: '0.68rem', padding: '1px 6px' }}
-                          >
+                          <span className={`desk-pill ${isHealthy ? 'pill-emerald' : !isLowBalance ? 'pill-amber' : 'pill-rose'}`}>
                             {runway} Days Runway
                           </span>
                         </div>
                         {isLowBalance && (
-                          <div style={{ marginTop: 4 }}>
-                            <span className="desk-pill pill-rose" style={{ fontSize: '0.64rem', padding: '1px 6px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                              <AlertTriangle size={10} /> ⚠️ Customer Balance is Low
-                            </span>
+                          <div className="appr-wallet-alert">
+                            <AlertTriangle size={11} /> ⚠️ Low Balance - Replenish Soon
                           </div>
                         )}
                       </div>
                     </td>
 
-                    {/* 4. Operations Actions */}
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+                    {/* 4. Operations Actions (Top-Up Removed) */}
+                    <td className="appr-actions-cell">
+                      <div className="appr-actions-wrap">
                         <a
                           href={`tel:${cleanPhone}`}
-                          className="desk-action-btn"
-                          style={{
-                            padding: '6px 10px',
-                            fontSize: '0.75rem',
-                            textDecoration: 'none',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                          }}
+                          className="appr-action-btn appr-action-call"
+                          title="Direct phone call"
                         >
-                          <Phone size={13} /> Call
+                          <Phone size={13} />
+                          <span>Call</span>
                         </a>
                         <a
                           href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(m.contactPerson || m.name)},%20this%20is%20AdMafia%20Marketing%20Operations.%20Your%20active%20campaign%20wallet%20balance%20is%20%E2%82%B9${bal.toLocaleString('en-IN')}%20(${runway}%20days%20runway%20remaining).`}
                           target="_blank"
                           rel="noreferrer"
-                          className="desk-action-btn"
-                          style={{
-                            padding: '6px 10px',
-                            fontSize: '0.75rem',
-                            textDecoration: 'none',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            color: '#059669',
-                          }}
+                          className="appr-action-btn appr-action-wa"
+                          title="Open WhatsApp chat"
                         >
-                          <MessageSquare size={13} /> WhatsApp
+                          <MessageSquare size={13} />
+                          <span>WhatsApp</span>
                         </a>
                         <button
                           type="button"
-                          onClick={() => setTopupCust(m)}
-                          className="sales-btn-primary"
-                          style={{
-                            padding: '6px 12px',
-                            fontSize: '0.75rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            background: '#4f46e5',
-                          }}
-                        >
-                          <Plus size={13} /> Top-Up
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => setSelectedMember(m)}
-                          className="desk-action-btn"
-                          style={{
-                            padding: '6px 10px',
-                            fontSize: '0.75rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                          }}
+                          className="appr-action-btn appr-action-profile"
+                          title="View verified business profile"
                         >
-                          <Eye size={13} /> Profile
+                          <Eye size={13} />
+                          <span>Profile</span>
                         </button>
                       </div>
                     </td>
@@ -4470,159 +4221,70 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
         </table>
       </div>
 
-      {/* MODAL 1: Instant Top-Up Credit Modal */}
-      {topupCust && (
-        <div className="desk-modal-backdrop" onClick={() => setTopupCust(null)}>
-          <div className="desk-modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-            <div className="desk-modal-header">
-              <div>
-                <div className="desk-modal-tag" style={{ color: '#4f46e5' }}>
-                  INSTANT AD WALLET RECHARGE
-                </div>
-                <h3 className="desk-modal-title">Credit Client Wallet Balance</h3>
-              </div>
-              <button type="button" className="desk-modal-close" onClick={() => setTopupCust(null)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ marginBottom: 18, background: '#f8fafc', padding: 14, borderRadius: 10, border: '1px solid #e2e8f0' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>
-                {topupCust.companyName || topupCust.name}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
-                👤 {topupCust.contactPerson || topupCust.contact} • +91 {topupCust.phone}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px dashed #cbd5e1' }}>
-                <span style={{ fontSize: '0.8rem', color: '#475569' }}>Current Live Balance:</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#059669' }}>
-                  {formatINR(topupCust.balance || topupCust.walletBalance || 0)}
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Amount Pills */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: 8 }}>
-                Select Top-Up Amount (₹):
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-                {[500, 1000, 1500, 3000].map((amt) => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => setTopupAmount(amt)}
-                    style={{
-                      padding: '8px 4px',
-                      borderRadius: 8,
-                      border: topupAmount === amt ? '2px solid #4f46e5' : '1px solid #cbd5e1',
-                      background: topupAmount === amt ? '#eef2ff' : '#ffffff',
-                      color: topupAmount === amt ? '#4f46e5' : '#1e293b',
-                      fontWeight: 800,
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    +₹{amt.toLocaleString('en-IN')}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom Amount */}
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: 6 }}>
-                Or Custom Amount (₹):
-              </label>
-              <input
-                type="number"
-                min="300"
-                step="100"
-                value={topupAmount}
-                onChange={(e) => setTopupAmount(Number(e.target.value))}
-                className="clean-input"
-                style={{ height: 42, fontSize: '1rem', fontWeight: 800 }}
-              />
-              <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 4 }}>
-                Adds approx. {Math.floor((Number(topupAmount) || 0) / 300)} days of active campaign runway (@ ₹300/day).
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button type="button" className="sales-btn-secondary" onClick={() => setTopupCust(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="sales-btn-primary"
-                onClick={handleApplyTopup}
-                disabled={isProcessingTopup || !topupAmount || topupAmount <= 0}
-                style={{ background: '#4f46e5', padding: '10px 20px', fontWeight: 800 }}
-              >
-                {isProcessingTopup ? 'Crediting Wallet...' : `Confirm & Credit ₹${Number(topupAmount).toLocaleString('en-IN')} →`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: Full Business Profile Viewer */}
+      {/* MODAL: Full Business Profile Viewer */}
       {selectedMember && (
-        <div className="desk-modal-backdrop" onClick={() => setSelectedMember(null)}>
-          <div className="desk-modal-card" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
-            <div className="desk-modal-header">
+        <div className="sales-modal-overlay" onClick={() => setSelectedMember(null)}>
+          <div className="sales-modal-card" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+            <div className="desk-modal-header" style={{ marginBottom: 20 }}>
               <div>
-                <div className="desk-modal-tag" style={{ color: '#059669' }}>
+                <div className="desk-modal-tag" style={{ color: '#059669', marginBottom: 4 }}>
                   ✓ 100% KYC &amp; PAYMENT VERIFIED MEMBER
                 </div>
-                <h3 className="desk-modal-title">{selectedMember.companyName || selectedMember.name}</h3>
+                <h3 className="desk-modal-title" style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+                  {selectedMember.companyName || selectedMember.name}
+                </h3>
               </div>
-              <button type="button" className="desk-modal-close" onClick={() => setSelectedMember(null)}>
+              <button type="button" className="desk-close-btn" onClick={() => setSelectedMember(null)}>
                 <X size={18} />
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
-              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Authorized Contact</div>
-                <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a', marginTop: 2 }}>{selectedMember.contactPerson || selectedMember.contact}</div>
-                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>+91 {selectedMember.phone}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 22 }}>
+              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Authorized Contact</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{selectedMember.contactPerson || selectedMember.contact}</div>
+                <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>+91 {selectedMember.phone}</div>
               </div>
 
-              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Business Category</div>
-                <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#4f46e5', marginTop: 2 }}>{selectedMember.category || 'Meta Ads Lead Gen'}</div>
-                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>{selectedMember.industry || 'Digital Lead Acquisition'}</div>
+              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Business Category</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#4f46e5', marginTop: 3 }}>{selectedMember.category || 'Meta Ads Lead Gen'}</div>
+                <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>{selectedMember.industry || 'Digital Lead Acquisition'}</div>
               </div>
 
-              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Live Wallet Reserves</div>
-                <div style={{ fontWeight: 900, fontSize: '1.15rem', color: '#059669', marginTop: 2 }}>{formatINR(selectedMember.balance || selectedMember.walletBalance || 0)}</div>
-                <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: 2 }}>Burn: ₹300/day • {selectedMember.runwayDays || Math.floor((selectedMember.balance || 0) / 300)} Days Left</div>
+              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Live Wallet Reserves</div>
+                <div style={{ fontWeight: 900, fontSize: '1.25rem', color: '#059669', marginTop: 3 }}>{formatINR(selectedMember.balance || selectedMember.walletBalance || 0)}</div>
+                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>Burn: ₹300/day • {selectedMember.runwayDays || Math.floor((selectedMember.balance || 0) / 300)} Days Left</div>
               </div>
 
-              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Target Geography</div>
-                <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a', marginTop: 2 }}>{selectedMember.city || 'India'}</div>
-                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>{selectedMember.state || 'Maharashtra'}, India</div>
+              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Target Geography</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{selectedMember.city || 'India'}</div>
+                <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>{selectedMember.state || 'Maharashtra'}, India</div>
               </div>
 
-              <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Registered Work Email &amp; Web Domain</div>
-                <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a', marginTop: 2 }}>✉️ {selectedMember.email || 'Registered via Web Portal'}</div>
+              <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Registered Work Email &amp; Web Domain</div>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a', marginTop: 3 }}>✉️ {selectedMember.email || 'Registered via Web Portal'}</div>
                 {selectedMember.website && (
                   <div style={{ fontSize: '0.82rem', color: '#4f46e5', marginTop: 4 }}>
-                    🌐 <a href={selectedMember.website.startsWith('http') ? selectedMember.website : `https://${selectedMember.website}`} target="_blank" rel="noreferrer" style={{ color: '#4f46e5' }}>{selectedMember.website} ↗</a>
+                    🌐 <a href={selectedMember.website.startsWith('http') ? selectedMember.website : `https://${selectedMember.website}`} target="_blank" rel="noreferrer" style={{ color: '#4f46e5', textDecoration: 'none', fontWeight: 600 }}>{selectedMember.website} ↗</a>
                   </div>
                 )}
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
                 Approved Member since: {formatIndianDateTime(selectedMember.completedAt || selectedMember.registeredAt)}
               </span>
-              <button type="button" className="sales-btn-primary" onClick={() => setSelectedMember(null)}>
+              <button
+                type="button"
+                className="sales-btn-primary"
+                onClick={() => setSelectedMember(null)}
+                style={{ padding: '8px 18px', borderRadius: 10, fontSize: '0.84rem' }}
+              >
                 Close Profile
               </button>
             </div>
