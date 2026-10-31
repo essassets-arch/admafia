@@ -729,9 +729,9 @@ export default function App() {
           window.location.hash = '';
           setCurrentView('landing');
         }} 
-      />
-    );
-  }
+        />
+      );
+    }
 
   return (
     <>
@@ -1130,6 +1130,36 @@ export default function App() {
                     className="mobile-drawer-action-card"
                     style={{ borderColor: '#fecaca', background: '#fff5f5' }}
                     onClick={() => {
+                      try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch (e) {}
+                      window.location.hash = '#app/dashboard';
+                      setCurrentView('portal');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="nav-btn nav-btn-primary"
+                  >
+                    <span>Dashboard</span>
+                    <span style={{ fontSize: '1rem', fontWeight: 900 }}>→</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      try {
+                        localStorage.removeItem('growthline_active_user');
+                        sessionStorage.clear();
+                        window.history.pushState({}, '', '/#register');
+                      } catch (e) {}
+                      setCurrentUser(null);
+                      window.location.hash = '#register';
+                      setCurrentView('register');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="nav-btn nav-btn-outline desktop-only"
+                  >
+                    Create Account
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => {
                       try {
                         localStorage.removeItem('growthline_active_user');
                         sessionStorage.clear();
@@ -1140,27 +1170,160 @@ export default function App() {
                       setCurrentView('landing');
                       setMobileMenuOpen(false);
                     }}
+                    className="nav-btn nav-btn-outline desktop-only"
+                    style={{ color: '#64748b' }}
                   >
-                    <div className="mobile-drawer-action-icon" style={{ background: '#fee2e2', color: '#b91c1c' }}>
-                      <X size={18} />
-                    </div>
-                    <div>
-                      <div className="mobile-drawer-action-title" style={{ color: '#b91c1c' }}>Sign Out</div>
-                      <div className="mobile-drawer-action-sub">Disconnect active customer session</div>
-                    </div>
+                    Sign Out
                   </button>
-                )}
-              </div>
+                </>
+              ) : (
+                <>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      try { window.history.pushState({}, '', '/#login'); } catch (e) {}
+                      window.location.hash = '#login';
+                      setCurrentView('login');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="nav-btn nav-btn-outline"
+                  >
+                    Login
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      try {
+                        localStorage.removeItem('growthline_active_user');
+                        sessionStorage.clear();
+                        window.history.pushState({}, '', '/#register');
+                      } catch (e) {}
+                      setCurrentUser(null);
+                      window.location.hash = '#register';
+                      setCurrentView('register');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="nav-btn nav-btn-primary"
+                  >
+                    Create Account
+                  </button>
+                </>
+              )}
+
+              {/* Mobile Menu Hamburger Toggle */}
+              <button
+                type="button"
+                className="mobile-menu-toggle"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                aria-label={mobileMenuOpen ? 'Close Menu' : 'Open Menu'}
+                aria-expanded={mobileMenuOpen}
+              >
+                {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+              </button>
             </div>
           </div>
-        )}
-      </header>
 
-      <main>
-        <section className="hero" aria-labelledby="h1">
-          <div className="wrap">
-            <div>
-              <h1 id="h1">
+          {/* Mobile Slide-down Drawer Menu */}
+          {mobileMenuOpen && (
+            <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
+              <div className="mobile-drawer-menu" onClick={(e) => e.stopPropagation()}>
+                <div className="mobile-drawer-links">
+                  <a href="#how" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                    <span>How It Works</span>
+                    <ChevronRight size={16} color="#94a3b8" />
+                  </a>
+                  <a href="#calc" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                    <span>Ad Spend Calculator</span>
+                    <ChevronRight size={16} color="#94a3b8" />
+                  </a>
+                  <a href="#services" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                    <span>Services &amp; Targeting</span>
+                    <ChevronRight size={16} color="#94a3b8" />
+                  </a>
+                  <a href="#contact" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                    <span>Pricing &amp; Contact</span>
+                    <ChevronRight size={16} color="#94a3b8" />
+                  </a>
+                </div>
+
+                <div className="mobile-drawer-divider" />
+
+                <div className="mobile-drawer-actions">
+                  <button
+                    type="button"
+                    className="mobile-drawer-action-card"
+                    onClick={() => {
+                      try { window.history.pushState({}, '', '/#login'); } catch (e) {}
+                      window.location.hash = '#login';
+                      setCurrentView('login');
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <div className="mobile-drawer-action-icon gold">
+                      <Laptop size={18} />
+                    </div>
+                    <div>
+                      <div className="mobile-drawer-action-title">Customer Business Portal</div>
+                      <div className="mobile-drawer-action-sub">Login to your active client dashboard</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="mobile-drawer-action-card"
+                    onClick={() => {
+                      try { window.history.pushState({}, '', '/admin/login'); } catch (e) {}
+                      window.location.hash = '#admin/login';
+                      setCurrentView('admin-login');
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <div className="mobile-drawer-action-icon indigo">
+                      <Shield size={18} />
+                    </div>
+                    <div>
+                      <div className="mobile-drawer-action-title">Department Operations Gateway</div>
+                      <div className="mobile-drawer-action-sub">Super Admin, Marketing, Graphics &amp; Sales</div>
+                    </div>
+                  </button>
+
+                  {currentUser && (
+                    <button
+                      type="button"
+                      className="mobile-drawer-action-card"
+                      style={{ borderColor: '#fecaca', background: '#fff5f5' }}
+                      onClick={() => {
+                        try {
+                          localStorage.removeItem('growthline_active_user');
+                          sessionStorage.clear();
+                          window.history.pushState({}, '', '/');
+                        } catch (e) {}
+                        setCurrentUser(null);
+                        window.location.hash = '';
+                        setCurrentView('landing');
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      <div className="mobile-drawer-action-icon" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                        <X size={18} />
+                      </div>
+                      <div>
+                        <div className="mobile-drawer-action-title" style={{ color: '#b91c1c' }}>Sign Out</div>
+                        <div className="mobile-drawer-action-sub">Disconnect active customer session</div>
+                      </div>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </header>
+
+        <main>
+          <section className="hero" aria-labelledby="h1">
+            <div className="wrap">
+              <div>
+                <h1 id="h1">
                 Turn Facebook &amp; Instagram Ads into real enquiries{' '}
                 <span>from just ₹300/Day</span>
               </h1>
