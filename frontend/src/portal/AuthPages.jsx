@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Wallet,
   Globe,
+  Target,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 
@@ -185,122 +186,143 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         {/* LEFT COLUMN: Enterprise Showcase & Value Proposition */}
         <section className="auth-fullpage-showcase">
           <div className="auth-showcase-inner">
-            <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="auth-showcase-topbar">
               <img
                 src="/AdMafia-Logo.png"
                 alt="AdMafia Marketing"
-                style={{
-                  height: '58px',
-                  width: 'auto',
-                  objectFit: 'contain',
-                  background: '#ffffff',
-                  padding: '6px 12px',
-                  borderRadius: '12px',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
-                }}
+                className="auth-brand-logo"
               />
+              <div className="auth-top-badge">
+                <span className="auth-pulse-dot" />
+                <span>SELF-SERVE ONBOARDING</span>
+              </div>
             </div>
 
-            <div className="auth-showcase-pill">
-              <Sparkles size={14} />
-              <span>SELF-SERVE BUSINESS WORKSPACE ONBOARDING</span>
+            <div className="auth-hero-block">
+              <h1 className="auth-showcase-heading">
+                Start receiving verified buyer enquiries{' '}
+                <span className="auth-showcase-highlight">from ₹300/day.</span>
+              </h1>
+              <p className="auth-showcase-subtext">
+                Create your dedicated <strong>AdMafia Business Workspace</strong> in 30 seconds. Top up your ad wallet, configure your target city &amp; industry, and receive real-time customer names and unmasked 10-digit mobile numbers.
+              </p>
             </div>
 
-            <h1 className="auth-showcase-heading">
-              Start receiving verified buyer enquiries from{' '}
-              <span className="auth-showcase-highlight">₹300/day.</span>
-            </h1>
-
-            <p className="auth-showcase-subtext">
-              Create your dedicated Growthline CRM account in 30 seconds. Top up your ad wallet, configure your target city &amp; industry, and receive real-time customer names and 10-digit mobile numbers.
-            </p>
-
-            {/* Live Incoming Lead Preview Widget */}
+            {/* Live Incoming Lead Dispatch Terminal Preview */}
             <div className="auth-showcase-live-card">
               <div className="auth-live-card-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="auth-live-status-group">
                   <span className="auth-pulse-dot" />
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.06em', color: '#a7f3d0' }}>
-                    LIVE BUYER LEAD DISPATCH PREVIEW
-                  </span>
+                  <span className="auth-live-header-tag">LIVE BUYER LEAD DISPATCH PREVIEW</span>
                 </div>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>Instant CRM Delivery</span>
+                <div className="auth-live-delivery-pill">
+                  <Zap size={12} color="#10b981" />
+                  <span>Instant CRM Delivery</span>
+                </div>
               </div>
 
-              <div className="auth-live-card-body">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div className="auth-live-lead-avatar">VM</div>
-                  <div>
-                    <div style={{ fontWeight: 800, color: '#ffffff', fontSize: '0.96rem' }}>
-                      +91 97249 16167
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: '#cbd5e1', marginTop: 2 }}>
-                      Verified Buyer Enquiry • Routed to Your CRM Inbox
-                    </div>
+              <div className="auth-live-card-lead-row">
+                <div className="auth-live-lead-avatar">VM</div>
+                <div className="auth-live-lead-details">
+                  <div className="auth-live-lead-name-row">
+                    <span className="auth-lead-name">Vikram Mehta</span>
+                    <span className="auth-lead-tag-verified">Verified Buyer ✓</span>
+                  </div>
+                  <div className="auth-lead-phone-row">
+                    <span className="auth-lead-phone">+91 97249 16167</span>
+                    <span className="auth-lead-phone-badge">Direct Unmasked Mobile</span>
+                  </div>
+                  <div className="auth-lead-intent-sub">
+                    Verified Buyer Enquiry • Routed to Your CRM Inbox
                   </div>
                 </div>
-                <div className="auth-live-lead-badges">
-                  <span className="auth-mini-tag emerald">
-                    <Phone size={11} /> Direct Call
+                <div className="auth-live-lead-actions">
+                  <span className="auth-action-chip call">
+                    <Phone size={12} /> Direct Call
                   </span>
-                  <span className="auth-mini-tag indigo">
-                    <MessageSquare size={11} /> WhatsApp
+                  <span className="auth-action-chip wa">
+                    <MessageSquare size={12} /> WhatsApp
                   </span>
                 </div>
               </div>
 
+              {/* 3 Highlighted Metric Pills */}
               <div className="auth-live-card-metrics">
-                <div>
+                <div className="auth-metric-item">
                   <small>Minimum Ad Spend</small>
                   <strong>₹300 / Day</strong>
+                  <span className="auth-metric-sub">100% Towards Meta Ads</span>
                 </div>
-                <div>
+                <div className="auth-metric-item highlight">
                   <small>Setup &amp; Platform Fee</small>
                   <strong>₹0 (100% Free)</strong>
+                  <span className="auth-metric-sub">Zero Hidden Cut</span>
                 </div>
-                <div>
+                <div className="auth-metric-item">
                   <small>Lead Exclusivity</small>
                   <strong>100% Direct</strong>
+                  <span className="auth-metric-sub">Never Shared or Resold</span>
                 </div>
               </div>
             </div>
 
-            {/* 3-Step Feature Checklist */}
+            {/* 3-Step Feature Checklist with Highlighting */}
             <div className="auth-showcase-steps">
               <div className="auth-showcase-step-item">
-                <div className="auth-step-icon">
-                  <CheckCircle2 size={18} color="#10b981" />
+                <div className="auth-step-icon emerald">
+                  <CheckCircle2 size={18} />
                 </div>
-                <div>
-                  <h4>1. Instant Customer CRM Dashboard</h4>
+                <div className="auth-step-body">
+                  <div className="auth-step-header">
+                    <h4>1. Instant Customer CRM Dashboard</h4>
+                    <span className="auth-step-tag">Ready in 30s</span>
+                  </div>
                   <p>Manage all incoming buyer enquiries, statuses, and follow-up schedules in one place.</p>
                 </div>
               </div>
 
               <div className="auth-showcase-step-item">
-                <div className="auth-step-icon">
-                  <Wallet size={18} color="#60a5fa" />
+                <div className="auth-step-icon blue">
+                  <Wallet size={18} />
                 </div>
-                <div>
-                  <h4>2. Pure Wallet Balance Control (Min ₹300)</h4>
+                <div className="auth-step-body">
+                  <div className="auth-step-header">
+                    <h4>2. Pure Wallet Balance Control (Min ₹300)</h4>
+                    <span className="auth-step-tag blue">Direct UPI / Bank UTR</span>
+                  </div>
                   <p>Add funds anytime via Razorpay UPI or Bank UTR with full daily ad budget control.</p>
                 </div>
               </div>
 
               <div className="auth-showcase-step-item">
-                <div className="auth-step-icon">
-                  <Globe size={18} color="#f59e0b" />
+                <div className="auth-step-icon amber">
+                  <Target size={18} />
                 </div>
-                <div>
-                  <h4>3. City &amp; Category Targeted Meta Ads</h4>
+                <div className="auth-step-body">
+                  <div className="auth-step-header">
+                    <h4>3. City &amp; Category Targeted Meta Ads</h4>
+                    <span className="auth-step-tag amber">Precision Geo-Targeted</span>
+                  </div>
                   <p>Connect directly with high-intent customers searching for your services in your city.</p>
                 </div>
               </div>
             </div>
 
             <div className="auth-showcase-footer">
-              <ShieldCheck size={16} color="#10b981" />
-              <span>256-Bit SSL Encrypted • Real-Time Sales Desk Sync • Zero Lock-In</span>
+              <div className="auth-trust-pill">
+                <ShieldCheck size={14} color="#10b981" />
+                <span>256-Bit SSL Encrypted</span>
+              </div>
+              <span className="auth-trust-dot">•</span>
+              <div className="auth-trust-pill">
+                <Zap size={14} color="#38bdf8" />
+                <span>Real-Time Sales Desk Sync</span>
+              </div>
+              <span className="auth-trust-dot">•</span>
+              <div className="auth-trust-pill">
+                <Lock size={14} color="#a855f7" />
+                <span>Zero Lock-In</span>
+              </div>
             </div>
           </div>
         </section>
@@ -567,77 +589,77 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
         {/* LEFT COLUMN: Customer Portal Command Center Showcase */}
         <section className="auth-fullpage-showcase">
           <div className="auth-showcase-inner">
-            <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="auth-showcase-topbar">
               <img
                 src="/AdMafia-Logo.png"
                 alt="AdMafia Marketing"
-                style={{
-                  height: '58px',
-                  width: 'auto',
-                  objectFit: 'contain',
-                  background: '#ffffff',
-                  padding: '6px 12px',
-                  borderRadius: '12px',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
-                }}
+                className="auth-brand-logo"
               />
+              <div className="auth-top-badge">
+                <span className="auth-pulse-dot" />
+                <span>CUSTOMER COMMAND CENTER</span>
+              </div>
             </div>
 
-            <div className="auth-showcase-pill">
-              <Sparkles size={14} />
-              <span>CUSTOMER LEAD COMMAND CENTER</span>
+            <div className="auth-hero-block">
+              <h1 className="auth-showcase-heading">
+                Welcome back to your{' '}
+                <span className="auth-showcase-highlight">Buyer Lead Hub.</span>
+              </h1>
+              <p className="auth-showcase-subtext">
+                Sign in to view real-time buyer leads dispatched by our ad operations team, manage your marketing wallet balance, and convert enquiries via direct Call &amp; WhatsApp.
+              </p>
             </div>
-
-            <h1 className="auth-showcase-heading">
-              Welcome back to your{' '}
-              <span className="auth-showcase-highlight">Buyer Lead Hub.</span>
-            </h1>
-
-            <p className="auth-showcase-subtext">
-              Sign in to view real-time buyer leads dispatched by our ad operations team, manage your marketing wallet balance, and convert enquiries via direct Call &amp; WhatsApp.
-            </p>
 
             {/* Live Incoming Lead Preview Widget */}
             <div className="auth-showcase-live-card">
               <div className="auth-live-card-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="auth-live-status-group">
                   <span className="auth-pulse-dot" />
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.06em', color: '#a7f3d0' }}>
-                    ACTIVE WORKSPACE SYNCHRONIZATION
-                  </span>
+                  <span className="auth-live-header-tag">ACTIVE WORKSPACE SYNCHRONIZATION</span>
                 </div>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>Verified Customer Access</span>
+                <div className="auth-live-delivery-pill">
+                  <ShieldCheck size={12} color="#10b981" />
+                  <span>Verified Customer Access</span>
+                </div>
               </div>
 
-              <div className="auth-live-card-body">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div className="auth-live-lead-avatar">GL</div>
-                  <div>
-                    <div style={{ fontWeight: 800, color: '#ffffff', fontSize: '0.96rem' }}>
-                      Real-Time Lead Inbox &amp; Wallet Ledger
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: '#cbd5e1', marginTop: 2 }}>
-                      Instant sync with Sales Operations &amp; Meta Ads Engine
-                    </div>
+              <div className="auth-live-card-lead-row">
+                <div className="auth-live-lead-avatar">AM</div>
+                <div className="auth-live-lead-details">
+                  <div className="auth-live-lead-name-row">
+                    <span className="auth-lead-name">AdMafia Live Lead Dispatch</span>
+                    <span className="auth-lead-tag-verified">24/7 Live Stream ✓</span>
+                  </div>
+                  <div className="auth-lead-phone-row">
+                    <span className="auth-lead-phone">Real-Time Lead Inbox &amp; Wallet Ledger</span>
+                  </div>
+                  <div className="auth-lead-intent-sub">
+                    Instant sync with Sales Operations &amp; Meta Ads Campaign Engine
                   </div>
                 </div>
-                <div className="auth-live-lead-badges">
-                  <span className="auth-mini-tag emerald">✓ Verified Leads</span>
+                <div className="auth-live-lead-actions">
+                  <span className="auth-action-chip wa">
+                    ✓ Verified Leads
+                  </span>
                 </div>
               </div>
 
               <div className="auth-live-card-metrics">
-                <div>
+                <div className="auth-metric-item">
                   <small>Daily Ad Budget</small>
-                  <strong>From ₹300/day</strong>
+                  <strong>From ₹300/Day</strong>
+                  <span className="auth-metric-sub">Full Pacing Control</span>
                 </div>
-                <div>
+                <div className="auth-metric-item highlight">
                   <small>Wallet Top-Up</small>
                   <strong>Instant UPI / UTR</strong>
+                  <span className="auth-metric-sub">Zero Platform Delay</span>
                 </div>
-                <div>
+                <div className="auth-metric-item">
                   <small>CRM Access</small>
                   <strong>24/7 Live</strong>
+                  <span className="auth-metric-sub">Instant Dispatch</span>
                 </div>
               </div>
             </div>
@@ -645,39 +667,60 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
             {/* 3 Highlights */}
             <div className="auth-showcase-steps">
               <div className="auth-showcase-step-item">
-                <div className="auth-step-icon">
-                  <Phone size={18} color="#10b981" />
+                <div className="auth-step-icon emerald">
+                  <Phone size={18} />
                 </div>
-                <div>
-                  <h4>Unmasked 10-Digit Buyer Mobile Numbers</h4>
+                <div className="auth-step-body">
+                  <div className="auth-step-header">
+                    <h4>Unmasked 10-Digit Buyer Mobile Numbers</h4>
+                    <span className="auth-step-tag">Direct Access</span>
+                  </div>
                   <p>Call or WhatsApp interested buyers the moment their enquiry hits your CRM.</p>
                 </div>
               </div>
 
               <div className="auth-showcase-step-item">
-                <div className="auth-step-icon">
-                  <Wallet size={18} color="#60a5fa" />
+                <div className="auth-step-icon blue">
+                  <Wallet size={18} />
                 </div>
-                <div>
-                  <h4>Transparent Wallet &amp; Daily Spend</h4>
+                <div className="auth-step-body">
+                  <div className="auth-step-header">
+                    <h4>Transparent Wallet &amp; Daily Spend</h4>
+                    <span className="auth-step-tag blue">Live Ledger</span>
+                  </div>
                   <p>Track every rupee added to your wallet and adjust your daily ad spend limit anytime.</p>
                 </div>
               </div>
 
               <div className="auth-showcase-step-item">
-                <div className="auth-step-icon">
-                  <ShieldCheck size={18} color="#f59e0b" />
+                <div className="auth-step-icon amber">
+                  <ShieldCheck size={18} />
                 </div>
-                <div>
-                  <h4>Dedicated Account Support Desk</h4>
+                <div className="auth-step-body">
+                  <div className="auth-step-header">
+                    <h4>Dedicated Account Support Desk</h4>
+                    <span className="auth-step-tag amber">Priority Help</span>
+                  </div>
                   <p>Raise support tickets or request custom targeting directly from your portal.</p>
                 </div>
               </div>
             </div>
 
             <div className="auth-showcase-footer">
-              <ShieldCheck size={16} color="#10b981" />
-              <span>Protected by Enterprise Session Security • Growthline CRM v2.4</span>
+              <div className="auth-trust-pill">
+                <ShieldCheck size={14} color="#10b981" />
+                <span>Enterprise Session Security</span>
+              </div>
+              <span className="auth-trust-dot">•</span>
+              <div className="auth-trust-pill">
+                <Zap size={14} color="#38bdf8" />
+                <span>PostgreSQL Relational Storage</span>
+              </div>
+              <span className="auth-trust-dot">•</span>
+              <div className="auth-trust-pill">
+                <Lock size={14} color="#a855f7" />
+                <span>Isolated Customer Data</span>
+              </div>
             </div>
           </div>
         </section>
