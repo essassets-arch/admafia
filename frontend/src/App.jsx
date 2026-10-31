@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ChevronRight, Laptop, Shield } from 'lucide-react';
+import { 
+  Menu, X, ChevronRight, ChevronDown, Laptop, Shield, 
+  Crown, Sparkles, Palette, Briefcase, Layers, ArrowRight, CheckCircle2 
+} from 'lucide-react';
 import MetaAdsCalculator from './components/MetaAdsCalculator';
 import AuthPage from './components/AuthPage';
 import PortalDashboard from './portal/PortalDashboard';
@@ -99,6 +102,63 @@ const faqs = [
   ['Do you convert leads into customers?', 'AdMafia Marketing focuses on generating customer enquiries. Your business handles customer communication, follow-ups, negotiations and final sales conversions.'],
   ['Are all leads guaranteed to convert into sales?', 'No. Lead quality and conversion depend on audience interest, advertising strategy, pricing, competition and your follow-up process. We do not guarantee that every enquiry will become a paying customer.'],
   ['How can I start generating leads with AdMafia Marketing?', 'Share your business details, advertising objectives and target audience. Our team can then discuss your campaign requirements and the next steps.'],
+];
+
+const platformPages = [
+  {
+    title: 'Super Admin Control Center',
+    path: '/superadmin',
+    view: 'superadmin-portal',
+    icon: Crown,
+    badge: 'Founders & Ops',
+    badgeClass: 'badge-gold',
+    desc: 'Platform health, financial ledger, refund audits & account controls',
+  },
+  {
+    title: 'Marketing Department',
+    path: '/marketing',
+    view: 'marketing-portal',
+    icon: Sparkles,
+    badge: 'Campaigns',
+    badgeClass: 'badge-blue',
+    desc: 'Meta Ads pacing, target audiences, creative angles & post ideation',
+  },
+  {
+    title: 'Graphics Department',
+    path: '/graphics',
+    view: 'graphics-portal',
+    icon: Palette,
+    badge: 'Creative Studio',
+    badgeClass: 'badge-pink',
+    desc: 'Incoming design requests queue, banner uploads & revision reviews',
+  },
+  {
+    title: 'Sales Department',
+    path: '/sales',
+    view: 'sales-portal',
+    icon: Briefcase,
+    badge: 'Leads & Accounts',
+    badgeClass: 'badge-green',
+    desc: 'Inbound leads qualification, telecalling follow-ups & customer groups',
+  },
+  {
+    title: 'Operations Gateway',
+    path: '/admin/login',
+    view: 'admin-login',
+    icon: Shield,
+    badge: 'Unified Sign-In',
+    badgeClass: 'badge-purple',
+    desc: 'Single authenticated gateway for all operations administrators & staff',
+  },
+  {
+    title: 'Customer Business Portal',
+    path: '/login',
+    view: 'login',
+    icon: Laptop,
+    badge: 'Client Dashboard',
+    badgeClass: 'badge-amber',
+    desc: 'Real-time ad spend, wallet recharge & live submitted enquiries',
+  },
 ];
 
 export default function App() {
@@ -304,6 +364,38 @@ export default function App() {
   });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [departmentsDropdownOpen, setDepartmentsDropdownOpen] = useState(false);
+
+  const navigateTo = (path, targetView) => {
+    try {
+      window.history.pushState({}, '', path);
+    } catch (e) {}
+    window.location.hash = path.startsWith('#') ? path : '';
+    const v = targetView || resolveView();
+    setCurrentView(v);
+    setMobileMenuOpen(false);
+    setDepartmentsDropdownOpen(false);
+
+    if (path.startsWith('#') && (!targetView || targetView === 'landing')) {
+      const targetId = path.replace('#', '');
+      const el = document.getElementById(targetId);
+      if (el) {
+        setTimeout(() => el.scrollIntoView({ behavior: 'smooth' }), 50);
+      }
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (departmentsDropdownOpen && !e.target.closest('.desktop-dropdown-container')) {
+        setDepartmentsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [departmentsDropdownOpen]);
 
   useEffect(() => {
     const syncUser = () => {
@@ -643,13 +735,83 @@ export default function App() {
 
   return (
     <>
+      {/* 1. Top Utility Ribbon: Quick Access to All Departments (Desktop Only) */}
+      <div className="top-utility-bar">
+        <div className="wrap utility-content">
+          <div className="utility-left">
+            <span className="utility-badge">⚡ AdMafia Network</span>
+            <span className="utility-sep">/</span>
+            <span className="utility-label">Departments:</span>
+            <a 
+              href="/superadmin" 
+              onClick={(e) => { e.preventDefault(); navigateTo('/superadmin', 'superadmin-portal'); }} 
+              className="utility-link"
+              title="Super Admin Control Center"
+            >
+              <Crown size={13} color="#f59e0b" />
+              <span>Super Admin</span>
+            </a>
+            <a 
+              href="/marketing" 
+              onClick={(e) => { e.preventDefault(); navigateTo('/marketing', 'marketing-portal'); }} 
+              className="utility-link"
+              title="Marketing Department"
+            >
+              <Sparkles size={13} color="#38bdf8" />
+              <span>Marketing</span>
+            </a>
+            <a 
+              href="/graphics" 
+              onClick={(e) => { e.preventDefault(); navigateTo('/graphics', 'graphics-portal'); }} 
+              className="utility-link"
+              title="Graphics Creative Studio"
+            >
+              <Palette size={13} color="#ec4899" />
+              <span>Graphics</span>
+            </a>
+            <a 
+              href="/sales" 
+              onClick={(e) => { e.preventDefault(); navigateTo('/sales', 'sales-portal'); }} 
+              className="utility-link"
+              title="Sales Department Desks"
+            >
+              <Briefcase size={13} color="#10b981" />
+              <span>Sales</span>
+            </a>
+          </div>
+          <div className="utility-right">
+            <a 
+              href="/admin/login" 
+              onClick={(e) => { e.preventDefault(); navigateTo('/admin/login', 'admin-login'); }} 
+              className="utility-link utility-link-highlight"
+              title="Multi-Department Operations Sign-In"
+            >
+              <Shield size={13} />
+              <span>Staff Gateway</span>
+            </a>
+            <span className="utility-sep">|</span>
+            <a 
+              href="#contact" 
+              onClick={(e) => { e.preventDefault(); navigateTo('#contact', 'landing'); }} 
+              className="utility-link"
+            >
+              <span>⚡ Plans from ₹300/Day</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Main Sticky Navigation Bar */}
       <header className="site-header">
         <div className="wrap nav">
           <a
             className="logo"
             href={site.url}
             aria-label="AdMafia Marketing home"
-            onClick={() => setMobileMenuOpen(false)}
+            onClick={(e) => {
+              e.preventDefault();
+              navigateTo('/', 'landing');
+            }}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}
           >
             <img
@@ -658,6 +820,113 @@ export default function App() {
               className="site-logo-img"
             />
           </a>
+
+          {/* Desktop Navigation Links */}
+          <nav className="desktop-nav-menu" aria-label="Main Navigation">
+            <a 
+              href="#how" 
+              onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }} 
+              className="desktop-nav-link"
+            >
+              How It Works
+            </a>
+            <a 
+              href="#pricing" 
+              onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }} 
+              className="desktop-nav-link"
+            >
+              Calculator
+            </a>
+            <a 
+              href="#services" 
+              onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }} 
+              className="desktop-nav-link"
+            >
+              Services
+            </a>
+            <a 
+              href="#industries" 
+              onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }} 
+              className="desktop-nav-link"
+            >
+              Industries
+            </a>
+            <a 
+              href="#faq" 
+              onClick={(e) => { e.preventDefault(); navigateTo('#faq', 'landing'); }} 
+              className="desktop-nav-link"
+            >
+              FAQ
+            </a>
+
+            {/* All Pages & Desks Dropdown */}
+            <div className="desktop-dropdown-container">
+              <button
+                type="button"
+                className={`desktop-nav-link dropdown-trigger ${departmentsDropdownOpen ? 'active' : ''}`}
+                onClick={() => setDepartmentsDropdownOpen(!departmentsDropdownOpen)}
+                aria-expanded={departmentsDropdownOpen}
+              >
+                <Layers size={15} />
+                <span>All Pages &amp; Desks</span>
+                <ChevronDown size={14} className={`dropdown-chevron ${departmentsDropdownOpen ? 'rotated' : ''}`} />
+              </button>
+
+              {departmentsDropdownOpen && (
+                <div className="desktop-dropdown-menu">
+                  <div className="dropdown-menu-header">
+                    <div className="dropdown-menu-title">AdMafia Portals &amp; Workspaces</div>
+                    <div className="dropdown-menu-sub">Direct access to all company departments and client workspaces</div>
+                  </div>
+                  <div className="dropdown-menu-grid">
+                    {platformPages.map((page, idx) => {
+                      const Icon = page.icon;
+                      return (
+                        <a
+                          key={idx}
+                          href={page.path}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigateTo(page.path, page.view);
+                          }}
+                          className="dropdown-menu-item"
+                        >
+                          <div className={`dropdown-item-icon ${page.badgeClass}`}>
+                            <Icon size={18} />
+                          </div>
+                          <div className="dropdown-item-content">
+                            <div className="dropdown-item-row">
+                              <span className="dropdown-item-name">{page.title}</span>
+                              <span className={`dropdown-item-badge ${page.badgeClass}`}>{page.badge}</span>
+                            </div>
+                            <p className="dropdown-item-desc">{page.desc}</p>
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                  <div className="dropdown-menu-footer">
+                    <div className="dropdown-footer-info">
+                      <CheckCircle2 size={13} color="#10b981" />
+                      <span>PostgreSQL Relational Security • 100% Dynamic</span>
+                    </div>
+                    <a
+                      href="/admin/login"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigateTo('/admin/login', 'admin-login');
+                      }}
+                      className="dropdown-footer-link"
+                    >
+                      <span>Operations Gateway</span>
+                      <ArrowRight size={13} />
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </nav>
+
           <div className="nav-actions">
             {currentUser ? (
               <>
@@ -761,23 +1030,57 @@ export default function App() {
         {mobileMenuOpen && (
           <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
             <div className="mobile-drawer-menu" onClick={(e) => e.stopPropagation()}>
+              <div className="mobile-drawer-section-title">Website Sections</div>
               <div className="mobile-drawer-links">
-                <a href="#how" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                <a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }} className="mobile-drawer-link">
                   <span>How It Works</span>
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
-                <a href="#calc" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                <a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }} className="mobile-drawer-link">
                   <span>Ad Spend Calculator</span>
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
-                <a href="#services" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                <a href="#services" onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }} className="mobile-drawer-link">
                   <span>Services &amp; Targeting</span>
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
-                <a href="#contact" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                <a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }} className="mobile-drawer-link">
+                  <span>Industry Solutions</span>
+                  <ChevronRight size={16} color="#94a3b8" />
+                </a>
+                <a href="#faq" onClick={(e) => { e.preventDefault(); navigateTo('#faq', 'landing'); }} className="mobile-drawer-link">
+                  <span>Frequently Asked Questions</span>
+                  <ChevronRight size={16} color="#94a3b8" />
+                </a>
+                <a href="#contact" onClick={(e) => { e.preventDefault(); navigateTo('#contact', 'landing'); }} className="mobile-drawer-link">
                   <span>Pricing &amp; Contact</span>
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
+              </div>
+
+              <div className="mobile-drawer-divider" />
+
+              <div className="mobile-drawer-section-title">All Departments &amp; Pages</div>
+              <div className="mobile-drawer-depts-grid">
+                {platformPages.map((page, idx) => {
+                  const Icon = page.icon;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="mobile-drawer-dept-card"
+                      onClick={() => navigateTo(page.path, page.view)}
+                    >
+                      <div className={`mobile-dept-icon ${page.badgeClass}`}>
+                        <Icon size={16} />
+                      </div>
+                      <div className="mobile-dept-info">
+                        <div className="mobile-dept-title">{page.title}</div>
+                        <div className="mobile-dept-badge">{page.badge}</div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="mobile-drawer-divider" />
@@ -1159,22 +1462,118 @@ export default function App() {
         </section>
       </main>
 
-      <footer>
-        <div className="wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
-            <img
-              src="/AdMafia-Logo.png"
-              alt="AdMafia Marketing"
-              style={{ height: '36px', width: 'auto', objectFit: 'contain', background: '#ffffff', padding: '4px 8px', borderRadius: '8px' }}
-            />
-            <span>&copy; {new Date().getFullYear()} {site.name}.</span>
+      <footer className="site-footer">
+        <div className="wrap">
+          <div className="footer-grid">
+            {/* Col 1: Brand Info */}
+            <div className="footer-col footer-col-brand">
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                <img
+                  src="/AdMafia-Logo.png"
+                  alt="AdMafia Marketing"
+                  style={{ height: '40px', width: 'auto', objectFit: 'contain', background: '#ffffff', padding: '4px 8px', borderRadius: '8px' }}
+                />
+              </div>
+              <p style={{ fontSize: '0.86rem', lineHeight: '1.6', color: '#94a3b8', margin: '0 0 16px' }}>
+                High-performance Meta Ads lead generation engine. Turn targeted Facebook and Instagram traffic into verified customer enquiries from just ₹300/day.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#10b981' }}>
+                <CheckCircle2 size={14} />
+                <span>PostgreSQL Relational Ledger &amp; Customer Isolation</span>
+              </div>
+            </div>
+
+            {/* Col 2: Company Operations Desks */}
+            <div className="footer-col">
+              <h4>Operations Desks</h4>
+              <ul className="footer-links">
+                <li>
+                  <a href="/superadmin" onClick={(e) => { e.preventDefault(); navigateTo('/superadmin', 'superadmin-portal'); }}>
+                    <Crown size={14} color="#f59e0b" />
+                    <span>Super Admin Control</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="/marketing" onClick={(e) => { e.preventDefault(); navigateTo('/marketing', 'marketing-portal'); }}>
+                    <Sparkles size={14} color="#38bdf8" />
+                    <span>Marketing Department</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="/graphics" onClick={(e) => { e.preventDefault(); navigateTo('/graphics', 'graphics-portal'); }}>
+                    <Palette size={14} color="#ec4899" />
+                    <span>Graphics Creative Studio</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="/sales" onClick={(e) => { e.preventDefault(); navigateTo('/sales', 'sales-portal'); }}>
+                    <Briefcase size={14} color="#10b981" />
+                    <span>Sales Operations</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="/admin/login" onClick={(e) => { e.preventDefault(); navigateTo('/admin/login', 'admin-login'); }}>
+                    <Shield size={14} color="#a855f7" />
+                    <span>Operations Gateway</span>
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {/* Col 3: Client Workspace */}
+            <div className="footer-col">
+              <h4>Customer Workspace</h4>
+              <ul className="footer-links">
+                <li>
+                  <a href="/login" onClick={(e) => { e.preventDefault(); navigateTo('/login', 'login'); }}>
+                    <Laptop size={14} color="#f59e0b" />
+                    <span>Client Dashboard Login</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="/register" onClick={(e) => { e.preventDefault(); navigateTo('/register', 'register'); }}>
+                    <span>Register Business Account</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }}>
+                    <span>Meta Ads Calculator</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="#contact" onClick={(e) => { e.preventDefault(); navigateTo('#contact', 'landing'); }}>
+                    <span>Starting Budget (₹300/Day)</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="#faq" onClick={(e) => { e.preventDefault(); navigateTo('#faq', 'landing'); }}>
+                    <span>Client FAQ</span>
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {/* Col 4: Advertising Solutions */}
+            <div className="footer-col">
+              <h4>Ad Solutions</h4>
+              <ul className="footer-links">
+                <li><a href="#services" onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }}>Facebook Lead Generation</a></li>
+                <li><a href="#services" onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }}>Instagram Sponsored Ads</a></li>
+                <li><a href="#services" onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }}>Local City Targeting</a></li>
+                <li><a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }}>Multi-Industry Campaigns</a></li>
+                <li><a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }}>How AdMafia Works</a></li>
+              </ul>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '14px', alignItems: 'center', fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.7)' }}>
-            <a href="/sales" style={{ color: 'inherit', textDecoration: 'none' }}>Sales Operations</a>
-            <span>•</span>
-            <a href="/marketing" style={{ color: 'inherit', textDecoration: 'none' }}>Marketing Panel</a>
+
+          <div className="footer-bottom">
+            <div>
+              <span>&copy; {new Date().getFullYear()} {site.name}. All rights reserved.</span>
+            </div>
+            <div>
+              <span>Facebook and Instagram are registered trademarks of Meta Platforms, Inc. AdMafia Marketing operates independently.</span>
+            </div>
           </div>
-          <span>Facebook and Instagram are trademarks of Meta Platforms, Inc. AdMafia Marketing is not affiliated with Meta.</span>
         </div>
       </footer>
     </>
