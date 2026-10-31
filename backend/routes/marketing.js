@@ -16,99 +16,135 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 // -----------------------------------------------------------------------------
+// Objective Format Normalizers & Formatters
+// -----------------------------------------------------------------------------
+export function normalizeMarketingObjective(obj) {
+  if (!obj) return 'lead_generation';
+  const clean = String(obj).trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const allowed = ['brand_awareness', 'lead_generation', 'product_promotion', 'festival_campaign', 'customer_engagement'];
+  if (allowed.includes(clean)) return clean;
+  if (clean.includes('lead')) return 'lead_generation';
+  if (clean.includes('brand') || clean.includes('aware')) return 'brand_awareness';
+  if (clean.includes('product') || clean.includes('promo')) return 'product_promotion';
+  if (clean.includes('festival') || clean.includes('event')) return 'festival_campaign';
+  if (clean.includes('engage')) return 'customer_engagement';
+  return 'lead_generation';
+}
+
+export function formatMarketingObjective(obj) {
+  if (!obj) return 'Lead Generation';
+  const map = {
+    lead_generation: 'Lead Generation',
+    brand_awareness: 'Brand Awareness',
+    product_promotion: 'Product Promotion',
+    festival_campaign: 'Festival Campaign',
+    customer_engagement: 'Customer Engagement',
+  };
+  return map[obj.toLowerCase()] || obj;
+}
+
+// -----------------------------------------------------------------------------
 // Auto-recovery: Ensure marketing schema tables exist
 // -----------------------------------------------------------------------------
 export async function ensureMarketingTables() {
-  try {
-    await query(`
-      CREATE TABLE IF NOT EXISTS marketing_ideas (
-        id VARCHAR(64) PRIMARY KEY,
-        customer_id VARCHAR(64) NOT NULL,
-        title VARCHAR(255) NOT NULL,
-        objective VARCHAR(100) NOT NULL DEFAULT 'Lead Generation',
-        concept TEXT NOT NULL,
-        target_audience TEXT DEFAULT '',
-        caption_suggestions TEXT DEFAULT '',
-        call_to_action VARCHAR(255) DEFAULT '',
-        hashtags TEXT DEFAULT '',
-        creative_brief TEXT DEFAULT '',
-        platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
-        language VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
-        campaign_period VARCHAR(100) DEFAULT '',
-        constraints TEXT DEFAULT '',
-        status VARCHAR(32) NOT NULL DEFAULT 'Saved',
-        created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Executive',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_marketing_ideas_customer ON marketing_ideas(customer_id, status);
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS marketing_ideas (
+      id VARCHAR(64) PRIMARY KEY,
+      customer_id VARCHAR(64) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      objective VARCHAR(100) NOT NULL DEFAULT 'lead_generation',
+      concept TEXT NOT NULL,
+      target_audience TEXT DEFAULT '',
+      caption_suggestions TEXT DEFAULT '',
+      call_to_action VARCHAR(255) DEFAULT '',
+      hashtags TEXT DEFAULT '',
+      creative_brief TEXT DEFAULT '',
+      platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
+      language VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
+      campaign_period VARCHAR(100) DEFAULT '',
+      constraints TEXT DEFAULT '',
+      status VARCHAR(32) NOT NULL DEFAULT 'Saved',
+      created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Executive',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_marketing_ideas_customer ON marketing_ideas(customer_id, status)`,
+    `CREATE TABLE IF NOT EXISTS marketing_posts (
+      id VARCHAR(64) PRIMARY KEY,
+      customer_id VARCHAR(64) NOT NULL,
+      idea_id VARCHAR(64),
+      title VARCHAR(255) NOT NULL,
+      platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
+      caption TEXT NOT NULL,
+      hashtags TEXT DEFAULT '',
+      call_to_action VARCHAR(255) DEFAULT '',
+      media_url TEXT DEFAULT '',
+      media_type VARCHAR(64) DEFAULT 'image',
+      language VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
+      campaign_association VARCHAR(255) DEFAULT '',
+      intended_publish_at TIMESTAMPTZ,
+      status VARCHAR(40) NOT NULL DEFAULT 'Draft',
+      submitted_by VARCHAR(140),
+      submitted_at TIMESTAMPTZ,
+      revision_number INT NOT NULL DEFAULT 1,
+      creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post',
+      designer_notes TEXT DEFAULT '',
+      designer_name VARCHAR(140) DEFAULT 'Graphics Designer',
+      creative_instructions TEXT DEFAULT '',
+      priority VARCHAR(40) DEFAULT 'Normal',
+      is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+      deleted_at TIMESTAMPTZ,
+      deleted_by VARCHAR(140),
+      created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Content Team',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_marketing_posts_customer ON marketing_posts(customer_id, status)`,
+    `CREATE TABLE IF NOT EXISTS marketing_campaigns (
+      id VARCHAR(64) PRIMARY KEY,
+      customer_id VARCHAR(64) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      objective VARCHAR(100) NOT NULL,
+      post_id VARCHAR(64),
+      platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
+      target_audience TEXT DEFAULT '',
+      start_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      end_date TIMESTAMPTZ,
+      daily_budget NUMERIC(10, 2) NOT NULL DEFAULT 300.00,
+      total_budget NUMERIC(12, 2) DEFAULT 0.00,
+      schedule_settings TEXT DEFAULT '{}',
+      status VARCHAR(40) NOT NULL DEFAULT 'Draft',
+      external_platform_status VARCHAR(64) NOT NULL DEFAULT 'Not Connected',
+      external_campaign_id VARCHAR(120),
+      created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Manager',
+      last_action VARCHAR(100) DEFAULT 'Created',
+      last_actor VARCHAR(140) DEFAULT 'Marketing Manager',
+      last_action_at TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`,
+    `ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_objective_check`,
+    `ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_status_check`,
+    `ALTER TABLE marketing_posts DROP CONSTRAINT IF EXISTS marketing_posts_status_check`,
+    `ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_status_check`,
+    `ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_daily_budget_check`,
+  ];
 
-      CREATE TABLE IF NOT EXISTS marketing_posts (
-        id VARCHAR(64) PRIMARY KEY,
-        customer_id VARCHAR(64) NOT NULL,
-        idea_id VARCHAR(64),
-        title VARCHAR(255) NOT NULL,
-        platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
-        caption TEXT NOT NULL,
-        hashtags TEXT DEFAULT '',
-        call_to_action VARCHAR(255) DEFAULT '',
-        media_url TEXT DEFAULT '',
-        media_type VARCHAR(64) DEFAULT 'image',
-        language VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
-        campaign_association VARCHAR(255) DEFAULT '',
-        intended_publish_at TIMESTAMPTZ,
-        status VARCHAR(40) NOT NULL DEFAULT 'Draft',
-        submitted_by VARCHAR(140),
-        submitted_at TIMESTAMPTZ,
-        revision_number INT NOT NULL DEFAULT 1,
-        creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post',
-        designer_notes TEXT DEFAULT '',
-        designer_name VARCHAR(140) DEFAULT 'Graphics Designer',
-        creative_instructions TEXT DEFAULT '',
-        priority VARCHAR(40) DEFAULT 'Normal',
-        is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-        deleted_at TIMESTAMPTZ,
-        deleted_by VARCHAR(140),
-        created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Content Team',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_marketing_posts_customer ON marketing_posts(customer_id, status);
-
-      CREATE TABLE IF NOT EXISTS marketing_campaigns (
-        id VARCHAR(64) PRIMARY KEY,
-        customer_id VARCHAR(64) NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        objective VARCHAR(100) NOT NULL,
-        post_id VARCHAR(64),
-        platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
-        target_audience TEXT DEFAULT '',
-        start_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        end_date TIMESTAMPTZ,
-        daily_budget NUMERIC(10, 2) NOT NULL DEFAULT 300.00,
-        total_budget NUMERIC(12, 2) DEFAULT 0.00,
-        schedule_settings TEXT DEFAULT '{}',
-        status VARCHAR(40) NOT NULL DEFAULT 'Draft',
-        external_platform_status VARCHAR(64) NOT NULL DEFAULT 'Not Connected',
-        external_campaign_id VARCHAR(120),
-        created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Manager',
-        last_action VARCHAR(100) DEFAULT 'Created',
-        last_actor VARCHAR(140) DEFAULT 'Marketing Manager',
-        last_action_at TIMESTAMPTZ DEFAULT NOW(),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_objective_check;
-      ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_status_check;
-      ALTER TABLE marketing_posts DROP CONSTRAINT IF EXISTS marketing_posts_status_check;
-      ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_status_check;
-      ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_daily_budget_check;
-    `);
-  } catch (e) {
-    console.warn('[ensureMarketingTables warning]:', e.message);
+  for (const stmt of statements) {
+    try {
+      await query(stmt);
+    } catch (e) {}
   }
 }
+
+let marketingTablesEnsured = false;
+marketingRouter.use(async (req, res, next) => {
+  if (!marketingTablesEnsured) {
+    marketingTablesEnsured = true;
+    ensureMarketingTables().catch(() => {});
+  }
+  next();
+});
 
 // -----------------------------------------------------------------------------
 // Helper: Audit Logger
@@ -587,7 +623,7 @@ marketingRouter.get('/ideas', async (req, res) => {
         customerId: r.customer_id,
         companyName: r.company_name || 'Client Workspace',
         title: r.title,
-        objective: r.objective,
+        objective: formatMarketingObjective(r.objective),
         concept: r.concept,
         targetAudience: r.target_audience || '',
         captionSuggestions: r.caption_suggestions || '',
@@ -615,7 +651,7 @@ marketingRouter.post('/ideas', async (req, res) => {
     const {
       customerId,
       title,
-      objective = 'Lead Generation',
+      objective = 'lead_generation',
       concept,
       targetAudience = '',
       captionSuggestions = '',
@@ -632,8 +668,10 @@ marketingRouter.post('/ideas', async (req, res) => {
 
     if (!customerId) return res.status(400).json({ ok: false, error: 'Customer selection is required.' });
     if (!title || !title.trim()) return res.status(400).json({ ok: false, error: 'Idea title is required.' });
-    const finalObjective = (objective && objective.trim()) || 'Lead Generation';
     if (!concept || !concept.trim()) return res.status(400).json({ ok: false, error: 'Concept / brief is required.' });
+
+    // Normalize objective to strictly match check constraint (e.g. 'lead_generation')
+    const finalObjective = normalizeMarketingObjective(objective);
 
     // Verify customer exists by id, phone, or username
     const cleanPhone = String(customerId).replace(/\D/g, '').slice(-10);
@@ -647,6 +685,9 @@ marketingRouter.post('/ideas', async (req, res) => {
 
     const verifiedCustId = custCheck.rows[0].id;
     const id = `idea_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+    // Drop constraint if present so flexible objectives are allowed
+    await query('ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_objective_check').catch(() => {});
 
     const insertSql = `INSERT INTO marketing_ideas (
       id, customer_id, title, objective, concept, target_audience,
@@ -676,7 +717,9 @@ marketingRouter.post('/ideas', async (req, res) => {
     try {
       await query(insertSql, insertParams);
     } catch (insertErr) {
-      if (insertErr && insertErr.message && (insertErr.message.includes('marketing_ideas') || insertErr.message.includes('does not exist'))) {
+      if (insertErr && insertErr.message && (insertErr.message.includes('check constraint') || insertErr.message.includes('marketing_ideas') || insertErr.message.includes('does not exist'))) {
+        await query('ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_objective_check').catch(() => {});
+        await query('ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_status_check').catch(() => {});
         await ensureMarketingTables();
         await query(insertSql, insertParams);
       } else {
@@ -688,7 +731,14 @@ marketingRouter.post('/ideas', async (req, res) => {
 
     res.status(201).json({
       ok: true,
-      idea: { id, customerId: verifiedCustId, title: title.trim(), objective: finalObjective, concept: concept.trim(), status },
+      idea: {
+        id,
+        customerId: verifiedCustId,
+        title: title.trim(),
+        objective: formatMarketingObjective(finalObjective),
+        concept: concept.trim(),
+        status,
+      },
       message: 'Marketing idea created and saved successfully.',
     });
   } catch (err) {

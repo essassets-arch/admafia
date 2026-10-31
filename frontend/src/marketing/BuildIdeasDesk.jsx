@@ -142,7 +142,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
       const res = await marketingApi.createIdea({
         customerId: selectedCustomerId,
         title: title.trim(),
-        objective: 'Lead Generation',
+        objective: 'lead_generation',
         concept: concept.trim(),
         targetAudience: '',
         captionSuggestions: concept.trim(),
