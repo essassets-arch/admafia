@@ -79,6 +79,17 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     totalLifetimePaid: amountPaid,
     runwayDays: Number(row.runway_days ?? Math.floor(balance / Math.max(dailyPacing, 1))),
     totalLeadsDispatched: Number(row.total_leads_dispatched ?? 0),
+    lastDeductedAt: row.last_deducted_at || null,
+    isDeductedToday: Boolean(
+      row.last_deducted_at &&
+      new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    ),
+    lockedDays: (row.last_deducted_at &&
+      new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))
+      ? [['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay()]]
+      : [],
     isSelfRegistered: true,
     registeredFrom: row.registered_from || 'http://localhost:5173/#register',
     registeredAt: row.registered_at
@@ -2399,7 +2410,10 @@ const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 if (fs.existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
 }

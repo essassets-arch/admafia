@@ -1,5 +1,6 @@
 import { TrendingUp, Zap, Calendar, X, ArrowRight, ShieldCheck, Sparkles, Building2, Briefcase, MapPin, Mail, Phone, Globe, User, CheckCircle2, Layers, Check, Shield } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 
 // Reusable SweetAlert2-Style Popup Dialog
 export function SweetAlertModal({
@@ -839,7 +840,7 @@ export function AddFundsModal({
   );
 }
 
-// Modal 6: Set Daily Ad Spend Budget Modal (Exact match to "Set Today's Ad Budget" design)
+// Modal 6: Set Daily Ad Spend Budget Modal (Exact match to "Set Today's Ad Budget" design + Day Lock & SweetAlert)
 export function SetDailyLimitModal({
   isOpen,
   onClose,
@@ -848,16 +849,42 @@ export function SetDailyLimitModal({
   walletBalance = 0,
   onOpenTopUp,
   onDeductDailyAdSpend,
+  customer = {},
+  onUpdateCustomer,
 }) {
   const [amount, setAmount] = useState(currentLimit || 300);
-  const [sweetAlert, setSweetAlert] = useState(null);
+  const [selectedDays, setSelectedDays] = useState(
+    Array.isArray(customer?.activeDays) && customer.activeDays.length > 0
+      ? customer.activeDays
+      : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+  );
+
+  const todayIdx = new Date().getDay(); // 0: SUN, 1: MON, ..., 6: SAT
+  const dayDefinitions = [
+    { code: 'MON', label: 'Monday', short: 'Mon', isToday: todayIdx === 1 },
+    { code: 'TUE', label: 'Tuesday', short: 'Tue', isToday: todayIdx === 2 },
+    { code: 'WED', label: 'Wednesday', short: 'Wed', isToday: todayIdx === 3 },
+    { code: 'THU', label: 'Thursday', short: 'Thu', isToday: todayIdx === 4 },
+    { code: 'FRI', label: 'Friday', short: 'Fri', isToday: todayIdx === 5 },
+    { code: 'SAT', label: 'Saturday', short: 'Sat', isToday: todayIdx === 6 },
+    { code: 'SUN', label: 'Sunday', short: 'Sun', isToday: todayIdx === 0 },
+  ];
+  const todayItem = dayDefinitions.find((d) => d.isToday) || dayDefinitions[5];
 
   React.useEffect(() => {
     if (isOpen) {
       setAmount(currentLimit || 300);
-      setSweetAlert(null);
+      const initialDays = Array.isArray(customer?.activeDays) && customer.activeDays.length > 0
+        ? customer.activeDays
+        : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      // Ensure today is selected so today's budget can be locked and run
+      if (!initialDays.includes(todayItem.code)) {
+        setSelectedDays([...initialDays, todayItem.code]);
+      } else {
+        setSelectedDays(initialDays);
+      }
     }
-  }, [isOpen, currentLimit]);
+  }, [isOpen, currentLimit, customer?.activeDays, todayItem.code]);
 
   if (!isOpen) return null;
 
@@ -871,56 +898,127 @@ export function SetDailyLimitModal({
     { label: '₹2,000', value: 2000 },
   ];
 
+  const toggleDaySelection = (dayCode) => {
+    if (selectedDays.includes(dayCode)) {
+      if (selectedDays.length <= 1) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Minimum 1 Active Day Required',
+          text: 'At least one day must remain selected for marketing pacing schedule.',
+          confirmButtonColor: '#4f46e5',
+        });
+        return;
+      }
+      setSelectedDays(selectedDays.filter((d) => d !== dayCode));
+    } else {
+      setSelectedDays([...selectedDays, dayCode]);
+    }
+  };
+
   const handleProceed = (e) => {
     if (e) e.preventDefault();
     const finalAmount = Number(amount);
+
     if (!finalAmount || finalAmount < 300) {
-      setSweetAlert({
-        type: 'warning',
+      Swal.fire({
+        icon: 'warning',
         title: 'Minimum Daily Spend is ₹300',
-        message: 'Minimum daily ad spend is ₹300 / day. Please enter ₹300 or higher to run today\'s Meta Ads campaign.',
-        confirmText: 'Set ₹300 (Min)',
-        onConfirm: () => {
-          setAmount(300);
-          setSweetAlert(null);
-        },
-        secondaryText: 'OK',
-        onSecondary: () => setSweetAlert(null),
+        text: 'Minimum daily ad spend is ₹300 / day. Please enter ₹300 or higher to activate Meta Ads.',
+        confirmButtonText: 'Set ₹300 (Min)',
+        confirmButtonColor: '#4f46e5',
+      }).then((res) => {
+        if (res.isConfirmed) setAmount(300);
       });
       return;
     }
 
     if (finalAmount > (walletBalance || 0)) {
-      setSweetAlert({
-        type: 'error',
-        title: 'Insufficient Wallet Balance',
-        message: `Your selected daily spend (₹${finalAmount.toLocaleString('en-IN')}) exceeds your available wallet balance (₹${Number(walletBalance || 0).toLocaleString('en-IN')}).`,
-        confirmText: '+ Top Up Wallet',
-        onConfirm: () => {
-          setSweetAlert(null);
-          if (onOpenTopUp) onOpenTopUp();
-        },
-        secondaryText: 'Cancel',
-        onSecondary: () => setSweetAlert(null),
+      Swal.fire({
+        icon: 'error',
+        title: 'Insufficient Ad Wallet Balance',
+        html: `Your selected daily spend of <strong>₹${finalAmount.toLocaleString('en-IN')}</strong> exceeds your available wallet balance of <strong>₹${Number(walletBalance || 0).toLocaleString('en-IN')}</strong>.<br/><br/>Please top up your wallet to activate this ad budget.`,
+        showCancelButton: true,
+        confirmButtonText: '+ Top Up Wallet',
+        confirmButtonColor: '#059669',
+        cancelButtonText: 'Cancel',
+      }).then((res) => {
+        if (res.isConfirmed && onOpenTopUp) onOpenTopUp();
       });
       return;
     }
 
+    // Ensure today is part of the final active days
+    const finalActiveDays = selectedDays.includes(todayItem.code)
+      ? selectedDays
+      : [...selectedDays, todayItem.code];
+
+    // 1. Deduct daily ad spend & lock today
     if (onDeductDailyAdSpend) {
       onDeductDailyAdSpend(finalAmount);
     }
+
+    // 2. Update limit & schedule in parent
     if (onUpdateLimit) {
-      onUpdateLimit(finalAmount);
+      onUpdateLimit(finalAmount, finalActiveDays);
     }
-    setSweetAlert({
-      type: 'success',
-      title: 'Today\'s Ad Budget Activated!',
-      message: `₹${finalAmount.toLocaleString('en-IN')} has been deducted from your wallet and today's Meta Ads campaign is now live.`,
-      confirmText: 'Done',
-      onConfirm: () => {
-        setSweetAlert(null);
-        onClose();
-      },
+    if (onUpdateCustomer) {
+      onUpdateCustomer({
+        dailyAdSpend: finalAmount,
+        activeDays: finalActiveDays,
+        adCampaignActive: true,
+        isDeductedToday: true,
+        lockedDays: [todayItem.code],
+      });
+    }
+
+    // 3. Close modal
+    onClose();
+
+    // 4. Calculate post-deduction values for SweetAlert2
+    const remainingWallet = Math.max(0, (walletBalance || 0) - finalAmount);
+    const calculatedRunway = Math.floor(remainingWallet / Math.max(finalAmount, 1));
+
+    // 5. Fire rich, prominent SweetAlert2 Confirmation Dialog
+    Swal.fire({
+      icon: 'success',
+      title: `Daily Ad Budget Set: ₹${finalAmount.toLocaleString('en-IN')}/day`,
+      html: `
+        <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 16px; margin: 12px 0; font-family: inherit;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Daily Burn Rate:</span>
+            <strong style="color:#4f46e5; font-size:1.1rem; font-weight:800;">₹${finalAmount.toLocaleString('en-IN')} / active day</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Marketing Campaign:</span>
+            <span style="background:#ecfdf5; color:#059669; font-weight:800; font-size:0.82rem; padding: 3px 10px; border-radius:9999px;">
+              ● Running (Active)
+            </span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Target Day Status:</span>
+            <span style="background:#fef3c7; color:#b45309; font-weight:800; font-size:0.82rem; padding: 3px 10px; border-radius:9999px;">
+              🔒 ${todayItem.label} Settled &amp; Locked
+            </span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Wallet Deduction:</span>
+            <strong style="color:#dc2626; font-size:0.95rem; font-weight:800;">- ₹${finalAmount.toLocaleString('en-IN')} (Done ✓)</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
+            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Remaining Ad Wallet:</span>
+            <strong style="color:#059669; font-size:1.1rem; font-weight:800;">₹${remainingWallet.toLocaleString('en-IN')} (${calculatedRunway}d runway)</strong>
+          </div>
+        </div>
+        <div style="background: #eef2ff; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 8px; text-align: left;">
+          <span style="font-size: 1.15rem;">🔒</span>
+          <span style="font-size: 0.84rem; color: #3730a3; font-weight: 600;">
+            <strong>${todayItem.label}</strong> marketing is locked as completed. Meta Verified Ads &amp; local buyer lead capture are now live.
+          </span>
+        </div>
+      `,
+      confirmButtonText: 'Done & View Dashboard',
+      confirmButtonColor: '#4f46e5',
+      buttonsStyling: true,
     });
   };
 
@@ -942,13 +1040,12 @@ export function SetDailyLimitModal({
       }}
       onClick={onClose}
     >
-      <SweetAlertModal alertState={sweetAlert} onClose={() => setSweetAlert(null)} />
       <div
         style={{
           background: '#ffffff',
           borderRadius: '20px',
           width: '100%',
-          maxWidth: '490px',
+          maxWidth: '520px',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           padding: '26px 28px',
           position: 'relative',
@@ -958,10 +1055,15 @@ export function SetDailyLimitModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
-            Set Today's Ad Budget
-          </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
+              Set Today's Ad Budget
+            </h2>
+            <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+              Schedule pacing &amp; lock daily Meta ad delivery
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -990,34 +1092,34 @@ export function SetDailyLimitModal({
           style={{
             border: '1.5px solid #e2e8f0',
             borderRadius: '14px',
-            padding: '14px 18px',
+            padding: '12px 18px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             background: '#ffffff',
-            marginBottom: '18px',
+            marginBottom: '16px',
           }}
         >
           <div>
-            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '3px' }}>
-              TOTAL BALANCE
+            <div style={{ fontSize: '0.70rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '2px' }}>
+              CURRENT WALLET BALANCE
             </div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+            <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
               ₹{Number(walletBalance || 0).toLocaleString('en-IN')}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '3px' }}>
+            <div style={{ fontSize: '0.70rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '2px' }}>
               MINIMUM SPEND
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#4338ca', lineHeight: 1.1 }}>
+            <div style={{ fontSize: '1.20rem', fontWeight: 800, color: '#4338ca', lineHeight: 1.1 }}>
               ₹300 / day
             </div>
           </div>
         </div>
 
         {/* Enter Daily Ad Spend Amount Label */}
-        <div style={{ marginBottom: '8px', fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>
+        <div style={{ marginBottom: '8px', fontWeight: 700, fontSize: '0.92rem', color: '#1e293b' }}>
           Enter Daily Ad Spend Amount (₹):
         </div>
 
@@ -1031,7 +1133,7 @@ export function SetDailyLimitModal({
             alignItems: 'center',
             background: '#ffffff',
             boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.12)',
-            marginBottom: '14px',
+            marginBottom: '12px',
           }}
         >
           <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#64748b', marginRight: '10px' }}>
@@ -1060,7 +1162,7 @@ export function SetDailyLimitModal({
         </div>
 
         {/* 4 Presets */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
           {presets.map((p) => {
             const isSelected = currentAmountNum === p.value;
             return (
@@ -1073,8 +1175,8 @@ export function SetDailyLimitModal({
                   background: isSelected ? '#eff6ff' : '#ffffff',
                   color: isSelected ? '#4338ca' : '#1e293b',
                   fontWeight: 700,
-                  fontSize: '0.92rem',
-                  padding: '11px 4px',
+                  fontSize: '0.90rem',
+                  padding: '9px 4px',
                   borderRadius: '10px',
                   cursor: 'pointer',
                   textAlign: 'center',
@@ -1087,22 +1189,88 @@ export function SetDailyLimitModal({
           })}
         </div>
 
+        {/* Day Selection Grid with Today Badged & Lock Indicator */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>
+              Select Marketing Days ({selectedDays.length} of 7 Active):
+            </span>
+            <span style={{ fontSize: '0.74rem', color: '#b45309', fontWeight: 700, background: '#fef3c7', padding: '2px 8px', borderRadius: '9999px' }}>
+              🔒 Today ({todayItem.short}) will be locked
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
+            {dayDefinitions.map((d) => {
+              const isDayActive = selectedDays.includes(d.code);
+              return (
+                <button
+                  key={d.code}
+                  type="button"
+                  onClick={() => toggleDaySelection(d.code)}
+                  style={{
+                    border: d.isToday
+                      ? '2px solid #2563eb'
+                      : isDayActive
+                      ? '1.5px solid #10b981'
+                      : '1px solid #cbd5e1',
+                    background: isDayActive ? (d.isToday ? '#eff6ff' : '#f0fdf4') : '#f8fafc',
+                    color: isDayActive ? (d.isToday ? '#1d4ed8' : '#047857') : '#94a3b8',
+                    borderRadius: '8px',
+                    padding: '8px 2px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    position: 'relative',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title={d.isToday ? 'Today (Locked upon activation)' : `${d.label} - click to toggle`}
+                >
+                  {d.isToday && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: '-7px',
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        fontSize: '0.58rem',
+                        fontWeight: 800,
+                        padding: '1px 4px',
+                        borderRadius: '9999px',
+                      }}
+                    >
+                      Today
+                    </span>
+                  )}
+                  <span>{d.code}</span>
+                  <span style={{ fontSize: '0.68rem', marginTop: '2px', fontWeight: 800 }}>
+                    {d.isToday ? '🔒' : isDayActive ? '✓' : '—'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Notice Info Box */}
         <div
           style={{
             background: '#f8fafc',
             border: '1px solid #e2e8f0',
             borderRadius: '12px',
-            padding: '14px 16px',
+            padding: '12px 14px',
             display: 'flex',
-            gap: '12px',
+            gap: '10px',
             alignItems: 'flex-start',
             marginBottom: '14px',
           }}
         >
-          <span style={{ fontSize: '1.25rem', lineHeight: 1.2 }}>💡</span>
-          <p style={{ margin: 0, fontSize: '0.84rem', color: '#475569', lineHeight: 1.5, fontWeight: 500 }}>
-            Amount will be deducted from your total balance immediately for today. If stopped/paused later, no extra money is cut today, and deductions resume from next day.
+          <span style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>💡</span>
+          <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.45, fontWeight: 500 }}>
+            Amount will be deducted from your total balance immediately for today. Today's marketing schedule will be <strong>locked as completed</strong>. Meta Verified Ads &amp; pacing run automatically.
           </p>
         </div>
 
@@ -1113,15 +1281,15 @@ export function SetDailyLimitModal({
               background: '#fff1f2',
               border: '1px solid #fecdd3',
               borderRadius: '12px',
-              padding: '12px 16px',
+              padding: '10px 14px',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '16px',
+              marginBottom: '14px',
             }}
           >
-            <span style={{ color: '#e11d48', fontWeight: 700, fontSize: '0.88rem' }}>
-              Amount exceeds wallet balance (₹${Number(walletBalance || 0).toLocaleString('en-IN')}).
+            <span style={{ color: '#e11d48', fontWeight: 700, fontSize: '0.85rem' }}>
+              Amount exceeds wallet balance (₹{Number(walletBalance || 0).toLocaleString('en-IN')}).
             </span>
             <button
               type="button"
@@ -1133,8 +1301,8 @@ export function SetDailyLimitModal({
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '8px',
-                padding: '7px 15px',
-                fontSize: '0.85rem',
+                padding: '6px 12px',
+                fontSize: '0.82rem',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
@@ -1153,8 +1321,8 @@ export function SetDailyLimitModal({
           style={{
             display: 'flex',
             justifyContent: 'flex-end',
-            gap: '12px',
-            marginTop: '20px',
+            gap: '10px',
+            marginTop: '16px',
             alignItems: 'center',
           }}
         >
@@ -1166,8 +1334,8 @@ export function SetDailyLimitModal({
               border: '1px solid #cbd5e1',
               color: '#334155',
               fontWeight: 700,
-              fontSize: '0.92rem',
-              padding: '11px 24px',
+              fontSize: '0.90rem',
+              padding: '10px 20px',
               borderRadius: '10px',
               cursor: 'pointer',
             }}
@@ -1182,14 +1350,17 @@ export function SetDailyLimitModal({
               color: '#ffffff',
               border: 'none',
               fontWeight: 700,
-              fontSize: '0.95rem',
-              padding: '11px 26px',
+              fontSize: '0.92rem',
+              padding: '10px 22px',
               borderRadius: '10px',
               cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
               boxShadow: '0 4px 6px -1px rgba(79, 70, 229, 0.3)',
             }}
           >
-            Proceed to Deduct & Run →
+            <span>🔒 Set Ad Budget &amp; Lock Marketing →</span>
           </button>
         </div>
       </div>

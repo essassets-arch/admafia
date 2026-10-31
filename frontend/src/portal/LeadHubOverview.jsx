@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Swal from 'sweetalert2';
 import emperorBannerImg from '../assets/emperor-banner.jpg';
 
 // Formatting Helpers
@@ -61,17 +62,45 @@ export default function LeadHubOverview({
   const weeklyPacing = activeDays.length * dailySpend;
   const currentTodayItem = daysList.find((d) => d.isToday) || daysList[todayIdx === 0 ? 6 : todayIdx - 1];
   const isMarketingLiveToday = Boolean(customer.adCampaignActive && activeDays.includes(currentTodayItem.code));
+  const isTodayLocked = Boolean(
+    (customer.isDeductedToday || isMarketingLiveToday) ||
+    (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(currentTodayItem.code))
+  );
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
   const isProfileDone = customer.profileStatus === 'complete' || customer.profile_status === 'complete' || customer.kycPercent === 100;
   const isFullyComplete = isPaymentDone && isProfileDone;
 
   const toggleDay = (code) => {
+    const isTargetLocked = (code === currentTodayItem.code && (customer.isDeductedToday || isMarketingLiveToday)) ||
+      (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(code));
+
+    if (isTargetLocked) {
+      const dayObj = daysList.find((d) => d.code === code);
+      Swal.fire({
+        icon: 'info',
+        title: `${dayObj?.label || code} Marketing is Settled & Locked`,
+        html: `Today's daily spend budget of <strong>₹${dailySpend.toLocaleString('en-IN')}</strong> has been deducted and Meta ads are actively running.<br/><br/>This day is locked to ensure continuous campaign pacing and prevent duplicate daily deductions.`,
+        confirmButtonText: 'Understood',
+        confirmButtonColor: '#4f46e5',
+      });
+      return;
+    }
+
     let next;
     const isTogglingToday = (code === currentTodayItem.code);
     let shouldActivate = false;
 
     if (activeDays.includes(code)) {
+      if (activeDays.length <= 1) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Minimum 1 Active Day Required',
+          text: 'At least one day must remain selected for marketing pacing schedule.',
+          confirmButtonColor: '#4f46e5',
+        });
+        return;
+      }
       next = activeDays.filter((d) => d !== code);
     } else {
       next = [...activeDays, code];
@@ -499,31 +528,41 @@ export default function LeadHubOverview({
             </div>
           </div>
 
-          {/* 7 Day Cards (Selected with green border and checkmark, Unselected with grey border and lock) */}
+          {/* 7 Day Cards (Selected with green border and checkmark, Unselected with grey border and lock, Settled & Locked when marketing is done) */}
           <div className="seven-days-cards-grid-exact">
             {daysList.map((d) => {
               const isSelected = activeDays.includes(d.code);
+              const isLocked = Boolean(
+                (d.isToday && (customer.isDeductedToday || isMarketingLiveToday)) ||
+                (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(d.code))
+              );
               return (
                 <div
                   key={d.code}
-                  className={`seven-day-card-exact ${isSelected ? 'is-selected' : 'is-unselected'} ${d.isToday ? 'is-today' : ''}`}
+                  className={`seven-day-card-exact ${isLocked ? 'is-locked-settled is-selected' : isSelected ? 'is-selected' : 'is-unselected'} ${d.isToday ? 'is-today' : ''}`}
                   onClick={() => toggleDay(d.code)}
-                  title={isSelected ? `Click to disable ${d.label}` : `Click to enable ${d.label}`}
+                  title={isLocked ? `${d.label} marketing is settled & locked for today` : isSelected ? `Click to disable ${d.label}` : `Click to enable ${d.label}`}
                 >
                   {/* If today, floating blue badge */}
                   {d.isToday && <span className="today-floating-pill">Today</span>}
+                  {isLocked && <span className="locked-done-floating-badge">🔒 Locked</span>}
 
                   <div className="day-code-title">{d.code}</div>
                   <div className="day-sub-label">{d.label}</div>
                   
                   {/* Price tag */}
-                  <div className={`day-price-badge ${isSelected ? 'selected' : 'unselected'}`}>
+                  <div className={`day-price-badge ${isLocked ? 'locked' : isSelected ? 'selected' : 'unselected'}`}>
                     ₹{dailySpend}
                   </div>
 
                   {/* Bottom Status Wrap */}
                   <div className="day-bottom-status-wrap">
-                    {isSelected ? (
+                    {isLocked ? (
+                      <div className="day-lock-settled-pill" title={`${d.label} marketing is settled and locked for today`}>
+                        <span className="badge-lock-icon">🔒</span>
+                        <span className="badge-lock-text">Done</span>
+                      </div>
+                    ) : isSelected ? (
                       <div className="day-check-circle">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
@@ -550,11 +589,18 @@ export default function LeadHubOverview({
               <span className={`today-campaign-state ${isMarketingLiveToday ? 'state-live' : 'state-off'}`}>
                 <span className="bullet-dot">●</span>
                 {isMarketingLiveToday
-                  ? 'Marketing is LIVE (Meta Ads Running)'
+                  ? (isTodayLocked
+                    ? `Marketing is LIVE & Locked (Meta Ads Running • Settled ₹${dailySpend})`
+                    : 'Marketing is LIVE (Meta Ads Running)')
                   : walletBalance < dailySpend
                   ? 'Marketing is OFF (Customer Balance is Low - Needs Top Up)'
                   : 'Marketing is OFF (Campaign Paused)'}
               </span>
+              {isTodayLocked && (
+                <span className="pill-settled-today-locked">
+                  🔒 Marketing Done &amp; Locked
+                </span>
+              )}
             </div>
 
             <div className="today-budget-actions-right">

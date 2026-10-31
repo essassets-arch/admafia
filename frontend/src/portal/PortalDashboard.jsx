@@ -335,11 +335,36 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   const t = translations[currentLang] || translations.en;
 
   // Actions
-  const handleUpdateDailyLimit = (newLimit) => {
+  const handleUpdateDailyLimit = (newLimit, customDays) => {
     const safeLimit = Math.max(300, Number(newLimit) || 300);
-    setCustomer((prev) => ({ ...prev, dailyAdSpend: safeLimit, dailyPacing: safeLimit }));
+    const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const todayDayCode = dayCodes[new Date().getDay()];
+
+    setCustomer((prev) => {
+      const existingDays = Array.isArray(customDays) && customDays.length > 0
+        ? customDays
+        : (Array.isArray(prev?.activeDays) ? prev.activeDays : ['MON', 'TUE', 'WED', 'THU', 'FRI']);
+      const finalDays = Array.from(new Set([...existingDays, todayDayCode]));
+      const updated = {
+        ...prev,
+        dailyAdSpend: safeLimit,
+        dailyPacing: safeLimit,
+        adCampaignActive: true,
+        activeDays: finalDays,
+        isDeductedToday: true,
+        lockedDays: Array.from(new Set([...(prev?.lockedDays || []), todayDayCode])),
+      };
+      try {
+        localStorage.setItem('growthline_active_user', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
     if (customer?.id || customer?.phone) {
-      crmApi.patchCustomer(customer.id || customer.phone, { dailyAdSpend: safeLimit }).catch(() => {});
+      crmApi.patchCustomer(customer.id || customer.phone, {
+        dailyAdSpend: safeLimit,
+        ...(Array.isArray(customDays) ? { activeDays: customDays } : {}),
+      }).catch(() => {});
     }
   };
 
@@ -635,6 +660,9 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           dailyPacing: spend,
           adCampaignActive: true,
           activeDays: nextActiveDays,
+          lastDeductedAt: new Date().toISOString(),
+          isDeductedToday: true,
+          lockedDays: Array.from(new Set([...(prev?.lockedDays || []), todayDayCode])),
         };
         try {
           localStorage.setItem('growthline_active_user', JSON.stringify(updated));
@@ -1441,6 +1469,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         currentLimit={customer.dailyAdSpend}
         onUpdateLimit={handleUpdateDailyLimit}
         walletBalance={walletBalance}
+        customer={customer}
+        onUpdateCustomer={handleUpdateCustomer}
         onOpenTopUp={() => {
           setIsSetDailyLimitOpen(false);
           setIsAddFundsOpen(true);
