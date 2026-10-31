@@ -25,6 +25,7 @@ export default function FollowUpsQueue({
   onOpenCompleteRegistration,
 }) {
   const [search, setSearch] = useState('');
+  const [viewFilter, setViewFilter] = useState('active'); // 'active' | 'dropped'
   const [unmaskedMap, setUnmaskedMap] = useState({});
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
@@ -36,12 +37,29 @@ export default function FollowUpsQueue({
     (l) => (l.status === 'In Follow-up' || l.status === 'Callback') && l.status !== 'Dropped'
   );
 
+  // Dropped leads
+  const droppedLeads = leads.filter((l) => l.status === 'Dropped');
+
   const togglePhoneReveal = (id) => {
     setUnmaskedMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   // Move back to active leads if needed
   const handleMoveBackToLeads = (leadId) => {
+    if (onUpdateLead) {
+      onUpdateLead(leadId, { status: 'New' });
+    }
+  };
+
+  // Restore dropped lead to Follow-ups queue
+  const handleRestoreToFollowUp = (leadId) => {
+    if (onUpdateLead) {
+      onUpdateLead(leadId, { status: 'In Follow-up' });
+    }
+  };
+
+  // Restore dropped lead to Active Pipeline
+  const handleRestoreToPipeline = (leadId) => {
     if (onUpdateLead) {
       onUpdateLead(leadId, { status: 'New' });
     }
@@ -61,8 +79,10 @@ export default function FollowUpsQueue({
     }
   };
 
+  const currentPool = viewFilter === 'dropped' ? droppedLeads : followUpLeads;
+
   // Search filter
-  const filteredLeads = followUpLeads.filter((item) => {
+  const filteredLeads = currentPool.filter((item) => {
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       const matchPhone = (item.phone || '').includes(q) || (item.maskedPhone || '').includes(q);
@@ -91,9 +111,15 @@ export default function FollowUpsQueue({
         <div>
           <div className="lead-header-title-row">
             <h1>Follow-ups Queue</h1>
-            <span className="lead-count-badge-top" style={{ background: '#fdf2f8', color: '#be185d', borderColor: '#fbcfe8' }}>
-              {followUpLeads.length} In Queue
-            </span>
+            {viewFilter === 'dropped' ? (
+              <span className="lead-count-badge-top" style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}>
+                {droppedLeads.length} Dropped
+              </span>
+            ) : (
+              <span className="lead-count-badge-top" style={{ background: '#fdf2f8', color: '#be185d', borderColor: '#fbcfe8' }}>
+                {followUpLeads.length} In Queue
+              </span>
+            )}
           </div>
           <p className="lead-header-desc">
             Leads scheduled for follow-up callback. Call, message on WhatsApp, or update status.
@@ -147,7 +173,7 @@ export default function FollowUpsQueue({
         </div>
       </div>
 
-      {/* 3. Search Bar */}
+      {/* 3. Search & Tabs Bar */}
       <div className="list-controls-bar">
         <div className="list-search-wrap">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.2">
@@ -157,7 +183,7 @@ export default function FollowUpsQueue({
           <input
             type="text"
             className="list-search-input"
-            placeholder="Search follow-up leads by phone or date..."
+            placeholder={viewFilter === 'dropped' ? "Search dropped leads by phone or date..." : "Search follow-up leads by phone or date..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -170,6 +196,29 @@ export default function FollowUpsQueue({
               ✕
             </button>
           )}
+        </div>
+
+        <div className="list-date-tabs">
+          <button
+            type="button"
+            className={`list-tab-pill ${viewFilter === 'active' ? 'active' : ''}`}
+            onClick={() => setViewFilter('active')}
+          >
+            Active Queue ({followUpLeads.length})
+          </button>
+          <button
+            type="button"
+            className={`list-tab-pill dropped-tab ${viewFilter === 'dropped' ? 'active' : ''}`}
+            onClick={() => setViewFilter('dropped')}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              <span>Dropped ({droppedLeads.length})</span>
+            </span>
+          </button>
         </div>
       </div>
 
@@ -189,11 +238,22 @@ export default function FollowUpsQueue({
             <div className="proper-list-empty-state">
               <div className="empty-icon">
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                  {viewFilter === 'dropped' ? (
+                    <>
+                      <circle cx="11" cy="11" r="8"/>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </>
+                  ) : (
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                  )}
                 </svg>
               </div>
-              <h3>No follow-up leads in queue</h3>
-              <p>Click "In Follow-up" on any lead in the Lead Pipeline to move it here.</p>
+              <h3>{viewFilter === 'dropped' ? 'No dropped leads' : 'No follow-up leads in queue'}</h3>
+              <p>
+                {viewFilter === 'dropped'
+                  ? 'There are currently no dropped leads.'
+                  : 'Click "In Follow-up" on any lead in the Lead Pipeline to move it here.'}
+              </p>
             </div>
           ) : (
             filteredLeads.map((item) => {
@@ -221,13 +281,28 @@ export default function FollowUpsQueue({
                       <div className="phone-digits-line">
                         <span className="phone-strong">{displayPhone}</span>
                       </div>
-                      <span className="fup-status-tag">In Callback Queue</span>
+                      {item.status === 'Dropped' ? (
+                        <span className="fup-status-tag" style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}>
+                          Dropped Lead
+                        </span>
+                      ) : (
+                        <span className="fup-status-tag">In Callback Queue</span>
+                      )}
                     </div>
                   </div>
 
                   {/* Col 2: Dynamic Security Status */}
                   <div className="col-status">
-                    {isFullyComplete ? (
+                    {item.status === 'Dropped' ? (
+                      <span className="proper-step-badge" style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                        <span>Dropped Lead</span>
+                      </span>
+                    ) : isFullyComplete ? (
                       <span className="proper-step-badge" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
                           <polyline points="20 6 9 17 4 12" />
@@ -290,55 +365,87 @@ export default function FollowUpsQueue({
                         <span>Chat</span>
                       </a>
 
-                      {/* 3. In Follow-up / Move back */}
-                      <button
-                        type="button"
-                        className="btn-list-action followup in-fup"
-                        onClick={() => handleMoveBackToLeads(item.id)}
-                        title="Lead is in follow-up. Click to move back to active leads pipeline."
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          <polyline points="15 18 9 12 15 6" />
-                        </svg>
-                        <span>In Follow-up</span>
-                      </button>
+                      {/* If Dropped, show Restore to Follow-up and Move to Pipeline; else standard actions */}
+                      {item.status === 'Dropped' ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-list-action restore"
+                            onClick={() => handleRestoreToFollowUp(item.id)}
+                            title="Restore lead back to follow-ups queue"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                              <polyline points="1 4 1 10 7 10" />
+                              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                            </svg>
+                            <span>Restore</span>
+                          </button>
 
-                      {/* 4. Read (Permanent: once read, stays read) */}
-                      <button
-                        type="button"
-                        className={`btn-list-action read ${item.read ? 'is-read' : ''}`}
-                        onClick={() => handleToggleRead(item)}
-                        disabled={Boolean(item.read)}
-                        title={item.read ? 'Lead Read' : 'Mark as Read'}
-                        style={item.read ? { cursor: 'default', opacity: 0.85 } : undefined}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          {item.read ? (
-                            <polyline points="20 6 9 17 4 12" />
-                          ) : (
-                            <>
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                              <circle cx="12" cy="12" r="3"/>
-                            </>
-                          )}
-                        </svg>
-                        <span>{item.read ? 'Read ✓' : 'Mark Read'}</span>
-                      </button>
+                          <button
+                            type="button"
+                            className="btn-list-action followup"
+                            onClick={() => handleRestoreToPipeline(item.id)}
+                            title="Restore lead and move to active Lead Pipeline"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <polyline points="15 18 9 12 15 6" />
+                            </svg>
+                            <span>To Pipeline</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {/* 3. In Follow-up / Move back */}
+                          <button
+                            type="button"
+                            className="btn-list-action followup in-fup"
+                            onClick={() => handleMoveBackToLeads(item.id)}
+                            title="Lead is in follow-up. Click to move back to active leads pipeline."
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <polyline points="15 18 9 12 15 6" />
+                            </svg>
+                            <span>In Follow-up</span>
+                          </button>
 
-                      {/* 5. Drop */}
-                      <button
-                        type="button"
-                        className="btn-list-action drop"
-                        onClick={() => handleDrop(item.id)}
-                        title="Drop lead and remove from follow-ups"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                          <circle cx="8.5" cy="7" r="4"/>
-                          <line x1="23" y1="11" x2="17" y2="11"/>
-                        </svg>
-                        <span>Drop</span>
-                      </button>
+                          {/* 4. Read (Permanent: once read, stays read) */}
+                          <button
+                            type="button"
+                            className={`btn-list-action read ${item.read ? 'is-read' : ''}`}
+                            onClick={() => handleToggleRead(item)}
+                            disabled={Boolean(item.read)}
+                            title={item.read ? 'Lead Read' : 'Mark as Read'}
+                            style={item.read ? { cursor: 'default', opacity: 0.85 } : undefined}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              {item.read ? (
+                                <polyline points="20 6 9 17 4 12" />
+                              ) : (
+                                <>
+                                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                  <circle cx="12" cy="12" r="3"/>
+                                </>
+                              )}
+                            </svg>
+                            <span>{item.read ? 'Read ✓' : 'Mark Read'}</span>
+                          </button>
+
+                          {/* 5. Drop */}
+                          <button
+                            type="button"
+                            className="btn-list-action drop"
+                            onClick={() => handleDrop(item.id)}
+                            title="Drop lead and remove from follow-ups"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                              <circle cx="8.5" cy="7" r="4"/>
+                              <line x1="23" y1="11" x2="17" y2="11"/>
+                            </svg>
+                            <span>Drop</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

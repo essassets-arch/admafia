@@ -83,14 +83,14 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     registeredFrom: row.registered_from || 'http://localhost:5173/#register',
     registeredAt: row.registered_at
       ? new Date(row.registered_at).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : 'Today',
     registeredAtRaw: row.registered_at,
     registered_at_raw: row.registered_at,
@@ -128,14 +128,14 @@ function mapLeadRow(row) {
     dateGroup: 'today',
     createdAt: row.created_at
       ? new Date(row.created_at).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : 'Today',
     createdAtRaw: row.created_at,
     created_at_raw: row.created_at,
@@ -155,14 +155,14 @@ function mapWalletTxRow(row) {
     status: row.status || 'Verified ✓',
     date: row.created_at
       ? new Date(row.created_at).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : 'Just now',
     createdAtRaw: row.created_at,
   };
@@ -183,11 +183,11 @@ function mapInvoiceRow(row) {
     status: row.status || 'Paid',
     date: row.issued_date
       ? new Date(row.issued_date).toLocaleDateString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
       : new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }),
   };
 }
@@ -212,14 +212,14 @@ function mapPaymentRecordRow(row) {
     notes: row.notes || '',
     date: row.paid_at
       ? new Date(row.paid_at).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : 'Today',
     paidAtRaw: row.paid_at,
     paid_at_raw: row.paid_at,
@@ -318,7 +318,7 @@ app.get('/api/state', async (req, res) => {
       `),
       query(`
         SELECT 
-          ml.*,
+          ml.*, 
           cg.name AS group_name,
           cg.icon AS group_icon,
           (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id) AS recipients_count,
@@ -350,14 +350,14 @@ app.get('/api/state', async (req, res) => {
         queueType: r.queue_type,
         submittedAt: r.submitted_at
           ? new Date(r.submitted_at).toLocaleString('en-IN', {
-              timeZone: 'Asia/Kolkata',
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            })
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
           : 'Today',
         submittedAtRaw: r.submitted_at,
         submitted_at_raw: r.submitted_at,
@@ -582,7 +582,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (authUser?.id) {
-      await query(`UPDATE system_users SET last_login_at = NOW() WHERE id = $1`, [authUser.id]).catch(() => {});
+      await query(`UPDATE system_users SET last_login_at = NOW() WHERE id = $1`, [authUser.id]).catch(() => { });
     }
 
     if (!targetCustomerId) {
@@ -762,7 +762,7 @@ app.post('/api/auth/admin-login', async (req, res) => {
       });
     }
 
-    await query(`UPDATE system_users SET last_login_at = NOW() WHERE id = $1`, [uRow.id]).catch(() => {});
+    await query(`UPDATE system_users SET last_login_at = NOW() WHERE id = $1`, [uRow.id]).catch(() => { });
 
     // Determine target department and landing route
     let department = uRow.department;
@@ -981,7 +981,7 @@ app.put('/api/customers/:id/profile', async (req, res) => {
   }
 });
 
-app.patch('/api/customers/:id', async (req, res) => {
+const handleUpdateCustomerRecord = async (req, res) => {
   try {
     const rawId = req.params.id;
     const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
@@ -1010,7 +1010,7 @@ app.patch('/api/customers/:id', async (req, res) => {
         profile_status = $4,
         payment_status = $5,
         kyc_percent = $6,
-        verified = ($6 >= 100 OR $4 = 'complete'),
+        verified = (kyc_percent >= 100 OR profile_status = 'complete'),
         updated_at = NOW()
       WHERE id = $7`,
       [nextCompany, nextWebsite, nextStatus, nextProfile, nextPayment, nextKyc, cust.id]
@@ -1034,8 +1034,8 @@ app.patch('/api/customers/:id', async (req, res) => {
           : (w.active_days || 'MON,TUE,WED,THU,FRI');
         const nextPreset = updates.schedulePreset || w.schedule_preset || 'weekdays';
         await query(
-          `UPDATE wallets SET daily_ad_spend = $1, ad_campaign_active = $2, available_balance = $3, active_days = $4, schedule_preset = $5, updated_at = NOW() WHERE customer_id = $6`,
-          [nextDaily, nextActive, nextBal, nextDays, nextPreset, cust.id]
+          `UPDATE wallets SET daily_ad_spend = $1::NUMERIC, ad_campaign_active = $2::BOOLEAN, available_balance = $3::NUMERIC, active_days = $4::VARCHAR, schedule_preset = $5::VARCHAR, updated_at = NOW() WHERE customer_id = $6`,
+          [nextDaily, nextActive, nextBal, String(nextDays), String(nextPreset), cust.id]
         );
       }
     }
@@ -1045,7 +1045,10 @@ app.patch('/api/customers/:id', async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
-});
+};
+
+app.patch('/api/customers/:id', handleUpdateCustomerRecord);
+app.put('/api/customers/:id', handleUpdateCustomerRecord);
 
 app.delete('/api/customers/:identifier', async (req, res) => {
   try {
@@ -1258,15 +1261,15 @@ app.post('/api/wallets/deduct', async (req, res) => {
 
     await query(
       `UPDATE wallets SET
-        available_balance = $1,
-        daily_ad_spend = $2,
-        total_ad_spent = total_ad_spent + $2,
+        available_balance = $1::NUMERIC,
+        daily_ad_spend = $2::NUMERIC,
+        total_ad_spent = total_ad_spent + $2::NUMERIC,
         ad_campaign_active = TRUE,
-        active_days = $4,
+        active_days = $4::VARCHAR,
         last_deducted_at = NOW(),
         updated_at = NOW()
       WHERE customer_id = $3`,
-      [nextBal, spendAmt, cust.id, finalActiveDays]
+      [nextBal, spendAmt, cust.id, String(finalActiveDays)]
     );
 
     // Also activate or update marketing campaigns if existing
@@ -1281,7 +1284,7 @@ app.post('/api/wallets/deduct', async (req, res) => {
         updated_at = NOW()
       WHERE customer_id = $2`,
       [spendAmt, cust.id]
-    ).catch(() => {});
+    ).catch(() => { });
 
     const txId = `tx_deb_${Date.now()}`;
     const refUtr = `AUTO-AD-${Date.now()}`;
@@ -1518,14 +1521,14 @@ app.get('/api/verifications', async (req, res) => {
       queueType: r.queue_type,
       submittedAt: r.submitted_at
         ? new Date(r.submitted_at).toLocaleString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          })
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
         : 'Today',
       submittedAtRaw: r.submitted_at,
       submitted_at_raw: r.submitted_at,
@@ -2420,3 +2423,5 @@ app.listen(PORT, () => {
       console.error('Failed to initialize PostgreSQL database:', err);
     });
 });
+
+export { app };

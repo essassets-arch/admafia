@@ -8451,6 +8451,25 @@
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
 }
 
+.list-tab-pill.dropped-tab {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.list-tab-pill.dropped-tab:hover {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #991b1b;
+}
+
+.list-tab-pill.dropped-tab.active {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+}
+
 /* Card Container for List View - Clean Horizontal Card */
 .proper-list-view-card {
   background: #ffffff;
@@ -8816,6 +8835,22 @@
   background: #fef2f2;
   border-color: #fca5a5;
   color: #ef4444;
+}
+
+/* 6. Restore: Success / Emerald outline to solid on hover */
+.btn-list-action.restore {
+  background: #ecfdf5;
+  border: 1.5px solid #a7f3d0;
+  color: #047857;
+  font-weight: 700;
+}
+
+.btn-list-action.restore:hover {
+  background: #059669;
+  border-color: #047857;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(5, 150, 105, 0.25);
 }
 
 /* Empty State */

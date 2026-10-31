@@ -46,7 +46,7 @@ export default function LeadPipelineInbox({
   onOpenCompleteRegistration,
 }) {
   const [search, setSearch] = useState('');
-  const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'today' | 'yesterday'
+  const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'today' | 'yesterday' | 'dropped'
   const [unmaskedMap, setUnmaskedMap] = useState({});
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
@@ -57,6 +57,9 @@ export default function LeadPipelineInbox({
   const activeLeads = leads.filter(
     (l) => l.status !== 'In Follow-up' && l.status !== 'Callback' && l.status !== 'Dropped'
   );
+
+  // Dropped leads: leads marked as Dropped
+  const droppedLeads = leads.filter((l) => l.status === 'Dropped');
 
   const togglePhoneReveal = (id) => {
     setUnmaskedMap((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -83,8 +86,17 @@ export default function LeadPipelineInbox({
     }
   };
 
+  // Restore dropped lead back to active pipeline
+  const handleRestore = (leadId) => {
+    if (onUpdateLead) {
+      onUpdateLead(leadId, { status: 'new' });
+    }
+  };
+
+  const currentPool = dateFilter === 'dropped' ? droppedLeads : activeLeads;
+
   // Filtered leads
-  const filteredLeads = activeLeads.filter((item) => {
+  const filteredLeads = currentPool.filter((item) => {
     // Date filter
     if (dateFilter === 'today') {
       const isToday = item.dateGroup === 'today' || (item.createdAt && item.createdAt.includes('Today'));
@@ -127,7 +139,13 @@ export default function LeadPipelineInbox({
         <div>
           <div className="lead-header-title-row" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h1>Lead Pipeline</h1>
-            <span className="lead-count-badge-top">{activeLeads.length} Active Leads</span>
+            {dateFilter === 'dropped' ? (
+              <span className="lead-count-badge-top" style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}>
+                {droppedLeads.length} Dropped Leads
+              </span>
+            ) : (
+              <span className="lead-count-badge-top">{activeLeads.length} Active Leads</span>
+            )}
             {customer?.companyName && (
               <span style={{
                 fontSize: '0.82rem',
@@ -274,6 +292,19 @@ export default function LeadPipelineInbox({
               <span>Yesterday ({yesterdayCount})</span>
             </span>
           </button>
+          <button
+            type="button"
+            className={`list-tab-pill dropped-tab ${dateFilter === 'dropped' ? 'active' : ''}`}
+            onClick={() => setDateFilter('dropped')}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              <span>Dropped ({droppedLeads.length})</span>
+            </span>
+          </button>
         </div>
       </div>
 
@@ -297,8 +328,12 @@ export default function LeadPipelineInbox({
                   <line x1="21" y1="21" x2="16.65" y2="16.65"/>
                 </svg>
               </div>
-              <h3>No leads found</h3>
-              <p>There are currently no active leads matching your filter.</p>
+              <h3>{dateFilter === 'dropped' ? 'No dropped leads' : 'No leads found'}</h3>
+              <p>
+                {dateFilter === 'dropped'
+                  ? 'There are currently no dropped leads in your pipeline.'
+                  : 'There are currently no active leads matching your filter.'}
+              </p>
             </div>
           ) : (
             filteredLeads.map((item) => {
@@ -332,7 +367,16 @@ export default function LeadPipelineInbox({
 
                   {/* Col 2: Dynamic Security Status */}
                   <div className="col-status">
-                    {isFullyComplete ? (
+                    {item.status === 'Dropped' ? (
+                      <span className="proper-step-badge" style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                        <span>Dropped Lead</span>
+                      </span>
+                    ) : isFullyComplete ? (
                       <span className="proper-step-badge" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
                           <polyline points="20 6 9 17 4 12" />
@@ -413,42 +457,60 @@ export default function LeadPipelineInbox({
                         <span>In Follow-up</span>
                       </button>
 
-                      {/* 4. Read (Permanent: once read, stays read) */}
-                      <button
-                        type="button"
-                        className={`btn-list-action read ${item.read ? 'is-read' : ''}`}
-                        onClick={() => handleMarkAsRead(item)}
-                        disabled={Boolean(item.read)}
-                        title={item.read ? 'Lead Read' : 'Mark as Read'}
-                        style={item.read ? { cursor: 'default', opacity: 0.85 } : undefined}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          {item.read ? (
-                            <polyline points="20 6 9 17 4 12" />
-                          ) : (
-                            <>
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                              <circle cx="12" cy="12" r="3"/>
-                            </>
-                          )}
-                        </svg>
-                        <span>{item.read ? 'Read ✓' : 'Mark Read'}</span>
-                      </button>
+                      {/* If Dropped, show Restore; else show Mark Read and Drop */}
+                      {item.status === 'Dropped' ? (
+                        <button
+                          type="button"
+                          className="btn-list-action restore"
+                          onClick={() => handleRestore(item.id)}
+                          title="Restore lead back to active pipeline"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                            <polyline points="1 4 1 10 7 10" />
+                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                          </svg>
+                          <span>Restore</span>
+                        </button>
+                      ) : (
+                        <>
+                          {/* 4. Read (Permanent: once read, stays read) */}
+                          <button
+                            type="button"
+                            className={`btn-list-action read ${item.read ? 'is-read' : ''}`}
+                            onClick={() => handleMarkAsRead(item)}
+                            disabled={Boolean(item.read)}
+                            title={item.read ? 'Lead Read' : 'Mark as Read'}
+                            style={item.read ? { cursor: 'default', opacity: 0.85 } : undefined}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              {item.read ? (
+                                <polyline points="20 6 9 17 4 12" />
+                              ) : (
+                                <>
+                                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                  <circle cx="12" cy="12" r="3"/>
+                                </>
+                              )}
+                            </svg>
+                            <span>{item.read ? 'Read ✓' : 'Mark Read'}</span>
+                          </button>
 
-                      {/* 5. Drop */}
-                      <button
-                        type="button"
-                        className="btn-list-action drop"
-                        onClick={() => handleDrop(item.id)}
-                        title="Drop lead and remove from active pipeline"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                          <circle cx="8.5" cy="7" r="4"/>
-                          <line x1="23" y1="11" x2="17" y2="11"/>
-                        </svg>
-                        <span>Drop</span>
-                      </button>
+                          {/* 5. Drop */}
+                          <button
+                            type="button"
+                            className="btn-list-action drop"
+                            onClick={() => handleDrop(item.id)}
+                            title="Drop lead and remove from active pipeline"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                              <circle cx="8.5" cy="7" r="4"/>
+                              <line x1="23" y1="11" x2="17" y2="11"/>
+                            </svg>
+                            <span>Drop</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

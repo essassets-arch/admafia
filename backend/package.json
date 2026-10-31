@@ -8,7 +8,8 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "db:init": "node initDb.js",
-    "test": "node test-e2e.js"
+    "test": "node test-e2e.js",
+    "test:flow": "node test-comprehensive-daywise-flow.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",
