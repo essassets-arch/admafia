@@ -7,6 +7,7 @@ import {
   Eye,
   CreditCard,
   Building,
+  Building2,
   CheckCircle2,
   Clock,
   ArrowUpDown,
@@ -15,9 +16,26 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  Phone,
+  Mail,
+  MapPin,
+  Globe,
+  Calendar,
+  Sparkles,
+  Shield,
+  ShieldCheck,
+  User,
+  Layers,
+  Tag,
+  Copy,
+  Check,
+  Zap,
+  Target,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
+
+const ALL_WEEK_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 export default function MarketingCustomersDesk({ onNavigateToDesk }) {
   const [loading, setLoading] = useState(true);
@@ -43,6 +61,49 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
   const [walletDrawerCustomer, setWalletDrawerCustomer] = useState(null);
   const [walletTransactions, setWalletTransactions] = useState([]);
   const [loadingWalletTx, setLoadingWalletTx] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
+
+  const copyToClipboard = (text, fieldName) => {
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(String(text));
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (e) {
+      console.warn('Clipboard copy error:', e);
+    }
+  };
+
+  const formatISTDate = (dateVal) => {
+    if (!dateVal) return 'Not Provided';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      return d.toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch (e) {
+      return String(dateVal);
+    }
+  };
+
+  const handleViewCustomerDetails = async (cust) => {
+    setSelectedCustomer(cust);
+    try {
+      const data = await marketingApi.getCustomerDetail(cust.id);
+      if (data && data.ok && data.customer) {
+        setSelectedCustomer((prev) => ({ ...(prev || {}), ...data.customer }));
+      }
+    } catch (err) {
+      console.warn('[MarketingCustomersDesk] Error fetching customer details:', err);
+    }
+  };
 
   const fetchCustomers = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -398,7 +459,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                         <button
                           type="button"
                           className="mkt-btn-table-action"
-                          onClick={() => setSelectedCustomer(c)}
+                          onClick={() => handleViewCustomerDetails(c)}
                           title="View Business Profile & Details"
                         >
                           <Eye size={13} />
@@ -452,12 +513,79 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
         </div>
       </div>
 
-      {/* 5. Customer Details Modal */}
+      {/* 5. Customer Details Modal (Comprehensive 360° Profile & All Intake Fields) */}
       {selectedCustomer && (
         <div className="marketing-modal-backdrop" onClick={() => setSelectedCustomer(null)}>
-          <div className="marketing-modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="marketing-modal-header">
-              <h3>Customer Profile: {selectedCustomer.name}</h3>
+          <div
+            className="marketing-modal-box"
+            style={{ maxWidth: '820px', width: '95%', maxHeight: '90vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="marketing-modal-header" style={{ padding: '16px 22px', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div
+                  style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.25rem',
+                    fontWeight: 800,
+                    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)',
+                    flexShrink: 0,
+                  }}
+                >
+                  {(selectedCustomer.name || selectedCustomer.companyName || 'C').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                      {selectedCustomer.companyName || selectedCustomer.name}
+                    </h3>
+                    <span className="mkt-pill mkt-pill-green" style={{ fontSize: '0.72rem' }}>
+                      ✓ 100% KYC Verified
+                    </span>
+                    <span
+                      className="mkt-pill"
+                      style={{
+                        fontSize: '0.72rem',
+                        background: selectedCustomer.profileStatus === 'complete' ? '#ecfdf5' : '#fef3c7',
+                        color: selectedCustomer.profileStatus === 'complete' ? '#059669' : '#b45309',
+                        borderColor: selectedCustomer.profileStatus === 'complete' ? '#a7f3d0' : '#fde68a',
+                      }}
+                    >
+                      {selectedCustomer.profileStatus === 'complete' ? 'Profile Complete ✓' : 'Profile Incomplete'}
+                    </span>
+                    {selectedCustomer.paymentStatus === 'paid' && (
+                      <span className="mkt-pill" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0', fontSize: '0.72rem' }}>
+                        Paid Customer
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', fontSize: '0.78rem', color: '#64748b', flexWrap: 'wrap' }}>
+                    <span>
+                      Handle: <strong style={{ color: '#4f46e5' }}>@{selectedCustomer.username || 'user'}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Customer ID: <code style={{ fontFamily: 'monospace', color: '#334155' }}>{selectedCustomer.customerId || selectedCustomer.id}</code>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(selectedCustomer.customerId || selectedCustomer.id, 'id')}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'id' ? '#059669' : '#94a3b8', display: 'inline-flex', alignItems: 'center' }}
+                      title="Copy Customer ID"
+                    >
+                      {copiedField === 'id' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
                 className="marketing-btn-close"
@@ -466,77 +594,505 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                 ✕
               </button>
             </div>
-            <div className="marketing-modal-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+
+            {/* Modal Body */}
+            <div className="marketing-modal-body" style={{ padding: '20px 22px' }}>
+              {/* Top Quick Highlights Banner */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                  gap: '12px',
+                  marginBottom: '20px',
+                  padding: '14px',
+                  background: 'linear-gradient(to right, #f8fafc, #f1f5f9)',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                }}
+              >
                 <div>
-                  <div className="mkt-form-help">Company Name</div>
-                  <div style={{ fontWeight: 700, fontSize: '1rem' }}>{selectedCustomer.name}</div>
-                </div>
-                <div>
-                  <div className="mkt-form-help">Authorized Owner</div>
-                  <div style={{ fontWeight: 700, fontSize: '1rem' }}>{selectedCustomer.owner || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="mkt-form-help">Mobile Phone</div>
-                  <div style={{ fontWeight: 700, fontFamily: 'monospace' }}>+91 {selectedCustomer.phone}</div>
-                </div>
-                <div>
-                  <div className="mkt-form-help">Work Email</div>
-                  <div style={{ fontWeight: 600 }}>{selectedCustomer.email || 'N/A'}</div>
-                </div>
-                <div>
-                  <div className="mkt-form-help">Business Category</div>
-                  <span className="mkt-pill mkt-pill-slate">{selectedCustomer.category}</span>
-                </div>
-                <div>
-                  <div className="mkt-form-help">City / Territory</div>
-                  <div style={{ fontWeight: 600 }}>{selectedCustomer.city || 'India'}</div>
-                </div>
-                <div>
-                  <div className="mkt-form-help">Available Wallet Balance</div>
-                  <div style={{ fontWeight: 800, color: '#059669', fontSize: '1.2rem', fontFamily: 'monospace' }}>
-                    ₹{selectedCustomer.availableBalance.toLocaleString('en-IN')}
+                  <div className="mkt-form-help" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Wallet size={12} /> Available Wallet Balance
+                  </div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
+                    ₹{(selectedCustomer.availableBalance || 0).toLocaleString('en-IN')}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                    {selectedCustomer.runwayDays || Math.floor((selectedCustomer.availableBalance || 0) / Math.max(selectedCustomer.dailyAdSpend || 300, 1))} Days Runway
                   </div>
                 </div>
+
                 <div>
-                  <div className="mkt-form-help">Registration Status</div>
-                  <span className="mkt-pill mkt-pill-green">100% KYC Verified ✓</span>
+                  <div className="mkt-form-help" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <CreditCard size={12} /> Daily Burn Rate
+                  </div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                    ₹{selectedCustomer.dailyAdSpend || 300}<span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>/day</span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                    {(selectedCustomer.activeDays || []).length} of 7 Days Active
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mkt-form-help" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Zap size={12} /> Marketing Campaign
+                  </div>
+                  <div style={{ marginTop: '3px' }}>
+                    {selectedCustomer.campaignStatus === 'Running' ? (
+                      <span className="mkt-pill mkt-pill-green">
+                        <span className="marketing-live-dot" /> Live Active
+                      </span>
+                    ) : (
+                      <span className="mkt-pill mkt-pill-slate">
+                        {selectedCustomer.campaignStatus || 'Paused'}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
+                    {selectedCustomer.isDeductedToday ? '✓ Charged Today' : 'Not Charged Today'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mkt-form-help" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Target size={12} /> Leads &amp; Creatives
+                  </div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#4f46e5' }}>
+                    {selectedCustomer.totalLeadsCount || 0} Leads
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                    {selectedCustomer.approvedPostsCount || 0} Approved • {selectedCustomer.ideasCount || 0} Ideas
+                  </div>
                 </div>
               </div>
 
-              {selectedCustomer.website && (
-                <div style={{ padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
-                  <div className="mkt-form-help">Website / Landing Page</div>
-                  <a
-                    href={selectedCustomer.website.startsWith('http') ? selectedCustomer.website : `https://${selectedCustomer.website}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: '#4f46e5', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    {selectedCustomer.website} <ExternalLink size={13} />
-                  </a>
+              {/* Section 1: Business Profile & Intake (Information Filled by Customer) */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                  <Building2 size={16} style={{ color: '#4f46e5' }} />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                    Company &amp; Business Intake Details
+                  </h4>
                 </div>
-              )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <div>
+                    <div className="mkt-form-help">Company Legal Name</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                      {selectedCustomer.companyName || selectedCustomer.name}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Authorized Owner / Signatory</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                      {selectedCustomer.contactPerson || selectedCustomer.owner || 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Business Category</div>
+                    <span className="mkt-pill mkt-pill-slate">{selectedCustomer.category || 'IT & Software'}</span>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Industry / Target Niche</div>
+                    <div style={{ fontWeight: 600, color: '#334155' }}>
+                      {selectedCustomer.industry || 'General Business'}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed #f1f5f9' }}>
+                  <div className="mkt-form-help">Website / Landing Page</div>
+                  {selectedCustomer.website ? (
+                    <a
+                      href={selectedCustomer.website.startsWith('http') ? selectedCustomer.website : `https://${selectedCustomer.website}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: '#4f46e5', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px', wordBreak: 'break-all' }}
+                    >
+                      <Globe size={13} />
+                      {selectedCustomer.website} <ExternalLink size={12} />
+                    </a>
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
+                      Not Provided
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 2: Contact Information & Identity */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                  <User size={16} style={{ color: '#059669' }} />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                    Primary Contact &amp; Account Identity
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <div>
+                    <div className="mkt-form-help">Direct Mobile / WhatsApp</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <a
+                        href={`tel:${selectedCustomer.phone}`}
+                        style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', textDecoration: 'none' }}
+                      >
+                        +91 {selectedCustomer.phone}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(selectedCustomer.phone, 'phone')}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'phone' ? '#059669' : '#94a3b8' }}
+                        title="Copy Phone Number"
+                      >
+                        {copiedField === 'phone' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mkt-form-help">Registered Work Email</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {selectedCustomer.email ? (
+                        <>
+                          <a
+                            href={`mailto:${selectedCustomer.email}`}
+                            style={{ fontWeight: 600, color: '#4f46e5', textDecoration: 'none', wordBreak: 'break-all' }}
+                          >
+                            {selectedCustomer.email}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(selectedCustomer.email, 'email')}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'email' ? '#059669' : '#94a3b8' }}
+                            title="Copy Work Email"
+                          >
+                            {copiedField === 'email' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>N/A</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mkt-form-help">Personal / Alternate Email</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {selectedCustomer.personalEmail ? (
+                        <>
+                          <a
+                            href={`mailto:${selectedCustomer.personalEmail}`}
+                            style={{ fontWeight: 600, color: '#4f46e5', textDecoration: 'none', wordBreak: 'break-all' }}
+                          >
+                            {selectedCustomer.personalEmail}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(selectedCustomer.personalEmail, 'pemail')}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'pemail' ? '#059669' : '#94a3b8' }}
+                            title="Copy Personal Email"
+                          >
+                            {copiedField === 'pemail' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>Not Provided</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mkt-form-help">Login Username</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                        @{selectedCustomer.username || 'user'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(selectedCustomer.username, 'username')}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'username' ? '#059669' : '#94a3b8' }}
+                        title="Copy Username"
+                      >
+                        {copiedField === 'username' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Headquarters & Location Territory */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                  <MapPin size={16} style={{ color: '#d97706' }} />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                    Headquarters &amp; Operating Territory
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                  <div>
+                    <div className="mkt-form-help">City / Territory</div>
+                    <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                      {selectedCustomer.city || 'Not Provided'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">State / Province</div>
+                    <div style={{ fontWeight: 600, color: '#334155' }}>
+                      {selectedCustomer.state || 'Maharashtra'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Country</div>
+                    <div style={{ fontWeight: 600, color: '#334155' }}>
+                      {selectedCustomer.country || 'India'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Marketing Campaign & Weekly Pacing Engine */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                  <Calendar size={16} style={{ color: '#2563eb' }} />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                    Marketing Campaign &amp; Weekly Pacing Control
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <div>
+                    <div className="mkt-form-help">Active Campaign Name</div>
+                    <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                      {selectedCustomer.campaignName || 'No Active Campaign'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Pacing Schedule Preset</div>
+                    <span className="mkt-pill mkt-pill-slate" style={{ textTransform: 'capitalize' }}>
+                      {selectedCustomer.schedulePreset === 'weekdays'
+                        ? 'Mon - Fri (5 Days)'
+                        : selectedCustomer.schedulePreset === 'all_days'
+                        ? 'All 7 Days'
+                        : selectedCustomer.schedulePreset === 'weekends'
+                        ? 'Sat - Sun (Weekends)'
+                        : selectedCustomer.schedulePreset || 'Custom'}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Daily Spend Pacing</div>
+                    <div style={{ fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
+                      ₹{selectedCustomer.dailyAdSpend || 300}/day
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Today&apos;s Deduction Status</div>
+                    <div>
+                      {selectedCustomer.isDeductedToday ? (
+                        <span className="mkt-pill mkt-pill-green">✓ Charged &amp; Settled Today</span>
+                      ) : (
+                        <span className="mkt-pill mkt-pill-slate">Not Deducted Today</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed #f1f5f9' }}>
+                  <div className="mkt-form-help" style={{ marginBottom: '6px' }}>
+                    Active Weekly Marketing Days ({(selectedCustomer.activeDays || []).length} of 7 Days Active)
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {ALL_WEEK_DAYS.map((day) => {
+                      const isActive = (selectedCustomer.activeDays || []).includes(day);
+                      return (
+                        <span
+                          key={day}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            background: isActive ? '#ecfdf5' : '#f1f5f9',
+                            color: isActive ? '#059669' : '#94a3b8',
+                            border: isActive ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}
+                        >
+                          {day} {isActive ? '✓' : ''}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 5: Registration & Onboarding Audit Trail */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                  <ShieldCheck size={16} style={{ color: '#059669' }} />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                    Registration &amp; KYC Audit Trail
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <div>
+                    <div className="mkt-form-help">Registration Source</div>
+                    <div style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: '#475569', wordBreak: 'break-all' }}>
+                      {selectedCustomer.registeredFrom || 'https://admafia.marketing/#register'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Registration Date &amp; Time</div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
+                      {formatISTDate(selectedCustomer.registeredAt)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Profile Completion Timestamp</div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
+                      {selectedCustomer.completedAt ? formatISTDate(selectedCustomer.completedAt) : '100% KYC Verified'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Total Lifetime Deposits</div>
+                    <div style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
+                      ₹{(selectedCustomer.totalPaid || 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Payment Settlement Status</div>
+                    <div>
+                      {selectedCustomer.paymentStatus === 'paid' ? (
+                        <span className="mkt-pill mkt-pill-green">✓ Settled &amp; Verified</span>
+                      ) : (
+                        <span className="mkt-pill mkt-pill-amber">Pending Payment</span>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mkt-form-help">Enrollment Method</div>
+                    <span className="mkt-pill mkt-pill-slate">
+                      {selectedCustomer.isSelfRegistered !== false ? 'Customer Self-Registered' : 'Admin Onboarded'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 6: Deliverables Summary */}
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyItems: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '140px' }}>
+                    <div className="mkt-form-help">Dispatched Leads</div>
+                    <strong style={{ fontSize: '1rem', color: '#0f172a' }}>
+                      {selectedCustomer.totalLeadsCount || 0} Leads
+                    </strong>
+                  </div>
+                  <div style={{ flex: 1, minWidth: '140px' }}>
+                    <div className="mkt-form-help">Marketing Ideas</div>
+                    <strong style={{ fontSize: '1rem', color: '#4f46e5' }}>
+                      {selectedCustomer.ideasCount || 0} Ideas
+                    </strong>
+                  </div>
+                  <div style={{ flex: 1, minWidth: '140px' }}>
+                    <div className="mkt-form-help">Approved Posts</div>
+                    <strong style={{ fontSize: '1rem', color: '#059669' }}>
+                      {selectedCustomer.approvedPostsCount || 0} Creatives
+                    </strong>
+                  </div>
+                  <div style={{ flex: 1, minWidth: '140px' }}>
+                    <div className="mkt-form-help">In Review / Draft</div>
+                    <strong style={{ fontSize: '1rem', color: '#d97706' }}>
+                      {(selectedCustomer.pendingPostsCount || 0) + (selectedCustomer.draftPostsCount || 0)} In Pipeline
+                    </strong>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="marketing-modal-footer">
+
+            {/* Modal Footer Actions */}
+            <div className="marketing-modal-footer" style={{ padding: '14px 22px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <button
                 type="button"
-                className="marketing-btn-primary"
+                className="mkt-btn-table-action primary"
                 onClick={() => {
                   const cust = selectedCustomer;
                   setSelectedCustomer(null);
-                  onNavigateToDesk && onNavigateToDesk('build_ideas', cust.id);
+                  handleOpenWalletDrawer(cust);
                 }}
+                style={{ padding: '8px 14px', fontSize: '0.85rem' }}
               >
-                + Build Ideas for this Customer
+                <Wallet size={14} />
+                <span>View Wallet Ledger</span>
               </button>
-              <button
-                type="button"
-                className="mkt-btn-table-action"
-                onClick={() => setSelectedCustomer(null)}
-              >
-                Close
-              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="marketing-btn-primary"
+                  onClick={() => {
+                    const cust = selectedCustomer;
+                    setSelectedCustomer(null);
+                    onNavigateToDesk && onNavigateToDesk('build_ideas', cust.id);
+                  }}
+                >
+                  <Sparkles size={14} />
+                  <span>+ Build Ideas for this Customer</span>
+                </button>
+                <button
+                  type="button"
+                  className="mkt-btn-table-action"
+                  onClick={() => setSelectedCustomer(null)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
