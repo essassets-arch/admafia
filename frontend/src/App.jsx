@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Menu, X, ChevronRight, Laptop, Shield } from 'lucide-react';
 import MetaAdsCalculator from './components/MetaAdsCalculator';
 import AuthPage from './components/AuthPage';
 import PortalDashboard from './portal/PortalDashboard';
@@ -302,6 +303,8 @@ export default function App() {
     return null;
   });
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   useEffect(() => {
     const syncUser = () => {
       try {
@@ -330,6 +333,7 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       setCurrentView(resolveView());
+      setMobileMenuOpen(false);
     };
     window.addEventListener('hashchange', handleHashChange);
     window.addEventListener('popstate', handleHashChange);
@@ -639,21 +643,22 @@ export default function App() {
 
   return (
     <>
-      <header style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(15, 23, 42, 0.05)' }}>
+      <header className="site-header">
         <div className="wrap nav">
           <a
             className="logo"
             href={site.url}
             aria-label="AdMafia Marketing home"
+            onClick={() => setMobileMenuOpen(false)}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}
           >
             <img
               src="/AdMafia-Logo.png"
               alt="AdMafia Marketing"
-              style={{ height: '48px', width: 'auto', objectFit: 'contain', display: 'block' }}
+              className="site-logo-img"
             />
           </a>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="nav-actions">
             {currentUser ? (
               <>
                 <button 
@@ -662,22 +667,9 @@ export default function App() {
                     try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch (e) {}
                     window.location.hash = '#app/dashboard';
                     setCurrentView('portal');
+                    setMobileMenuOpen(false);
                   }}
-                  className="btn"
-                  style={{
-                    padding: '9px 22px',
-                    fontSize: '0.9rem',
-                    fontWeight: 700,
-                    background: '#ffb800',
-                    color: '#171347',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 14px rgba(255, 184, 0, 0.35)',
-                    cursor: 'pointer',
-                    border: 'none',
-                  }}
+                  className="nav-btn nav-btn-primary"
                 >
                   <span>Dashboard</span>
                   <span style={{ fontSize: '1rem', fontWeight: 900 }}>→</span>
@@ -693,18 +685,9 @@ export default function App() {
                     setCurrentUser(null);
                     window.location.hash = '#register';
                     setCurrentView('register');
+                    setMobileMenuOpen(false);
                   }}
-                  className="btn alt"
-                  style={{
-                    padding: '8px 18px',
-                    fontSize: '0.86rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: '#ffffff',
-                    color: '#0f172a',
-                    border: '1.5px solid #cbd5e1',
-                    borderRadius: '8px',
-                  }}
+                  className="nav-btn nav-btn-outline desktop-only"
                 >
                   Create Account
                 </button>
@@ -719,18 +702,10 @@ export default function App() {
                     setCurrentUser(null);
                     window.location.hash = '';
                     setCurrentView('landing');
+                    setMobileMenuOpen(false);
                   }}
-                  className="btn alt"
-                  style={{
-                    padding: '8px 16px',
-                    fontSize: '0.84rem',
-                    fontWeight: 600,
-                    color: '#64748b',
-                    background: '#ffffff',
-                    border: '1.5px solid #e2e8f0',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                  }}
+                  className="nav-btn nav-btn-outline desktop-only"
+                  style={{ color: '#64748b' }}
                 >
                   Sign Out
                 </button>
@@ -743,18 +718,9 @@ export default function App() {
                     try { window.history.pushState({}, '', '/#login'); } catch (e) {}
                     window.location.hash = '#login';
                     setCurrentView('login');
+                    setMobileMenuOpen(false);
                   }}
-                  className="btn alt"
-                  style={{
-                    padding: '8px 20px',
-                    fontSize: '0.88rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: '#ffffff',
-                    color: '#0f172a',
-                    border: '1.5px solid #cbd5e1',
-                    borderRadius: '8px',
-                  }}
+                  className="nav-btn nav-btn-outline"
                 >
                   Login
                 </button>
@@ -769,26 +735,122 @@ export default function App() {
                     setCurrentUser(null);
                     window.location.hash = '#register';
                     setCurrentView('register');
+                    setMobileMenuOpen(false);
                   }}
-                  className="btn"
-                  style={{
-                    padding: '8px 22px',
-                    fontSize: '0.88rem',
-                    fontWeight: 700,
-                    background: '#ffb800',
-                    color: '#171347',
-                    cursor: 'pointer',
-                    border: 'none',
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 8px rgba(255, 184, 0, 0.35)',
-                  }}
+                  className="nav-btn nav-btn-primary"
                 >
                   Create Account
                 </button>
               </>
             )}
+
+            {/* Mobile Menu Hamburger Toggle */}
+            <button
+              type="button"
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Close Menu' : 'Open Menu'}
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Slide-down Drawer Menu */}
+        {mobileMenuOpen && (
+          <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
+            <div className="mobile-drawer-menu" onClick={(e) => e.stopPropagation()}>
+              <div className="mobile-drawer-links">
+                <a href="#how" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                  <span>How It Works</span>
+                  <ChevronRight size={16} color="#94a3b8" />
+                </a>
+                <a href="#calc" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                  <span>Ad Spend Calculator</span>
+                  <ChevronRight size={16} color="#94a3b8" />
+                </a>
+                <a href="#services" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                  <span>Services &amp; Targeting</span>
+                  <ChevronRight size={16} color="#94a3b8" />
+                </a>
+                <a href="#contact" onClick={() => setMobileMenuOpen(false)} className="mobile-drawer-link">
+                  <span>Pricing &amp; Contact</span>
+                  <ChevronRight size={16} color="#94a3b8" />
+                </a>
+              </div>
+
+              <div className="mobile-drawer-divider" />
+
+              <div className="mobile-drawer-actions">
+                <button
+                  type="button"
+                  className="mobile-drawer-action-card"
+                  onClick={() => {
+                    try { window.history.pushState({}, '', '/#login'); } catch (e) {}
+                    window.location.hash = '#login';
+                    setCurrentView('login');
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <div className="mobile-drawer-action-icon gold">
+                    <Laptop size={18} />
+                  </div>
+                  <div>
+                    <div className="mobile-drawer-action-title">Customer Business Portal</div>
+                    <div className="mobile-drawer-action-sub">Login to your active client dashboard</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="mobile-drawer-action-card"
+                  onClick={() => {
+                    try { window.history.pushState({}, '', '/admin/login'); } catch (e) {}
+                    window.location.hash = '#admin/login';
+                    setCurrentView('admin-login');
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <div className="mobile-drawer-action-icon indigo">
+                    <Shield size={18} />
+                  </div>
+                  <div>
+                    <div className="mobile-drawer-action-title">Department Operations Gateway</div>
+                    <div className="mobile-drawer-action-sub">Super Admin, Marketing, Graphics &amp; Sales</div>
+                  </div>
+                </button>
+
+                {currentUser && (
+                  <button
+                    type="button"
+                    className="mobile-drawer-action-card"
+                    style={{ borderColor: '#fecaca', background: '#fff5f5' }}
+                    onClick={() => {
+                      try {
+                        localStorage.removeItem('growthline_active_user');
+                        sessionStorage.clear();
+                        window.history.pushState({}, '', '/');
+                      } catch (e) {}
+                      setCurrentUser(null);
+                      window.location.hash = '';
+                      setCurrentView('landing');
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <div className="mobile-drawer-action-icon" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                      <X size={18} />
+                    </div>
+                    <div>
+                      <div className="mobile-drawer-action-title" style={{ color: '#b91c1c' }}>Sign Out</div>
+                      <div className="mobile-drawer-action-sub">Disconnect active customer session</div>
+                    </div>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       <main>
