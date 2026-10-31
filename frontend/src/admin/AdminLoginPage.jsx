@@ -139,40 +139,6 @@ export default function AdminLoginPage({
 
   return (
     <div className="adm-login-page">
-      {/* Top Bar */}
-      <header className="adm-login-topbar">
-        <a href="/" className="adm-brand-wrap" onClick={(e) => {
-          if (onBackToWebsite) {
-            e.preventDefault();
-            onBackToWebsite();
-          }
-        }}>
-          <div className="adm-brand-logo-icon">AM</div>
-          <div className="adm-brand-text">
-            <h1>AdMafia Operations</h1>
-            <span>Department &amp; Admin Gateway</span>
-          </div>
-        </a>
-
-        <div className="adm-topbar-actions">
-          <a href="/login" className="adm-topbar-link" title="Open Customer Business Portal">
-            <Laptop size={14} />
-            <span>Customer Portal</span>
-          </a>
-          <button
-            type="button"
-            className="adm-topbar-link"
-            onClick={() => {
-              if (onBackToWebsite) onBackToWebsite();
-              else window.location.href = '/';
-            }}
-          >
-            <ExternalLink size={14} />
-            <span>AdMafia Website</span>
-          </button>
-        </div>
-      </header>
-
       {/* Main Container */}
       <main className="adm-login-container">
         {/* Left Column: Department Matrix */}
