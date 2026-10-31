@@ -8045,7 +8045,7 @@
 .seven-day-card-exact {
   background: #ffffff;
   border-radius: 14px;
-  padding: 18px 10px 14px;
+  padding: 16px 8px 12px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -8053,7 +8053,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  min-height: 165px;
+  box-sizing: border-box;
+  gap: 3px;
 }
 
 .seven-day-card-exact.is-selected {
@@ -8158,6 +8161,12 @@
 
 .day-status-micro-text.selected {
   color: #059669;
+}
+
+.day-status-micro-text.booked {
+  color: #059669;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 .day-status-micro-text.available {
@@ -8266,7 +8275,7 @@
 }
 
 .day-bottom-status-wrap {
-  margin-top: 4px;
+  margin-top: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8305,15 +8314,16 @@
 
 /* Ad Booked & Marketing Booked State */
 .seven-day-card-exact.is-ad-booked {
-  border: 2px solid #059669 !important;
-  background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%) !important;
-  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.2) !important;
+  border: 1.5px solid #10b981 !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08) !important;
+  background: #ffffff !important;
   cursor: pointer;
 }
 
 .seven-day-card-exact.is-ad-booked:hover {
+  border-color: #059669 !important;
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(5, 150, 105, 0.28) !important;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.15) !important;
 }
 
 .ad-booked-floating-badge {

@@ -666,7 +666,7 @@ export default function LeadHubOverview({
                   </div>
 
                   {isBooked ? (
-                    <div className="day-booked-sub-pill">🔒 MARKETING BOOKED</div>
+                    <div className="day-status-micro-text booked">🔒 MARKETING BOOKED</div>
                   ) : isSelected ? (
                     <div className="day-status-micro-text selected">Active Day</div>
                   ) : (
