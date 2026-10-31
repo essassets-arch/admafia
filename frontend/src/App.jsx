@@ -364,7 +364,6 @@ export default function App() {
   });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [departmentsDropdownOpen, setDepartmentsDropdownOpen] = useState(false);
 
   const navigateTo = (path, targetView) => {
     try {
@@ -374,7 +373,6 @@ export default function App() {
     const v = targetView || resolveView();
     setCurrentView(v);
     setMobileMenuOpen(false);
-    setDepartmentsDropdownOpen(false);
 
     if (path.startsWith('#') && (!targetView || targetView === 'landing')) {
       const targetId = path.replace('#', '');
@@ -386,16 +384,6 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (departmentsDropdownOpen && !e.target.closest('.desktop-dropdown-container')) {
-        setDepartmentsDropdownOpen(false);
-      }
-    };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [departmentsDropdownOpen]);
 
   useEffect(() => {
     const syncUser = () => {
@@ -858,73 +846,13 @@ export default function App() {
             >
               FAQ
             </a>
-
-            {/* All Pages & Desks Dropdown */}
-            <div className="desktop-dropdown-container">
-              <button
-                type="button"
-                className={`desktop-nav-link dropdown-trigger ${departmentsDropdownOpen ? 'active' : ''}`}
-                onClick={() => setDepartmentsDropdownOpen(!departmentsDropdownOpen)}
-                aria-expanded={departmentsDropdownOpen}
-              >
-                <Layers size={15} />
-                <span>All Pages &amp; Desks</span>
-                <ChevronDown size={14} className={`dropdown-chevron ${departmentsDropdownOpen ? 'rotated' : ''}`} />
-              </button>
-
-              {departmentsDropdownOpen && (
-                <div className="desktop-dropdown-menu">
-                  <div className="dropdown-menu-header">
-                    <div className="dropdown-menu-title">AdMafia Portals &amp; Workspaces</div>
-                    <div className="dropdown-menu-sub">Direct access to all company departments and client workspaces</div>
-                  </div>
-                  <div className="dropdown-menu-grid">
-                    {platformPages.map((page, idx) => {
-                      const Icon = page.icon;
-                      return (
-                        <a
-                          key={idx}
-                          href={page.path}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigateTo(page.path, page.view);
-                          }}
-                          className="dropdown-menu-item"
-                        >
-                          <div className={`dropdown-item-icon ${page.badgeClass}`}>
-                            <Icon size={18} />
-                          </div>
-                          <div className="dropdown-item-content">
-                            <div className="dropdown-item-row">
-                              <span className="dropdown-item-name">{page.title}</span>
-                              <span className={`dropdown-item-badge ${page.badgeClass}`}>{page.badge}</span>
-                            </div>
-                            <p className="dropdown-item-desc">{page.desc}</p>
-                          </div>
-                        </a>
-                      );
-                    })}
-                  </div>
-                  <div className="dropdown-menu-footer">
-                    <div className="dropdown-footer-info">
-                      <CheckCircle2 size={13} color="#10b981" />
-                      <span>PostgreSQL Relational Security • 100% Dynamic</span>
-                    </div>
-                    <a
-                      href="/admin/login"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        navigateTo('/admin/login', 'admin-login');
-                      }}
-                      className="dropdown-footer-link"
-                    >
-                      <span>Operations Gateway</span>
-                      <ArrowRight size={13} />
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
+            <a 
+              href="#contact" 
+              onClick={(e) => { e.preventDefault(); navigateTo('#contact', 'landing'); }} 
+              className="desktop-nav-link"
+            >
+              Contact
+            </a>
           </nav>
 
           <div className="nav-actions">
