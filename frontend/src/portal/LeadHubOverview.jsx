@@ -261,11 +261,30 @@ export default function LeadHubOverview({
             </div>
           </div>
 
-          {/* Right: MARKETING STATUS Paused (Off) + Power Toggle Button */}
+          {/* Right: MARKETING STATUS Paused (Off) + Start / Stop Action Buttons */}
           <div className="pacing-status-toggle-cluster">
             <div className="pacing-status-text-stack">
               <span className="pacing-status-mini-label">MARKETING STATUS</span>
-              <strong className="pacing-status-state-text">
+              <strong
+                className="pacing-status-state-text"
+                style={{
+                  color: customer.adCampaignActive ? '#059669' : '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  justifyContent: 'flex-end',
+                }}
+              >
+                <span
+                  style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: customer.adCampaignActive ? '#10b981' : '#94a3b8',
+                    display: 'inline-block',
+                    boxShadow: customer.adCampaignActive ? '0 0 6px #10b981' : 'none',
+                  }}
+                />
                 {customer.adCampaignActive ? 'Running (Active)' : 'Paused (Off)'}
               </strong>
               {!customer.adCampaignActive && walletBalance < dailySpend && (
@@ -274,19 +293,43 @@ export default function LeadHubOverview({
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              className={`pacing-power-switch ${customer.adCampaignActive ? 'active' : ''}`}
-              onClick={() => onToggleCampaign && onToggleCampaign()}
-              title={customer.adCampaignActive ? 'Click to Pause Marketing Campaign' : 'Click to Resume Marketing Campaign'}
-            >
-              <span className="pacing-power-thumb">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
-                  <line x1="12" y1="2" x2="12" y2="12" />
+
+            {/* Start / Stop Button Controls */}
+            <div className="pacing-start-stop-container">
+              <button
+                type="button"
+                className={`btn-pacing-action btn-pacing-start ${customer.adCampaignActive ? 'is-active' : ''}`}
+                onClick={() => {
+                  if (!customer.adCampaignActive && onToggleCampaign) {
+                    onToggleCampaign(true);
+                  }
+                }}
+                disabled={customer.adCampaignActive}
+                title={customer.adCampaignActive ? 'Marketing is currently Running' : 'Click to Start Marketing Campaign'}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3" />
                 </svg>
-              </span>
-            </button>
+                <span>Start</span>
+              </button>
+
+              <button
+                type="button"
+                className={`btn-pacing-action btn-pacing-stop ${!customer.adCampaignActive ? 'is-active' : ''}`}
+                onClick={() => {
+                  if (customer.adCampaignActive && onToggleCampaign) {
+                    onToggleCampaign(false);
+                  }
+                }}
+                disabled={!customer.adCampaignActive}
+                title={!customer.adCampaignActive ? 'Marketing is currently Paused' : 'Click to Stop Marketing Campaign'}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                </svg>
+                <span>Stop</span>
+              </button>
+            </div>
           </div>
         </div>
 
