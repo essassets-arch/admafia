@@ -139,6 +139,13 @@ export const adminAuthApi = {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
+      const token = localStorage.getItem(TOKEN_KEY) || '';
+      // Invalidate legacy mock direct tokens to enforce authentic /admin/login authentication
+      if (token && token.includes('_direct')) {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(TOKEN_KEY);
+        return null;
+      }
       return JSON.parse(raw);
     } catch (e) {
       return null;

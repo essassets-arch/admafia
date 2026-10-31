@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, MessageCircle, Phone, Sparkles } from 'lucide-react';
+import { X, Send, Sparkles, Check, ChevronRight, MessageSquareText, ShieldCheck } from 'lucide-react';
 
 const WA_NUMBER = '916359120081'; // +91 6359 120 081
 
@@ -9,7 +9,7 @@ export default function WhatsAppWidget() {
   const [userMsg, setUserMsg] = useState('');
   const [hasInteracted, setHasInteracted] = useState(false);
 
-  // Auto-show tooltip bubble after 2.5 seconds to invite interaction
+  // Auto-show teaser bubble after 2.5s for initial visitor engagement
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!hasInteracted) {
@@ -20,10 +20,26 @@ export default function WhatsAppWidget() {
   }, [hasInteracted]);
 
   const quickQuestions = [
-    '⚡ I want to launch Meta Ads from ₹300/day',
-    '📊 Help me calculate ad spend & expected leads',
-    '🏢 I have a local business and need customer calls',
-    '💬 Can I speak with an AdMafia campaign specialist?',
+    {
+      icon: '🚀',
+      text: 'Start Meta Ads from ₹300/day',
+      query: "Hi AdMafia! I want to start Facebook & Instagram lead generation ads from ₹300/day. Please share the details."
+    },
+    {
+      icon: '📊',
+      text: 'Calculate my ad spend & expected leads',
+      query: "Hi AdMafia! Can you help me calculate the expected enquiries and budget for my business category?"
+    },
+    {
+      icon: '🏢',
+      text: 'Local business customer calls setup',
+      query: "Hi AdMafia! I have a local business and want customer enquiries with names and phone numbers in my city."
+    },
+    {
+      icon: '💬',
+      text: 'Speak with an AdMafia campaign specialist',
+      query: "Hi AdMafia! I want to discuss my advertising requirements directly with a campaign specialist."
+    }
   ];
 
   const handleOpenWhatsApp = (customText) => {
@@ -37,7 +53,10 @@ export default function WhatsAppWidget() {
 
   const handleSendForm = (e) => {
     e.preventDefault();
-    if (!userMsg.trim()) return;
+    if (!userMsg.trim()) {
+      handleOpenWhatsApp();
+      return;
+    }
     handleOpenWhatsApp(userMsg.trim());
     setUserMsg('');
   };
@@ -50,9 +69,9 @@ export default function WhatsAppWidget() {
 
   return (
     <div className="wa-widget-container">
-      {/* 1. Interactive Tooltip / Teaser Bubble */}
+      {/* 1. Interactive Teaser Bubble */}
       {showTooltip && !isOpen && (
-        <div className="wa-teaser-bubble">
+        <div className="wa-teaser-bubble" onClick={toggleOpen}>
           <button
             type="button"
             className="wa-teaser-close"
@@ -63,15 +82,16 @@ export default function WhatsAppWidget() {
             }}
             aria-label="Close message preview"
           >
-            <X size={12} />
+            <X size={13} />
           </button>
-          <div className="wa-teaser-content" onClick={toggleOpen}>
+          <div className="wa-teaser-content">
             <div className="wa-teaser-header">
               <span className="wa-online-dot" />
-              <strong>AdMafia Marketing Support</strong>
+              <strong>AdMafia Growth Support</strong>
+              <VerifiedBadge size={14} />
             </div>
             <p className="wa-teaser-text">
-              Looking to generate verified customer enquiries from <strong>₹300/day</strong>? Chat with us live! 👋
+              Generate genuine buyer leads with phone numbers from <strong>₹300/day</strong>. Chat with us live! 👋
             </p>
           </div>
         </div>
@@ -80,26 +100,28 @@ export default function WhatsAppWidget() {
       {/* 2. Interactive WhatsApp Chat Popup Window */}
       {isOpen && (
         <div className="wa-chat-window">
-          {/* Header */}
+          {/* Top Header */}
           <div className="wa-chat-header">
             <div className="wa-chat-avatar-wrap">
               <img
-                src="/AdMafia-Logo.png"
+                src="/favicon.png"
                 alt="AdMafia Marketing"
                 className="wa-chat-avatar"
               />
               <span className="wa-avatar-status" />
             </div>
+
             <div className="wa-chat-header-info">
               <div className="wa-chat-header-title">
                 <span>AdMafia Growth Support</span>
-                <span className="wa-verified-badge" title="Official Verified Support">✓</span>
+                <VerifiedBadge size={15} />
               </div>
               <div className="wa-chat-header-subtitle">
                 <span className="wa-pulse-dot" />
-                <span>Online | Replies in ~2 mins</span>
+                <span>Online • Replies in ~2 mins</span>
               </div>
             </div>
+
             <button
               type="button"
               className="wa-chat-close-btn"
@@ -110,22 +132,52 @@ export default function WhatsAppWidget() {
             </button>
           </div>
 
-          {/* Body with Chat Pattern */}
+          {/* Chat Body with Wallpaper */}
           <div className="wa-chat-body">
-            <div className="wa-chat-timestamp">Today</div>
+            <div className="wa-chat-timestamp">
+              <span>TODAY</span>
+            </div>
 
-            {/* Incoming Agent Message Bubble */}
+            {/* Agent Message Bubble */}
             <div className="wa-chat-bubble incoming">
-              <div className="wa-bubble-sender">AdMafia Specialist</div>
-              <p className="wa-bubble-text">
+              <div className="wa-bubble-header">
+                <span className="wa-bubble-sender">AdMafia Specialist</span>
+                <span className="wa-bubble-badge">Official Support</span>
+              </div>
+
+              <p className="wa-bubble-greeting">
                 Hello! 👋 Welcome to <strong>AdMafia Marketing</strong>.
               </p>
-              <p className="wa-bubble-text" style={{ marginTop: '6px' }}>
-                We help businesses generate real customer enquiries with names &amp; phone numbers via Facebook &amp; Instagram ads starting from just <strong>₹300/Day</strong>.
+
+              {/* Value Highlight Card */}
+              <div className="wa-bubble-card">
+                <div className="wa-card-row">
+                  <span className="wa-card-icon">⚡</span>
+                  <div>
+                    <strong>Starting from ₹300/Day</strong>
+                    <p>Meta Ads on Facebook &amp; Instagram</p>
+                  </div>
+                </div>
+                <div className="wa-card-row">
+                  <span className="wa-card-icon">🎯</span>
+                  <div>
+                    <strong>Real Customer Enquiries</strong>
+                    <p>Receive submitted names &amp; phone numbers</p>
+                  </div>
+                </div>
+                <div className="wa-card-row">
+                  <span className="wa-card-icon">📍</span>
+                  <div>
+                    <strong>Geo-Targeted Campaigns</strong>
+                    <p>Reach customers in your preferred city or area</p>
+                  </div>
+                </div>
+              </div>
+
+              <p className="wa-bubble-prompt">
+                How can we assist your campaign today? Choose a quick enquiry below or type your message:
               </p>
-              <p className="wa-bubble-text" style={{ marginTop: '6px' }}>
-                How can we assist your campaign today?
-              </p>
+
               <div className="wa-bubble-meta">
                 <span>Just now</span>
                 <span className="wa-double-check">✓✓</span>
@@ -134,37 +186,46 @@ export default function WhatsAppWidget() {
 
             {/* Quick Interactive Questions */}
             <div className="wa-quick-questions">
-              <div className="wa-quick-title">Choose a quick question:</div>
-              {quickQuestions.map((q, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className="wa-quick-chip"
-                  onClick={() => handleOpenWhatsApp(q)}
-                >
-                  <span>{q}</span>
-                </button>
-              ))}
+              <div className="wa-quick-title">
+                <Sparkles size={12} className="wa-quick-sparkle" />
+                <span>Quick Enquiries:</span>
+              </div>
+              <div className="wa-quick-grid">
+                {quickQuestions.map((q, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="wa-quick-chip"
+                    onClick={() => handleOpenWhatsApp(q.query)}
+                  >
+                    <span className="wa-chip-icon">{q.icon}</span>
+                    <span className="wa-chip-text">{q.text}</span>
+                    <ChevronRight size={14} className="wa-chip-arrow" />
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Footer Interactive Input & Direct Action */}
+          {/* Chat Footer with Input & Direct CTA */}
           <div className="wa-chat-footer">
             <form onSubmit={handleSendForm} className="wa-input-row">
-              <input
-                type="text"
-                placeholder="Type a message..."
-                value={userMsg}
-                onChange={(e) => setUserMsg(e.target.value)}
-                className="wa-chat-input"
-              />
+              <div className="wa-input-wrap">
+                <input
+                  type="text"
+                  placeholder="Type your message or enquiry..."
+                  value={userMsg}
+                  onChange={(e) => setUserMsg(e.target.value)}
+                  className="wa-chat-input"
+                />
+              </div>
               <button
                 type="submit"
                 className="wa-chat-send-btn"
                 title="Send message on WhatsApp"
                 aria-label="Send message on WhatsApp"
               >
-                <Send size={16} />
+                <Send size={15} />
               </button>
             </form>
 
@@ -173,9 +234,14 @@ export default function WhatsAppWidget() {
               onClick={() => handleOpenWhatsApp()}
               className="wa-direct-cta-btn"
             >
-              <WhatsAppIcon size={20} />
+              <WhatsAppIcon size={19} />
               <span>Chat on WhatsApp (+91 6359 120 081)</span>
             </button>
+
+            <div className="wa-footer-trust">
+              <ShieldCheck size={12} />
+              <span>Instant direct WhatsApp connection • Official business line</span>
+            </div>
           </div>
         </div>
       )}
@@ -189,10 +255,32 @@ export default function WhatsAppWidget() {
         title="Chat with AdMafia on WhatsApp (+91 6359 120 081)"
       >
         <span className="wa-btn-pulse-ring" />
-        <span className="wa-badge-dot">1</span>
+        {!isOpen && <span className="wa-badge-dot">1</span>}
         <WhatsAppIcon size={32} />
       </button>
     </div>
+  );
+}
+
+// Official Meta / WhatsApp Verified Badge SVG
+function VerifiedBadge({ size = 15 }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      style={{ display: 'inline-block', flexShrink: 0 }}
+      aria-label="Verified Support Badge"
+    >
+      <path
+        fill="#25D366"
+        d="m10.06 2.4.92-.93a2 2 0 0 1 2.83 0l.92.93 1.28-.27a2 2 0 0 1 2.3 1.33l.47 1.22 1.3.16a2 2 0 0 1 1.7 1.7l.17 1.3 1.22.47a2 2 0 0 1 1.33 2.3l-.27 1.28.93.92a2 2 0 0 1 0 2.83l-.93.92.27 1.28a2 2 0 0 1-1.33 2.3l-1.22.47-.16 1.3a2 2 0 0 1-1.7 1.7l-1.3.17-.47 1.22a2 2 0 0 1-2.3 1.33l-1.28-.27-.92.93a2 2 0 0 1-2.83 0l-.92-.93-1.28.27a2 2 0 0 1-2.3-1.33l-.47-1.22-1.3-.16a2 2 0 0 1-1.7-1.7l-.17-1.3-1.22-.47a2 2 0 0 1-1.33-2.3l.27-1.28-.93-.92a2 2 0 0 1 0-2.83l.93-.92-.27-1.28a2 2 0 0 1 1.33-2.3l1.22-.47.16-1.3a2 2 0 0 1 1.7-1.7l1.3-.17.47-1.22a2 2 0 0 1 2.3-1.33l1.28.27z"
+      />
+      <path
+        fill="#ffffff"
+        d="m9.5 12.5-2-2a1 1 0 0 0-1.4 1.4l2.7 2.7c.4.4 1 .4 1.4 0l6.7-6.7a1 1 0 1 0-1.4-1.4l-6 6z"
+      />
+    </svg>
   );
 }
 
@@ -211,4 +299,3 @@ function WhatsAppIcon({ size = 28 }) {
     </svg>
   );
 }
-
