@@ -261,7 +261,7 @@ export default function LeadHubOverview({
             </div>
           </div>
 
-          {/* Right: MARKETING STATUS Paused (Off) + Start / Stop Action Buttons */}
+          {/* Right: MARKETING STATUS Paused (Off) + Start / Stop Action Button */}
           <div className="pacing-status-toggle-cluster">
             <div className="pacing-status-text-stack">
               <span className="pacing-status-mini-label">MARKETING STATUS</span>
@@ -277,12 +277,12 @@ export default function LeadHubOverview({
               >
                 <span
                   style={{
-                    width: '7px',
-                    height: '7px',
+                    width: '8px',
+                    height: '8px',
                     borderRadius: '50%',
                     background: customer.adCampaignActive ? '#10b981' : '#94a3b8',
                     display: 'inline-block',
-                    boxShadow: customer.adCampaignActive ? '0 0 6px #10b981' : 'none',
+                    boxShadow: customer.adCampaignActive ? '0 0 8px #10b981' : 'none',
                   }}
                 />
                 {customer.adCampaignActive ? 'Running (Active)' : 'Paused (Off)'}
@@ -294,42 +294,32 @@ export default function LeadHubOverview({
               )}
             </div>
 
-            {/* Start / Stop Button Controls */}
-            <div className="pacing-start-stop-container">
+            {/* Explicit Master Start / Stop Button */}
+            {customer.adCampaignActive ? (
               <button
                 type="button"
-                className={`btn-pacing-action btn-pacing-start ${customer.adCampaignActive ? 'is-active' : ''}`}
-                onClick={() => {
-                  if (!customer.adCampaignActive && onToggleCampaign) {
-                    onToggleCampaign(true);
-                  }
-                }}
-                disabled={customer.adCampaignActive}
-                title={customer.adCampaignActive ? 'Marketing is currently Running' : 'Click to Start Marketing Campaign'}
+                className="btn-marketing-master-action stop"
+                onClick={() => onToggleCampaign && onToggleCampaign(false)}
+                title="Click to Stop / Pause Marketing Campaign"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-                <span>Start</span>
-              </button>
-
-              <button
-                type="button"
-                className={`btn-pacing-action btn-pacing-stop ${!customer.adCampaignActive ? 'is-active' : ''}`}
-                onClick={() => {
-                  if (customer.adCampaignActive && onToggleCampaign) {
-                    onToggleCampaign(false);
-                  }
-                }}
-                disabled={!customer.adCampaignActive}
-                title={!customer.adCampaignActive ? 'Marketing is currently Paused' : 'Click to Stop Marketing Campaign'}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="4" y="4" width="16" height="16" rx="2" />
                 </svg>
-                <span>Stop</span>
+                <span>Stop Marketing</span>
               </button>
-            </div>
+            ) : (
+              <button
+                type="button"
+                className="btn-marketing-master-action start"
+                onClick={() => onToggleCampaign && onToggleCampaign(true)}
+                title="Click to Start Marketing Campaign"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                <span>Start Marketing</span>
+              </button>
+            )}
           </div>
         </div>
 
