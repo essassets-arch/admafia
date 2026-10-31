@@ -981,7 +981,31 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     const dailyLimit = Number(customer.dailyAdSpend || 300);
     const nextActive = typeof forceState === 'boolean' ? forceState : !customer.adCampaignActive;
 
-    // 1. Low Balance Check with SweetAlert2
+    // 1. If user clicks Start but it's ALREADY active
+    if (forceState === true && customer.adCampaignActive) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Marketing Campaign Already Active',
+        html: `Your marketing campaign is currently <strong>Running (Active)</strong> and pacing at <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong>.<br/><br/>Meta ads and local buyer lead capture are active.`,
+        confirmButtonText: 'Understood',
+        confirmButtonColor: '#059669',
+      });
+      return;
+    }
+
+    // 2. If user clicks Stop but it's ALREADY stopped
+    if (forceState === false && !customer.adCampaignActive) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Marketing Campaign Already Paused',
+        html: `Your marketing campaign is currently <strong>Paused (Off)</strong>.<br/><br/>Click <strong>Start</strong> whenever you are ready to launch advertising.`,
+        confirmButtonText: 'Understood',
+        confirmButtonColor: '#64748b',
+      });
+      return;
+    }
+
+    // 3. Low Balance Check with SweetAlert2
     if (nextActive && walletBalance < dailyLimit) {
       Swal.fire({
         icon: 'warning',
@@ -997,7 +1021,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       return;
     }
 
-    // 2. SweetAlert2 Confirmation Dialog before Start or Stop
+    // 4. SweetAlert2 Confirmation Dialog before Start or Stop
     if (nextActive) {
       const confirmStart = await Swal.fire({
         icon: 'question',
@@ -1016,14 +1040,18 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         html: `Are you sure you want to stop/pause your marketing campaigns?<br/><br/>Daily ad deductions and active Meta buyer lead capture will be <strong>paused</strong>.`,
         showCancelButton: true,
         confirmButtonText: '⏹ Yes, Stop Marketing',
-        confirmButtonColor: '#e11d48',
+        confirmButtonColor: '#dc2626',
         cancelButtonText: 'Keep Running',
       });
       if (!confirmStop.isConfirmed) return;
     }
 
+    // 5. Automatic Booking: Compute Kolkata Date & Day Code
+    const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    const todayDayCode = dayCodes[new Date().getDay()];
+    const todayDayCode = dayCodes[kolkataNow.getDay()];
+    const todayIsoDate = `${kolkataNow.getFullYear()}-${String(kolkataNow.getMonth() + 1).padStart(2, '0')}-${String(kolkataNow.getDate()).padStart(2, '0')}`;
+
     const currentDays = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
       ? customer.activeDays
       : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
@@ -1032,11 +1060,24 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       ? [...currentDays, todayDayCode]
       : currentDays;
 
+    const currentBookedDays = Array.isArray(customer.bookedDays) ? customer.bookedDays : [];
+    const nextBookedDays = nextActive && !currentBookedDays.includes(todayDayCode)
+      ? [...currentBookedDays, todayDayCode]
+      : currentBookedDays;
+
+    const currentBookedDates = Array.isArray(customer.bookedDates) ? customer.bookedDates : [];
+    const nextBookedDates = nextActive && !currentBookedDates.includes(todayIsoDate)
+      ? [...currentBookedDates, todayIsoDate]
+      : currentBookedDates;
+
     setCustomer((prev) => {
       const updated = {
         ...prev,
         adCampaignActive: nextActive,
         activeDays: nextActiveDays,
+        bookedDays: nextBookedDays,
+        bookedDates: nextBookedDates,
+        isDeductedToday: nextActive ? true : prev.isDeductedToday,
       };
       try {
         localStorage.setItem('growthline_active_user', JSON.stringify(updated));
@@ -1048,18 +1089,20 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       await crmApi.patchCustomer(customer.id, {
         adCampaignActive: nextActive,
         activeDays: nextActiveDays,
+        bookedDays: nextBookedDays,
+        bookedDates: nextBookedDates,
       });
     } catch (e) {
       console.warn('Sync campaign state note:', e.message);
     }
 
-    // 3. SweetAlert2 Success Notice
+    // 6. SweetAlert2 Success Notice
     if (nextActive) {
       Swal.fire({
         icon: 'success',
-        title: 'Marketing is LIVE!',
-        html: `Your marketing campaign is now active and pacing at <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong>.`,
-        timer: 2000,
+        title: 'Marketing is LIVE & Ad Booked!',
+        html: `Your marketing campaign is now active and pacing at <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong>.<br/><br/>Today's advertising slot is <strong>🎯 AD BOOKED</strong>.`,
+        timer: 2600,
         showConfirmButton: false,
       });
     } else {
@@ -1067,7 +1110,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         icon: 'info',
         title: 'Marketing Paused (Off)',
         html: `Your campaign has been paused. Daily ad spend will not be deducted until you start it again.`,
-        timer: 2000,
+        timer: 2200,
         showConfirmButton: false,
       });
     }

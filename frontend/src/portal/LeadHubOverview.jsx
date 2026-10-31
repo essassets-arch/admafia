@@ -27,6 +27,11 @@ export function getKolkataWeekDays(weekOffset = 0) {
     const isToday = (weekOffset === 0 && d.toDateString() === now.toDateString());
     const isPast = d < new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+    const year = d.getFullYear();
+    const month2 = String(d.getMonth() + 1).padStart(2, '0');
+    const day2 = String(dateNum).padStart(2, '0');
+    const isoDate = `${year}-${month2}-${day2}`;
+
     days.push({
       code: dayCodes[i],
       label: dayNames[i],
@@ -34,6 +39,7 @@ export function getKolkataWeekDays(weekOffset = 0) {
       month: monthShort,
       dateFormatted: `${dateNum} ${monthShort}`,
       fullDateString: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      isoDate,
       isToday,
       isPast,
     });
@@ -103,17 +109,20 @@ export default function LeadHubOverview({
   const isProfileDone = customer.profileStatus === 'complete' || customer.profile_status === 'complete' || customer.kycPercent === 100;
   const isFullyComplete = isPaymentDone && isProfileDone;
 
-  const toggleDay = (code) => {
-    const isTargetBooked = (code === currentTodayItem.code && isTodayBooked) ||
-      (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(code)) ||
-      (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(code));
+  const toggleDay = (dayTarget) => {
+    const code = typeof dayTarget === 'string' ? dayTarget : dayTarget?.code;
+    const dayObj = typeof dayTarget === 'object' ? dayTarget : daysList.find((d) => d.code === code);
+    const isTargetBooked = Boolean(
+      (dayObj?.isToday && isTodayBooked) ||
+      (dayObj?.isoDate && Array.isArray(customer.bookedDates) && customer.bookedDates.includes(dayObj.isoDate)) ||
+      (code === currentTodayItem.code && isTodayBooked)
+    );
 
     if (isTargetBooked) {
-      const dayObj = daysList.find((d) => d.code === code);
       Swal.fire({
         icon: 'info',
         title: 'Marketing Day Already Booked',
-        html: `Advertising has already been started or booked for <strong>${dayObj?.label || code} (${dayObj?.dateFormatted || ''})</strong>.<br/><br/>This booking is locked and cannot be removed from your marketing schedule.`,
+        text: 'Advertising has already started or been booked for this day. This day is locked and cannot be deselected.',
         confirmButtonText: 'Understood',
         confirmButtonColor: '#059669',
       });
@@ -628,14 +637,13 @@ export default function LeadHubOverview({
               const isSelected = activeDays.includes(d.code);
               const isBooked = Boolean(
                 (d.isToday && isTodayBooked) ||
-                (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(d.code)) ||
-                (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(d.code))
+                (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(d.isoDate))
               );
               return (
                 <div
                   key={d.code}
                   className={`seven-day-card-exact ${isBooked ? 'is-ad-booked is-selected' : isSelected ? 'is-selected' : 'is-unselected'} ${d.isToday ? 'is-today' : ''}`}
-                  onClick={() => toggleDay(d.code)}
+                  onClick={() => toggleDay(d)}
                   title={isBooked ? `${d.label} (${d.dateFormatted}): Advertising already booked & locked` : isSelected ? `Click to disable ${d.label} (${d.dateFormatted})` : `Click to enable ${d.label} (${d.dateFormatted})`}
                 >
                   {/* If today, floating blue badge */}

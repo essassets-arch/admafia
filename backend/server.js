@@ -85,10 +85,21 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
       new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
       new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
     ),
-    lockedDays: (row.last_deducted_at &&
-      new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))
+    lockedDays: (
+      (row.last_deducted_at &&
+        new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+        new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) ||
+      Boolean(row.ad_campaign_active)
+    )
       ? [['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay()]]
+      : [],
+    bookedDates: (
+      (row.last_deducted_at &&
+        new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+        new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) ||
+      Boolean(row.ad_campaign_active)
+    )
+      ? [new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })]
       : [],
     isSelfRegistered: true,
     registeredFrom: row.registered_from || 'http://localhost:5173/#register',

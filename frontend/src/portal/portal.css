@@ -7619,7 +7619,7 @@
   font-size: 0.86rem;
   font-weight: 800;
   cursor: pointer;
-  border: 1px solid #a7f3d0;
+  border: 1.5px solid #a7f3d0;
   background: #ecfdf5;
   color: #047857;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -7635,10 +7635,10 @@
 }
 
 .btn-proper-pacing-start.is-active {
-  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  background: #059669;
   color: #ffffff;
-  border: 1px solid #059669;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  border: 1.5px solid #047857;
+  box-shadow: 0 2px 10px rgba(5, 150, 105, 0.45);
 }
 
 .btn-proper-pacing-stop {
@@ -7650,9 +7650,9 @@
   font-size: 0.86rem;
   font-weight: 800;
   cursor: pointer;
-  border: 1px solid #fecaca;
+  border: 1.5px solid #fecaca;
   background: #fef2f2;
-  color: #b91c1c;
+  color: #dc2626;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   outline: none;
   line-height: 1.2;
@@ -7666,28 +7666,30 @@
 }
 
 .btn-proper-pacing-stop.is-active {
-  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+  background: #dc2626;
   color: #ffffff;
-  border: 1px solid #be123c;
-  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.4);
+  border: 1.5px solid #b91c1c;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.45);
 }
 
 .btn-status-badge {
   font-size: 0.68rem;
   font-weight: 800;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 2px 7px;
+  border-radius: 9999px;
   letter-spacing: 0.04em;
+  margin-left: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 .btn-status-badge.on {
-  background: rgba(255, 255, 255, 0.28);
-  color: #ffffff;
+  background: #ffffff;
+  color: #059669;
 }
 
 .btn-status-badge.off {
-  background: rgba(255, 255, 255, 0.28);
-  color: #ffffff;
+  background: #ffffff;
+  color: #dc2626;
 }
 
 /* Start / Stop Button Controls for Marketing Campaign */
