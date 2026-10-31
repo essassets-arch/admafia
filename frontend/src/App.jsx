@@ -4,6 +4,7 @@ import {
   Crown, Sparkles, Palette, Briefcase, Layers, ArrowRight, CheckCircle2 
 } from 'lucide-react';
 import MetaAdsCalculator from './components/MetaAdsCalculator';
+import WhatsAppWidget from './components/WhatsAppWidget';
 import AuthPage from './components/AuthPage';
 import PortalDashboard from './portal/PortalDashboard';
 import WorkspaceSetupPage from './portal/WorkspaceSetupPage';
@@ -42,7 +43,7 @@ const site = {
   name: 'AdMafia Marketing',
   url: 'https://admafia.marketing/',       // canonical (trailing slash ke saath)
   email: 'hello@admafia.marketing',        // lead form yahin aayega
-  phone: '+91XXXXXXXXXX',
+  phone: '+91 6359 120 081',
   title: 'Facebook & Instagram Lead Generation Ads from ₹300/Day | AdMafia Marketing',
   desc: 'Get customer enquiries with names and phone numbers through targeted Meta Ads. Start Facebook & Instagram lead generation campaigns from ₹300/day with AdMafia Marketing.',
 };
@@ -1504,6 +1505,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      <WhatsAppWidget />
     </>
   );
 }
