@@ -211,3 +211,4 @@ function WhatsAppIcon({ size = 28 }) {
     </svg>
   );
 }
+
