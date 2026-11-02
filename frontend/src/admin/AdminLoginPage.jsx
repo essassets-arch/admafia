@@ -1,84 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  Shield,
   Lock,
   User,
   Key,
   Eye,
   EyeOff,
   ArrowRight,
-  Sparkles,
-  Palette,
-  Briefcase,
   CheckCircle2,
   AlertCircle,
-  ExternalLink,
-  Laptop,
-  Check
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import adminAuthApi from '../services/adminAuthApi';
 import './admin-login.css';
 
 export default function AdminLoginPage({
-  requiredDept = null,
   targetUrl = null,
   notice = null,
   onLoginSuccess = null,
   onBackToWebsite = null,
 }) {
-  const [departments, setDepartments] = useState([]);
-  const [selectedDeptId, setSelectedDeptId] = useState('superadmin');
-  const [identifier, setIdentifier] = useState('superadmin');
-  const [password, setPassword] = useState('SuperAdmin@2026!');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(notice || '');
-
-  // Load configured departments
-  useEffect(() => {
-    async function loadDepts() {
-      try {
-        const res = await adminAuthApi.getDepartments();
-        if (res && res.departments) {
-          setDepartments(res.departments);
-          // Check URL param or requiredDept
-          const urlParams = new URLSearchParams(window.location.search);
-          const deptParam = urlParams.get('dept') || requiredDept;
-          if (deptParam) {
-            const match = res.departments.find(
-              (d) => d.id.toLowerCase() === deptParam.toLowerCase() || d.name.toLowerCase().includes(deptParam.toLowerCase())
-            );
-            if (match) {
-              handleSelectDept(match);
-              return;
-            }
-          }
-          // Default selection to Super Admin
-          const initial = res.departments.find((d) => d.id === 'superadmin') || res.departments[0];
-          if (initial) {
-            handleSelectDept(initial);
-          }
-        }
-      } catch (err) {
-        console.error('[AdminLoginPage] loadDepts error', err);
-      }
-    }
-    loadDepts();
-  }, [requiredDept]);
-
-  const handleSelectDept = (dept) => {
-    setSelectedDeptId(dept.id);
-    if (dept.defaultUser) {
-      setIdentifier(dept.defaultUser.username);
-      setPassword(dept.defaultUser.password);
-    }
-    setErrorMsg('');
-  };
-
-  const getSelectedDept = () => {
-    return departments.find((d) => d.id === selectedDeptId) || null;
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -135,86 +80,17 @@ export default function AdminLoginPage({
     }
   };
 
-  const currentDept = getSelectedDept();
-
   return (
     <div className="adm-login-page">
       {/* Main Container */}
       <main className="adm-login-container">
-        {/* Left Column: Department Matrix */}
-        <section className="adm-dept-col">
-          <div className="adm-col-header">
-            <div className="adm-col-badge">
-              <Shield size={12} />
-              <span>Unified Gateway</span>
-            </div>
-            <h2>Choose Department</h2>
-            <p>
-              Select your department below to preview assigned desks or fast-fill authorized credentials, or type any registered administrator login.
-            </p>
-          </div>
-
-          {/* Department Cards Grid */}
-          <div className="adm-dept-grid">
-            {departments.map((dept) => {
-              const isSelected = selectedDeptId === dept.id;
-              return (
-                <div
-                  key={dept.id}
-                  data-dept={dept.id}
-                  className={`adm-dept-card ${isSelected ? 'selected' : ''}`}
-                  onClick={() => handleSelectDept(dept)}
-                >
-                  <div className="adm-dept-card-top">
-                    <span className="adm-dept-icon">{dept.icon}</span>
-                    <button
-                      type="button"
-                      className="adm-dept-fill-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectDept(dept);
-                      }}
-                      title="Auto-fill verified credentials"
-                    >
-                      {isSelected ? '✓ Selected' : '⚡ Auto-Fill'}
-                    </button>
-                  </div>
-                  <h3>{dept.name}</h3>
-                  <div className="adm-dept-subtitle">{dept.defaultUser?.title || 'Department Staff'}</div>
-
-                  <div className="adm-dept-meta">
-                    <div className="adm-dept-meta-row">
-                      <span className="adm-dept-meta-label">Path:</span>
-                      <span className="adm-dept-meta-val">{dept.path}</span>
-                    </div>
-                    <div className="adm-dept-meta-row">
-                      <span className="adm-dept-meta-label">User:</span>
-                      <span className="adm-dept-meta-val">{dept.defaultUser?.username}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Security & Isolation Callout */}
-          <div className="adm-security-card">
-            <div className="adm-security-icon">
-              <CheckCircle2 size={20} />
-            </div>
-            <div className="adm-security-text">
-              <h4>Role Isolation &amp; PostgreSQL Security</h4>
-              <p>
-                Each department operates with isolated access permissions. Dynamic credentials verify against authoritative PostgreSQL database records with session enforcement.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Right Column: Interactive Login Form */}
+        {/* Administrator Login Form */}
         <section
           className="adm-form-card"
           style={{
+            gridColumn: '1 / -1',
+            width: 'min(100%, 520px)',
+            justifySelf: 'center',
             background: 'linear-gradient(180deg, #131c2e 0%, #0d1527 100%)',
             border: '1px solid rgba(255, 255, 255, 0.14)',
             borderRadius: '20px',
@@ -224,7 +100,7 @@ export default function AdminLoginPage({
           }}
         >
           <div className="adm-form-header">
-            <h3>Department Sign In</h3>
+            <h3>Administrator Sign In</h3>
             <p>Enter your username, work email, or 10-digit mobile number</p>
           </div>
 
@@ -232,9 +108,9 @@ export default function AdminLoginPage({
           <div className="adm-routing-preview">
             <ArrowRight size={16} className="adm-routing-icon" />
             <div className="adm-routing-text">
-              Target Destination: <strong>{currentDept?.name || 'Authorized Department'}</strong>
+              Target Destination: <strong>Administrator Workspace</strong>
               <div style={{ marginTop: 2 }}>
-                Routes dynamically to <span className="adm-routing-path">https://admafia.marketing{currentDept?.path || targetUrl || '/superadmin'}</span>
+                Routes to your authorized workspace after sign in.
               </div>
             </div>
           </div>
@@ -298,7 +174,7 @@ export default function AdminLoginPage({
                     boxSizing: 'border-box',
                     marginBottom: 0,
                   }}
-                  placeholder="e.g. superadmin, marketing, or 9999999999"
+                  placeholder="Username, email, or mobile number"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   autoComplete="username"
@@ -390,54 +266,12 @@ export default function AdminLoginPage({
                 <>
                   <Lock size={16} />
                   <span>
-                    {selectedDeptId === 'superadmin' ? 'Sign In to Super Admin Panel' :
-                     selectedDeptId === 'marketing' ? 'Sign In to Marketing Ops' :
-                     selectedDeptId === 'graphics' ? 'Sign In to Graphics Ops' :
-                     selectedDeptId === 'sales' ? 'Sign In to Sales Executive Desk' :
-                     `Sign In to ${currentDept?.name || 'Department'}`}
+                    Sign In to Administrator Workspace
                   </span>
                 </>
               )}
             </button>
 
-            {/* Instant Access Helper */}
-            <button
-              type="button"
-              onClick={() => {
-                adminAuthApi.saveSession({
-                  id: 'user_superadmin_01',
-                  fullName: 'AdMafia Executive Super Admin',
-                  username: 'superadmin',
-                  email: 'admin@admafia.marketing',
-                  phone: '9999999999',
-                  role: 'Super Admin',
-                  department: 'Super Admin',
-                  permissions: ['all'],
-                }, 'adm_token_superadmin_direct');
-                window.location.href = '/superadmin';
-              }}
-              style={{
-                width: '100%',
-                background: 'rgba(99, 102, 241, 0.12)',
-                border: '1px solid rgba(99, 102, 241, 0.35)',
-                color: '#c7d2fe',
-                borderRadius: 10,
-                padding: '10px 16px',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                marginTop: 12,
-                transition: 'all 0.2s ease',
-                boxSizing: 'border-box',
-              }}
-            >
-              <Sparkles size={14} color="#818cf8" />
-              <span>⚡ Instant Launch Super Admin Control Center</span>
-            </button>
           </form>
 
           <div className="adm-form-footer">
