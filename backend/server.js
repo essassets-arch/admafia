@@ -97,6 +97,9 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
       const kToday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kDow];
       if (typeof row.active_days === 'string') {
         const parsed = row.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+        if (parsed.length === 5 && parsed.includes('MON') && parsed.includes('FRI') && !row.booked_dates && Number(row.available_balance || 0) === 0) {
+          return [kToday];
+        }
         return parsed.length > 0 ? parsed : [kToday];
       }
       if (Array.isArray(row.active_days) && row.active_days.length > 0) return row.active_days;

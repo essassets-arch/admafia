@@ -89,30 +89,36 @@ export default function LeadHubOverview({
   const todayCode = currentTodayItem?.code || 'MON';
 
   const [activeDays, setActiveDays] = useState(() => {
-    // By default, only select today's day
-    const base = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
-      ? customer.activeDays
-      : [todayCode];
-    const merged = new Set(base);
-    if (merged.size === 0) merged.add(todayCode);
-    if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
-    if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
-    if (customer.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
-    return Array.from(merged);
+    // If user has booked days, keep those + today
+    const booked = new Set();
+    if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => booked.add(b));
+    if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => booked.add(b));
+    if (customer.isDeductedToday && currentTodayItem?.code) booked.add(currentTodayItem.code);
+
+    if (booked.size > 0) {
+      booked.add(todayCode);
+      return Array.from(booked);
+    }
+
+    const sessionPreset = typeof window !== 'undefined' ? window.sessionStorage.getItem('admafia_active_schedule_preset') : null;
+    if (sessionPreset && Array.isArray(customer.activeDays) && customer.activeDays.length > 0) {
+      return customer.activeDays;
+    }
+
+    // Default on initial load: ONLY select today's day
+    return [todayCode];
   });
   const [unmaskedLeads, setUnmaskedLeads] = useState({});
 
   React.useEffect(() => {
-    const todayCode = currentTodayItem?.code || 'MON';
-    if (customer?.activeDays && Array.isArray(customer.activeDays)) {
+    const sessionPreset = typeof window !== 'undefined' ? window.sessionStorage.getItem('admafia_active_schedule_preset') : null;
+    if (sessionPreset && customer?.activeDays && Array.isArray(customer.activeDays)) {
       const merged = new Set(customer.activeDays.length > 0 ? customer.activeDays : [todayCode]);
       if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
       if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
       if (customer.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
       if (merged.size === 0) merged.add(todayCode);
       setActiveDays(Array.from(merged));
-    } else if (!customer?.activeDays) {
-      setActiveDays([todayCode]);
     }
   }, [customer?.activeDays, customer?.bookedDays, customer?.lockedDays, customer?.isDeductedToday, currentTodayItem?.code]);
 
@@ -214,6 +220,7 @@ export default function LeadHubOverview({
     const isTogglingToday = (code === currentTodayItem.code);
     let shouldActivate = false;
 
+    try { window.sessionStorage.setItem('admafia_active_schedule_preset', 'custom'); } catch (e) {}
     if (activeDays.includes(code)) {
       next = activeDays.filter((d) => d !== code);
       if (next.length === 0) {
@@ -235,6 +242,7 @@ export default function LeadHubOverview({
   };
 
   const handleSelectPresetDays = (preset) => {
+    try { window.sessionStorage.setItem('admafia_active_schedule_preset', preset); } catch (e) {}
     let next = [];
     if (preset === 'all') next = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     if (preset === 'weekdays') next = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
