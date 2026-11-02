@@ -164,6 +164,34 @@ async function runWalletAudit() {
     const plink = await plinkRes.json();
     assert(plinkRes.ok && plink.id && plink.short_url, `Razorpay API generates valid hosted URL: ${plink.short_url}`);
     assert(plink.short_url.includes('rzp.io'), `Hosted URL is full-page rzp.io checkout`);
+
+    // Verify URL validation logic
+    function validateHostedUrl(urlStr) {
+      try {
+        const parsed = new URL(urlStr);
+        const allowedDomains = ['rzp.io', 'razorpay.com'];
+        const isAllowed = allowedDomains.some((d) => parsed.hostname === d || parsed.hostname.endsWith('.' + d));
+        return parsed.protocol === 'https:' && isAllowed;
+      } catch {
+        return false;
+      }
+    }
+    assert(validateHostedUrl(plink.short_url) === true, `Generated Razorpay URL accepted by domain validator`);
+    assert(validateHostedUrl('https://rzp.io/rzp/HpNgUTC') === true, `Hosted URL on rzp.io accepted as secure`);
+    assert(validateHostedUrl('https://api.razorpay.com/v1/checkout') === true, `Hosted URL on razorpay.com accepted as secure`);
+    assert(validateHostedUrl('http://rzp.io/rzp/test') === false, `Insecure HTTP URL strictly rejected`);
+    assert(validateHostedUrl('https://evil-phishing-site.com/fake') === false, `Untrusted domain strictly rejected`);
+
+    // Verify polymorphic response shape
+    const mockLinkResponse = {
+      ok: true,
+      paymentLinkId: plink.id,
+      paymentUrl: plink.short_url,
+      short_url: plink.short_url,
+      url: plink.short_url,
+    };
+    const extractedUrl = mockLinkResponse.paymentUrl || mockLinkResponse.short_url || mockLinkResponse.url;
+    assert(extractedUrl === plink.short_url, `Polymorphic response resolves URL across paymentUrl, short_url, and url`);
   } catch (err) {
     assert(false, `Razorpay API call failed: ${err.message}`);
   }

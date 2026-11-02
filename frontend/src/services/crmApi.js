@@ -7,12 +7,12 @@ const isLocalhost =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-const API_BASE =
-  import.meta.env?.VITE_API_BASE_URL ||
-  (isLocalhost ? 'http://localhost:5000/api' : '/api');
+const API_BASE = isLocalhost
+  ? (import.meta.env?.VITE_API_BASE_URL || 'http://localhost:5000/api')
+  : '/api';
 
 async function apiRequest(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;localStorage
+  const url = `${API_BASE}${endpoint}`;
   const response = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',

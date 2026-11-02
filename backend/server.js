@@ -1459,6 +1459,8 @@ app.post('/api/payments/razorpay/payment-link', async (req, res) => {
       ok: true,
       paymentLinkId: plink.id,
       paymentUrl: plink.short_url,
+      short_url: plink.short_url,
+      url: plink.short_url,
       amount,
       currency: plink.currency || 'INR',
       keyId: razorpayKeyId,

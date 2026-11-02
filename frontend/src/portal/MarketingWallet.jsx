@@ -26,6 +26,7 @@ export default function MarketingWallet({
   const [customAmount, setCustomAmount] = useState('300');
   const [activeLedgerTab, setActiveLedgerTab] = useState('all'); // 'all' | 'recharges' | 'deductions' | 'failed' | 'invoices'
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [razorpayMode, setRazorpayMode] = useState(null);
   const [actionAlert, setActionAlert] = useState(null); // { type: 'success' | 'error', message: string }
   const [copiedTxId, setCopiedTxId] = useState(null);
@@ -57,6 +58,7 @@ export default function MarketingWallet({
       const amountStr = urlParams.get('amount') || hashParams.get('amount');
 
       if (paymentStatus === 'success') {
+        setIsVerifyingPayment(true);
         const creditedAmt = Number(amountStr) || activeAmount || 300;
         setActionAlert({
           type: 'success',
@@ -69,7 +71,11 @@ export default function MarketingWallet({
             if (workspace?.customer && onTopUpWallet) {
               onTopUpWallet(creditedAmt, paymentId || `rzp_${Date.now()}`, workspace);
             }
-          }).catch(() => {});
+          }).finally(() => {
+            setIsVerifyingPayment(false);
+          });
+        } else {
+          setIsVerifyingPayment(false);
         }
 
         const cleanHash = '#app/wallet';
@@ -175,6 +181,8 @@ export default function MarketingWallet({
 
   // Trigger Hosted Razorpay Payment Link flow (full-page experience, zero popup overlay)
   const handlePayViaRazorpay = async () => {
+    if (isProcessingPayment || isVerifyingPayment) return;
+
     if (!Number.isSafeInteger(activeAmount) || activeAmount < 300) {
       setActionAlert({ type: 'error', message: 'Minimum wallet recharge amount is ₹300.' });
       setTimeout(() => setActionAlert(null), 3000);
@@ -188,6 +196,7 @@ export default function MarketingWallet({
         throw new Error('Customer account details are missing. Please sign in again and retry.');
       }
 
+      console.log(`[handlePayViaRazorpay] Requesting payment link for ₹${activeAmount}`);
       const res = await crmApi.createRazorpayPaymentLink({
         customerId: customer?.id,
         phone: customer?.phone,
@@ -195,11 +204,25 @@ export default function MarketingWallet({
         amount: activeAmount,
       });
 
-      if (!res?.paymentUrl) {
-        throw new Error(res?.error || 'Could not generate Razorpay payment link. Please try again.');
+      console.log('[handlePayViaRazorpay] Server response:', res);
+      const targetUrl = res?.paymentUrl || res?.short_url || res?.url;
+
+      if (!targetUrl) {
+        throw new Error(res?.error || res?.message || 'Could not generate Razorpay payment link. Please try again.');
       }
 
-      setRazorpayMode(res.keyId?.startsWith('rzp_test_') ? 'TEST MODE' : 'LIVE MODE');
+      // Confirm the URL is HTTPS on an explicitly allowed Razorpay checkout domain
+      const parsedUrl = new URL(targetUrl);
+      const allowedDomains = ['rzp.io', 'razorpay.com'];
+      const isAllowed = allowedDomains.some((d) => parsedUrl.hostname === d || parsedUrl.hostname.endsWith('.' + d));
+
+      if (parsedUrl.protocol !== 'https:' || !isAllowed) {
+        throw new Error(`Untrusted payment URL destination: ${parsedUrl.hostname}`);
+      }
+
+      if (res.keyId) {
+        setRazorpayMode(res.keyId.startsWith('rzp_live_') ? 'LIVE MODE' : 'TEST MODE');
+      }
 
       // Store pending payment in localStorage so return handler can reconcile
       try {
@@ -213,16 +236,18 @@ export default function MarketingWallet({
         );
       } catch (e) {}
 
-      // Redirect browser directly to Razorpay's full-page hosted checkout
-      window.location.href = res.paymentUrl;
+      // Navigate using the browser's top-level location
+      console.log(`[handlePayViaRazorpay] Redirecting to Razorpay: ${targetUrl}`);
+      window.location.assign(targetUrl);
     } catch (err) {
+      console.error('[handlePayViaRazorpay] Link generation failed:', err);
       setIsProcessingPayment(false);
       const failReason = err.message || 'Payment initiation error';
       setActionAlert({
         type: 'error',
         message: `${failReason}. Please try again or contact support.`,
       });
-      setTimeout(() => setActionAlert(null), 4000);
+      setTimeout(() => setActionAlert(null), 5000);
     }
   };
 
@@ -540,12 +565,17 @@ export default function MarketingWallet({
               type="button"
               className="btn-pay-green-exact"
               onClick={handlePayViaRazorpay}
-              disabled={isProcessingPayment || !Number.isSafeInteger(activeAmount) || activeAmount < 300}
+              disabled={isProcessingPayment || isVerifyingPayment || !Number.isSafeInteger(activeAmount) || activeAmount < 300}
             >
               {isProcessingPayment ? (
                 <>
                   <span className="spinner-rotate-inline">⟳</span>
-                  <span>Opening Razorpay...</span>
+                  <span>Creating secure payment link…</span>
+                </>
+              ) : isVerifyingPayment ? (
+                <>
+                  <span className="spinner-rotate-inline">⟳</span>
+                  <span>Verifying payment…</span>
                 </>
               ) : (
                 <>

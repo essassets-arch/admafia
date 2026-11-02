@@ -627,11 +627,12 @@ export function AddFundsModal({
         amount: currentAmount,
       });
 
-      if (!res?.paymentUrl) {
-        throw new Error(res?.error || 'Could not start payment. Please try again.');
+      const paymentUrl = res?.paymentUrl || res?.short_url || res?.url;
+      if (!paymentUrl) {
+        throw new Error(res?.error || res?.message || 'Could not start payment. Please try again.');
       }
 
-      window.location.href = res.paymentUrl;
+      window.location.assign(paymentUrl);
     } catch (err) {
       setIsProcessing(false);
       setSweetAlert({
@@ -1960,11 +1961,12 @@ export function MarketingGrowthPaymentModal({
         amount: currentAmount,
       });
 
-      if (!res?.paymentUrl) {
-        throw new Error(res?.error || 'Could not start payment. Please try again.');
+      const paymentUrl = res?.paymentUrl || res?.short_url || res?.url;
+      if (!paymentUrl) {
+        throw new Error(res?.error || res?.message || 'Could not start payment. Please try again.');
       }
 
-      window.location.href = res.paymentUrl;
+      window.location.assign(paymentUrl);
     } catch (err) {
       setIsProcessing(false);
       setSweetAlert({
