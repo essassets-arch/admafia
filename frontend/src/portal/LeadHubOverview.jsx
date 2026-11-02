@@ -85,13 +85,16 @@ export default function LeadHubOverview({
   const [weekOffset, setWeekOffset] = useState(0);
   const daysList = getKolkataWeekDays(weekOffset);
   const dailySpend = customer.dailyAdSpend || 300;
-  const currentTodayItem = daysList.find((d) => d.isToday) || daysList[5];
+  const currentTodayItem = daysList.find((d) => d.isToday) || daysList[0];
+  const todayCode = currentTodayItem?.code || 'MON';
 
   const [activeDays, setActiveDays] = useState(() => {
+    // By default, only select today's day
     const base = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
       ? customer.activeDays
-      : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+      : [todayCode];
     const merged = new Set(base);
+    if (merged.size === 0) merged.add(todayCode);
     if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
     if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
     if (customer.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
@@ -100,12 +103,16 @@ export default function LeadHubOverview({
   const [unmaskedLeads, setUnmaskedLeads] = useState({});
 
   React.useEffect(() => {
+    const todayCode = currentTodayItem?.code || 'MON';
     if (customer?.activeDays && Array.isArray(customer.activeDays)) {
-      const merged = new Set(customer.activeDays);
+      const merged = new Set(customer.activeDays.length > 0 ? customer.activeDays : [todayCode]);
       if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
       if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
       if (customer.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
+      if (merged.size === 0) merged.add(todayCode);
       setActiveDays(Array.from(merged));
+    } else if (!customer?.activeDays) {
+      setActiveDays([todayCode]);
     }
   }, [customer?.activeDays, customer?.bookedDays, customer?.lockedDays, customer?.isDeductedToday, currentTodayItem?.code]);
 
@@ -209,6 +216,9 @@ export default function LeadHubOverview({
 
     if (activeDays.includes(code)) {
       next = activeDays.filter((d) => d !== code);
+      if (next.length === 0) {
+        next = [todayCode];
+      }
     } else {
       next = [...activeDays, code];
       if (isTogglingToday && walletBalance >= dailySpend) {
@@ -229,7 +239,7 @@ export default function LeadHubOverview({
     if (preset === 'all') next = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     if (preset === 'weekdays') next = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
     if (preset === 'weekends') next = ['SAT', 'SUN'];
-    if (preset === 'clear') next = [];
+    if (preset === 'clear') next = [todayCode];
 
     // All booked days in current view CANNOT be deselected by presets
     const bookedCodesInView = daysList.filter((d) => isDayBooked(d)).map((d) => d.code);

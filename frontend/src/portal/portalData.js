@@ -2,6 +2,11 @@
  * Growthline CRM - Clean Baseline Data & Translations (Zero Static Data)
  */
 
+export function getKolkataTodayCode() {
+  const dow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay();
+  return ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][dow];
+}
+
 export const initialCustomer = {
   id: '',
   companyName: '',
@@ -29,7 +34,7 @@ export const initialCustomer = {
   balance: 0,
   dailyAdSpend: 300,
   adCampaignActive: false,
-  activeDays: ['MON', 'TUE', 'WED', 'THU', 'FRI'],
+  activeDays: [getKolkataTodayCode()],
   totalLifetimePaid: 0,
   totalLifetimeSpent: 0,
   totalEnquiries: 0,

@@ -92,9 +92,16 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     kycPercent: Number(row.kyc_percent ?? (row.profile_status === 'complete' ? 100 : 25)),
     verified: Boolean(row.verified || row.profile_status === 'complete'),
     adCampaignActive: Boolean(row.ad_campaign_active),
-    activeDays: typeof row.active_days === 'string'
-      ? row.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
-      : (Array.isArray(row.active_days) ? row.active_days : ['MON', 'TUE', 'WED', 'THU', 'FRI']),
+    activeDays: (() => {
+      const kDow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay();
+      const kToday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kDow];
+      if (typeof row.active_days === 'string') {
+        const parsed = row.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+        return parsed.length > 0 ? parsed : [kToday];
+      }
+      if (Array.isArray(row.active_days) && row.active_days.length > 0) return row.active_days;
+      return [kToday];
+    })(),
     schedulePreset: row.schedule_preset || 'weekdays',
     balance,
     walletBalance: balance,

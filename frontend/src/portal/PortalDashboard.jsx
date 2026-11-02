@@ -136,7 +136,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           dailyAdSpend: typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : 300,
           dailyPacing: typeof u.dailyPacing === 'number' ? u.dailyPacing : (typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : 300),
           adCampaignActive: typeof u.adCampaignActive === 'boolean' ? u.adCampaignActive : Boolean(u.adCampaignActive),
-          activeDays: Array.isArray(u.activeDays) && u.activeDays.length > 0 ? u.activeDays : ['MON', 'TUE', 'WED', 'THU', 'FRI'],
+          activeDays: Array.isArray(u.activeDays) && u.activeDays.length > 0 ? u.activeDays : [['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay()]],
           bookedDates: Array.isArray(u.bookedDates) ? u.bookedDates : [],
           lockedDays: Array.isArray(u.lockedDays) ? u.lockedDays : [],
           isDeductedToday: Boolean(u.isDeductedToday),
@@ -1215,7 +1215,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
 
     const currentDays = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
       ? customer.activeDays
-      : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+      : [todayDayCode];
 
     const nextActiveDays = nextActive && !currentDays.includes(todayDayCode)
       ? [...currentDays, todayDayCode]
