@@ -30,6 +30,9 @@ services:
       dockerfile: Dockerfile
     container_name: admafia-backend
     restart: always
+    env_file:
+      - path: ./backend/.env
+        required: false
     depends_on:
       db:
         condition: service_healthy

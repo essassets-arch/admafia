@@ -159,6 +159,14 @@ export const crmApi = {
     });
   },
 
+  async createRazorpayOrder(payload) {
+    return apiRequest('/payments/razorpay/order', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async verifyRazorpayPayment(payload) {
+    return apiRequest('/payments/razorpay/verify', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
   /**
    * Deduct daily ad spend from customer wallet in PostgreSQL (/api/wallets/deduct)
    */

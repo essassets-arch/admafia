@@ -1,6 +1,7 @@
 import { TrendingUp, Zap, Calendar, X, ArrowRight, ShieldCheck, Sparkles, Building2, Briefcase, MapPin, Mail, Phone, Globe, User, CheckCircle2, Layers, Check, Shield } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
+import { crmApi } from '../services/crmApi';
 
 // Reusable SweetAlert2-Style Popup Dialog
 export function SweetAlertModal({
@@ -619,21 +620,36 @@ export function AddFundsModal({
 
     const scriptLoaded = await loadRazorpayScript();
     if (!scriptLoaded || !window.Razorpay) {
-      const generatedRef = `rzp_test_${Date.now().toString().slice(-6)}`;
-      finalizeTopUp(currentAmount, generatedRef);
+      setIsProcessing(false);
+      setSweetAlert({ type: 'error', title: 'Checkout unavailable', message: 'Could not load Razorpay. Check your connection and try again.', confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
+      return;
+    }
+
+    let order;
+    try {
+      order = await crmApi.createRazorpayOrder({ customerId: customer?.id, phone: customer?.phone, username: customer?.username, amount: currentAmount });
+    } catch (err) {
+      setIsProcessing(false);
+      setSweetAlert({ type: 'error', title: 'Could not start payment', message: err.message, confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
       return;
     }
 
     const options = {
-      key: 'rzp_test_S7dlJIqMvrpcaj',
-      amount: currentAmount * 100,
-      currency: 'INR',
-      name: 'Growthline CRM',
+      key: order.keyId,
+      order_id: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      name: 'AdMafia',
       description: `Ad Wallet Balance Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
       image: 'https://cdn-icons-png.flaticon.com/512/992/992651.png',
-      handler: function (response) {
-        const paymentId = response.razorpay_payment_id || `rzp_pay_${Date.now().toString().slice(-6)}`;
-        finalizeTopUp(currentAmount, paymentId);
+      handler: async function (response) {
+        try {
+          await crmApi.verifyRazorpayPayment({ orderId: response.razorpay_order_id, paymentId: response.razorpay_payment_id, signature: response.razorpay_signature, customerId: customer?.id, phone: customer?.phone, username: customer?.username, amount: currentAmount });
+          finalizeTopUp(currentAmount, response.razorpay_payment_id);
+        } catch (err) {
+          setIsProcessing(false);
+          setSweetAlert({ type: 'error', title: 'Payment verification failed', message: err.message, confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
+        }
       },
       prefill: {
         name: customer?.contactPerson || customer?.name || customer?.username || '',
@@ -664,8 +680,8 @@ export function AddFundsModal({
       });
       rzp.open();
     } catch (err) {
-      const generatedRef = `rzp_test_${Date.now().toString().slice(-6)}`;
-      finalizeTopUp(currentAmount, generatedRef);
+      setIsProcessing(false);
+      setSweetAlert({ type: 'error', title: 'Could not open Razorpay', message: err.message || 'Please try again.', confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
     }
   };
 
@@ -1978,24 +1994,37 @@ export function MarketingGrowthPaymentModal({
 
     const scriptLoaded = await loadRazorpayScript();
     if (!scriptLoaded || !window.Razorpay) {
-      // Fallback if network blocked checkout.razorpay.com
-      const generatedRef = `rzp_test_${Date.now().toString().slice(-6)}`;
-      onPay(currentAmount, generatedRef);
       setIsProcessing(false);
+      setSweetAlert({ type: 'error', title: 'Checkout unavailable', message: 'Could not load Razorpay. Check your connection and try again.', confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
+      return;
+    }
+
+    let order;
+    try {
+      order = await crmApi.createRazorpayOrder({ customerId: customer?.id, phone: customer?.phone, username: customer?.username, amount: currentAmount });
+    } catch (err) {
+      setIsProcessing(false);
+      setSweetAlert({ type: 'error', title: 'Could not start payment', message: err.message, confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
       return;
     }
 
     const options = {
-      key: 'rzp_test_S7dlJIqMvrpcaj',
-      amount: currentAmount * 100, // paise
-      currency: 'INR',
-      name: 'Growthline CRM',
+      key: order.keyId,
+      order_id: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      name: 'AdMafia',
       description: `Marketing & Growth Wallet Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
       image: 'https://cdn-icons-png.flaticon.com/512/992/992651.png',
-      handler: function (response) {
-        setIsProcessing(false);
-        const paymentId = response.razorpay_payment_id || `rzp_pay_${Date.now().toString().slice(-6)}`;
-        onPay(currentAmount, paymentId);
+      handler: async function (response) {
+        try {
+          await crmApi.verifyRazorpayPayment({ orderId: response.razorpay_order_id, paymentId: response.razorpay_payment_id, signature: response.razorpay_signature, customerId: customer?.id, phone: customer?.phone, username: customer?.username, amount: currentAmount });
+          setIsProcessing(false);
+          onPay(currentAmount, response.razorpay_payment_id);
+        } catch (err) {
+          setIsProcessing(false);
+          setSweetAlert({ type: 'error', title: 'Payment verification failed', message: err.message, confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
+        }
       },
       prefill: {
         name: customer?.contactPerson || customer?.name || customer?.username || '',
@@ -2030,10 +2059,8 @@ export function MarketingGrowthPaymentModal({
       rzp.open();
     } catch (err) {
       console.error('Failed to open Razorpay modal', err);
-      // Fallback on error
-      const generatedRef = `rzp_test_${Date.now().toString().slice(-6)}`;
-      onPay(currentAmount, generatedRef);
       setIsProcessing(false);
+      setSweetAlert({ type: 'error', title: 'Could not open Razorpay', message: err.message || 'Please try again.', confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
     }
   };
 

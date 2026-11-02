@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
 import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
@@ -28,6 +29,10 @@ const PORT = Number(process.env.PORT || 5000);
 
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
+
+const razorpayKeyId = process.env.RAZORPAY_KEY_ID || '';
+const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
+const walletCreditToken = randomBytes(32).toString('hex');
 
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -1205,7 +1210,96 @@ app.delete('/api/customers/:identifier', async (req, res) => {
 // =============================================================================
 // 4. WALLET TOP-UP, DAILY AD SPEND DEDUCTION & INVOICES (/api/wallets)
 // =============================================================================
+app.post('/api/payments/razorpay/order', async (req, res) => {
+  try {
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
+    }
+    const amount = Number(req.body?.amount);
+    if (!Number.isSafeInteger(amount) || amount < 300 || amount > 1000000) {
+      return res.status(400).json({ ok: false, error: 'Enter an amount from ₹300 to ₹10,00,000.' });
+    }
+    const cleanPhone = String(req.body?.phone || req.body?.customerId || '').replace(/\D/g, '').slice(-10);
+    const customer = await query(
+      `SELECT id, phone, username, contact_person, email FROM customers
+       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
+      [req.body?.customerId || '', cleanPhone, req.body?.username || '']
+    );
+    if (!customer.rowCount) return res.status(404).json({ ok: false, error: 'Customer account not found.' });
+
+    const response = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: amount * 100,
+        currency: 'INR',
+        receipt: `admafia_${Date.now()}`,
+        notes: { customer_id: String(customer.rows[0].id) },
+      }),
+    });
+    const order = await response.json();
+    if (!response.ok || !order.id) {
+      console.error('[Razorpay] Order creation failed:', order.error?.description || response.status);
+      return res.status(502).json({ ok: false, error: 'Could not start Razorpay checkout. Please try again.' });
+    }
+    res.status(201).json({
+      ok: true,
+      keyId: razorpayKeyId,
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      customer: customer.rows[0],
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/payments/razorpay/verify', async (req, res) => {
+  try {
+    if (!razorpayKeySecret) return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
+    const { orderId, paymentId, signature, customerId, phone, username, amount } = req.body || {};
+    if (!orderId || !paymentId || !signature) return res.status(400).json({ ok: false, error: 'Missing Razorpay payment verification details.' });
+    const expected = createHmac('sha256', razorpayKeySecret).update(`${orderId}|${paymentId}`).digest();
+    let received;
+    try { received = Buffer.from(signature, 'hex'); } catch { received = Buffer.alloc(0); }
+    if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+      return res.status(400).json({ ok: false, error: 'Razorpay payment signature is invalid.' });
+    }
+    const paymentResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
+    });
+    const payment = await paymentResponse.json();
+    if (!paymentResponse.ok || payment.order_id !== orderId || payment.status !== 'captured' || payment.amount !== Number(amount) * 100) {
+      return res.status(400).json({ ok: false, error: 'Payment is not captured for this amount.' });
+    }
+    const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
+    const cust = await query(
+      `SELECT id FROM customers WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
+      [customerId || '', cleanPhone, username || '']
+    );
+    if (!cust.rowCount || String(payment.notes?.customer_id || '') !== String(cust.rows[0].id)) {
+      return res.status(403).json({ ok: false, error: 'Payment does not belong to this customer.' });
+    }
+    const topup = await fetch(`http://127.0.0.1:${PORT}/api/wallets/topup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Wallet-Credit': walletCreditToken },
+      body: JSON.stringify({ customerId: cust.rows[0].id, amount: Number(amount), referenceUtr: paymentId, paymentMethod: 'Razorpay Secure (UPI/Card)', description: `AdMafia wallet top-up (₹${Number(amount).toLocaleString('en-IN')})` }),
+    });
+    const result = await topup.json();
+    return res.status(topup.status).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/wallets/topup', async (req, res) => {
+  if (req.get('X-Internal-Wallet-Credit') !== walletCreditToken) {
+    return res.status(410).json({ ok: false, error: 'Direct wallet credits are disabled. Use a verified payment flow.' });
+  }
   try {
     const {
       customerId,
@@ -1236,6 +1330,10 @@ app.post('/api/wallets/topup', async (req, res) => {
 
     const cust = custRes.rows[0];
     const utr = (referenceUtr || `rzp_${Date.now()}`).trim();
+    const existingCredit = await query('SELECT id FROM wallet_transactions WHERE reference_utr = $1 LIMIT 1', [utr]);
+    if (existingCredit.rowCount) {
+      return res.status(409).json({ ok: false, error: 'This payment has already been credited.' });
+    }
 
     // Update wallet balance
     const walUpdate = await query(
