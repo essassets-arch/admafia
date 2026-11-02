@@ -476,33 +476,33 @@ export default function LeadHubOverview({
               )}
             </div>
 
-            {/* Start and Stop Proper Dual Action Buttons */}
-            <div className="pacing-start-stop-dual-buttons">
-              <button
-                type="button"
-                className={`btn-proper-pacing-start ${customer.adCampaignActive ? 'is-active' : ''}`}
-                onClick={() => onToggleCampaign && onToggleCampaign(true)}
-                title="Click to Start Marketing Campaign"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-                <span>Start</span>
-                {customer.adCampaignActive && <span className="btn-status-badge on">LIVE</span>}
-              </button>
-
-              <button
-                type="button"
-                className={`btn-proper-pacing-stop ${!customer.adCampaignActive ? 'is-active' : ''}`}
-                onClick={() => onToggleCampaign && onToggleCampaign(false)}
-                title="Click to Stop Marketing Campaign"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="4" y="4" width="16" height="16" rx="2" />
-                </svg>
-                <span>Stop</span>
-                {!customer.adCampaignActive && <span className="btn-status-badge off">STOPPED</span>}
-              </button>
+            {/* Single Action Button: Start when stopped, Stop when running */}
+            <div className="pacing-start-stop-single-button">
+              {customer.adCampaignActive ? (
+                <button
+                  type="button"
+                  className="btn-proper-pacing-stop is-active"
+                  onClick={() => onToggleCampaign && onToggleCampaign(false)}
+                  title="Click to Stop Marketing Campaign"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                  </svg>
+                  <span>Stop</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-proper-pacing-start is-active"
+                  onClick={() => onToggleCampaign && onToggleCampaign(true)}
+                  title="Click to Start Marketing Campaign"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                  </svg>
+                  <span>Start</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

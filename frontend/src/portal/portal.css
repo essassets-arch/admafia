@@ -7603,7 +7603,8 @@
   color: #334155;
 }
 
-/* Dual Proper Start and Stop Buttons */
+/* Single or Dual Proper Start and Stop Buttons */
+.pacing-start-stop-single-button,
 .pacing-start-stop-dual-buttons {
   display: flex;
   align-items: center;
