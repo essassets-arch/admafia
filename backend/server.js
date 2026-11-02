@@ -1086,7 +1086,8 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
         wt.payment_method,
         wt.status,
         wt.created_at,
-        c.name AS customer_name,
+        c.id AS matched_cust_id,
+        c.username,
         c.company_name,
         c.contact_person,
         c.phone,
@@ -1096,7 +1097,11 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
         c.country,
         c.category
       FROM wallet_transactions wt
-      LEFT JOIN customers c ON wt.customer_id = c.id
+      LEFT JOIN customers c ON (
+        wt.customer_id = c.id 
+        OR wt.customer_id = c.phone 
+        OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
+      )
       WHERE LOWER(wt.status) LIKE '%fail%' 
          OR LOWER(wt.tx_type) LIKE '%fail%'
          OR LOWER(wt.description) LIKE '%fail%'
@@ -1104,34 +1109,50 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
       ORDER BY wt.created_at DESC
     `;
     const result = await query(querySql);
-    const mapped = result.rows.map((row) => ({
-      id: row.id,
-      customerId: row.customer_id,
-      customerName: row.company_name || row.customer_name || 'Corporate Workspace',
-      companyName: row.company_name || row.customer_name || 'Corporate Workspace',
-      contactPerson: row.contact_person || row.customer_name || 'Account Admin',
-      phone: row.phone || '',
-      email: row.email || '',
-      city: row.city || '',
-      state: row.state || '',
-      category: row.category || 'General',
-      amount: Number(row.amount || 0),
-      ref: row.reference_utr,
-      desc: row.description,
-      method: row.payment_method,
-      status: row.status || 'Failed ✕',
-      date: row.created_at
-        ? new Date(row.created_at).toLocaleString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          })
-        : 'Recently Failed',
-    }));
+    const mapped = result.rows.map((row) => {
+      const cleanPhone = String(row.phone || row.customer_id || '').replace(/\D/g, '').slice(-10);
+      const rawUser = String(row.username || '').trim();
+      const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : '';
+
+      const rawContact = String(row.contact_person || '').trim();
+      const isGenericContact = !rawContact || rawContact.toLowerCase() === 'registered business' || rawContact.toLowerCase() === 'account admin';
+      const properContact = (!isGenericContact ? rawContact : '') || capUser || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
+
+      const rawCompany = String(row.company_name || '').trim();
+      const isGenericCompany = !rawCompany || rawCompany.toLowerCase() === 'registered business' || rawCompany.toLowerCase() === 'corporate workspace';
+      const properCompany = (!isGenericCompany ? rawCompany : '') || (capUser ? `${capUser} Enterprises` : '') || properContact;
+
+      return {
+        id: row.id,
+        customerId: row.customer_id,
+        customerName: properCompany,
+        companyName: properCompany,
+        contactPerson: properContact,
+        username: rawUser,
+        phone: cleanPhone || row.phone || '',
+        email: row.email || '',
+        city: row.city || '',
+        state: row.state || 'Maharashtra',
+        category: row.category || 'IT & Software',
+        amount: Number(row.amount || 0),
+        ref: row.reference_utr,
+        desc: row.description,
+        method: row.payment_method,
+        status: row.status || 'Failed ✕',
+        failureReason: row.description || 'Bank transaction declined by customer',
+        date: row.created_at
+          ? new Date(row.created_at).toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            })
+          : 'Recently Failed',
+      };
+    });
     res.json({ ok: true, failedTransactions: mapped });
   } catch (err) {
     console.error('[GET /api/sales/failed-transactions]', err);

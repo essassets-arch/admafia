@@ -239,6 +239,10 @@ export async function initDatabase() {
     UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
     UPDATE wallets SET active_days = '${kolkataToday}' WHERE active_days = 'MON,TUE,WED,THU,FRI' OR active_days IS NULL OR active_days = '';
     UPDATE customers SET active_days = ARRAY['${kolkataToday}']::text[] WHERE active_days = ARRAY['MON','TUE','WED','THU','FRI']::text[] OR active_days IS NULL OR active_days = '{}'::text[];
+    UPDATE customers SET 
+      contact_person = CASE WHEN contact_person = 'Registered Business' OR contact_person IS NULL OR contact_person = '' THEN INITCAP(username) ELSE contact_person END,
+      company_name = CASE WHEN company_name = 'Registered Business' OR company_name IS NULL OR company_name = '' THEN INITCAP(username) || ' Enterprises' ELSE company_name END
+    WHERE company_name = 'Registered Business' OR contact_person = 'Registered Business';
     ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other';
     ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active';
     ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();

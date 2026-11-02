@@ -5545,26 +5545,42 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           );
           // Match with customer data for phone/company if missing
           const enrichedLocal = localFails.map((t) => {
+            const cleanPhone = String(t.customerPhone || t.phone || t.customerId || '').replace(/\D/g, '').slice(-10);
             const matchedCust = customers.find(
-              (c) => c.id === t.customerId || c.phone === t.customerPhone
+              (c) => c.id === t.customerId || (cleanPhone && c.phone && String(c.phone).includes(cleanPhone))
             );
+
+            const rawUser = matchedCust?.username || t.customerUsername || '';
+            const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : '';
+
+            let contactTitle = matchedCust?.contactPerson || matchedCust?.name || t.contactPerson || '';
+            if (!contactTitle || contactTitle.toLowerCase() === 'registered business' || contactTitle.toLowerCase() === 'account admin') {
+              contactTitle = capUser || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
+            }
+
+            let companyTitle = matchedCust?.companyName || t.company || '';
+            if (!companyTitle || companyTitle.toLowerCase() === 'registered business' || companyTitle.toLowerCase() === 'corporate workspace') {
+              companyTitle = capUser ? `${capUser} Enterprises` : contactTitle;
+            }
+
             return {
               id: t.id,
               customerId: t.customerId || matchedCust?.id,
-              customerName: matchedCust?.companyName || matchedCust?.name || t.company || 'Corporate Workspace',
-              companyName: matchedCust?.companyName || matchedCust?.name || t.company || 'Corporate Workspace',
-              contactPerson: matchedCust?.contactPerson || matchedCust?.contact || matchedCust?.username || 'Account Admin',
-              phone: matchedCust?.phone || t.customerPhone || '',
+              customerName: companyTitle,
+              companyName: companyTitle,
+              contactPerson: contactTitle,
+              username: rawUser,
+              phone: matchedCust?.phone || cleanPhone || '',
               email: matchedCust?.email || '',
               city: matchedCust?.city || '',
-              state: matchedCust?.state || '',
-              category: matchedCust?.category || 'General',
+              state: matchedCust?.state || 'Maharashtra',
+              category: matchedCust?.category || 'IT & Software',
               amount: Number(t.amount || 0),
               ref: t.ref || t.id,
               desc: t.desc || 'Online recharge failed',
               method: t.method || 'Razorpay Gateway',
               status: t.status || 'Failed ✕',
-              failureReason: t.failureReason || 'Bank transaction declined',
+              failureReason: t.failureReason || 'Bank transaction declined by customer',
               date: t.date || 'Recently Failed',
             };
           });
@@ -5786,8 +5802,19 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
             ) : (
               filtered.map((tx) => {
                 const cleanPhone = String(tx.phone || '').replace(/\D/g, '').slice(-10);
-                const companyTitle = tx.companyName || tx.customerName || 'Corporate Workspace';
-                const contactTitle = tx.contactPerson || tx.customerName || 'Account Admin';
+                const matchedCust = customers.find(c => c.id === tx.customerId || (cleanPhone && c.phone && String(c.phone).includes(cleanPhone)));
+                const rawUser = tx.username || matchedCust?.username || '';
+                const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : '';
+
+                let contactTitle = tx.contactPerson || matchedCust?.contactPerson || matchedCust?.name || '';
+                if (!contactTitle || contactTitle.toLowerCase() === 'registered business' || contactTitle.toLowerCase() === 'account admin') {
+                  contactTitle = capUser || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
+                }
+
+                let companyTitle = tx.companyName || tx.customerName || matchedCust?.companyName || '';
+                if (!companyTitle || companyTitle.toLowerCase() === 'registered business' || companyTitle.toLowerCase() === 'corporate workspace') {
+                  companyTitle = capUser ? `${capUser} Enterprises` : contactTitle;
+                }
                 const failReason = tx.failureReason || tx.desc || 'Payment declined by bank or user cancelled';
 
                 return (
@@ -5798,9 +5825,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
                         <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#0f172a' }}>
                           {companyTitle}
                         </span>
-                        {tx.category && (
+                        {(tx.category || matchedCust?.category) && (
                           <span style={{ background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
-                            {tx.category}
+                            {tx.category || matchedCust?.category}
                           </span>
                         )}
                       </div>
@@ -5808,12 +5835,14 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
                         <span style={{ fontWeight: 800, color: '#059669', fontSize: '0.92rem', fontFamily: 'monospace' }}>
                           📞 +91 {cleanPhone || 'No Phone'}
                         </span>
-                        <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        <span style={{ fontSize: '0.80rem', fontWeight: 700, color: '#4338ca' }}>
                           ({contactTitle})
                         </span>
                       </div>
                       <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
-                        {tx.email && <span>{tx.email} • </span>}{tx.city ? `${tx.city}, ` : ''}{tx.state || 'India'}
+                        {(tx.email || matchedCust?.email) && <span>{tx.email || matchedCust?.email} • </span>}
+                        {tx.city || matchedCust?.city ? `${tx.city || matchedCust?.city}, ` : ''}
+                        {tx.state || matchedCust?.state || 'Maharashtra'}
                       </div>
                     </td>
 
