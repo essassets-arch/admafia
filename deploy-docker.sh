@@ -15,30 +15,27 @@ echo "======================================================================"
 
 cd "$APP_DIR"
 
-# 1. Stop host PM2 process if running to free port 5050/5000
+# 1. Reset local uncommitted files to avoid git merge conflicts
+git reset --hard origin/main 2>/dev/null || true
+git pull origin main 2>/dev/null || true
+
+# 2. Stop host PM2 process if running to free port 5050/5000
 pm2 delete admafia 2>/dev/null || true
 pm2 save 2>/dev/null || true
 
-# 2. Stop host postgresql service if running to free port 5432 for the Docker container
+# 3. Stop host postgresql service if running to free port 5432 for the Docker container
 systemctl stop postgresql 2>/dev/null || true
 systemctl disable postgresql 2>/dev/null || true
-
-# 3. Ensure Docker and Docker Compose Plugin are installed
-if ! command -v docker > /dev/null; then
-  curl -fsSL https://get.docker.com | bash -
-fi
-
-if ! docker compose version > /dev/null 2>&1; then
-  apt-get update -y && apt-get install -y docker-compose-plugin
-fi
 
 # 4. Build and start all 4 Docker containers
 echo "📦 Building & starting containers..."
 docker compose down --remove-orphans 2>/dev/null || true
 docker compose up -d --build
 
-# 5. Configure Host Nginx Reverse Proxy for the domain
+# 5. Configure Host Nginx Reverse Proxy for https://admafia.marketing
 echo "⚙️ Configuring Host Nginx reverse proxy..."
+
+if [ -f "/etc/letsencrypt/live/admafia.marketing/fullchain.pem" ]; then
 cat > /etc/nginx/sites-available/admafia << 'EOF'
 server {
     server_name admafia.marketing www.admafia.marketing;
@@ -117,6 +114,37 @@ server {
     return 404;
 }
 EOF
+else
+cat > /etc/nginx/sites-available/admafia << 'EOF'
+server {
+    listen 80;
+    server_name admafia.marketing www.admafia.marketing;
+    client_max_body_size 50M;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:5000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:5050;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+EOF
+ln -sf /etc/nginx/sites-available/admafia /etc/nginx/sites-enabled/admafia
+nginx -t && systemctl reload nginx
+echo "🔒 Automatically requesting SSL Certificate from Let's Encrypt for https://$DOMAIN..."
+certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos -m admin@admafia.marketing --redirect || true
+fi
 
 ln -sf /etc/nginx/sites-available/admafia /etc/nginx/sites-enabled/admafia
 nginx -t
