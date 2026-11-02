@@ -150,7 +150,9 @@ export default function MarketingWallet({
         amount: order.amount,
         currency: order.currency,
         name: 'AdMafia',
-        description: `Ad Wallet Balance Top-Up (₹${activeAmount.toLocaleString('en-IN')})`,
+        description: `Wallet top-up • ₹${activeAmount.toLocaleString('en-IN')}`,
+        image: `${window.location.origin}/favicon.ico`,
+        retry: { enabled: true, max_count: 3 },
         handler: async function (response) {
           try {
             await crmApi.verifyRazorpayPayment({
@@ -246,7 +248,10 @@ export default function MarketingWallet({
       if (onPaymentFailed) {
         onPaymentFailed(failTx);
       }
-      setActionAlert({ type: 'error', message: failReason });
+      setActionAlert({
+        type: 'error',
+        message: `${failReason} No wallet funds were added. Please try again or contact support.`,
+      });
       setTimeout(() => setActionAlert(null), 4000);
     }
   };
