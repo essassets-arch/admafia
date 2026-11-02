@@ -899,7 +899,7 @@ export default function AllDesksOverviewDashboard({
                       {item.customerName || item.client || 'Client Account'}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      Ref: <span style={{ fontFamily: 'monospace' }}>{item.receiptNumber || item.invoiceNumber || item.utr || 'REC-SETTLED'}</span> • ⏱️ {formatIndianDateTime(item.date, item.paid_at_raw || item.paid_at)}
+                      Ref: <span style={{ fontFamily: 'monospace' }}>{item.receiptNumber || item.receiptNo || item.invoiceNumber || item.utr || 'REC-SETTLED'}</span> • ⏱️ {formatIndianDateTime(item.date, item.paid_at_raw || item.paid_at)}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>

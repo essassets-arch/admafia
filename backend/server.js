@@ -316,9 +316,18 @@ function mapInvoiceRow(row) {
 }
 
 function mapPaymentRecordRow(row) {
+  const receiptVal =
+    row.receipt_number ||
+    row.receiptNumber ||
+    row.receiptNo ||
+    (row.id ? `RCP-2026-${String(row.id).replace(/\D/g, '').slice(-4).padStart(4, '1001')}` : `RCP-2026-${Math.floor(1000 + Math.random() * 9000)}`);
   return {
     id: row.id,
-    receiptNo: row.receipt_number,
+    receiptNo: receiptVal,
+    receiptNumber: receiptVal,
+    receipt_number: receiptVal,
+    invoiceNumber: row.invoice_number || receiptVal,
+    invoice_number: row.invoice_number || receiptVal,
     customerId: row.customer_id,
     company: row.company_name,
     contact: row.contact_person,
@@ -329,7 +338,8 @@ function mapPaymentRecordRow(row) {
     gstAmount: Number(row.gst_amount || 0),
     totalAmount: Number(row.total_amount || 0),
     mode: row.payment_mode,
-    utr: row.utr_reference,
+    paymentMode: row.payment_mode || row.mode || 'Razorpay Secure (UPI/Card)',
+    utr: row.utr_reference || row.utr,
     status: row.status || 'paid',
     daysOverdue: Number(row.days_overdue || 0),
     notes: row.notes || '',

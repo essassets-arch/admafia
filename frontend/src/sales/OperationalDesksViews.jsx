@@ -3274,6 +3274,24 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
    ========================================================================== */
 export const INITIAL_PAYMENT_RECORDS = [];
 
+export const formatPaymentRecord = (r) => {
+  if (!r) return r;
+  const receiptVal =
+    r.receiptNumber ||
+    r.receiptNo ||
+    r.receipt_number ||
+    r.invoiceNumber ||
+    r.invoice_number ||
+    r.invoiceNo ||
+    (r.id ? `RCP-2026-${String(r.id).replace(/\D/g, '').slice(-4).padStart(4, '0')}` : 'RCP-2026-1001');
+  return {
+    ...r,
+    receiptNumber: receiptVal,
+    receiptNo: receiptVal,
+    paymentMode: r.paymentMode || r.mode || 'Razorpay Secure (UPI/Card)',
+  };
+};
+
 export function PaymentCollectionDesk({
   invoices = [],
   setInvoices,
@@ -3305,11 +3323,42 @@ export function PaymentCollectionDesk({
       const raw = localStorage.getItem('growthline_payment_records');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(formatPaymentRecord);
+        }
       }
     } catch (e) {}
     return INITIAL_PAYMENT_RECORDS;
   });
+
+  // Fetch authoritative payments from backend on mount (/api/payments)
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/api/payments')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted) return;
+        if (data && data.ok && Array.isArray(data.payments) && data.payments.length > 0) {
+          const formatted = data.payments.map(formatPaymentRecord);
+          setRecords((prev) => {
+            const merged = [...formatted];
+            prev.forEach((p) => {
+              if (!merged.some((m) => m.id === p.id)) {
+                merged.push(formatPaymentRecord(p));
+              }
+            });
+            try {
+              localStorage.setItem('growthline_payment_records', JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Auto-sync real newly registered accounts from Desk 1
   useEffect(() => {
@@ -3328,7 +3377,7 @@ export function PaymentCollectionDesk({
           if (!exists) {
             hasChange = true;
             const amt = c.amountPaid || c.balance || 1200;
-            updated.unshift({
+            const newRec = formatPaymentRecord({
               id: `pay_reg_${c.id || Date.now()}`,
               receiptNumber: `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
               company: c.companyName || c.name,
@@ -3347,6 +3396,7 @@ export function PaymentCollectionDesk({
               runwayAdded: c.runwayDays || Math.floor(amt / 300),
               notes: 'Self-Registered Customer Intake (#register)',
             });
+            updated.unshift(newRec);
           }
         }
       });
@@ -3366,22 +3416,31 @@ export function PaymentCollectionDesk({
     const handleNewPayment = (e) => {
       const rec = e?.detail;
       if (rec) {
-        setRecords((prev) => [rec, ...prev.filter((r) => r.id !== rec.id)]);
+        const formatted = formatPaymentRecord(rec);
+        setRecords((prev) => [formatted, ...prev.filter((r) => r.id !== formatted.id)]);
+      }
+    };
+    const handlePostgresSynced = (e) => {
+      const state = e?.detail;
+      if (state && Array.isArray(state.payments) && state.payments.length > 0) {
+        setRecords(state.payments.map(formatPaymentRecord));
       }
     };
     const handleStorage = (e) => {
       if (e.key === 'growthline_payment_records' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) setRecords(parsed);
+          if (Array.isArray(parsed)) setRecords(parsed.map(formatPaymentRecord));
         } catch (err) {}
       }
     };
 
     window.addEventListener('growthline_payment_recorded', handleNewPayment);
+    window.addEventListener('growthline_postgres_synced', handlePostgresSynced);
     window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('growthline_payment_recorded', handleNewPayment);
+      window.removeEventListener('growthline_postgres_synced', handlePostgresSynced);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
@@ -3540,7 +3599,7 @@ export function PaymentCollectionDesk({
       const matchContact = (r.contact || '').toLowerCase().includes(q);
       const matchPhone = (r.phone || '').includes(q);
       const matchUtr = (r.utr || '').toLowerCase().includes(q);
-      const matchRec = (r.receiptNumber || r.invoiceNumber || '').toLowerCase().includes(q);
+      const matchRec = (r.receiptNumber || r.receiptNo || r.receipt_number || r.invoiceNumber || r.invoice_number || '').toLowerCase().includes(q);
       return matchComp || matchContact || matchPhone || matchUtr || matchRec;
     }
     return true;
@@ -3695,7 +3754,7 @@ export function PaymentCollectionDesk({
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontWeight: 800, fontFamily: 'monospace', color: '#0f172a', fontSize: '0.85rem' }}>
-                          {r.receiptNumber || r.invoiceNumber}
+                          {r.receiptNumber || r.receiptNo || r.receipt_number || r.invoiceNumber || r.invoice_number || (r.id ? `RCP-2026-${String(r.id).replace(/\D/g, '').slice(-4).padStart(4, '0')}` : 'RCP-2026-1001')}
                         </span>
                       </div>
                     </td>
@@ -4014,7 +4073,7 @@ export function PaymentCollectionDesk({
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '0.94rem', color: '#0f172a' }}>
-                  {activeReceipt.receiptNumber || activeReceipt.invoiceNumber}
+                  {activeReceipt.receiptNumber || activeReceipt.receiptNo || activeReceipt.receipt_number || activeReceipt.invoiceNumber || activeReceipt.invoice_number || 'RCP-2026-1001'}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
                   Date: {activeReceipt.date}
@@ -4129,7 +4188,7 @@ export function PaymentCollectionDesk({
             </div>
             <div className="desk-modal-box" style={{ marginBottom: 14 }}>
               <div style={{ fontWeight: 800 }}>{activeInv.company}</div>
-              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Invoice / Receipt: {activeInv.invoiceNumber || activeInv.receiptNumber}</div>
+              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Invoice / Receipt: {activeInv.invoiceNumber || activeInv.receiptNumber || activeInv.receiptNo || 'RCP-2026-1001'}</div>
               <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
                 Total Due: {formatINR(activeInv.amount || activeInv.total)}
               </div>
