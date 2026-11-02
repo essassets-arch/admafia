@@ -102,9 +102,11 @@ export function evaluateCustomerEligibility(row, options = {}) {
 
   // 6. Marketing Campaign Enabled & Actually Able to Run Today
   const isCampaignActive = Boolean(row.ad_campaign_active ?? row.adCampaignActive);
-  const activeDaysRaw = row.active_days ?? row.activeDays ?? 'MON,TUE,WED,THU,FRI';
-  const activeDaysList = (Array.isArray(activeDaysRaw) ? activeDaysRaw : String(activeDaysRaw).split(','))
-    .map((s) => String(s).trim().toUpperCase());
+  const activeDaysRaw = row.active_days ?? row.activeDays ?? todayCode;
+  const rawList = (Array.isArray(activeDaysRaw) ? activeDaysRaw : String(activeDaysRaw).split(','))
+    .map((s) => String(s).trim().toUpperCase()).filter(Boolean);
+  const isLegacy = rawList.length === 5 && rawList.includes('MON') && rawList.includes('FRI');
+  const activeDaysList = isLegacy || rawList.length === 0 ? [todayCode] : rawList;
 
   const isScheduledToday = activeDaysList.includes('ALL') || activeDaysList.includes(todayCode);
   const canCampaignRun = isCampaignActive && (isScheduledToday || isTodayBooked);
@@ -200,7 +202,7 @@ export async function getEvaluatedRecipients(dbQuery, { groupId = '', category =
       COALESCE(w.available_balance, 0) AS available_balance,
       COALESCE(w.daily_ad_spend, 300) AS daily_ad_spend,
       COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-      COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
+      COALESCE(w.active_days, '') AS active_days,
       w.last_deducted_at,
       COALESCE(w.booked_dates, '') AS booked_dates,
       cgm.group_id AS member_group_id,

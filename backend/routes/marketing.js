@@ -43,6 +43,21 @@ export function formatMarketingObjective(obj) {
   return map[obj.toLowerCase()] || obj;
 }
 
+export function resolveActiveDays(rawDays) {
+  const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
+  let list = [];
+  if (typeof rawDays === 'string') {
+    list = rawDays.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+  } else if (Array.isArray(rawDays)) {
+    list = rawDays.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
+  }
+  if (list.length === 5 && list.includes('MON') && list.includes('TUE') && list.includes('WED') && list.includes('THU') && list.includes('FRI')) {
+    return [todayDayCode];
+  }
+  return list.length > 0 ? list : [todayDayCode];
+}
+
 // -----------------------------------------------------------------------------
 // Auto-recovery: Ensure marketing schema tables exist
 // -----------------------------------------------------------------------------
@@ -347,8 +362,8 @@ marketingRouter.get('/customers', async (req, res) => {
         COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
         COALESCE(w.total_lifetime_paid, 0)::NUMERIC AS total_paid,
         COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-        COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
-        COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
+        COALESCE(w.active_days, '') AS active_days,
+        COALESCE(w.schedule_preset, 'custom') AS schedule_preset,
         w.last_deducted_at,
         (SELECT COUNT(*)::INT FROM leads l WHERE l.customer_id = c.id) AS total_leads_count,
         (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Approved') AS approved_posts_count,
@@ -402,10 +417,8 @@ marketingRouter.get('/customers', async (req, res) => {
         dailyAdSpend: Number(r.daily_ad_spend || 300),
         totalPaid: Number(r.total_paid || 0),
         adCampaignActive: Boolean(r.ad_campaign_active),
-        activeDays: typeof r.active_days === 'string'
-          ? r.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
-          : (Array.isArray(r.active_days) ? r.active_days : ['MON', 'TUE', 'WED', 'THU', 'FRI']),
-        schedulePreset: r.schedule_preset || 'weekdays',
+        activeDays: resolveActiveDays(r.active_days),
+        schedulePreset: r.schedule_preset || 'custom',
         runwayDays: Math.floor(Number(r.available_balance || 0) / Math.max(Number(r.daily_ad_spend || 300), 1)),
         totalLeadsCount: Number(r.total_leads_count || 0),
         lastDeductedAt: r.last_deducted_at,
@@ -456,8 +469,8 @@ marketingRouter.get('/customers/:id', async (req, res) => {
         COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
         COALESCE(w.total_lifetime_paid, 0)::NUMERIC AS total_paid,
         COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-        COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
-        COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
+        COALESCE(w.active_days, '') AS active_days,
+        COALESCE(w.schedule_preset, 'custom') AS schedule_preset,
         w.last_deducted_at,
         (SELECT COUNT(*)::INT FROM leads l WHERE l.customer_id = c.id) AS total_leads_count,
         (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Approved') AS approved_posts_count,
@@ -513,10 +526,8 @@ marketingRouter.get('/customers/:id', async (req, res) => {
         dailyAdSpend: Number(c.daily_ad_spend || 300),
         totalPaid: Number(c.total_paid || 0),
         adCampaignActive: Boolean(c.ad_campaign_active),
-        activeDays: typeof c.active_days === 'string'
-          ? c.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
-          : (Array.isArray(c.active_days) ? c.active_days : ['MON', 'TUE', 'WED', 'THU', 'FRI']),
-        schedulePreset: c.schedule_preset || 'weekdays',
+        activeDays: resolveActiveDays(c.active_days),
+        schedulePreset: c.schedule_preset || 'custom',
         runwayDays: Math.floor(Number(c.available_balance || 0) / Math.max(Number(c.daily_ad_spend || 300), 1)),
         totalLeadsCount: Number(c.total_leads_count || 0),
         lastDeductedAt: c.last_deducted_at,
@@ -2016,11 +2027,13 @@ marketingRouter.put('/customers/:id/pacing', async (req, res) => {
     }
     const w = walRes.rows[0];
 
+    const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
     const nextDaily = dailyAdSpend !== undefined ? Math.max(300, Number(dailyAdSpend)) : Number(w.daily_ad_spend);
     const nextDays = activeDays !== undefined
       ? (Array.isArray(activeDays) ? activeDays.join(',') : String(activeDays))
-      : (w.active_days || 'MON,TUE,WED,THU,FRI');
-    const nextPreset = schedulePreset || w.schedule_preset || 'weekdays';
+      : (w.active_days || todayDayCode);
+    const nextPreset = schedulePreset || w.schedule_preset || 'custom';
 
     await query(
       `UPDATE wallets SET daily_ad_spend = $1, active_days = $2, schedule_preset = $3, updated_at = NOW() WHERE customer_id = $4`,
@@ -2071,7 +2084,7 @@ export async function processDailyAdSpendPacing() {
         COALESCE(w.available_balance, 0)::NUMERIC AS balance,
         COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
         COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-        COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
+        COALESCE(w.active_days, '') AS active_days,
         COALESCE(w.booked_dates, '') AS booked_dates,
         w.last_deducted_at,
         (SELECT mc.id FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = 'Running' LIMIT 1) AS running_camp_id
@@ -2086,9 +2099,7 @@ export async function processDailyAdSpendPacing() {
     const details = [];
 
     for (const cust of activeCustomers.rows) {
-      const activeDays = typeof cust.active_days === 'string'
-        ? cust.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
-        : (Array.isArray(cust.active_days) ? cust.active_days : ['MON', 'TUE', 'WED', 'THU', 'FRI']);
+      const activeDays = resolveActiveDays(cust.active_days);
 
       // 1. Is today an active day in the customer's weekly schedule?
       if (!activeDays.includes(todayDayCode)) {

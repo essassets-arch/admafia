@@ -452,9 +452,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     const todayDayCode = dayCodes[new Date().getDay()];
 
     setCustomer((prev) => {
+      const isLegacy = Array.isArray(prev?.activeDays) && prev.activeDays.length === 5 && prev.activeDays.includes('MON') && prev.activeDays.includes('FRI');
       const existingDays = Array.isArray(customDays) && customDays.length > 0
         ? customDays
-        : (Array.isArray(prev?.activeDays) ? prev.activeDays : ['MON', 'TUE', 'WED', 'THU', 'FRI']);
+        : (Array.isArray(prev?.activeDays) && !isLegacy ? prev.activeDays : [todayDayCode]);
       const finalDays = Array.from(new Set([...existingDays, todayDayCode]));
       const updated = {
         ...prev,

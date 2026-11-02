@@ -88,6 +88,12 @@ export default function LeadHubOverview({
   const currentTodayItem = daysList.find((d) => d.isToday) || daysList[0];
   const todayCode = currentTodayItem?.code || 'MON';
 
+  const isLegacyWeekdays = (arr) => {
+    if (!Array.isArray(arr) || arr.length !== 5) return false;
+    const s = new Set(arr.map((d) => String(d).trim().toUpperCase()));
+    return s.has('MON') && s.has('TUE') && s.has('WED') && s.has('THU') && s.has('FRI');
+  };
+
   const [activeDays, setActiveDays] = useState(() => {
     // If user has booked days, keep those
     const booked = new Set();
@@ -99,7 +105,7 @@ export default function LeadHubOverview({
       return Array.from(booked);
     }
 
-    if (Array.isArray(customer.activeDays) && customer.activeDays.length > 0) {
+    if (Array.isArray(customer.activeDays) && customer.activeDays.length > 0 && !isLegacyWeekdays(customer.activeDays)) {
       return customer.activeDays;
     }
 
@@ -109,7 +115,7 @@ export default function LeadHubOverview({
   const [unmaskedLeads, setUnmaskedLeads] = useState({});
 
   React.useEffect(() => {
-    const baseDays = (Array.isArray(customer?.activeDays) && customer.activeDays.length > 0)
+    const baseDays = (Array.isArray(customer?.activeDays) && customer.activeDays.length > 0 && !isLegacyWeekdays(customer.activeDays))
       ? customer.activeDays
       : [todayCode];
 
@@ -245,7 +251,7 @@ export default function LeadHubOverview({
     if (preset === 'all') next = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     if (preset === 'weekdays') next = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
     if (preset === 'weekends') next = ['SAT', 'SUN'];
-    if (preset === 'clear') next = [todayCode];
+    if (preset === 'clear') next = [];
 
     // All booked days in current view CANNOT be deselected by presets
     const bookedCodesInView = daysList.filter((d) => isDayBooked(d)).map((d) => d.code);

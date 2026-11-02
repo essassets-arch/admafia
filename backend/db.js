@@ -50,8 +50,8 @@ SELECT
     COALESCE(w.total_lifetime_paid, 0) AS amount_paid,
     COALESCE(w.total_ad_spent, 0) AS total_ad_spent,
     COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-    COALESCE(w.active_days, 'MON,TUE,WED,THU,FRI') AS active_days,
-    COALESCE(w.schedule_preset, 'weekdays') AS schedule_preset,
+    COALESCE(w.active_days, '') AS active_days,
+    COALESCE(w.schedule_preset, 'custom') AS schedule_preset,
     w.last_deducted_at,
     COALESCE(w.booked_dates, '') AS booked_dates,
     FLOOR(COALESCE(w.available_balance, 0) / GREATEST(COALESCE(w.daily_ad_spend, 300), 1))::INT AS runway_days,
@@ -198,8 +198,8 @@ export async function initDatabase() {
   await safeExec(`ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
   await safeExec(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS master_lead_id VARCHAR(64)`);
   await safeExec(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'IT & Software'`);
-  await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS active_days VARCHAR(120) DEFAULT 'MON,TUE,WED,THU,FRI'`);
-  await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS schedule_preset VARCHAR(64) DEFAULT 'weekdays'`);
+  await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS active_days VARCHAR(120) DEFAULT ''`);
+  await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS schedule_preset VARCHAR(64) DEFAULT 'custom'`);
   await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS ad_campaign_active BOOLEAN DEFAULT FALSE`);
   await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS booked_dates TEXT DEFAULT ''`);
   await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS last_deducted_at TIMESTAMPTZ`);
@@ -230,10 +230,15 @@ export async function initDatabase() {
     await safeExec(cleanSql);
   }
 
+  const kolkataDow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay();
+  const kolkataToday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataDow];
+
   // Post-migration auto-completes and updates
   await safeExec(`
     UPDATE customers SET profile_status = 'complete', kyc_percent = 100, verified = TRUE WHERE profile_status = 'incomplete';
     UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
+    UPDATE wallets SET active_days = '${kolkataToday}' WHERE active_days = 'MON,TUE,WED,THU,FRI' OR active_days IS NULL OR active_days = '';
+    UPDATE customers SET active_days = ARRAY['${kolkataToday}']::text[] WHERE active_days = ARRAY['MON','TUE','WED','THU','FRI']::text[] OR active_days IS NULL OR active_days = '{}'::text[];
     ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Other';
     ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'active';
     ALTER TABLE customer_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();

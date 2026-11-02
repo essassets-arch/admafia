@@ -95,15 +95,17 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     activeDays: (() => {
       const kDow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay();
       const kToday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kDow];
+      let rawList = [];
       if (typeof row.active_days === 'string') {
-        const parsed = row.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
-        if (parsed.length === 5 && parsed.includes('MON') && parsed.includes('FRI') && !row.booked_dates && Number(row.available_balance || 0) === 0) {
-          return [kToday];
-        }
-        return parsed.length > 0 ? parsed : [kToday];
+        rawList = row.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      } else if (Array.isArray(row.active_days)) {
+        rawList = row.active_days.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
       }
-      if (Array.isArray(row.active_days) && row.active_days.length > 0) return row.active_days;
-      return [kToday];
+      // If legacy 5 weekdays default or empty, default strictly to today's day
+      if (rawList.length === 5 && rawList.includes('MON') && rawList.includes('TUE') && rawList.includes('WED') && rawList.includes('THU') && rawList.includes('FRI')) {
+        return [kToday];
+      }
+      return rawList.length > 0 ? rawList : [kToday];
     })(),
     schedulePreset: row.schedule_preset || 'weekdays',
     balance,
@@ -1275,7 +1277,10 @@ const handleUpdateCustomerRecord = async (req, res) => {
           ? (Array.isArray(updates.activeDays)
               ? updates.activeDays.map(d => String(d).trim().toUpperCase()).filter(Boolean)
               : String(updates.activeDays).split(',').map(d => d.trim().toUpperCase()).filter(Boolean))
-          : (w.active_days ? w.active_days.split(',').map(d => d.trim().toUpperCase()).filter(Boolean) : ['MON', 'TUE', 'WED', 'THU', 'FRI']);
+          : (w.active_days ? w.active_days.split(',').map(d => d.trim().toUpperCase()).filter(Boolean) : [todayCode]);
+        if (finalDaysArray.length === 5 && finalDaysArray.includes('MON') && finalDaysArray.includes('TUE') && finalDaysArray.includes('WED') && finalDaysArray.includes('THU') && finalDaysArray.includes('FRI')) {
+          finalDaysArray = [todayCode];
+        }
 
         const bookedDatesList = (w.booked_dates || '').split(',').map((s) => s.trim()).filter(Boolean);
         if (isDeductedToday) {
@@ -2041,7 +2046,7 @@ app.post('/api/wallets/deduct', async (req, res) => {
       bookedDatesSet.add(kolkataTodayStr);
       const nextBookedDates = Array.from(bookedDatesSet).join(',');
 
-      let finalActiveDays = wallet?.active_days || 'MON,TUE,WED,THU,FRI';
+      let finalActiveDays = wallet?.active_days || todayDayCode;
       const daySet = new Set(
         (Array.isArray(activeDays) && activeDays.length > 0 ? activeDays : finalActiveDays.split(','))
           .map((d) => String(d).trim().toUpperCase())
