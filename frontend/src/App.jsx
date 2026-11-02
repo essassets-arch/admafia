@@ -218,6 +218,16 @@ export default function App() {
         window.location.href = '/';
         return 'landing';
       }
+      // If customer is already logged in, redirect directly to dashboard
+      try {
+        const raw = localStorage.getItem('growthline_active_user');
+        if (raw) {
+          const u = JSON.parse(raw);
+          if (u && (u.companyName || u.name || u.phone || u.username)) {
+            return 'portal';
+          }
+        }
+      } catch (e) {}
       return 'login';
     }
 
@@ -781,26 +791,10 @@ export default function App() {
                     setMobileMenuOpen(false);
                   }}
                   className="nav-btn nav-btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
                 >
                   <span>Dashboard</span>
                   <span style={{ fontSize: '1rem', fontWeight: 900 }}>→</span>
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    try {
-                      localStorage.removeItem('growthline_active_user');
-                      sessionStorage.clear();
-                      window.history.pushState({}, '', '/#register');
-                    } catch (e) {}
-                    setCurrentUser(null);
-                    window.location.hash = '#register';
-                    setCurrentView('register');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="nav-btn nav-btn-outline desktop-only"
-                >
-                  Create Account
                 </button>
                 <button 
                   type="button" 
@@ -932,9 +926,15 @@ export default function App() {
                   type="button"
                   className="mobile-drawer-action-card"
                   onClick={() => {
-                    try { window.history.pushState({}, '', '/#login'); } catch (e) {}
-                    window.location.hash = '#login';
-                    setCurrentView('login');
+                    if (currentUser) {
+                      try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch (e) {}
+                      window.location.hash = '#app/dashboard';
+                      setCurrentView('portal');
+                    } else {
+                      try { window.history.pushState({}, '', '/#login'); } catch (e) {}
+                      window.location.hash = '#login';
+                      setCurrentView('login');
+                    }
                     setMobileMenuOpen(false);
                   }}
                 >
@@ -942,8 +942,12 @@ export default function App() {
                     <Laptop size={18} />
                   </div>
                   <div>
-                    <div className="mobile-drawer-action-title">Customer Business Portal</div>
-                    <div className="mobile-drawer-action-sub">Login to your active client dashboard</div>
+                    <div className="mobile-drawer-action-title">
+                      {currentUser ? 'Client Dashboard' : 'Customer Business Portal'}
+                    </div>
+                    <div className="mobile-drawer-action-sub">
+                      {currentUser ? 'Open your active client CRM dashboard →' : 'Login to your active client dashboard'}
+                    </div>
                   </div>
                 </button>
 
@@ -1366,17 +1370,43 @@ export default function App() {
             <div className="footer-col">
               <h4>Customer Workspace</h4>
               <ul className="footer-links">
-                <li>
-                  <a href="/login" onClick={(e) => { e.preventDefault(); navigateTo('/login', 'login'); }}>
-                    <Laptop size={14} color="#f59e0b" />
-                    <span>Client Dashboard Login</span>
-                  </a>
-                </li>
-                <li>
-                  <a href="/register" onClick={(e) => { e.preventDefault(); navigateTo('/register', 'register'); }}>
-                    <span>Register Business Account</span>
-                  </a>
-                </li>
+                {currentUser ? (
+                  <>
+                    <li>
+                      <a href="/app/lead#app/dashboard" onClick={(e) => { e.preventDefault(); navigateTo('/app/lead#app/dashboard', 'portal'); }}>
+                        <Laptop size={14} color="#10b981" />
+                        <span>Go to Client Dashboard →</span>
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#signout" onClick={(e) => {
+                        e.preventDefault();
+                        try {
+                          localStorage.removeItem('growthline_active_user');
+                          sessionStorage.clear();
+                        } catch (err) {}
+                        setCurrentUser(null);
+                        navigateTo('/', 'landing');
+                      }}>
+                        <span style={{ color: '#94a3b8' }}>Sign Out ({currentUser.companyName || currentUser.name || 'Client'})</span>
+                      </a>
+                    </li>
+                  </>
+                ) : (
+                  <>
+                    <li>
+                      <a href="/login" onClick={(e) => { e.preventDefault(); navigateTo('/login', 'login'); }}>
+                        <Laptop size={14} color="#f59e0b" />
+                        <span>Client Dashboard Login</span>
+                      </a>
+                    </li>
+                    <li>
+                      <a href="/register" onClick={(e) => { e.preventDefault(); navigateTo('/register', 'register'); }}>
+                        <span>Register Business Account</span>
+                      </a>
+                    </li>
+                  </>
+                )}
                 <li>
                   <a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }}>
                     <span>Meta Ads Calculator</span>
