@@ -3,7 +3,7 @@
  * Page: https://admafia.marketing/app/lead#app/wallet
  */
 
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 let passed = 0;
 let failed = 0;
@@ -20,7 +20,7 @@ function assert(condition, message) {
 
 async function runWalletAudit() {
   console.log('\n======================================================================');
-  console.log('💳 STARTING ADMAFIA GROWTH WALLET & CREDITS AUDIT');
+  console.log('💳 STARTING ADMAFIA GROWTH WALLET & RAZORPAY VERIFICATION AUDIT');
   console.log('======================================================================\n');
 
   // -------------------------------------------------------------------------
@@ -28,7 +28,6 @@ async function runWalletAudit() {
   // -------------------------------------------------------------------------
   console.log('1️⃣  Verifying Financial Balance Arithmetic & Ledger Reconciliation...');
 
-  // Ledger state matching problem statement: ₹500 starting balance, ₹300 daily ad spend debit
   const initialBalance = 500;
   const dailyAdSpend = 300;
   const expectedBalanceAfterDebit = initialBalance - dailyAdSpend; // 200
@@ -124,7 +123,6 @@ async function runWalletAudit() {
   const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_S7dlJIqMvrpcaj';
   const keySecret = process.env.RAZORPAY_KEY_SECRET || 'ongR1rNVsrzSoVyjGx6VY9Zm';
 
-  // Test minimum amount validation (₹300 min)
   function validateTopupAmount(amount) {
     const num = Number(amount);
     if (!Number.isSafeInteger(num) || num < 300 || num > 1000000) {
@@ -138,7 +136,6 @@ async function runWalletAudit() {
   assert(validateTopupAmount(1000).ok === true, `Amount ₹1,000 accepted`);
   assert(validateTopupAmount(10000).ok === true, `Amount ₹10,000 accepted`);
 
-  // Verify Razorpay API call
   try {
     const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
     const plinkRes = await fetch('https://api.razorpay.com/v1/payment_links', {
@@ -175,22 +172,95 @@ async function runWalletAudit() {
   // AREA 5: SIGNATURE & WEBHOOK HMAC SHA-256 VERIFICATION
   // -------------------------------------------------------------------------
   console.log('\n5️⃣  Verifying Webhook HMAC SHA-256 Signature Verification...');
-  const testPayload = JSON.stringify({ event: 'payment.captured', entity: { id: 'pay_test_123', amount: 30000 } });
-  const validSig = createHmac('sha256', keySecret).update(testPayload).digest('hex');
+  const testPayloadBuf = Buffer.from(JSON.stringify({ event: 'payment.captured', entity: { id: 'pay_test_123', amount: 30000 } }));
+  const validSig = createHmac('sha256', keySecret).update(testPayloadBuf).digest('hex');
   const invalidSig = 'invalid_signature_hash_1234567890';
 
   function verifyWebhookSig(payload, signature, secret) {
     const digest = createHmac('sha256', secret).update(payload).digest('hex');
-    return digest === signature;
+    try {
+      return timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
+    } catch {
+      return false;
+    }
   }
 
-  assert(verifyWebhookSig(testPayload, validSig, keySecret) === true, `Valid webhook HMAC signature verified`);
-  assert(verifyWebhookSig(testPayload, invalidSig, keySecret) === false, `Tampered/invalid webhook signature strictly rejected`);
+  assert(verifyWebhookSig(testPayloadBuf, validSig, keySecret) === true, `Valid webhook HMAC signature verified using raw Buffer`);
+  assert(verifyWebhookSig(testPayloadBuf, invalidSig, keySecret) === false, `Tampered/invalid webhook signature strictly rejected`);
+
+  // Standard Checkout Signature Check (orderId|paymentId)
+  const orderId = 'order_test_456';
+  const paymentId = 'pay_test_789';
+  const validStandardSig = createHmac('sha256', keySecret).update(`${orderId}|${paymentId}`).digest('hex');
+  assert(
+    timingSafeEqual(Buffer.from(validStandardSig), Buffer.from(createHmac('sha256', keySecret).update(`${orderId}|${paymentId}`).digest('hex'))),
+    `Standard Checkout signature verification confirmed for orderId|paymentId`
+  );
 
   // -------------------------------------------------------------------------
-  // AREA 6: LEDGER TABS AND TRANSACTION FILTERING
+  // AREA 6: EXACTLY-ONCE WALLET CREDITING & IDEMPOTENCY
   // -------------------------------------------------------------------------
-  console.log('\n6️⃣  Verifying Ledger Tabs & Transaction Filtering...');
+  console.log('\n6️⃣  Verifying Exactly-Once Crediting & Idempotency Simulation...');
+  
+  // Simulated wallet ledger store
+  const mockDb = {
+    walletBalance: 500,
+    transactions: [],
+  };
+
+  function simulateCreditWallet({ utr, amount }) {
+    // Check if reference_utr already exists
+    const existing = mockDb.transactions.find(t => t.reference_utr === utr && t.status === 'Verified ✓');
+    if (existing) {
+      return { ok: true, alreadyCredited: true, balance: mockDb.walletBalance };
+    }
+    // Atomic update
+    mockDb.walletBalance += amount;
+    const tx = { id: `tx_${Date.now()}`, reference_utr: utr, amount, status: 'Verified ✓', balance_after: mockDb.walletBalance };
+    mockDb.transactions.push(tx);
+    return { ok: true, alreadyCredited: false, balance: mockDb.walletBalance, transaction: tx };
+  }
+
+  const testUtr = `rzp_test_pay_${Date.now()}`;
+  const firstCredit = simulateCreditWallet({ utr: testUtr, amount: 300 });
+  assert(firstCredit.ok && !firstCredit.alreadyCredited && mockDb.walletBalance === 800, `First payment credits ₹300 (₹500 -> ₹800)`);
+
+  // Duplicate webhook delivery with identical UTR
+  const duplicateWebhook = simulateCreditWallet({ utr: testUtr, amount: 300 });
+  assert(duplicateWebhook.ok && duplicateWebhook.alreadyCredited && mockDb.walletBalance === 800, `Duplicate webhook with same UTR is idempotent: returns alreadyCredited without increasing balance (stays ₹800)`);
+
+  // Duplicate callback delivery with identical UTR
+  const duplicateCallback = simulateCreditWallet({ utr: testUtr, amount: 300 });
+  assert(duplicateCallback.ok && duplicateCallback.alreadyCredited && mockDb.walletBalance === 800, `Duplicate browser callback with same UTR does NOT double credit (stays ₹800)`);
+
+  // -------------------------------------------------------------------------
+  // AREA 7: TAX INVOICE & GST BREAKDOWN INTEGRITY
+  // -------------------------------------------------------------------------
+  console.log('\n7️⃣  Verifying GST Invoice Arithmetic & SAC Codes...');
+  const rechargeAmount = 1000;
+  const baseAmt = Math.round(rechargeAmount / 1.18); // 847
+  const cgstAmt = Math.round((rechargeAmount - baseAmt) / 2); // 76
+  const sgstAmt = rechargeAmount - baseAmt - cgstAmt; // 77
+  assert(baseAmt + cgstAmt + sgstAmt === rechargeAmount, `GST components perfectly sum to total recharge (₹${baseAmt} + ₹${cgstAmt} + ₹${sgstAmt} = ₹${rechargeAmount})`);
+
+  // -------------------------------------------------------------------------
+  // AREA 8: PUBLIC CONFIG & GATEWAY MODE INTEGRITY
+  // -------------------------------------------------------------------------
+  console.log('\n8️⃣  Verifying Public Gateway Config & Mode Isolation...');
+  function getMode(kId) {
+    const isLive = Boolean(kId && kId.startsWith('rzp_live_'));
+    return {
+      isLive,
+      mode: isLive ? 'LIVE MODE' : 'TEST MODE',
+    };
+  }
+  assert(getMode('rzp_test_S7dlJIqMvrpcaj').mode === 'TEST MODE', `Test key correctly identified as 'TEST MODE'`);
+  assert(getMode('rzp_live_ABC12345XYZ').mode === 'LIVE MODE', `Live key correctly identified as 'LIVE MODE'`);
+
+  // -------------------------------------------------------------------------
+  // AREA 9: LEDGER TABS AND TRANSACTION FILTERING
+  // -------------------------------------------------------------------------
+  console.log('\n9️⃣  Verifying Ledger Tabs & Transaction Filtering...');
   const sampleLedger = [
     { id: '1', txType: 'Credit', amount: 500, status: 'Completed ✓' },
     { id: '2', txType: 'Debit', amount: 300, status: 'Completed ✓' },

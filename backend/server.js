@@ -28,11 +28,30 @@ const app = express();
 const PORT = Number(process.env.PORT || 5000);
 
 app.use(cors());
-app.use(express.json({ limit: '25mb' }));
+app.use(express.json({
+  limit: '25mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID || '';
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
 const walletCreditToken = randomBytes(32).toString('hex');
+
+function getRazorpayConfigInfo() {
+  const isConfigured = Boolean(razorpayKeyId && razorpayKeySecret);
+  const isLive = Boolean(razorpayKeyId && razorpayKeyId.startsWith('rzp_live_'));
+  return {
+    configured: isConfigured,
+    keyId: razorpayKeyId || '',
+    mode: isLive ? 'LIVE MODE' : 'TEST MODE',
+    isLive,
+    currency: 'INR',
+    minAmount: 300,
+    maxAmount: 1000000,
+  };
+}
 
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -1365,6 +1384,14 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
   }
 });
 
+// Public gateway config for UI (never leaks secrets)
+app.get('/api/payments/razorpay/config', (req, res) => {
+  res.json({
+    ok: true,
+    ...getRazorpayConfigInfo(),
+  });
+});
+
 app.post('/api/payments/razorpay/payment-link', async (req, res) => {
   try {
     if (!razorpayKeyId || !razorpayKeySecret) {
@@ -1435,11 +1462,186 @@ app.post('/api/payments/razorpay/payment-link', async (req, res) => {
       amount,
       currency: plink.currency || 'INR',
       keyId: razorpayKeyId,
+      mode: razorpayKeyId.startsWith('rzp_live_') ? 'LIVE MODE' : 'TEST MODE',
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// Authoritative Atomic Wallet Crediting Engine
+export async function creditCustomerWallet({
+  customerId,
+  phone,
+  username,
+  amount,
+  referenceUtr,
+  paymentMethod = 'Razorpay Secure (UPI/Card)',
+  description,
+}) {
+  const cleanAmount = Number(amount || 0);
+  if (!Number.isSafeInteger(cleanAmount) || cleanAmount < 300) {
+    throw new Error('Minimum wallet top-up amount is ₹300.');
+  }
+
+  const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
+  const utr = String(referenceUtr || `rzp_${Date.now()}`).trim();
+
+  return await withTransaction(async (txQuery) => {
+    // 1. Resolve customer
+    const custRes = await txQuery(
+      `SELECT * FROM customers
+       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3)
+       LIMIT 1`,
+      [customerId || '', cleanPhone, username || '']
+    );
+
+    if (custRes.rowCount === 0) {
+      throw new Error(`Customer account not found for wallet credit (ID: ${customerId || 'N/A'}, Phone: ${cleanPhone || 'N/A'}).`);
+    }
+
+    const cust = custRes.rows[0];
+
+    // 2. Check for duplicate credit idempotency using row lock
+    const existingTx = await txQuery(
+      `SELECT id, amount, balance_after, status, reference_utr
+       FROM wallet_transactions
+       WHERE reference_utr = $1 FOR UPDATE LIMIT 1`,
+      [utr]
+    );
+
+    if (existingTx.rowCount > 0 && String(existingTx.rows[0].status).includes('Verified')) {
+      const walRes = await txQuery('SELECT available_balance FROM wallets WHERE customer_id = $1 LIMIT 1', [cust.id]);
+      const viewRes = await txQuery('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
+      return {
+        ok: true,
+        alreadyCredited: true,
+        customerId: cust.id,
+        walletBalance: Number(walRes.rows[0]?.available_balance || 0),
+        customer: mapCustomerRow(viewRes.rows[0]),
+        transaction: mapWalletTxRow(existingTx.rows[0]),
+        message: 'Payment already credited idempotently.',
+      };
+    }
+
+    // 3. Upsert wallet balance atomically
+    const walRes = await txQuery(
+      `INSERT INTO wallets (
+        id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active
+      ) VALUES ($1, $2, $3, 300.00, $3, TRUE)
+      ON CONFLICT (customer_id) DO UPDATE SET
+        available_balance = wallets.available_balance + EXCLUDED.available_balance,
+        total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
+        ad_campaign_active = TRUE,
+        updated_at = NOW()
+      RETURNING *`,
+      [`wal_${Date.now()}`, cust.id, cleanAmount]
+    );
+
+    const newBalance = Number(walRes.rows[0]?.available_balance || cleanAmount);
+    const walletId = walRes.rows[0]?.id || null;
+
+    // 4. Mark customer payment_status = 'paid'
+    await txQuery(
+      `UPDATE customers SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
+      [cust.id]
+    );
+
+    // 5. Insert or update wallet transaction with 'Verified ✓'
+    const txId = `tx_${Date.now()}`;
+    const txDesc = description || `Ad Wallet Balance Top-Up (₹${cleanAmount.toLocaleString('en-IN')} Added)`;
+    const txInsert = await txQuery(
+      `INSERT INTO wallet_transactions (
+        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+      ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓')
+      ON CONFLICT (reference_utr) DO UPDATE SET
+        balance_after = EXCLUDED.balance_after,
+        status = 'Verified ✓',
+        description = EXCLUDED.description,
+        payment_method = EXCLUDED.payment_method
+      RETURNING *`,
+      [txId, cust.id, walletId, cleanAmount, newBalance, utr, txDesc, paymentMethod]
+    );
+
+    // 6. Insert payment_records for Sales Desk (/sales#payments)
+    const payId = `pay_${Date.now()}`;
+    const receiptNo = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+    const payInsert = await txQuery(
+      `INSERT INTO payment_records (
+        id, receipt_number, customer_id, company_name, contact_person, phone, city,
+        tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'topup', $8, 0, $8, $9, $10, 'paid', $11)
+      ON CONFLICT DO NOTHING
+      RETURNING *`,
+      [
+        payId,
+        receiptNo,
+        cust.id,
+        cust.company_name,
+        cust.contact_person,
+        cust.phone,
+        cust.city || 'India',
+        cleanAmount,
+        paymentMethod,
+        utr,
+        `Wallet Top-Up (+₹${cleanAmount.toLocaleString('en-IN')})`,
+      ]
+    );
+
+    // 7. Insert tax invoice with SAC code breakdown
+    const invId = `inv_${Date.now()}`;
+    const invoiceNo = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+    const baseAmt = Math.round(cleanAmount / 1.18);
+    const cgstAmt = Math.round((cleanAmount - baseAmt) / 2);
+    const sgstAmt = cleanAmount - baseAmt - cgstAmt;
+
+    const invInsert = await txQuery(
+      `INSERT INTO tax_invoices (
+        id, invoice_no, customer_id, payment_record_id, particulars, sac_code,
+        base_amount, cgst_amount, sgst_amount, total_amount, payment_mode, status
+      ) VALUES ($1, $2, $3, $4, $5, '998311', $6, $7, $8, $9, $10, 'Paid')
+      ON CONFLICT DO NOTHING
+      RETURNING *`,
+      [
+        invId,
+        invoiceNo,
+        cust.id,
+        payId,
+        'Meta Ads Campaign Ad Spend Budget Credit',
+        baseAmt,
+        cgstAmt,
+        sgstAmt,
+        cleanAmount,
+        `${paymentMethod} (Ref: ${utr})`,
+      ]
+    );
+
+    // 8. Sync Pending Verifications (Sales Desk 02)
+    await txQuery(
+      `UPDATE pending_verifications SET
+        amount = $1,
+        utr_number = $2,
+        payment_status = 'paid',
+        queue_type = CASE WHEN profile_status = 'complete' THEN 'Completed' ELSE 'Profile Only Incomplete' END,
+        verified_at = NOW()
+      WHERE customer_id = $3`,
+      [cleanAmount, utr, cust.id]
+    );
+
+    const viewRes = await txQuery('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
+
+    return {
+      ok: true,
+      alreadyCredited: false,
+      walletBalance: newBalance,
+      customer: mapCustomerRow(viewRes.rows[0]),
+      transaction: mapWalletTxRow(txInsert.rows[0]),
+      paymentRecord: payInsert.rowCount ? mapPaymentRecordRow(payInsert.rows[0]) : null,
+      invoice: invInsert.rowCount ? mapInvoiceRow(invInsert.rows[0]) : null,
+      message: `₹${cleanAmount.toLocaleString('en-IN')} successfully credited to wallet.`,
+    };
+  });
+}
 
 app.get('/api/payments/razorpay/callback', async (req, res) => {
   const hostHeader = req.get('x-forwarded-host') || req.get('host') || 'admafia.marketing';
@@ -1512,20 +1714,13 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
 
     const targetCustId = custRes.rows[0].id;
 
-    // Credit the wallet idempotently
-    await fetch(`http://127.0.0.1:${PORT}/api/wallets/topup`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Internal-Wallet-Credit': walletCreditToken,
-      },
-      body: JSON.stringify({
-        customerId: targetCustId,
-        amount: cleanAmount,
-        referenceUtr: paymentId,
-        paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
-        description: `AdMafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
-      }),
+    // Credit the wallet idempotently via atomic database transaction
+    await creditCustomerWallet({
+      customerId: targetCustId,
+      amount: cleanAmount,
+      referenceUtr: paymentId,
+      paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
+      description: `AdMafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
     });
 
     return res.redirect(
@@ -1564,13 +1759,15 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
     if (!cust.rowCount || String(payment.notes?.customer_id || '') !== String(cust.rows[0].id)) {
       return res.status(403).json({ ok: false, error: 'Payment does not belong to this customer.' });
     }
-    const topup = await fetch(`http://127.0.0.1:${PORT}/api/wallets/topup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Internal-Wallet-Credit': walletCreditToken },
-      body: JSON.stringify({ customerId: cust.rows[0].id, amount: Number(amount), referenceUtr: paymentId, paymentMethod: 'Razorpay Secure (UPI/Card)', description: `AdMafia wallet top-up (₹${Number(amount).toLocaleString('en-IN')})` }),
+
+    const result = await creditCustomerWallet({
+      customerId: cust.rows[0].id,
+      amount: Number(amount),
+      referenceUtr: paymentId,
+      paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
+      description: `AdMafia wallet top-up (₹${Number(amount).toLocaleString('en-IN')})`,
     });
-    const result = await topup.json();
-    return res.status(topup.status).json(result);
+    return res.status(200).json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -1583,8 +1780,9 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
     if (!signature || !secret) {
       return res.status(400).json({ ok: false, error: 'Missing webhook signature or secret.' });
     }
+    const rawPayload = req.rawBody || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
     const shasum = createHmac('sha256', secret);
-    shasum.update(typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
+    shasum.update(rawPayload);
     const digest = shasum.digest('hex');
     let valid = false;
     try {
@@ -1604,22 +1802,19 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
       const customerId = payment?.notes?.customer_id;
 
       if (customerId && amount >= 300) {
-        await fetch(`http://127.0.0.1:${PORT}/api/wallets/topup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Internal-Wallet-Credit': walletCreditToken },
-          body: JSON.stringify({
-            customerId,
-            amount,
-            referenceUtr: paymentId,
-            paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
-            description: `AdMafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
-          }),
+        await creditCustomerWallet({
+          customerId,
+          amount,
+          referenceUtr: paymentId,
+          paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
+          description: `AdMafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
         }).catch((e) => console.error('[Razorpay Webhook Top-Up]', e));
       }
     } else if (event === 'payment.failed') {
       const payment = req.body?.payload?.payment?.entity;
       const customerId = payment?.notes?.customer_id;
       if (customerId && payment?.id) {
+        const failAmount = Number(payment.amount || 0) / 100;
         await query(
           `INSERT INTO wallet_transactions (
             id, customer_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
@@ -1628,9 +1823,9 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
           [
             `tx_fail_${Date.now()}`,
             customerId,
-            Number(payment.amount || 0) / 100,
+            failAmount,
             payment.id,
-            `Online recharge failed: ${payment.error_description || 'Payment declined'}`,
+            `Online recharge failed: ${payment.error_description || payment.error_reason || 'Payment declined'}`,
           ]
         ).catch(() => {});
       }
@@ -1646,150 +1841,11 @@ app.post('/api/wallets/topup', async (req, res) => {
     return res.status(410).json({ ok: false, error: 'Direct wallet credits are disabled. Use a verified payment flow.' });
   }
   try {
-    const {
-      customerId,
-      phone,
-      username,
-      amount,
-      referenceUtr,
-      paymentMethod = 'Razorpay Secure (UPI/Card)',
-      description,
-    } = req.body || {};
-
-    const cleanAmount = Number(amount || 0);
-    if (cleanAmount < 300) {
-      return res.status(400).json({ ok: false, error: 'Minimum wallet top-up amount is ₹300.' });
-    }
-
-    const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
-    const custRes = await query(
-      `SELECT * FROM customers
-       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3)
-       LIMIT 1`,
-      [customerId || '', cleanPhone, username || '']
-    );
-
-    if (custRes.rowCount === 0) {
-      return res.status(404).json({ ok: false, error: 'Customer account not found for wallet top-up.' });
-    }
-
-    const cust = custRes.rows[0];
-    const utr = (referenceUtr || `rzp_${Date.now()}`).trim();
-    const existingCredit = await query('SELECT id FROM wallet_transactions WHERE reference_utr = $1 LIMIT 1', [utr]);
-    if (existingCredit.rowCount) {
-      return res.status(409).json({ ok: false, error: 'This payment has already been credited.' });
-    }
-
-    // Update wallet balance
-    const walUpdate = await query(
-      `UPDATE wallets SET
-        available_balance = available_balance + $1,
-        total_lifetime_paid = total_lifetime_paid + $1,
-        ad_campaign_active = TRUE,
-        updated_at = NOW()
-      WHERE customer_id = $2
-      RETURNING *`,
-      [cleanAmount, cust.id]
-    );
-
-    const newBalance = Number(walUpdate.rows[0]?.available_balance || cleanAmount);
-
-    // Mark customer payment_status = 'paid'
-    await query(
-      `UPDATE customers SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
-      [cust.id]
-    );
-
-    // Insert Wallet Transaction
-    const txId = `tx_${Date.now()}`;
-    const txDesc =
-      description ||
-      `Ad Wallet Balance Top-Up (₹${cleanAmount.toLocaleString('en-IN')} Added)`;
-    const txInsert = await query(
-      `INSERT INTO wallet_transactions (
-        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-      ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓')
-      ON CONFLICT (reference_utr) DO UPDATE SET balance_after = EXCLUDED.balance_after
-      RETURNING *`,
-      [txId, cust.id, walUpdate.rows[0]?.id || null, cleanAmount, newBalance, utr, txDesc, paymentMethod]
-    );
-
-    // Insert Payment Record for Sales Desk 05 (/sales#payments)
-    const payId = `pay_${Date.now()}`;
-    const receiptNo = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
-    const payInsert = await query(
-      `INSERT INTO payment_records (
-        id, receipt_number, customer_id, company_name, contact_person, phone, city,
-        tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'topup', $8, 0, $8, $9, $10, 'paid', $11)
-      RETURNING *`,
-      [
-        payId,
-        receiptNo,
-        cust.id,
-        cust.company_name,
-        cust.contact_person,
-        cust.phone,
-        cust.city || 'India',
-        cleanAmount,
-        paymentMethod,
-        utr,
-        `Wallet Top-Up (+₹${cleanAmount.toLocaleString('en-IN')})`,
-      ]
-    );
-
-    // Insert Tax Invoice
-    const invId = `inv_${Date.now()}`;
-    const invoiceNo = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
-    const baseAmt = Math.round(cleanAmount / 1.18);
-    const cgstAmt = Math.round((cleanAmount - baseAmt) / 2);
-    const sgstAmt = cleanAmount - baseAmt - cgstAmt;
-
-    const invInsert = await query(
-      `INSERT INTO tax_invoices (
-        id, invoice_no, customer_id, payment_record_id, particulars, sac_code,
-        base_amount, cgst_amount, sgst_amount, total_amount, payment_mode, status
-      ) VALUES ($1, $2, $3, $4, $5, '998311', $6, $7, $8, $9, $10, 'Paid')
-      RETURNING *`,
-      [
-        invId,
-        invoiceNo,
-        cust.id,
-        payId,
-        'Meta Ads Campaign Ad Spend Budget Credit',
-        baseAmt,
-        cgstAmt,
-        sgstAmt,
-        cleanAmount,
-        `${paymentMethod} (Ref: ${utr})`,
-      ]
-    );
-
-    // Sync Pending Verifications (Sales Desk 02)
-    await query(
-      `UPDATE pending_verifications SET
-        amount = $1,
-        utr_number = $2,
-        payment_status = 'paid',
-        queue_type = CASE WHEN profile_status = 'complete' THEN 'Completed' ELSE 'Profile Only Incomplete' END,
-        verified_at = NOW()
-      WHERE customer_id = $3`,
-      [cleanAmount, utr, cust.id]
-    );
-
-    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
-
-    res.status(201).json({
-      ok: true,
-      walletBalance: newBalance,
-      customer: mapCustomerRow(viewRes.rows[0]),
-      transaction: mapWalletTxRow(txInsert.rows[0]),
-      paymentRecord: mapPaymentRecordRow(payInsert.rows[0]),
-      invoice: mapInvoiceRow(invInsert.rows[0]),
-    });
+    const result = await creditCustomerWallet(req.body);
+    res.status(result.alreadyCredited ? 200 : 201).json(result);
   } catch (err) {
     console.error('[POST /api/wallets/topup]', err);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(err.message.includes('not found') ? 404 : 400).json({ ok: false, error: err.message });
   }
 });
 

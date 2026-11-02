@@ -176,6 +176,10 @@ export const crmApi = {
     return apiRequest('/sales/failed-transactions');
   },
 
+  async getRazorpayConfig() {
+    return apiRequest('/payments/razorpay/config', { method: 'GET' });
+  },
+
   async createRazorpayOrder(payload) {
     return apiRequest('/payments/razorpay/order', { method: 'POST', body: JSON.stringify(payload) });
   },

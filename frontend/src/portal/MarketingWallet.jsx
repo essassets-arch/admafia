@@ -93,6 +93,17 @@ export default function MarketingWallet({
     } catch (e) {}
   }, []);
 
+  // Dynamically load active Razorpay gateway configuration from backend
+  React.useEffect(() => {
+    crmApi.getRazorpayConfig()
+      .then((cfg) => {
+        if (cfg?.ok) {
+          setRazorpayMode(cfg.mode || (cfg.isLive ? 'LIVE MODE' : 'TEST MODE'));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Ledger lists categorization
   const isFailedTx = (t) =>
     String(t.status || '').toLowerCase().includes('fail') ||
@@ -506,10 +517,14 @@ export default function MarketingWallet({
                 <div className="gateway-box-text">
                   <div className="gateway-box-title-row">
                     <strong>Razorpay Secure Gateway</strong>
-                    <span className="test-mode-badge-green">{razorpayMode || 'TEST MODE'}</span>
+                    <span className={razorpayMode === 'LIVE MODE' ? 'live-mode-badge-emerald' : 'test-mode-badge-green'}>
+                      {razorpayMode === 'LIVE MODE' ? '● LIVE MODE' : (razorpayMode || 'TEST MODE')}
+                    </span>
                   </div>
                   <div className="gateway-box-sub">
-                    Secured 256-Bit Encrypted Gateway
+                    {razorpayMode === 'LIVE MODE'
+                      ? 'Secured 256-Bit Encrypted Live Production Gateway'
+                      : 'Secured 256-Bit Encrypted Sandbox Gateway (Test Mode)'}
                   </div>
                 </div>
               </div>
