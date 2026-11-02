@@ -622,24 +622,142 @@ export function AddFundsModal({
     setIsProcessing(true);
 
     try {
-      const res = await crmApi.createRazorpayPaymentLink({
+      const cleanPhone = String(customer?.phone || customer?.username || '').replace(/\D/g, '').slice(-10);
+
+      // 1. Create real Razorpay order on backend
+      const orderRes = await crmApi.createRazorpayOrder({
         customerId: customer?.id,
-        phone: customer?.phone,
+        phone: cleanPhone || customer?.phone,
         username: customer?.username,
         amount: currentAmount,
       });
 
-      const paymentUrl = res?.paymentUrl || res?.short_url || res?.url;
-      if (!paymentUrl) {
-        throw new Error(res?.error || res?.message || 'Could not start payment. Please try again.');
+      if (!orderRes?.ok || !orderRes?.orderId) {
+        throw new Error(orderRes?.error || 'Could not start payment. Please retry.');
       }
 
-      window.location.assign(paymentUrl);
+      // 2. Load Razorpay Standard Checkout SDK
+      const scriptReady = await loadRazorpayScript();
+      if (!scriptReady || !window.Razorpay) {
+        const linkRes = await crmApi.createRazorpayPaymentLink({
+          customerId: customer?.id,
+          phone: cleanPhone,
+          username: customer?.username,
+          amount: currentAmount,
+        });
+        if (linkRes?.paymentUrl) {
+          window.location.assign(linkRes.paymentUrl);
+          return;
+        }
+        throw new Error('Razorpay Checkout failed to load.');
+      }
+
+      // 3. Open direct Razorpay Checkout popup
+      const options = {
+        key: orderRes.keyId,
+        amount: orderRes.amount,
+        currency: orderRes.currency || 'INR',
+        name: 'AdMafia',
+        description: `Ad Wallet Instant Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
+        image: 'https://admafia.marketing/assets/logo.png',
+        order_id: orderRes.orderId,
+        prefill: {
+          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'AdMafia Customer',
+          ...(cleanPhone && cleanPhone.length === 10 ? { contact: cleanPhone } : {}),
+          email: customer?.email || `${cleanPhone || 'client'}@admafia.marketing`,
+        },
+        notes: {
+          customer_id: String(customer?.id || ''),
+          customer_phone: cleanPhone,
+        },
+        theme: {
+          color: '#4f46e5',
+        },
+        handler: async function (response) {
+          try {
+            const verifyRes = await crmApi.verifyRazorpayPayment({
+              orderId: response.razorpay_order_id || orderRes.orderId,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+              customerId: customer?.id,
+              phone: cleanPhone,
+              username: customer?.username,
+              amount: currentAmount,
+            });
+
+            if (verifyRes?.ok) {
+              finalizeTopUp(currentAmount, response.razorpay_payment_id);
+              if (onTopUp) {
+                onTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
+              }
+            } else {
+              throw new Error(verifyRes?.error || 'Payment verification failed.');
+            }
+          } catch (vErr) {
+            console.error('[Verify Error]', vErr);
+            setIsProcessing(false);
+            setSweetAlert({
+              type: 'error',
+              title: 'Verification Failed',
+              message: vErr.message || 'Payment received, but verification timed out.',
+              confirmText: 'OK',
+              onConfirm: () => setSweetAlert(null),
+            });
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessing(false);
+            if (onPaymentFailed) {
+              onPaymentFailed({
+                id: `tx_fail_${Date.now()}`,
+                ref: `DISMISS-${Date.now().toString().slice(-6)}`,
+                amount: currentAmount,
+                desc: 'Payment checkout dismissed by user',
+                status: 'Failed ✕',
+                type: 'Credit',
+                method: 'Razorpay Secure',
+                failureReason: 'Checkout closed by user',
+                date: 'Today, Just now',
+              });
+            }
+          },
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        setIsProcessing(false);
+        const failReason = resp.error?.description || resp.error?.reason || 'Payment failed';
+        if (onPaymentFailed) {
+          onPaymentFailed({
+            id: `tx_fail_${Date.now()}`,
+            ref: resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`,
+            amount: currentAmount,
+            desc: `Online recharge failed: ${failReason}`,
+            status: 'Failed ✕',
+            type: 'Credit',
+            method: 'Razorpay Secure',
+            failureReason: failReason,
+            date: 'Today, Just now',
+          });
+        }
+        setSweetAlert({
+          type: 'error',
+          title: 'Payment Failed',
+          message: failReason,
+          confirmText: 'OK',
+          onConfirm: () => setSweetAlert(null),
+        });
+      });
+
+      setIsProcessing(false);
+      rzp.open();
     } catch (err) {
       setIsProcessing(false);
       setSweetAlert({
         type: 'error',
-        title: 'Could not start payment',
+        title: 'Could not open checkout',
         message: err.message || 'Payment initiation failed. Please try again.',
         confirmText: 'OK',
         onConfirm: () => setSweetAlert(null),
@@ -1953,24 +2071,142 @@ export function MarketingGrowthPaymentModal({
     setIsProcessing(true);
 
     try {
-      const res = await crmApi.createRazorpayPaymentLink({
+      const cleanPhone = String(customer?.phone || customer?.username || '').replace(/\D/g, '').slice(-10);
+
+      // 1. Create real Razorpay order on backend
+      const orderRes = await crmApi.createRazorpayOrder({
         customerId: customer?.id,
-        phone: customer?.phone,
+        phone: cleanPhone || customer?.phone,
         username: customer?.username,
         amount: currentAmount,
       });
 
-      const paymentUrl = res?.paymentUrl || res?.short_url || res?.url;
-      if (!paymentUrl) {
-        throw new Error(res?.error || res?.message || 'Could not start payment. Please try again.');
+      if (!orderRes?.ok || !orderRes?.orderId) {
+        throw new Error(orderRes?.error || 'Could not start payment. Please retry.');
       }
 
-      window.location.assign(paymentUrl);
+      // 2. Load Razorpay Standard Checkout SDK
+      const scriptReady = await loadRazorpayScript();
+      if (!scriptReady || !window.Razorpay) {
+        const linkRes = await crmApi.createRazorpayPaymentLink({
+          customerId: customer?.id,
+          phone: cleanPhone,
+          username: customer?.username,
+          amount: currentAmount,
+        });
+        if (linkRes?.paymentUrl) {
+          window.location.assign(linkRes.paymentUrl);
+          return;
+        }
+        throw new Error('Razorpay Checkout failed to load.');
+      }
+
+      // 3. Open direct Razorpay Checkout popup
+      const options = {
+        key: orderRes.keyId,
+        amount: orderRes.amount,
+        currency: orderRes.currency || 'INR',
+        name: 'AdMafia',
+        description: `Ad Wallet Instant Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
+        image: 'https://admafia.marketing/assets/logo.png',
+        order_id: orderRes.orderId,
+        prefill: {
+          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'AdMafia Customer',
+          ...(cleanPhone && cleanPhone.length === 10 ? { contact: cleanPhone } : {}),
+          email: customer?.email || `${cleanPhone || 'client'}@admafia.marketing`,
+        },
+        notes: {
+          customer_id: String(customer?.id || ''),
+          customer_phone: cleanPhone,
+        },
+        theme: {
+          color: '#4f46e5',
+        },
+        handler: async function (response) {
+          try {
+            const verifyRes = await crmApi.verifyRazorpayPayment({
+              orderId: response.razorpay_order_id || orderRes.orderId,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+              customerId: customer?.id,
+              phone: cleanPhone,
+              username: customer?.username,
+              amount: currentAmount,
+            });
+
+            if (verifyRes?.ok) {
+              finalizeTopUp(currentAmount, response.razorpay_payment_id);
+              if (onTopUp) {
+                onTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
+              }
+            } else {
+              throw new Error(verifyRes?.error || 'Payment verification failed.');
+            }
+          } catch (vErr) {
+            console.error('[Verify Error]', vErr);
+            setIsProcessing(false);
+            setSweetAlert({
+              type: 'error',
+              title: 'Verification Failed',
+              message: vErr.message || 'Payment received, but verification timed out.',
+              confirmText: 'OK',
+              onConfirm: () => setSweetAlert(null),
+            });
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessing(false);
+            if (onPaymentFailed) {
+              onPaymentFailed({
+                id: `tx_fail_${Date.now()}`,
+                ref: `DISMISS-${Date.now().toString().slice(-6)}`,
+                amount: currentAmount,
+                desc: 'Payment checkout dismissed by user',
+                status: 'Failed ✕',
+                type: 'Credit',
+                method: 'Razorpay Secure',
+                failureReason: 'Checkout closed by user',
+                date: 'Today, Just now',
+              });
+            }
+          },
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        setIsProcessing(false);
+        const failReason = resp.error?.description || resp.error?.reason || 'Payment failed';
+        if (onPaymentFailed) {
+          onPaymentFailed({
+            id: `tx_fail_${Date.now()}`,
+            ref: resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`,
+            amount: currentAmount,
+            desc: `Online recharge failed: ${failReason}`,
+            status: 'Failed ✕',
+            type: 'Credit',
+            method: 'Razorpay Secure',
+            failureReason: failReason,
+            date: 'Today, Just now',
+          });
+        }
+        setSweetAlert({
+          type: 'error',
+          title: 'Payment Failed',
+          message: failReason,
+          confirmText: 'OK',
+          onConfirm: () => setSweetAlert(null),
+        });
+      });
+
+      setIsProcessing(false);
+      rzp.open();
     } catch (err) {
       setIsProcessing(false);
       setSweetAlert({
         type: 'error',
-        title: 'Could not start payment',
+        title: 'Could not open checkout',
         message: err.message || 'Payment initiation failed. Please try again.',
         confirmText: 'OK',
         onConfirm: () => setSweetAlert(null),

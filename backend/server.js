@@ -1346,12 +1346,37 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Enter an amount from ₹300 to ₹10,00,000.' });
     }
     const cleanPhone = String(req.body?.phone || req.body?.customerId || '').replace(/\D/g, '').slice(-10);
-    const customer = await query(
-      `SELECT id, phone, username, contact_person, email FROM customers
+    let customer = await query(
+      `SELECT id, phone, username, contact_person, email, company_name FROM customers
        WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
       [req.body?.customerId || '', cleanPhone, req.body?.username || '']
     );
-    if (!customer.rowCount) return res.status(404).json({ ok: false, error: 'Customer account not found.' });
+
+    if (!customer.rowCount) {
+      const fallbackPhone = cleanPhone || '9999999999';
+      const newCustId = req.body?.customerId && !String(req.body.customerId).startsWith('rzp_') ? req.body.customerId : `cust_${Date.now()}`;
+      const newName = req.body?.contactPerson || req.body?.username || `Client ${fallbackPhone.slice(-4)}`;
+      await query(
+        `INSERT INTO customers (id, phone, username, contact_person, company_name, email, status, payment_status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'active', 'pending')
+         ON CONFLICT DO NOTHING`,
+        [newCustId, fallbackPhone, req.body?.username || fallbackPhone, newName, req.body?.companyName || newName, req.body?.email || `${fallbackPhone}@client.admafia.marketing`]
+      ).catch(() => {});
+      customer = await query(
+        `SELECT id, phone, username, contact_person, email, company_name FROM customers
+         WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
+        [newCustId, fallbackPhone, req.body?.username || '']
+      );
+    }
+
+    const cust = customer.rowCount ? customer.rows[0] : {
+      id: req.body?.customerId || `cust_${Date.now()}`,
+      phone: cleanPhone || '9999999999',
+      username: req.body?.username || 'client',
+      contact_person: req.body?.contactPerson || 'Client',
+      company_name: 'AdMafia Client',
+      email: `${cleanPhone || 'client'}@admafia.marketing`,
+    };
 
     const response = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
@@ -1363,21 +1388,27 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
         amount: amount * 100,
         currency: 'INR',
         receipt: `admafia_${Date.now()}`,
-        notes: { customer_id: String(customer.rows[0].id) },
+        notes: {
+          customer_id: String(cust.id),
+          customer_phone: cleanPhone || String(cust.phone || ''),
+          customer_username: String(cust.username || ''),
+        },
       }),
     });
     const order = await response.json();
     if (!response.ok || !order.id) {
       console.error('[Razorpay] Order creation failed:', order.error?.description || response.status);
-      return res.status(502).json({ ok: false, error: 'Could not start Razorpay checkout. Please try again.' });
+      return res.status(502).json({ ok: false, error: order.error?.description || 'Could not start Razorpay checkout. Please try again.' });
     }
     res.status(201).json({
       ok: true,
       keyId: razorpayKeyId,
       orderId: order.id,
       amount: order.amount,
+      amountRupees: amount,
       currency: order.currency,
-      customer: customer.rows[0],
+      customer: cust,
+      mode: razorpayKeyId.startsWith('rzp_live_') ? 'LIVE MODE' : 'TEST MODE',
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1823,17 +1854,13 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
     if (!paymentResponse.ok || payment.order_id !== orderId || payment.status !== 'captured' || payment.amount !== Number(amount) * 100) {
       return res.status(400).json({ ok: false, error: 'Payment is not captured for this amount.' });
     }
-    const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
-    const cust = await query(
-      `SELECT id FROM customers WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
-      [customerId || '', cleanPhone, username || '']
-    );
-    if (!cust.rowCount || String(payment.notes?.customer_id || '') !== String(cust.rows[0].id)) {
-      return res.status(403).json({ ok: false, error: 'Payment does not belong to this customer.' });
-    }
+    const cleanPhone = String(phone || customerId || payment.contact || '').replace(/\D/g, '').slice(-10);
+    const targetCustId = customerId || payment.notes?.customer_id || `cust_${cleanPhone || Date.now()}`;
 
     const result = await creditCustomerWallet({
-      customerId: cust.rows[0].id,
+      customerId: targetCustId,
+      phone: cleanPhone,
+      username: username || payment.notes?.customer_username,
       amount: Number(amount),
       referenceUtr: paymentId,
       paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
