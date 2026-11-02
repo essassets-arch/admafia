@@ -43,6 +43,8 @@ services:
       PGUSER: admafia_user
       PGPASSWORD: AdMafiaStrongPass2026!
       PGDATABASE: admafia_crm
+      RAZORPAY_KEY_ID: rzp_live_TuUlRUHnVlWd5i
+      RAZORPAY_KEY_SECRET: ItZeWawXWwTt98Dx60n47Sza
       NODE_ENV: production
     ports:
       - "127.0.0.1:5000:5000"

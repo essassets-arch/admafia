@@ -35,8 +35,8 @@ app.use(express.json({
   },
 }));
 
-const razorpayKeyId = process.env.RAZORPAY_KEY_ID || '';
-const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
+const razorpayKeyId = process.env.RAZORPAY_KEY_ID || 'rzp_live_TuUlRUHnVlWd5i';
+const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || 'ItZeWawXWwTt98Dx60n47Sza';
 const walletCreditToken = randomBytes(32).toString('hex');
 
 function getRazorpayConfigInfo() {

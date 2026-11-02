@@ -23,6 +23,19 @@ echo "📥 1/5 Pulling latest changes from GitHub (main)..."
 git fetch origin main
 git reset --hard origin/main
 
+# 1b. Write authoritative backend environment variables with live Razorpay credentials
+cat > "$APP_DIR/backend/.env" << 'EOF'
+PORT=5000
+PGHOST=db
+PGPORT=5432
+PGUSER=admafia_user
+PGPASSWORD=AdMafiaStrongPass2026!
+PGDATABASE=admafia_crm
+RAZORPAY_KEY_ID=rzp_live_TuUlRUHnVlWd5i
+RAZORPAY_KEY_SECRET=ItZeWawXWwTt98Dx60n47Sza
+NODE_ENV=production
+EOF
+
 # 2. Build Frontend Production Distribution (Removes old cache and rebuilds dist)
 echo "🔨 2/5 Building frontend production assets..."
 cd "$APP_DIR/frontend"
