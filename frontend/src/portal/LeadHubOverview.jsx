@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import emperorBannerImg from '../assets/emperor-banner.jpg';
 
@@ -87,22 +87,6 @@ export default function LeadHubOverview({
   const dailySpend = customer.dailyAdSpend || 300;
   const currentTodayItem = daysList.find((d) => d.isToday) || daysList[5];
 
-  const isTodayBooked = Boolean(
-    customer.isDeductedToday ||
-    (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(currentTodayItem.isoDate)) ||
-    (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(currentTodayItem.code)) ||
-    (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(currentTodayItem.code))
-  );
-
-  const isDayBooked = (dayObj) => {
-    if (!dayObj) return false;
-    return Boolean(
-      (dayObj.isToday && isTodayBooked) ||
-      (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(dayObj.isoDate)) ||
-      (dayObj.isToday && Array.isArray(customer.bookedDays) && customer.bookedDays.includes(dayObj.code))
-    );
-  };
-
   const [activeDays, setActiveDays] = useState(() => {
     const base = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
       ? customer.activeDays
@@ -124,6 +108,75 @@ export default function LeadHubOverview({
       setActiveDays(Array.from(merged));
     }
   }, [customer?.activeDays, customer?.bookedDays, customer?.lockedDays, customer?.isDeductedToday, currentTodayItem?.code]);
+
+  // Compute how many days are funded by the current wallet balance
+  const fundedRunwayDays = dailySpend > 0 ? Math.floor(walletBalance / dailySpend) : 0;
+
+  // Real-time calculation of booked dates based on DB deductions + funded wallet runway
+  const bookedDatesSet = useMemo(() => {
+    const set = new Set();
+
+    // 1. Explicit server booked dates
+    if (Array.isArray(customer.bookedDates)) {
+      customer.bookedDates.forEach((iso) => set.add(iso));
+    }
+    if (customer.isDeductedToday && currentTodayItem?.isoDate) {
+      set.add(currentTodayItem.isoDate);
+    }
+    if (Array.isArray(customer.bookedDays)) {
+      daysList.forEach((d) => {
+        if (customer.bookedDays.includes(d.code)) set.add(d.isoDate);
+      });
+    }
+
+    // 2. Allocate funded runway days starting from today across active days
+    if (fundedRunwayDays > 0 && currentTodayItem) {
+      let count = fundedRunwayDays;
+      const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const baseDate = new Date(kolkataNow);
+      baseDate.setHours(0, 0, 0, 0);
+
+      const dayCodesMap = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+      for (let offset = 0; offset < 60 && count > 0; offset++) {
+        const target = new Date(baseDate);
+        target.setDate(baseDate.getDate() + offset);
+        const dayCode = dayCodesMap[target.getDay()];
+        const y = target.getFullYear();
+        const m = String(target.getMonth() + 1).padStart(2, '0');
+        const dt = String(target.getDate()).padStart(2, '0');
+        const iso = `${y}-${m}-${dt}`;
+
+        if (activeDays.includes(dayCode)) {
+          set.add(iso);
+          if (!(offset === 0 && customer.isDeductedToday)) {
+            count--;
+          }
+        }
+      }
+    }
+
+    return set;
+  }, [customer.bookedDates, customer.isDeductedToday, customer.bookedDays, currentTodayItem?.isoDate, fundedRunwayDays, activeDays]);
+
+  const isTodayBooked = Boolean(
+    customer.isDeductedToday ||
+    bookedDatesSet.has(currentTodayItem?.isoDate) ||
+    (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(currentTodayItem.isoDate)) ||
+    (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(currentTodayItem.code)) ||
+    (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(currentTodayItem.code))
+  );
+
+  const isDayBooked = (dayObj) => {
+    if (!dayObj) return false;
+    if (bookedDatesSet.has(dayObj.isoDate)) return true;
+    if (dayObj.isToday && isTodayBooked) return true;
+    if (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(dayObj.isoDate)) return true;
+    if (dayObj.isToday && Array.isArray(customer.bookedDays) && customer.bookedDays.includes(dayObj.code)) return true;
+    return false;
+  };
+
+  const totalBookedCount = fundedRunwayDays + (customer.isDeductedToday ? 1 : 0);
 
   const weeklyPacing = activeDays.length * dailySpend;
   const weekRangeStr = `${daysList[0].dateFormatted} – ${daysList[6].dateFormatted} ${daysList[6].fullDateString.split(' ')[2]}`;
@@ -496,7 +549,9 @@ export default function LeadHubOverview({
 
             <div className="pacing-card-footer-between">
               <span>Weekly pacing: <strong>₹{weeklyPacing.toLocaleString('en-IN')}</strong></span>
-              <span className="pacing-days-badge">{activeDays.length}d / wk</span>
+              <span className="pacing-days-badge" style={{ background: totalBookedCount > 0 ? '#ecfdf5' : '#f8fafc', color: totalBookedCount > 0 ? '#047857' : '#64748b', fontWeight: 800 }}>
+                {totalBookedCount > 0 ? `🎯 ${totalBookedCount}d Booked` : `${activeDays.length}d / wk`}
+              </span>
             </div>
           </div>
 
@@ -528,11 +583,11 @@ export default function LeadHubOverview({
             </div>
 
             <div className="pacing-card-footer-between">
-              <span>Runway: <strong className={walletBalance < dailySpend ? 'text-red-alert' : ''}>{dailySpend > 0 ? Math.floor(walletBalance / dailySpend) : 0} days funded</strong></span>
+              <span>Runway: <strong className={walletBalance < dailySpend ? 'text-red-alert' : ''}>{fundedRunwayDays} days funded</strong></span>
               {walletBalance < dailySpend ? (
                 <span className="text-red-alert" style={{ fontWeight: 800 }}>● Balance is Low (Needs Top Up)</span>
               ) : (
-                <span className="text-amber-alert">● Funded</span>
+                <span style={{ color: '#047857', fontWeight: 800 }}>● {fundedRunwayDays}d Marketing Booked</span>
               )}
             </div>
           </div>
@@ -549,8 +604,44 @@ export default function LeadHubOverview({
                 <line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
               <span className="engine-title-text">
-                SELECT MARKETING DAYS ({activeDays.length} OF 7 DAYS ACTIVE)
+                SELECT MARKETING DAYS ({activeDays.length} OF 7 DAYS ACTIVE
+                {totalBookedCount > 0 ? ` • ${totalBookedCount} DAY${totalBookedCount > 1 ? 'S' : ''} BOOKED` : ''})
               </span>
+              {totalBookedCount > 0 ? (
+                <span className="engine-booked-highlight-pill" style={{
+                  background: '#ecfdf5',
+                  color: '#047857',
+                  border: '1px solid #10b981',
+                  borderRadius: '9999px',
+                  padding: '3px 10px',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  marginLeft: '8px'
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                  {totalBookedCount} Day{totalBookedCount > 1 ? 's' : ''} Marketing Booked
+                </span>
+              ) : (
+                <span className="engine-booked-highlight-pill" style={{
+                  background: '#fff1f2',
+                  color: '#e11d48',
+                  border: '1px solid #fda4af',
+                  borderRadius: '9999px',
+                  padding: '3px 10px',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  marginLeft: '8px',
+                  cursor: 'pointer'
+                }} onClick={onOpenAddFunds} title="Click to Top Up & Book Marketing Days">
+                  ⚠️ 0 Days Booked (Top Up to Book)
+                </span>
+              )}
             </div>
 
             <div className="engine-preset-buttons-row">
@@ -670,6 +761,14 @@ export default function LeadHubOverview({
                 >
                   {/* If today, floating blue badge */}
                   {d.isToday && <span className="today-floating-pill">Today</span>}
+                  {isBooked && (
+                    <span className="ad-booked-floating-badge">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: '2px' }}>
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      Booked
+                    </span>
+                  )}
 
                   <div className="day-code-title">{d.code}</div>
                   <div className="day-calendar-date">{d.dateFormatted}</div>
@@ -727,6 +826,11 @@ export default function LeadHubOverview({
               {isTodayBooked && (
                 <span className="pill-ad-booked-badge">
                   🎯 Marketing Booked &amp; Running
+                </span>
+              )}
+              {totalBookedCount > 0 && !isTodayBooked && (
+                <span className="pill-ad-booked-badge" style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #10b981' }}>
+                  ✓ {totalBookedCount} Days Funded &amp; Booked
                 </span>
               )}
             </div>
