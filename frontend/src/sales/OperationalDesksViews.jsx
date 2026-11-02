@@ -42,6 +42,7 @@ import {
   Copy,
   Trash2,
 } from 'lucide-react';
+import Swal from 'sweetalert2';
 import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
 
@@ -5672,7 +5673,12 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     if (!topupCust) return;
     const rechargeNum = Number(topupAmount) || 0;
     if (rechargeNum <= 0) {
-      alert('Please enter a valid amount.');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Invalid Amount',
+        text: 'Please enter a valid recharge amount.',
+        confirmButtonColor: '#4f46e5',
+      });
       return;
     }
     const targetCust = customers.find((c) => c.id === topupCust.id || c.phone === topupCust.phone) || topupCust;
@@ -5713,14 +5719,40 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       }).catch(() => {});
     } catch (e) {}
 
-    alert(`Successfully credited ₹${rechargeNum.toLocaleString('en-IN')} to ${targetCust.companyName || targetCust.name}!`);
+    Swal.fire({
+      icon: 'success',
+      title: 'Wallet Credited!',
+      html: `Successfully credited <strong>₹${rechargeNum.toLocaleString('en-IN')}</strong> to <strong>${targetCust.companyName || targetCust.name}</strong>.`,
+      confirmButtonColor: '#059669',
+    });
     setTopupCust(null);
   };
 
   const handleDeleteFailedTx = async (tx) => {
-    if (!window.confirm(`Are you sure you want to remove this failed transaction record (${tx.companyName || tx.customerName} - ₹${tx.amount})?`)) {
-      return;
-    }
+    const confirmResult = await Swal.fire({
+      title: 'Remove Failed Transaction?',
+      html: `
+        <div style="text-align: left; font-size: 0.90rem; line-height: 1.7; color: #334155;">
+          <div style="margin-bottom: 6px;">Client / Business: <strong style="color: #0f172a;">${tx.companyName || tx.customerName || 'Customer'}</strong></div>
+          <div style="margin-bottom: 6px;">Failed Amount: <strong style="color: #dc2626; font-size: 1.05rem;">₹${Number(tx.amount || 0).toLocaleString('en-IN')}</strong></div>
+          <div style="margin-bottom: 6px;">Transaction Ref: <code style="font-family: monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; color: #475569;">${tx.ref || tx.id}</code></div>
+          <div style="margin-top: 10px; padding: 10px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; color: #be123c; font-size: 0.82rem;">
+            ⚠️ This will permanently remove this transaction from the failed ledger in PostgreSQL and local storage.
+          </div>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Delete Record',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      focusCancel: true,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
     const targetId = tx.id || tx.ref;
     try {
       await crmApi.deleteFailedTransaction(targetId);
@@ -5743,12 +5775,39 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     if (selectedFailTx && (selectedFailTx.id === tx.id || selectedFailTx.ref === tx.ref)) {
       setSelectedFailTx(null);
     }
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Record Removed',
+      text: 'The failed transaction has been permanently deleted.',
+      timer: 1600,
+      showConfirmButton: false,
+    });
   };
 
   const handleClearAllFailed = async () => {
-    if (!window.confirm('Are you sure you want to clear and remove ALL failed transaction records?')) {
-      return;
-    }
+    const confirmResult = await Swal.fire({
+      title: 'Clear All Failed Records?',
+      html: `
+        <div style="text-align: left; font-size: 0.90rem; line-height: 1.7; color: #334155;">
+          <p>You are about to delete all <strong>${failedList.length} declined transaction records</strong> totalling <strong>${formatINR(totalAtRisk)}</strong>.</p>
+          <div style="margin-top: 10px; padding: 10px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; color: #be123c; font-size: 0.82rem;">
+            ⚠️ This action cannot be undone. All failed attempts will be wiped from the ledger.
+          </div>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Clear All',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      focusCancel: true,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
     try {
       await crmApi.clearAllFailedTransactions();
     } catch (e) {
@@ -5773,6 +5832,14 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
 
     setFailedList([]);
     setSelectedFailTx(null);
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Ledger Cleared',
+      text: 'All failed transaction records have been wiped.',
+      timer: 1600,
+      showConfirmButton: false,
+    });
   };
 
   return (
