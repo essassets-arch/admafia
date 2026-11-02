@@ -1060,36 +1060,7 @@ export default function MarketingWallet({
                         </td>
                         <td>
                           {isFailed ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const retryAmount = Number(tx.amount) || 1000;
-                                setSelectedPreset(retryAmount);
-                                setCustomAmount('');
-                                const topupSection = document.getElementById('wallet-topup-section') || document.querySelector('.wallet-recharge-section');
-                                if (topupSection) {
-                                  topupSection.scrollIntoView({ behavior: 'smooth' });
-                                }
-                              }}
-                              className="btn-retry-failed-tx"
-                              style={{
-                                background: '#4f46e5',
-                                color: '#ffffff',
-                                border: 'none',
-                                borderRadius: 6,
-                                padding: '5px 12px',
-                                fontSize: '0.75rem',
-                                fontWeight: 800,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                boxShadow: '0 2px 6px rgba(79, 70, 229, 0.25)'
-                              }}
-                              title="Retry this recharge amount"
-                            >
-                              ↻ Retry
-                            </button>
+                            <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600 }}>—</span>
                           ) : (
                             <button
                               type="button"
