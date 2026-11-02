@@ -100,7 +100,7 @@ export default function MarketingWallet({
 
   // Trigger Razorpay payment top-up with failed transaction logging
   const handlePayViaRazorpay = async () => {
-    if (activeAmount < 300) {
+    if (!Number.isSafeInteger(activeAmount) || activeAmount < 300) {
       setActionAlert({ type: 'error', message: 'Minimum wallet recharge amount is ₹300.' });
       setTimeout(() => setActionAlert(null), 3000);
       return;
@@ -128,16 +128,18 @@ export default function MarketingWallet({
         throw new Error('Razorpay script could not be loaded. Please check your internet connection.');
       }
 
-      let order;
-      try {
-        order = await crmApi.createRazorpayOrder({
-          customerId: customer?.id,
-          phone: customer?.phone,
-          username: customer?.username,
-          amount: activeAmount,
-        });
-      } catch (err) {
-        throw new Error(err.message || 'Could not initiate Razorpay order.');
+      if (!customer?.id && !customer?.phone && !customer?.username) {
+        throw new Error('Customer account details are missing. Please sign in again and retry.');
+      }
+
+      const order = await crmApi.createRazorpayOrder({
+        customerId: customer?.id,
+        phone: customer?.phone,
+        username: customer?.username,
+        amount: activeAmount,
+      });
+      if (!order?.keyId || !order?.orderId || !order?.amount || !order?.currency) {
+        throw new Error('Razorpay did not return a valid checkout order. Please try again.');
       }
 
       const options = {
@@ -159,8 +161,11 @@ export default function MarketingWallet({
               amount: activeAmount,
             });
             setIsProcessingPayment(false);
-            if (onTopUpWallet) {
-              onTopUpWallet(activeAmount, response.razorpay_payment_id);
+            // The verification endpoint credits the wallet atomically. Refresh server state
+            // instead of sending a second top-up request from the browser.
+            const workspace = await crmApi.getCustomerWorkspace(customer?.id || customer?.phone || customer?.username);
+            if (workspace?.customer && onTopUpWallet) {
+              onTopUpWallet(activeAmount, response.razorpay_payment_id, workspace);
             }
             setActionAlert({
               type: 'success',
@@ -169,7 +174,7 @@ export default function MarketingWallet({
             setTimeout(() => setActionAlert(null), 4000);
           } catch (err) {
             setIsProcessingPayment(false);
-            setActionAlert({ type: 'error', message: 'Payment verification failed: ' + err.message });
+            setActionAlert({ type: 'error', message: 'Payment was received, but wallet verification or refresh failed: ' + err.message + '. Contact support before retrying.' });
           }
         },
         prefill: {
@@ -639,7 +644,7 @@ export default function MarketingWallet({
               {isProcessingPayment ? (
                 <>
                   <span className="spinner-rotate-inline">⟳</span>
-                  <span>Verifying Payment...</span>
+                  <span>Opening Razorpay...</span>
                 </>
               ) : (
                 <>

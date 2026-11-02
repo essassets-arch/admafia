@@ -449,6 +449,24 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   };
 
   const handleTopUpWallet = (amount, utr, sourceInfo = {}) => {
+    if (sourceInfo?.customer) {
+      const verifiedCustomer = sourceInfo.customer;
+      const verifiedBalance = Number(verifiedCustomer.walletBalance ?? verifiedCustomer.balance ?? 0);
+      setCustomer((prev) => {
+        const merged = { ...prev, ...verifiedCustomer };
+        try { localStorage.setItem('growthline_active_user', JSON.stringify(merged)); } catch (e) {}
+        return merged;
+      });
+      setWalletBalance(verifiedBalance);
+      if (Array.isArray(sourceInfo.transactions)) {
+        setTransactions(sourceInfo.transactions.filter((tx) => belongsToCustomer(tx, verifiedCustomer)));
+      }
+      if (Array.isArray(sourceInfo.invoices)) {
+        setInvoices(sourceInfo.invoices.filter((invoice) => belongsToCustomer(invoice, verifiedCustomer)));
+      }
+      return;
+    }
+
     const payNum = Number(amount) || 0;
     const currentBal = Number(walletBalance) || 0;
     const newBal = currentBal + payNum;
