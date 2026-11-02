@@ -39,6 +39,7 @@ import {
   Mail,
   Globe,
   User,
+  Copy,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
@@ -2236,12 +2237,46 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 }
 
 /* ==========================================================================
-   DESK 4: PROFILE COMPLETION
+   DESK 4: PROFILE COMPLETION (Complete Customer Intake Dossier Desk)
    ========================================================================== */
-export function ProfileCompletionDesk({ customers, setCustomers }) {
+export function ProfileCompletionDesk({ customers = [], setCustomers }) {
   const [filterTab, setFilterTab] = useState('all'); // 'all' | 'complete' | 'incomplete'
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'cards'
   const [selectedProfileCust, setSelectedProfileCust] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
+
+  // Auto-sync fresh customer profiles from backend PostgreSQL on mount
+  const handleSyncLatest = React.useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const state = await crmApi.syncStateFromPostgres();
+      if (state && Array.isArray(state.customers) && typeof setCustomers === 'function') {
+        setCustomers(state.customers);
+      }
+    } catch (e) {
+      console.warn('[Profile sync note]', e);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [setCustomers]);
+
+  useEffect(() => {
+    handleSyncLatest();
+    const handleSyncEvent = (e) => {
+      const state = e?.detail;
+      if (state && Array.isArray(state.customers) && typeof setCustomers === 'function') {
+        setCustomers(state.customers);
+      }
+    };
+    window.addEventListener('growthline_postgres_synced', handleSyncEvent);
+    window.addEventListener('growthline_active_user_changed', handleSyncLatest);
+    return () => {
+      window.removeEventListener('growthline_postgres_synced', handleSyncEvent);
+      window.removeEventListener('growthline_active_user_changed', handleSyncLatest);
+    };
+  }, [handleSyncLatest, setCustomers]);
 
   const handleToggleCheck = (custId) => {
     setCustomers((prev) =>
@@ -2277,6 +2312,38 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
     );
   };
 
+  const handleCopyProfile = (cust) => {
+    if (!cust) return;
+    const text = `
+=== ADMAFIA CUSTOMER PROFILE DOSSIER ===
+Company / Name: ${cust.companyName || cust.name || 'Not Provided'}
+Contact Person: ${cust.contactPerson || cust.contact || cust.username || 'Not Provided'}
+Username: @${cust.username || 'user'}
+Workspace ID: ${cust.id}
+Mobile Phone: +91 ${cust.phone}
+Work Email: ${cust.email || 'Not Provided'}
+Personal / Backup Email: ${cust.personalEmail || 'Not Provided'}
+Category: ${cust.category || 'General'}
+Industry: ${cust.industry || 'General'}
+Website: ${cust.website || cust.domain || 'Not Configured'}
+Location: ${cust.city || 'Not Specified'}, ${cust.state || 'Not Specified'}, ${cust.country || 'India'}
+KYC Status: ${(cust.kycPercent === 100 || cust.profileStatus === 'complete') ? '100% KYC Complete & Verified' : 'Pending KYC Audit (' + (cust.kycPercent || 25) + '%)'}
+Wallet Balance: ₹${(cust.walletBalance ?? cust.balance ?? 0).toLocaleString('en-IN')}
+Daily Budget Pacing: ₹${(cust.dailyAdSpend ?? cust.dailyPacing ?? 300).toLocaleString('en-IN')}/day
+Total Lifetime Paid: ₹${(cust.amountPaid || cust.totalLifetimePaid || 0).toLocaleString('en-IN')}
+Lead Delivery Status: ${(cust.kycPercent === 100 || cust.profileStatus === 'complete') ? 'Active & Delivering' : 'Pending Verification'}
+Scheduled Active Days: ${Array.isArray(cust.activeDays) ? cust.activeDays.join(', ') : 'MON, TUE, WED, THU, FRI'}
+Registration Date: ${cust.registeredAt || 'Active'}
+Profile Completed At: ${cust.completedAt || 'Recently Active'}
+========================================
+`.trim();
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2500);
+    }
+  };
+
   const completeList = customers.filter((c) => c.kycPercent === 100 || c.profileStatus === 'complete');
   const incompleteList = customers.filter((c) => (c.kycPercent || 0) < 100 && c.profileStatus !== 'complete');
 
@@ -2289,13 +2356,17 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
       (c.companyName || '').toLowerCase().includes(q) ||
       (c.contact || '').toLowerCase().includes(q) ||
       (c.contactPerson || '').toLowerCase().includes(q) ||
+      (c.username || '').toLowerCase().includes(q) ||
       (c.phone || '').includes(q) ||
       (c.email || '').toLowerCase().includes(q) ||
       (c.personalEmail || '').toLowerCase().includes(q) ||
       (c.city || '').toLowerCase().includes(q) ||
       (c.state || '').toLowerCase().includes(q) ||
+      (c.country || '').toLowerCase().includes(q) ||
       (c.category || '').toLowerCase().includes(q) ||
       (c.industry || '').toLowerCase().includes(q) ||
+      (c.website || '').toLowerCase().includes(q) ||
+      (c.domain || '').toLowerCase().includes(q) ||
       (c.id || '').toLowerCase().includes(q)
     );
   });
@@ -2310,8 +2381,20 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
           <div className="desk-breadcrumb">SUB ADMIN &amp; SUPPORT OPERATIONS / DESK 04</div>
           <h1 className="desk-title">Profile Completion</h1>
           <p className="desk-subtitle">
-            KYC compliance audit, corporate identity verification, and multi-channel compliance chase cadences.
+            Authoritative registry of all customer profile intake information (Company Name, Contact Person, Work &amp; Personal Email, City, State, Country, Industry, Website, and KYC Verification).
           </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button
+            type="button"
+            className="desk-action-btn"
+            onClick={handleSyncLatest}
+            disabled={isSyncing}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
+          >
+            <RefreshCw size={15} className={isSyncing ? 'spin-anim' : ''} />
+            <span>{isSyncing ? 'Syncing...' : '↻ Sync Latest Profiles'}</span>
+          </button>
         </div>
       </div>
 
@@ -2333,13 +2416,13 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
           <div className="desk-kpi-sub">Platform compliance score</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">AUDITED TODAY</div>
-          <div className="desk-kpi-val text-emerald">{completeList.length}</div>
-          <div className="desk-kpi-sub">WhatsApp &amp; CRM Syncs</div>
+          <div className="desk-kpi-label">TOTAL PROFILES</div>
+          <div className="desk-kpi-val text-indigo">{customers.length}</div>
+          <div className="desk-kpi-sub">Registered Client Accounts</div>
         </div>
       </div>
 
-      {/* Tab Filter & Search Row */}
+      {/* Tab Filter, View Toggle & Search Row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, margin: '20px 0 16px 0' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
@@ -2395,248 +2478,496 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
           </button>
         </div>
 
-        <div style={{ position: 'relative', minWidth: 280 }}>
-          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-          <input
-            type="text"
-            placeholder="Search by company, name, phone, city..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 14px 8px 36px',
-              borderRadius: 8,
-              border: '1.5px solid #cbd5e1',
-              fontSize: '0.85rem',
-              outline: 'none',
-              background: '#ffffff'
-            }}
-          />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* View Mode Toggle */}
+          <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: 3, borderRadius: 8, border: '1px solid #cbd5e1' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 6,
+                border: 'none',
+                background: viewMode === 'table' ? '#0f172a' : 'transparent',
+                color: viewMode === 'table' ? '#ffffff' : '#475569',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              📑 Master Table
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 6,
+                border: 'none',
+                background: viewMode === 'cards' ? '#0f172a' : 'transparent',
+                color: viewMode === 'cards' ? '#ffffff' : '#475569',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              🗂 Visual Cards
+            </button>
+          </div>
+
+          <div style={{ position: 'relative', minWidth: 260 }}>
+            <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input
+              type="text"
+              placeholder="Search company, contact, phone, email, city..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 14px 8px 36px',
+                borderRadius: 8,
+                border: '1.5px solid #cbd5e1',
+                fontSize: '0.85rem',
+                outline: 'none',
+                background: '#ffffff'
+              }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Profiles Cards List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {displayedList.length === 0 ? (
-          <div style={{ padding: '40px 20px', textAlign: 'center', background: '#ffffff', borderRadius: 16, border: '1.5px solid #e2e8f0', color: '#64748b' }}>
-            <Building2 size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
-            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#334155' }}>No Customer Profiles Found</h4>
-            <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>Try clearing the search query or changing filter tab.</p>
-          </div>
-        ) : (
-          displayedList.map((c) => {
-            const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
-            const companyDisplayName = c.companyName || c.name || 'Corporate Workspace';
-            const contactDisplayName = c.contactPerson || c.contact || c.username || 'Not Set';
-            return (
-              <div
-                key={c.id}
-                className="desk-card-row"
-                style={{
-                  borderLeft: isComplete ? '5px solid #10b981' : '5px solid #f59e0b',
-                  background: '#ffffff',
-                  padding: '22px 26px',
-                  borderRadius: '16px',
-                  border: '1.5px solid #e2e8f0',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.03)'
-                }}
-              >
-                {/* Card Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
-                        {companyDisplayName}
-                      </h3>
-                      <span
-                        style={{
-                          background: isComplete ? '#ecfdf5' : '#fffbeb',
-                          color: isComplete ? '#065f46' : '#b45309',
-                          border: isComplete ? '1px solid #a7f3d0' : '1px solid #fde68a',
-                          padding: '3px 10px',
-                          borderRadius: 9999,
-                          fontSize: '0.78rem',
-                          fontWeight: 800,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 5
-                        }}
-                      >
-                        {isComplete ? '✓ 100% KYC Audit Passed & Verified' : '⏳ Action Required: Profile Audit Incomplete'}
-                      </span>
-                      <span
-                        style={{
-                          background: '#f1f5f9',
-                          color: '#475569',
-                          padding: '3px 8px',
-                          borderRadius: 6,
-                          fontSize: '0.76rem',
-                          fontWeight: 700
-                        }}
-                      >
-                        Category: {c.category || 'Other'}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.84rem', color: '#64748b', marginTop: 4 }}>
-                      Workspace ID: <code>{c.id}</code> • Registered Phone: <strong style={{ color: '#0f172a' }}>+91 {c.phone}</strong> • Completed: {c.completedAt || c.registeredAt || 'Recently Active'}
-                    </div>
-                  </div>
+      {/* VIEW 1: MASTER TABLE VIEW (Default) */}
+      {viewMode === 'table' && (
+        <div className="desk-table-card">
+          <table className="desk-table">
+            <thead>
+              <tr>
+                <th>Company &amp; Workspace</th>
+                <th>Contact Person &amp; Mobile</th>
+                <th>Work &amp; Backup Email</th>
+                <th>Category &amp; Industry</th>
+                <th>Location (City, State)</th>
+                <th>Website</th>
+                <th>KYC Audit Status</th>
+                <th style={{ textAlign: 'right' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayedList.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                    <Building2 size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
+                    <div style={{ fontWeight: 700, color: '#334155' }}>No Customer Profiles Found</div>
+                    <div style={{ fontSize: '0.84rem' }}>Try clearing the search query or changing filter tab.</div>
+                  </td>
+                </tr>
+              ) : (
+                displayedList.map((c) => {
+                  const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
+                  const companyDisplayName = c.companyName || c.name || 'Corporate Workspace';
+                  const contactDisplayName = c.contactPerson || c.contact || c.username || 'Not Set';
+                  const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
 
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '1.45rem', fontWeight: 800, color: isComplete ? '#059669' : (c.kycPercent >= 50 ? '#d97706' : '#e11d48') }}>
-                      {isComplete ? '100%' : `${c.kycPercent || 25}%`}
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
-                      Audit Score
-                    </div>
-                  </div>
-                </div>
+                  return (
+                    <tr key={c.id}>
+                      {/* 1. Company & Workspace */}
+                      <td>
+                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>
+                          {companyDisplayName}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                          <span style={{ fontWeight: 700, color: '#4f46e5', background: '#eef2ff', padding: '1px 6px', borderRadius: 4, fontSize: '0.74rem' }}>
+                            @{c.username || 'user'}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
+                            {c.id}
+                          </span>
+                        </div>
+                      </td>
 
-                {/* Complete Organization & Contact Details Dossier Grid */}
+                      {/* 2. Contact Person & Mobile */}
+                      <td>
+                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.90rem' }}>
+                          {contactDisplayName}
+                        </div>
+                        <div style={{ fontWeight: 800, color: '#059669', fontFamily: 'monospace', fontSize: '0.88rem', marginTop: 2 }}>
+                          +91 {cleanPhone || c.phone}
+                        </div>
+                      </td>
+
+                      {/* 3. Work & Backup Email */}
+                      <td>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#0f172a' }}>
+                          {c.email ? (
+                            <a href={`mailto:${c.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
+                              {c.email}
+                            </a>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Not Provided</span>
+                          )}
+                        </div>
+                        {c.personalEmail && (
+                          <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                            Backup: {c.personalEmail}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 4. Category & Industry */}
+                      <td>
+                        <span
+                          style={{
+                            background: '#f1f5f9',
+                            color: '#334155',
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            display: 'inline-block'
+                          }}
+                        >
+                          {c.category || 'General'}
+                        </span>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                          {c.industry || 'Standard Niche'}
+                        </div>
+                      </td>
+
+                      {/* 5. Location (City, State) */}
+                      <td>
+                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.88rem' }}>
+                          {c.city ? `${c.city}, ` : ''}{c.state || 'Maharashtra'}
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                          {c.country || 'India'}
+                        </div>
+                      </td>
+
+                      {/* 6. Website */}
+                      <td>
+                        {c.website || c.domain ? (
+                          <a
+                            href={c.website?.startsWith('http') ? c.website : `https://${c.website || c.domain}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600, fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                          >
+                            <Globe size={13} /> {c.website || c.domain} ↗
+                          </a>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '0.80rem' }}>—</span>
+                        )}
+                      </td>
+
+                      {/* 7. KYC Audit Status */}
+                      <td>
+                        <span
+                          style={{
+                            background: isComplete ? '#ecfdf5' : '#fffbeb',
+                            color: isComplete ? '#047857' : '#b45309',
+                            border: isComplete ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                            padding: '3px 10px',
+                            borderRadius: 9999,
+                            fontSize: '0.76rem',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                        >
+                          {isComplete ? '✓ 100% KYC Complete' : `⏳ Incomplete (${c.kycPercent || 25}%)`}
+                        </span>
+                      </td>
+
+                      {/* 8. Actions (Details Button) */}
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
+                          {/* 1. Prominent Details Button */}
+                          <button
+                            type="button"
+                            className="sales-btn-primary"
+                            style={{
+                              padding: '6px 14px',
+                              fontSize: '0.82rem',
+                              fontWeight: 800,
+                              background: '#4f46e5',
+                              borderColor: '#4338ca',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              boxShadow: '0 2px 6px rgba(79, 70, 229, 0.25)',
+                              cursor: 'pointer'
+                            }}
+                            title="View Complete Profile Dossier"
+                            onClick={() => setSelectedProfileCust(c)}
+                          >
+                            <Eye size={14} /> Details
+                          </button>
+
+                          {/* WhatsApp Shortcut */}
+                          <a
+                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20we%20reviewed%20your%20AdMafia%20business%20profile.`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="desk-action-btn"
+                            style={{ padding: '6px 9px', textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}
+                            title="Open WhatsApp"
+                          >
+                            <MessageSquare size={14} color="#059669" />
+                          </a>
+
+                          {/* Direct Call Shortcut */}
+                          <a
+                            href={`tel:${cleanPhone}`}
+                            className="desk-action-btn"
+                            style={{ padding: '6px 9px', textDecoration: 'none', background: '#f8fafc', color: '#0f172a', borderColor: '#cbd5e1' }}
+                            title="Call Partner"
+                          >
+                            <Phone size={14} color="#0284c7" />
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* VIEW 2: VISUAL CARDS VIEW */}
+      {viewMode === 'cards' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {displayedList.length === 0 ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', background: '#ffffff', borderRadius: 16, border: '1.5px solid #e2e8f0', color: '#64748b' }}>
+              <Building2 size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
+              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#334155' }}>No Customer Profiles Found</h4>
+              <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>Try clearing the search query or changing filter tab.</p>
+            </div>
+          ) : (
+            displayedList.map((c) => {
+              const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
+              const companyDisplayName = c.companyName || c.name || 'Corporate Workspace';
+              const contactDisplayName = c.contactPerson || c.contact || c.username || 'Not Set';
+              const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
+
+              return (
                 <div
+                  key={c.id}
+                  className="desk-card-row"
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                    gap: 12,
-                    marginTop: 16,
-                    padding: '16px',
-                    background: '#f8fafc',
-                    borderRadius: 12,
-                    border: '1px solid #edf2f7'
+                    borderLeft: isComplete ? '5px solid #10b981' : '5px solid #f59e0b',
+                    background: '#ffffff',
+                    padding: '22px 26px',
+                    borderRadius: '16px',
+                    border: '1.5px solid #e2e8f0',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.03)'
                   }}
                 >
-                  <div>
-                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person</small>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{contactDisplayName}</div>
-                  </div>
-                  <div>
-                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Business Email</small>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.email || 'Not Provided'}</div>
-                  </div>
-                  <div>
-                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Personal / Backup Email</small>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#334155' }}>{c.personalEmail || 'Not Provided'}</div>
-                  </div>
-                  <div>
-                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone / WhatsApp</small>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#059669' }}>+91 {c.phone}</div>
-                  </div>
-                  <div>
-                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Industry / Niche</small>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.industry || c.category || 'Other'}</div>
-                  </div>
-                  <div>
-                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company Website</small>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#2563eb' }}>
-                      {c.website || c.domain ? (
-                        <a href={c.website?.startsWith('http') ? c.website : `https://${c.website || c.domain}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>
-                          {c.website || c.domain} ↗
-                        </a>
-                      ) : 'Not Configured'}
+                  {/* Card Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                          {companyDisplayName}
+                        </h3>
+                        <span
+                          style={{
+                            background: isComplete ? '#ecfdf5' : '#fffbeb',
+                            color: isComplete ? '#065f46' : '#b45309',
+                            border: isComplete ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                            padding: '3px 10px',
+                            borderRadius: 9999,
+                            fontSize: '0.78rem',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5
+                          }}
+                        >
+                          {isComplete ? '✓ 100% KYC Audit Passed & Verified' : '⏳ Action Required: Profile Audit Incomplete'}
+                        </span>
+                        <span
+                          style={{
+                            background: '#f1f5f9',
+                            color: '#475569',
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            fontSize: '0.76rem',
+                            fontWeight: 700
+                          }}
+                        >
+                          Category: {c.category || 'Other'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.84rem', color: '#64748b', marginTop: 4 }}>
+                        Workspace ID: <code>{c.id}</code> • Registered Phone: <strong style={{ color: '#0f172a' }}>+91 {cleanPhone}</strong> • Completed: {c.completedAt || c.registeredAt || 'Recently Active'}
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Headquarters Location</small>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>
-                      {c.city ? `${c.city}, ` : ''}{c.state ? `${c.state}, ` : ''}{c.country || 'India'}
-                    </div>
-                  </div>
-                  <div>
-                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Wallet Balance &amp; Spend</small>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>
-                      ₹{(c.walletBalance ?? c.balance ?? 0).toLocaleString('en-IN')} <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>(@ ₹{(c.dailyAdSpend ?? c.dailyPacing ?? 300).toLocaleString('en-IN')}/d)</span>
-                    </div>
-                  </div>
-                  <div>
-                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Lead Distribution Status</small>
-                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: isComplete ? '#059669' : '#d97706' }}>
-                      {isComplete ? '● Active & Delivering' : '⏸ Pending Verification'}
-                    </div>
-                  </div>
-                </div>
 
-                {/* 4 Checklist Checkpoints */}
-                <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
-                  <div className="desk-check-item">
-                    <CheckCircle2 size={16} color="#059669" />
-                    <span>1. Company Name &amp; Identity</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '1.45rem', fontWeight: 800, color: isComplete ? '#059669' : (c.kycPercent >= 50 ? '#d97706' : '#e11d48') }}>
+                        {isComplete ? '100%' : `${c.kycPercent || 25}%`}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+                        Audit Score
+                      </div>
+                    </div>
                   </div>
-                  <div className="desk-check-item">
-                    <CheckCircle2 size={16} color={isComplete ? '#059669' : '#d97706'} />
-                    <span>2. Category &amp; Industry Allocation</span>
-                  </div>
-                  <div className="desk-check-item">
-                    <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
-                    <span>3. Administrator WhatsApp &amp; Email</span>
-                  </div>
-                  <div className="desk-check-item">
-                    <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
-                    <span>4. City &amp; Geographic Location</span>
-                  </div>
-                </div>
 
-                {/* Actions Bar */}
-                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {/* Details Button - Opens Comprehensive Customer Dossier Modal */}
-                  <button
-                    type="button"
-                    className="desk-action-btn"
+                  {/* Complete Organization & Contact Details Dossier Grid */}
+                  <div
                     style={{
-                      background: '#4f46e5',
-                      color: '#ffffff',
-                      borderColor: '#4338ca',
-                      fontWeight: 800,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)'
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                      gap: 12,
+                      marginTop: 16,
+                      padding: '16px',
+                      background: '#f8fafc',
+                      borderRadius: 12,
+                      border: '1px solid #edf2f7'
                     }}
-                    onClick={() => setSelectedProfileCust(c)}
                   >
-                    <Eye size={14} /> Details
-                  </button>
+                    <div>
+                      <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person</small>
+                      <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{contactDisplayName}</div>
+                    </div>
+                    <div>
+                      <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Business Email</small>
+                      <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.email || 'Not Provided'}</div>
+                    </div>
+                    <div>
+                      <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Personal / Backup Email</small>
+                      <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#334155' }}>{c.personalEmail || 'Not Provided'}</div>
+                    </div>
+                    <div>
+                      <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone / WhatsApp</small>
+                      <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#059669' }}>+91 {cleanPhone}</div>
+                    </div>
+                    <div>
+                      <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Industry / Niche</small>
+                      <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.industry || c.category || 'Other'}</div>
+                    </div>
+                    <div>
+                      <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company Website</small>
+                      <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#2563eb' }}>
+                        {c.website || c.domain ? (
+                          <a href={c.website?.startsWith('http') ? c.website : `https://${c.website || c.domain}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>
+                            {c.website || c.domain} ↗
+                          </a>
+                        ) : 'Not Configured'}
+                      </div>
+                    </div>
+                    <div>
+                      <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Headquarters Location</small>
+                      <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>
+                        {c.city ? `${c.city}, ` : ''}{c.state ? `${c.state}, ` : ''}{c.country || 'India'}
+                      </div>
+                    </div>
+                    <div>
+                      <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Wallet Balance &amp; Spend</small>
+                      <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>
+                        ₹{(c.walletBalance ?? c.balance ?? 0).toLocaleString('en-IN')} <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>(@ ₹{(c.dailyAdSpend ?? c.dailyPacing ?? 300).toLocaleString('en-IN')}/d)</span>
+                      </div>
+                    </div>
+                    <div>
+                      <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Lead Distribution Status</small>
+                      <div style={{ fontSize: '0.94rem', fontWeight: 700, color: isComplete ? '#059669' : '#d97706' }}>
+                        {isComplete ? '● Active & Delivering' : '⏸ Pending Verification'}
+                      </div>
+                    </div>
+                  </div>
 
-                  <a
-                    href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20your%20AdMafia%20business%20profile%20is%20now%20reviewed.`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="desk-action-btn"
-                    style={{ textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}
-                  >
-                    <MessageSquare size={14} color="#059669" /> WhatsApp Partner Desk
-                  </a>
+                  {/* 4 Checklist Checkpoints */}
+                  <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                    <div className="desk-check-item">
+                      <CheckCircle2 size={16} color="#059669" />
+                      <span>1. Company Name &amp; Identity</span>
+                    </div>
+                    <div className="desk-check-item">
+                      <CheckCircle2 size={16} color={isComplete ? '#059669' : '#d97706'} />
+                      <span>2. Category &amp; Industry Allocation</span>
+                    </div>
+                    <div className="desk-check-item">
+                      <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
+                      <span>3. Administrator WhatsApp &amp; Email</span>
+                    </div>
+                    <div className="desk-check-item">
+                      <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
+                      <span>4. City &amp; Geographic Location</span>
+                    </div>
+                  </div>
 
-                  <button
-                    type="button"
-                    className="desk-action-btn"
-                    onClick={() => alert(`Compliance dossier dispatched for ${companyDisplayName} to ${c.email || 'customer'}!`)}
-                  >
-                    <Send size={14} /> Send Certificate
-                  </button>
-
-                  {!isComplete && (
+                  {/* Actions Bar */}
+                  <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {/* Details Button - Opens Comprehensive Customer Dossier Modal */}
                     <button
                       type="button"
-                      className="sales-btn-primary"
-                      style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-                      onClick={() => handleToggleCheck(c.id)}
+                      className="desk-action-btn"
+                      style={{
+                        background: '#4f46e5',
+                        color: '#ffffff',
+                        borderColor: '#4338ca',
+                        fontWeight: 800,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)'
+                      }}
+                      onClick={() => setSelectedProfileCust(c)}
                     >
-                      <Check size={14} /> Mark Step Verified (+25%)
+                      <Eye size={14} /> Details
                     </button>
-                  )}
+
+                    <a
+                      href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20your%20AdMafia%20business%20profile%20is%20now%20reviewed.`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="desk-action-btn"
+                      style={{ textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}
+                    >
+                      <MessageSquare size={14} color="#059669" /> WhatsApp Partner Desk
+                    </a>
+
+                    <button
+                      type="button"
+                      className="desk-action-btn"
+                      onClick={() => alert(`Compliance dossier dispatched for ${companyDisplayName} to ${c.email || 'customer'}!`)}
+                    >
+                      <Send size={14} /> Send Certificate
+                    </button>
+
+                    {!isComplete && (
+                      <button
+                        type="button"
+                        className="sales-btn-primary"
+                        style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                        onClick={() => handleToggleCheck(c.id)}
+                      >
+                        <Check size={14} /> Mark Step Verified (+25%)
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* Comprehensive Customer Profile Details Modal (Popup) */}
       {selectedProfileCust && (
         <div className="sales-modal-overlay" onClick={() => setSelectedProfileCust(null)}>
           <div
             className="sales-modal-card"
-            style={{ maxWidth: 840, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
+            style={{ maxWidth: 860, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -2644,7 +2975,7 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                   <span className="sales-dept-badge" style={{ background: '#e0e7ff', color: '#4338ca', fontWeight: 800 }}>
-                    Customer Profile Dossier
+                    Customer Profile 360° Dossier
                   </span>
                   <span
                     style={{
@@ -2756,13 +3087,17 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone / WhatsApp Number</div>
                     <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#059669', marginTop: 2 }}>
-                      +91 {selectedProfileCust.phone}
+                      +91 {String(selectedProfileCust.phone || '').replace(/\D/g, '').slice(-10)}
                     </div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Business Email</div>
                     <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
-                      {selectedProfileCust.email || 'Not Provided'}
+                      {selectedProfileCust.email ? (
+                        <a href={`mailto:${selectedProfileCust.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
+                          {selectedProfileCust.email}
+                        </a>
+                      ) : 'Not Provided'}
                     </div>
                   </div>
                   <div>
@@ -2870,9 +3205,28 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
             </div>
 
             {/* Modal Actions Footer */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 16, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 16, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', alignItems: 'center' }}>
+              {/* Copy Profile Details to Clipboard */}
+              <button
+                type="button"
+                className="desk-action-btn"
+                onClick={() => handleCopyProfile(selectedProfileCust)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontWeight: 700,
+                  background: copyFeedback ? '#ecfdf5' : '#f8fafc',
+                  color: copyFeedback ? '#065f46' : '#334155',
+                  borderColor: copyFeedback ? '#a7f3d0' : '#cbd5e1'
+                }}
+              >
+                <Copy size={14} />
+                <span>{copyFeedback ? '✓ Copied to Clipboard!' : 'Copy Dossier'}</span>
+              </button>
+
               <a
-                href={`https://wa.me/91${selectedProfileCust.phone}?text=Hello%20${encodeURIComponent(selectedProfileCust.contactPerson || selectedProfileCust.contact || selectedProfileCust.name || 'Partner')},%20we%20reviewed%20your%20AdMafia%20business%20profile.`}
+                href={`https://wa.me/91${String(selectedProfileCust.phone || '').replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedProfileCust.contactPerson || selectedProfileCust.contact || selectedProfileCust.name || 'Partner')},%20we%20reviewed%20your%20AdMafia%20business%20profile.`}
                 target="_blank"
                 rel="noreferrer"
                 className="desk-action-btn"
@@ -2880,6 +3234,15 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
               >
                 <MessageSquare size={14} /> Open WhatsApp Chat
               </a>
+
+              <a
+                href={`tel:${String(selectedProfileCust.phone || '').replace(/\D/g, '').slice(-10)}`}
+                className="desk-action-btn"
+                style={{ textDecoration: 'none', background: '#0284c7', color: '#ffffff', borderColor: '#0369a1', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Phone size={14} /> Call Partner
+              </a>
+
               {!(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') && (
                 <button
                   type="button"
@@ -2890,6 +3253,7 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
                   <Check size={14} /> Mark Profile 100% Verified
                 </button>
               )}
+
               <button
                 type="button"
                 className="desk-action-btn"
