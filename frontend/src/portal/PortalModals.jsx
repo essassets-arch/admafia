@@ -1007,15 +1007,6 @@ export function SetDailyLimitModal({
     }
 
     if (selectedDays.includes(dayCode)) {
-      if (selectedDays.length <= 1) {
-        Swal.fire({
-          icon: 'warning',
-          title: 'Minimum 1 Active Day Required',
-          text: 'At least one day must remain selected for marketing pacing schedule.',
-          confirmButtonColor: '#4f46e5',
-        });
-        return;
-      }
       setSelectedDays(selectedDays.filter((d) => d !== dayCode));
     } else {
       setSelectedDays([...selectedDays, dayCode]);

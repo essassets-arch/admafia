@@ -208,15 +208,6 @@ export default function LeadHubOverview({
     let shouldActivate = false;
 
     if (activeDays.includes(code)) {
-      if (activeDays.length <= 1) {
-        Swal.fire({
-          icon: 'warning',
-          title: 'Minimum 1 Active Day Required',
-          text: 'At least one day must remain selected for marketing pacing schedule.',
-          confirmButtonColor: '#4f46e5',
-        });
-        return;
-      }
       next = activeDays.filter((d) => d !== code);
     } else {
       next = [...activeDays, code];
@@ -789,8 +780,18 @@ export default function LeadHubOverview({
 
                   {/* Bottom Status Wrap */}
                   <div className="day-bottom-status-wrap">
-                    {isSelected ? (
-                      <div className="day-check-circle" title={isBooked ? `${d.label} (${d.dateFormatted}) is marketing booked` : `${d.label} (${d.dateFormatted}) is selected & scheduled`}>
+                    {isBooked ? (
+                      <div className="day-check-circle is-booked-lock-pill" style={{ background: '#059669', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px', padding: '0 6px', width: 'auto', minWidth: '38px', borderRadius: '9999px', height: '22px' }} title={`${d.label} (${d.dateFormatted}) is marketing booked & locked`}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.6">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                      </div>
+                    ) : isSelected ? (
+                      <div className="day-check-circle" title={`Click to deselect ${d.label} (${d.dateFormatted})`}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
