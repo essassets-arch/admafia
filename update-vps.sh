@@ -15,9 +15,10 @@ echo "======================================================================"
 
 cd "$APP_DIR"
 
-# 1. Pull latest commits from GitHub
+# 1. Pull latest commits from GitHub (Clean discard of local build artifacts)
 echo "📥 1/4 Pulling latest changes from GitHub (main)..."
-git pull origin main
+git fetch origin main
+git reset --hard origin/main
 
 # 2. Build Frontend Production Distribution (Removes old cache and rebuilds dist)
 echo "🔨 2/4 Building frontend production assets..."
