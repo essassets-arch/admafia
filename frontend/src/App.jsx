@@ -335,6 +335,24 @@ export default function App() {
     // 8. Auth
     if (h.includes('#auth') || p.startsWith('/auth')) return 'auth';
 
+    // 9. Root Landing / Homepage Check:
+    // If the customer has already registered or logged in, navigate straight to their Dashboard!
+    // Per User Request: "https://admafia.marketing/ in this if already created account or login so just show dashbaord not again button"
+    if ((p === '/' || p === '') && (!h || h === '' || h === '#')) {
+      try {
+        const raw = localStorage.getItem('growthline_active_user');
+        if (raw) {
+          const u = JSON.parse(raw);
+          if (u && (u.companyName || u.name || u.phone || u.username)) {
+            try {
+              window.history.replaceState({}, '', '/app/lead#app/dashboard');
+            } catch (e) {}
+            return 'portal';
+          }
+        }
+      } catch (e) {}
+    }
+
     return 'landing';
   };
 
@@ -1014,9 +1032,19 @@ export default function App() {
                 Generate customer enquiries through targeted Meta Ads campaigns. Reach potential customers, receive their names and phone numbers, and convert enquiries into business.
               </p>
               <div className="row">
-                <a className="btn" href="#contact">
-                  Start Advertising at ₹300/Day
-                </a>
+                {currentUser ? (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => navigateTo('/app/lead#app/dashboard', 'portal')}
+                  >
+                    Open Client Dashboard →
+                  </button>
+                ) : (
+                  <a className="btn" href="#contact">
+                    Start Advertising at ₹300/Day
+                  </a>
+                )}
                 <a className="btn alt" href="#how">
                   See how it works
                 </a>
@@ -1090,9 +1118,19 @@ export default function App() {
               <strong>Note:</strong> ₹300/day is the minimum advertising budget, not a guaranteed cost per lead. Lead volume and results depend on campaign performance, competition and audience response. Any additional management fees are disclosed separately.
             </p>
             <p style={{ marginTop: '28px' }}>
-              <a className="btn dark" href="#contact">
-                Launch Your Campaign at ₹300/Day
-              </a>
+              {currentUser ? (
+                <button
+                  type="button"
+                  className="btn dark"
+                  onClick={() => navigateTo('/app/lead#app/dashboard', 'portal')}
+                >
+                  Open Client Dashboard →
+                </button>
+              ) : (
+                <a className="btn dark" href="#contact">
+                  Launch Your Campaign at ₹300/Day
+                </a>
+              )}
             </p>
           </div>
         </section>
@@ -1126,9 +1164,19 @@ export default function App() {
               </li>
             </ul>
             <p style={{ marginTop: '28px' }}>
-              <a className="btn dark" href="#contact">
-                Start Generating Leads
-              </a>
+              {currentUser ? (
+                <button
+                  type="button"
+                  className="btn dark"
+                  onClick={() => navigateTo('/app/lead#app/dashboard', 'portal')}
+                >
+                  Open Client Dashboard →
+                </button>
+              ) : (
+                <a className="btn dark" href="#contact">
+                  Start Generating Leads
+                </a>
+              )}
             </p>
           </div>
         </section>

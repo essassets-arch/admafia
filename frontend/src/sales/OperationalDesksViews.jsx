@@ -25,6 +25,7 @@ import {
   Eye,
   AlertCircle,
   Building,
+  Building2,
   ChevronRight,
   Filter,
   FileText,
@@ -34,8 +35,13 @@ import {
   UserCheck,
   Sparkles,
   BadgeCheck,
+  MapPin,
+  Mail,
+  Globe,
+  User,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
+import adminAuthApi from '../services/adminAuthApi';
 
 const formatINR = (val) =>
   new Intl.NumberFormat('en-IN', {
@@ -146,6 +152,8 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
   const [search, setSearch] = useState('');
   const [selectedCust, setSelectedCust] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   // Add Lead Modal State for http://localhost:5173/sales#register
   const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
@@ -159,6 +167,45 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
     budget: '₹1.5L – ₹3.5L',
   });
   const [leadSuccessToast, setLeadSuccessToast] = useState(null);
+
+  const handleToggleCustomerPassword = async () => {
+    if (showPassword) {
+      setShowPassword(false);
+      setPasswordError('');
+      return;
+    }
+
+    if (selectedCust?.password && !/^[\u2022*]+$/.test(selectedCust.password)) {
+      setShowPassword(true);
+      return;
+    }
+
+    setPasswordLoading(true);
+    setPasswordError('');
+    try {
+      const token = adminAuthApi.getToken();
+      if (!token) throw new Error('Your admin session has expired. Please sign in again.');
+      // The backend password lookup accepts a phone number or username, not the CRM row ID.
+      const identifier = encodeURIComponent(selectedCust.phone || selectedCust.username || selectedCust.id);
+      const response = await fetch(`/api/admin/customer-password/${identifier}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok || !data.password) {
+        throw new Error(data.error || 'Could not retrieve this customer password.');
+      }
+      const updatedCustomer = { ...selectedCust, password: data.password };
+      setSelectedCust(updatedCustomer);
+      setCustomers((prev) => prev.map((customer) =>
+        customer.id === updatedCustomer.id ? { ...customer, password: data.password } : customer
+      ));
+      setShowPassword(true);
+    } catch (error) {
+      setPasswordError(error.message || 'Could not retrieve this customer password.');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   // Phone sanitization & validation (0/10 digits, starts with 6, 7, 8, or 9)
   const handlePhoneChange = (e) => {
@@ -788,6 +835,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                         onClick={() => {
                           setSelectedCust(c);
                           setShowPassword(false);
+                          setPasswordError('');
                         }}
                       >
                         <Eye size={13} /> 360°
@@ -851,12 +899,17 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
+                      onClick={handleToggleCustomerPassword}
+                      disabled={passwordLoading}
+                      aria-label={showPassword ? 'Hide customer password' : 'Reveal customer password'}
                       style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
                     >
-                      {showPassword ? 'Hide' : 'Reveal'}
+                      {passwordLoading ? 'Loading…' : showPassword ? 'Hide' : 'Reveal'}
                     </button>
                   </div>
+                  {passwordError && (
+                    <div role="alert" style={{ marginTop: 4, color: '#b91c1c', fontSize: '0.72rem' }}>{passwordError}</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2187,6 +2240,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
    ========================================================================== */
 export function ProfileCompletionDesk({ customers, setCustomers }) {
   const [filterTab, setFilterTab] = useState('all'); // 'all' | 'complete' | 'incomplete'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProfileCust, setSelectedProfileCust] = useState(null);
 
   const handleToggleCheck = (custId) => {
     setCustomers((prev) =>
@@ -2197,7 +2252,27 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
         try {
           crmApi.patchCustomer(c.id, { profileStatus: newProfileStatus, kycPercent: newPercent });
         } catch (e) {}
-        return { ...c, kycPercent: newPercent, profileStatus: newProfileStatus, verified: newPercent === 100 };
+        const updated = { ...c, kycPercent: newPercent, profileStatus: newProfileStatus, verified: newPercent === 100 };
+        if (selectedProfileCust?.id === custId) {
+          setSelectedProfileCust(updated);
+        }
+        return updated;
+      })
+    );
+  };
+
+  const handleMarkComplete = (custId) => {
+    setCustomers((prev) =>
+      prev.map((c) => {
+        if (c.id !== custId) return c;
+        try {
+          crmApi.patchCustomer(c.id, { profileStatus: 'complete', kycPercent: 100, verified: true });
+        } catch (e) {}
+        const updated = { ...c, kycPercent: 100, profileStatus: 'complete', verified: true };
+        if (selectedProfileCust?.id === custId) {
+          setSelectedProfileCust(updated);
+        }
+        return updated;
       })
     );
   };
@@ -2205,7 +2280,26 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
   const completeList = customers.filter((c) => c.kycPercent === 100 || c.profileStatus === 'complete');
   const incompleteList = customers.filter((c) => (c.kycPercent || 0) < 100 && c.profileStatus !== 'complete');
 
-  const displayedList = filterTab === 'complete' ? completeList : (filterTab === 'incomplete' ? incompleteList : customers);
+  const tabFiltered = filterTab === 'complete' ? completeList : (filterTab === 'incomplete' ? incompleteList : customers);
+  const displayedList = tabFiltered.filter((c) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.companyName || '').toLowerCase().includes(q) ||
+      (c.contact || '').toLowerCase().includes(q) ||
+      (c.contactPerson || '').toLowerCase().includes(q) ||
+      (c.phone || '').includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.personalEmail || '').toLowerCase().includes(q) ||
+      (c.city || '').toLowerCase().includes(q) ||
+      (c.state || '').toLowerCase().includes(q) ||
+      (c.category || '').toLowerCase().includes(q) ||
+      (c.industry || '').toLowerCase().includes(q) ||
+      (c.id || '').toLowerCase().includes(q)
+    );
+  });
+
   const avgCompletion = customers.length ? Math.round(customers.reduce((a, b) => a + (b.kycPercent || 0), 0) / customers.length) : 0;
 
   return (
@@ -2245,239 +2339,568 @@ export function ProfileCompletionDesk({ customers, setCustomers }) {
         </div>
       </div>
 
-      {/* Tab Filter Row */}
-      <div style={{ display: 'flex', gap: 10, margin: '20px 0 16px 0', alignItems: 'center' }}>
-        <button
-          type="button"
-          onClick={() => setFilterTab('all')}
-          className={`desk-preset-btn ${filterTab === 'all' ? 'active' : ''}`}
-          style={{
-            background: filterTab === 'all' ? '#0f172a' : '#f8fafc',
-            color: filterTab === 'all' ? '#ffffff' : '#334155',
-            padding: '7px 16px',
-            borderRadius: 8,
-            fontWeight: 700,
-            fontSize: '0.86rem',
-            border: '1.5px solid #cbd5e1',
-            cursor: 'pointer'
-          }}
-        >
-          All Workspaces ({customers.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setFilterTab('complete')}
-          className={`desk-preset-btn ${filterTab === 'complete' ? 'active' : ''}`}
-          style={{
-            background: filterTab === 'complete' ? '#059669' : '#ecfdf5',
-            color: filterTab === 'complete' ? '#ffffff' : '#047857',
-            padding: '7px 16px',
-            borderRadius: 8,
-            fontWeight: 700,
-            fontSize: '0.86rem',
-            border: '1.5px solid #a7f3d0',
-            cursor: 'pointer'
-          }}
-        >
-          ✓ Completed Profiles ({completeList.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setFilterTab('incomplete')}
-          className={`desk-preset-btn ${filterTab === 'incomplete' ? 'active' : ''}`}
-          style={{
-            background: filterTab === 'incomplete' ? '#d97706' : '#fffbeb',
-            color: filterTab === 'incomplete' ? '#ffffff' : '#b45309',
-            padding: '7px 16px',
-            borderRadius: 8,
-            fontWeight: 700,
-            fontSize: '0.86rem',
-            border: '1.5px solid #fde68a',
-            cursor: 'pointer'
-          }}
-        >
-          ⏳ Pending KYC Audit ({incompleteList.length})
-        </button>
+      {/* Tab Filter & Search Row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, margin: '20px 0 16px 0' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setFilterTab('all')}
+            className={`desk-preset-btn ${filterTab === 'all' ? 'active' : ''}`}
+            style={{
+              background: filterTab === 'all' ? '#0f172a' : '#f8fafc',
+              color: filterTab === 'all' ? '#ffffff' : '#334155',
+              padding: '7px 16px',
+              borderRadius: 8,
+              fontWeight: 700,
+              fontSize: '0.86rem',
+              border: '1.5px solid #cbd5e1',
+              cursor: 'pointer'
+            }}
+          >
+            All Workspaces ({customers.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterTab('complete')}
+            className={`desk-preset-btn ${filterTab === 'complete' ? 'active' : ''}`}
+            style={{
+              background: filterTab === 'complete' ? '#059669' : '#ecfdf5',
+              color: filterTab === 'complete' ? '#ffffff' : '#047857',
+              padding: '7px 16px',
+              borderRadius: 8,
+              fontWeight: 700,
+              fontSize: '0.86rem',
+              border: '1.5px solid #a7f3d0',
+              cursor: 'pointer'
+            }}
+          >
+            ✓ Completed Profiles ({completeList.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterTab('incomplete')}
+            className={`desk-preset-btn ${filterTab === 'incomplete' ? 'active' : ''}`}
+            style={{
+              background: filterTab === 'incomplete' ? '#d97706' : '#fffbeb',
+              color: filterTab === 'incomplete' ? '#ffffff' : '#b45309',
+              padding: '7px 16px',
+              borderRadius: 8,
+              fontWeight: 700,
+              fontSize: '0.86rem',
+              border: '1.5px solid #fde68a',
+              cursor: 'pointer'
+            }}
+          >
+            ⏳ Pending KYC Audit ({incompleteList.length})
+          </button>
+        </div>
+
+        <div style={{ position: 'relative', minWidth: 280 }}>
+          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <input
+            type="text"
+            placeholder="Search by company, name, phone, city..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 14px 8px 36px',
+              borderRadius: 8,
+              border: '1.5px solid #cbd5e1',
+              fontSize: '0.85rem',
+              outline: 'none',
+              background: '#ffffff'
+            }}
+          />
+        </div>
       </div>
 
       {/* Profiles Cards List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {displayedList.map((c) => {
-          const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
-          return (
-            <div
-              key={c.id}
-              className="desk-card-row"
-              style={{
-                borderLeft: isComplete ? '5px solid #10b981' : '5px solid #f59e0b',
-                background: '#ffffff',
-                padding: '22px 26px',
-                borderRadius: '16px',
-                border: '1.5px solid #e2e8f0',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.03)'
-              }}
-            >
-              {/* Card Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
-                      {c.name || c.companyName || 'Corporate Workspace'}
-                    </h3>
-                    <span
-                      style={{
-                        background: isComplete ? '#ecfdf5' : '#fffbeb',
-                        color: isComplete ? '#065f46' : '#b45309',
-                        border: isComplete ? '1px solid #a7f3d0' : '1px solid #fde68a',
-                        padding: '3px 10px',
-                        borderRadius: 9999,
-                        fontSize: '0.78rem',
-                        fontWeight: 800,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 5
-                      }}
-                    >
-                      {isComplete ? '✓ 100% KYC Audit Passed & Verified' : '⏳ Action Required: Profile Audit Incomplete'}
-                    </span>
-                    <span
-                      style={{
-                        background: '#f1f5f9',
-                        color: '#475569',
-                        padding: '3px 8px',
-                        borderRadius: 6,
-                        fontSize: '0.76rem',
-                        fontWeight: 700
-                      }}
-                    >
-                      Category: {c.category || 'Other'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.84rem', color: '#64748b', marginTop: 4 }}>
-                    Workspace ID: <code>{c.id}</code> • Registered Phone: <strong style={{ color: '#0f172a' }}>+91 {c.phone}</strong> • Completed: {c.completedAt || 'Recently Active'}
-                  </div>
-                </div>
-
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '1.45rem', fontWeight: 800, color: isComplete ? '#059669' : (c.kycPercent >= 50 ? '#d97706' : '#e11d48') }}>
-                    {isComplete ? '100%' : `${c.kycPercent || 25}%`}
-                  </div>
-                  <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
-                    Audit Score
-                  </div>
-                </div>
-              </div>
-
-              {/* Complete Organization & Contact Details Dossier Grid */}
+        {displayedList.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', background: '#ffffff', borderRadius: 16, border: '1.5px solid #e2e8f0', color: '#64748b' }}>
+            <Building2 size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
+            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#334155' }}>No Customer Profiles Found</h4>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>Try clearing the search query or changing filter tab.</p>
+          </div>
+        ) : (
+          displayedList.map((c) => {
+            const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
+            const companyDisplayName = c.companyName || c.name || 'Corporate Workspace';
+            const contactDisplayName = c.contactPerson || c.contact || c.username || 'Not Set';
+            return (
               <div
+                key={c.id}
+                className="desk-card-row"
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                  gap: 12,
-                  marginTop: 16,
-                  padding: '16px',
-                  background: '#f8fafc',
-                  borderRadius: 12,
-                  border: '1px solid #edf2f7'
+                  borderLeft: isComplete ? '5px solid #10b981' : '5px solid #f59e0b',
+                  background: '#ffffff',
+                  padding: '22px 26px',
+                  borderRadius: '16px',
+                  border: '1.5px solid #e2e8f0',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.03)'
                 }}
               >
-                <div>
-                  <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person</small>
-                  <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.contact || c.contactPerson || c.username || 'Not Set'}</div>
-                </div>
-                <div>
-                  <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Business Email</small>
-                  <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.email || 'Not Provided'}</div>
-                </div>
-                <div>
-                  <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Personal / Backup Email</small>
-                  <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#334155' }}>{c.personalEmail || 'Not Provided'}</div>
-                </div>
-                <div>
-                  <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone / WhatsApp</small>
-                  <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#059669' }}>+91 {c.phone}</div>
-                </div>
-                <div>
-                  <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Industry / Niche</small>
-                  <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.industry || c.category || 'Other'}</div>
-                </div>
-                <div>
-                  <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company Website</small>
-                  <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#2563eb' }}>
-                    {c.website || c.domain ? (
-                      <a href={c.website || c.domain} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>
-                        {c.website || c.domain} ↗
-                      </a>
-                    ) : 'Not Configured'}
+                {/* Card Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                        {companyDisplayName}
+                      </h3>
+                      <span
+                        style={{
+                          background: isComplete ? '#ecfdf5' : '#fffbeb',
+                          color: isComplete ? '#065f46' : '#b45309',
+                          border: isComplete ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                          padding: '3px 10px',
+                          borderRadius: 9999,
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                      >
+                        {isComplete ? '✓ 100% KYC Audit Passed & Verified' : '⏳ Action Required: Profile Audit Incomplete'}
+                      </span>
+                      <span
+                        style={{
+                          background: '#f1f5f9',
+                          color: '#475569',
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          fontSize: '0.76rem',
+                          fontWeight: 700
+                        }}
+                      >
+                        Category: {c.category || 'Other'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.84rem', color: '#64748b', marginTop: 4 }}>
+                      Workspace ID: <code>{c.id}</code> • Registered Phone: <strong style={{ color: '#0f172a' }}>+91 {c.phone}</strong> • Completed: {c.completedAt || c.registeredAt || 'Recently Active'}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Headquarters Location</small>
-                  <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>
-                    {c.city ? `${c.city}, ` : ''}{c.state ? `${c.state}, ` : ''}{c.country || 'India'}
-                  </div>
-                </div>
-                <div>
-                  <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Lead Distribution Status</small>
-                  <div style={{ fontSize: '0.94rem', fontWeight: 700, color: isComplete ? '#059669' : '#d97706' }}>
-                    {isComplete ? '● Active & Delivering' : '⏸ Pending Verification'}
-                  </div>
-                </div>
-              </div>
 
-              {/* 4 Checklist Checkpoints */}
-              <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
-                <div className="desk-check-item">
-                  <CheckCircle2 size={16} color="#059669" />
-                  <span>1. Company Name &amp; Identity</span>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '1.45rem', fontWeight: 800, color: isComplete ? '#059669' : (c.kycPercent >= 50 ? '#d97706' : '#e11d48') }}>
+                      {isComplete ? '100%' : `${c.kycPercent || 25}%`}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Audit Score
+                    </div>
+                  </div>
                 </div>
-                <div className="desk-check-item">
-                  <CheckCircle2 size={16} color={isComplete ? '#059669' : '#d97706'} />
-                  <span>2. Category &amp; Industry Allocation</span>
-                </div>
-                <div className="desk-check-item">
-                  <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
-                  <span>3. Administrator WhatsApp &amp; Email</span>
-                </div>
-                <div className="desk-check-item">
-                  <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
-                  <span>4. City &amp; Geographic Location</span>
-                </div>
-              </div>
 
-              {/* Actions Bar */}
-              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
-                <a
-                  href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(c.contact || 'Partner')},%20your%20Growthline%20business%20profile%20is%20now%20100%%20verified.`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="desk-action-btn"
-                  style={{ textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}
+                {/* Complete Organization & Contact Details Dossier Grid */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: 12,
+                    marginTop: 16,
+                    padding: '16px',
+                    background: '#f8fafc',
+                    borderRadius: 12,
+                    border: '1px solid #edf2f7'
+                  }}
                 >
-                  <MessageSquare size={14} color="#059669" /> WhatsApp Partner Desk
-                </a>
-                <button
-                  type="button"
-                  className="desk-action-btn"
-                  onClick={() => alert(`Compliance dossier dispatched for ${c.name} to ${c.email}!`)}
-                >
-                  <Send size={14} /> Send Compliance Certificate
-                </button>
-                {!isComplete && (
+                  <div>
+                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person</small>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{contactDisplayName}</div>
+                  </div>
+                  <div>
+                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Business Email</small>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.email || 'Not Provided'}</div>
+                  </div>
+                  <div>
+                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Personal / Backup Email</small>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#334155' }}>{c.personalEmail || 'Not Provided'}</div>
+                  </div>
+                  <div>
+                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone / WhatsApp</small>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#059669' }}>+91 {c.phone}</div>
+                  </div>
+                  <div>
+                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Industry / Niche</small>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.industry || c.category || 'Other'}</div>
+                  </div>
+                  <div>
+                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company Website</small>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#2563eb' }}>
+                      {c.website || c.domain ? (
+                        <a href={c.website?.startsWith('http') ? c.website : `https://${c.website || c.domain}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>
+                          {c.website || c.domain} ↗
+                        </a>
+                      ) : 'Not Configured'}
+                    </div>
+                  </div>
+                  <div>
+                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Headquarters Location</small>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>
+                      {c.city ? `${c.city}, ` : ''}{c.state ? `${c.state}, ` : ''}{c.country || 'India'}
+                    </div>
+                  </div>
+                  <div>
+                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Wallet Balance &amp; Spend</small>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>
+                      ₹{(c.walletBalance ?? c.balance ?? 0).toLocaleString('en-IN')} <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>(@ ₹{(c.dailyAdSpend ?? c.dailyPacing ?? 300).toLocaleString('en-IN')}/d)</span>
+                    </div>
+                  </div>
+                  <div>
+                    <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Lead Distribution Status</small>
+                    <div style={{ fontSize: '0.94rem', fontWeight: 700, color: isComplete ? '#059669' : '#d97706' }}>
+                      {isComplete ? '● Active & Delivering' : '⏸ Pending Verification'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4 Checklist Checkpoints */}
+                <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                  <div className="desk-check-item">
+                    <CheckCircle2 size={16} color="#059669" />
+                    <span>1. Company Name &amp; Identity</span>
+                  </div>
+                  <div className="desk-check-item">
+                    <CheckCircle2 size={16} color={isComplete ? '#059669' : '#d97706'} />
+                    <span>2. Category &amp; Industry Allocation</span>
+                  </div>
+                  <div className="desk-check-item">
+                    <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
+                    <span>3. Administrator WhatsApp &amp; Email</span>
+                  </div>
+                  <div className="desk-check-item">
+                    <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
+                    <span>4. City &amp; Geographic Location</span>
+                  </div>
+                </div>
+
+                {/* Actions Bar */}
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {/* Details Button - Opens Comprehensive Customer Dossier Modal */}
                   <button
                     type="button"
-                    className="sales-btn-primary"
-                    style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-                    onClick={() => handleToggleCheck(c.id)}
+                    className="desk-action-btn"
+                    style={{
+                      background: '#4f46e5',
+                      color: '#ffffff',
+                      borderColor: '#4338ca',
+                      fontWeight: 800,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)'
+                    }}
+                    onClick={() => setSelectedProfileCust(c)}
                   >
-                    <Check size={14} /> Mark Step Verified (+25%)
+                    <Eye size={14} /> Details
                   </button>
-                )}
+
+                  <a
+                    href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20your%20AdMafia%20business%20profile%20is%20now%20reviewed.`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="desk-action-btn"
+                    style={{ textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}
+                  >
+                    <MessageSquare size={14} color="#059669" /> WhatsApp Partner Desk
+                  </a>
+
+                  <button
+                    type="button"
+                    className="desk-action-btn"
+                    onClick={() => alert(`Compliance dossier dispatched for ${companyDisplayName} to ${c.email || 'customer'}!`)}
+                  >
+                    <Send size={14} /> Send Certificate
+                  </button>
+
+                  {!isComplete && (
+                    <button
+                      type="button"
+                      className="sales-btn-primary"
+                      style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                      onClick={() => handleToggleCheck(c.id)}
+                    >
+                      <Check size={14} /> Mark Step Verified (+25%)
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Comprehensive Customer Profile Details Modal (Popup) */}
+      {selectedProfileCust && (
+        <div className="sales-modal-overlay" onClick={() => setSelectedProfileCust(null)}>
+          <div
+            className="sales-modal-card"
+            style={{ maxWidth: 840, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: 16, marginBottom: 18 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span className="sales-dept-badge" style={{ background: '#e0e7ff', color: '#4338ca', fontWeight: 800 }}>
+                    Customer Profile Dossier
+                  </span>
+                  <span
+                    style={{
+                      background: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#ecfdf5' : '#fffbeb',
+                      color: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#047857' : '#b45309',
+                      border: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                      padding: '3px 10px',
+                      borderRadius: 9999,
+                      fontSize: '0.76rem',
+                      fontWeight: 800
+                    }}
+                  >
+                    {(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '✓ 100% KYC Audit Complete' : `⏳ Incomplete Audit (${selectedProfileCust.kycPercent || 25}%)`}
+                  </span>
+                  <span
+                    style={{
+                      background: selectedProfileCust.status === 'active' ? '#ecfdf5' : '#fff1f2',
+                      color: selectedProfileCust.status === 'active' ? '#047857' : '#be123c',
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      fontSize: '0.74rem',
+                      fontWeight: 700
+                    }}
+                  >
+                    Account: {selectedProfileCust.status === 'active' ? 'Active' : 'Suspended'}
+                  </span>
+                </div>
+                <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: '#0f172a' }}>
+                  {selectedProfileCust.companyName || selectedProfileCust.name || 'Corporate Workspace'}
+                </h2>
+                <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 4 }}>
+                  Workspace ID: <code>{selectedProfileCust.id}</code> • Registered: {selectedProfileCust.registeredAt || 'Active'}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="desk-close-btn"
+                onClick={() => setSelectedProfileCust(null)}
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Dossier Content - 5 Structured Section Panels */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Panel 1: Business Identity & Commercial Classification */}
+              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <Building2 size={16} color="#4f46e5" />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    1. Business Identity &amp; Industry Classification
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company / Brand Name</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                      {selectedProfileCust.companyName || selectedProfileCust.name || 'Not Specified'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Lead Generation Category</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                      {selectedProfileCust.category || 'IT & Software'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Industry / Specialization</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                      {selectedProfileCust.industry || selectedProfileCust.category || 'General'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company Website / Domain</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#2563eb', marginTop: 2 }}>
+                      {selectedProfileCust.website || selectedProfileCust.domain ? (
+                        <a
+                          href={selectedProfileCust.website?.startsWith('http') ? selectedProfileCust.website : `https://${selectedProfileCust.website || selectedProfileCust.domain}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: '#2563eb', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        >
+                          {selectedProfileCust.website || selectedProfileCust.domain} <ExternalLink size={12} />
+                        </a>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Not Provided</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Panel 2: Authorized Contacts & Administrator Communications */}
+              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <User size={16} color="#059669" />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    2. Authorized Administrator Contacts
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person / Representative</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                      {selectedProfileCust.contactPerson || selectedProfileCust.contact || selectedProfileCust.username || 'Not Specified'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone / WhatsApp Number</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#059669', marginTop: 2 }}>
+                      +91 {selectedProfileCust.phone}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Business Email</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                      {selectedProfileCust.email || 'Not Provided'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Personal / Backup Email</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 600, color: '#334155', marginTop: 2 }}>
+                      {selectedProfileCust.personalEmail || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>None (Optional)</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Panel 3: Geographic Headquarters & Service Jurisdiction */}
+              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <MapPin size={16} color="#d97706" />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    3. Geographic Headquarters &amp; Service Location
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>City / Operational Base</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                      {selectedProfileCust.city || 'Not Specified'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>State / Province</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                      {selectedProfileCust.state || 'Not Specified'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Country</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                      {selectedProfileCust.country || 'India'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Panel 4: Marketing Wallet, Ad Spend & Distribution Eligibility */}
+              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <Wallet size={16} color="#0891b2" />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    4. Marketing Wallet, Budget &amp; Lead Dispatch
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Available Wallet Balance</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: (selectedProfileCust.walletBalance ?? selectedProfileCust.balance ?? 0) > 0 ? '#059669' : '#e11d48', marginTop: 2 }}>
+                      ₹{(selectedProfileCust.walletBalance ?? selectedProfileCust.balance ?? 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Daily Ad Spend Pacing</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
+                      ₹{(selectedProfileCust.dailyAdSpend ?? selectedProfileCust.dailyPacing ?? 300).toLocaleString('en-IN')}<span style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 600 }}>/day</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Total Lifetime Paid</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                      ₹{(selectedProfileCust.amountPaid || selectedProfileCust.totalLifetimePaid || 0).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Lead Distribution Status</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#059669' : '#d97706', marginTop: 2 }}>
+                      {(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '● Active & Delivering Leads' : '⏸ Verification Required'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Panel 5: Verification & Compliance Checkpoints */}
+              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <ShieldCheck size={16} color="#059669" />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    5. Compliance &amp; Verification Ledger
+                  </h4>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: '#1e293b', fontWeight: 600 }}>
+                    <CheckCircle2 size={16} color="#059669" />
+                    <span>Company Name &amp; Workspace Registered</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: '#1e293b', fontWeight: 600 }}>
+                    <CheckCircle2 size={16} color={(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#059669' : '#d97706'} />
+                    <span>Industry &amp; Campaign Category Allocated</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: '#1e293b', fontWeight: 600 }}>
+                    <CheckCircle2 size={16} color={(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#059669' : '#94a3b8'} />
+                    <span>Administrator WhatsApp &amp; Email Contact Verified</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: '#1e293b', fontWeight: 600 }}>
+                    <CheckCircle2 size={16} color={(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#059669' : '#94a3b8'} />
+                    <span>Headquarters City &amp; State Geocoded</span>
+                  </div>
+                </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+
+            {/* Modal Actions Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 16, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+              <a
+                href={`https://wa.me/91${selectedProfileCust.phone}?text=Hello%20${encodeURIComponent(selectedProfileCust.contactPerson || selectedProfileCust.contact || selectedProfileCust.name || 'Partner')},%20we%20reviewed%20your%20AdMafia%20business%20profile.`}
+                target="_blank"
+                rel="noreferrer"
+                className="desk-action-btn"
+                style={{ textDecoration: 'none', background: '#25D366', color: '#ffffff', borderColor: '#22c55e', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <MessageSquare size={14} /> Open WhatsApp Chat
+              </a>
+              {!(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') && (
+                <button
+                  type="button"
+                  className="sales-btn-primary"
+                  onClick={() => handleMarkComplete(selectedProfileCust.id)}
+                  style={{ fontWeight: 700 }}
+                >
+                  <Check size={14} /> Mark Profile 100% Verified
+                </button>
+              )}
+              <button
+                type="button"
+                className="desk-action-btn"
+                onClick={() => setSelectedProfileCust(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
