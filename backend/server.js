@@ -1007,6 +1007,39 @@ app.get('/api/customers/:identifier', async (req, res) => {
   }
 });
 
+// Admin Lookup: Direct Customer Password & Credentials Retrieval
+app.get('/api/admin/customer-password/:identifier', async (req, res) => {
+  try {
+    const rawId = String(req.params.identifier || '').trim();
+    const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
+
+    const lookupRes = await query(
+      `SELECT id, username, phone, email, password_hash, company_name, contact_person
+       FROM customers
+       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($1)
+       LIMIT 1`,
+      [rawId, cleanPhone]
+    );
+
+    if (lookupRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer not found' });
+    }
+
+    const cust = lookupRes.rows[0];
+    res.json({
+      ok: true,
+      id: cust.id,
+      name: cust.company_name || cust.contact_person,
+      username: cust.username,
+      phone: cust.phone,
+      email: cust.email,
+      password: cust.password_hash || 'Password123!',
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.put('/api/customers/:id/profile', async (req, res) => {
   try {
     const rawId = req.params.id;
@@ -1101,6 +1134,7 @@ const handleUpdateCustomerRecord = async (req, res) => {
     const nextKyc = updates.kycPercent !== undefined ? Number(updates.kycPercent) : Number(cust.kyc_percent);
     const nextCompany = updates.companyName || updates.name || cust.company_name;
     const nextWebsite = updates.website ?? updates.domain ?? cust.website;
+    const nextPassword = (updates.password || updates.passwordPlain || updates.passwordHash || '').trim() || cust.password_hash;
 
     await query(
       `UPDATE customers SET
@@ -1111,9 +1145,10 @@ const handleUpdateCustomerRecord = async (req, res) => {
         payment_status = $5,
         kyc_percent = $6,
         verified = (kyc_percent >= 100 OR profile_status = 'complete'),
+        password_hash = $7,
         updated_at = NOW()
-      WHERE id = $7`,
-      [nextCompany, nextWebsite, nextStatus, nextProfile, nextPayment, nextKyc, cust.id]
+      WHERE id = $8`,
+      [nextCompany, nextWebsite, nextStatus, nextProfile, nextPayment, nextKyc, nextPassword, cust.id]
     );
 
     if (
@@ -1179,7 +1214,11 @@ const handleUpdateCustomerRecord = async (req, res) => {
     }
 
     const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
-    res.json({ ok: true, customer: mapCustomerRow(viewRes.rows[0]) });
+    res.json({
+      ok: true,
+      customer: mapCustomerRow(viewRes.rows[0], nextPassword),
+      loginPassword: nextPassword,
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
