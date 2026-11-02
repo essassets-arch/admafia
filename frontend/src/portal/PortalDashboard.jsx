@@ -1596,7 +1596,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 setSelectedLeadForFollowUp(lead || null);
                 setIsScheduleOpen(true);
               }}
-              onOpenAddFunds={() => handleSwitchTab('wallet')}
+              onOpenAddFunds={() => setIsAddFundsOpen(true)}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
               onOpenSetDailyLimit={() => setIsSetDailyLimitOpen(true)}
               onOpenLanguageModal={() => setIsLangOpen(true)}
@@ -1620,7 +1620,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 setSelectedLeadForFollowUp(lead || null);
                 setIsScheduleOpen(true);
               }}
-              onOpenAddFunds={() => handleSwitchTab('wallet')}
+              onOpenAddFunds={() => setIsAddFundsOpen(true)}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
             />
           )}
@@ -1631,7 +1631,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               customer={customer}
               walletBalance={walletBalance}
               onUpdateLead={handleUpdateLead}
-              onOpenAddFunds={() => handleSwitchTab('wallet')}
+              onOpenAddFunds={() => setIsAddFundsOpen(true)}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
             />
           )}

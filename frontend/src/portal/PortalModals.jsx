@@ -535,26 +535,27 @@ export function AddFundsModal({
   walletBalance = 0,
   customer = {},
 }) {
-  const [budget, setBudget] = useState('1000');
-  const [selectedPreset, setSelectedPreset] = useState(1000);
+  const [budget, setBudget] = useState('600');
+  const [selectedPreset, setSelectedPreset] = useState(600);
   const [isProcessing, setIsProcessing] = useState(false);
   const [txSuccess, setTxSuccess] = useState(false);
   const [sweetAlert, setSweetAlert] = useState(null);
 
   if (!isOpen) return null;
 
-  const presets = [
-    { amount: 300, label: 'Min ₹300' },
-    { amount: 500, label: '+₹500' },
-    { amount: 1000, label: '+₹1,000', tag: 'Popular' },
-    { amount: 2000, label: '+₹2,000' },
-    { amount: 5000, label: '+₹5,000' },
-    { amount: 10000, label: '+₹10,000', tag: 'Best Value' },
-    { amount: 15000, label: '+₹15,000' },
-    { amount: 25000, label: '+₹25,000' },
+  const durationPresets = [
+    { days: 1, amount: 300, label: '1 Day', tag: null },
+    { days: 2, amount: 600, label: '2 Days', tag: null },
+    { days: 5, amount: 1500, label: '5 Days', tag: null },
+    { days: 7, amount: 2100, label: '7 Days', tag: '1 Wk' },
+    { days: 15, amount: 4500, label: '15 Days', tag: null },
+    { days: 30, amount: 9000, label: '30 Days', tag: '1 MONTH' },
+    { days: 60, amount: 18000, label: '60 Days', tag: '2 MONTHS' },
   ];
 
   const currentAmount = budget ? parseInt(budget, 10) : 0;
+  const pacingRate = dailyAdSpend || 300;
+  const calculatedDays = currentAmount > 0 ? Math.max(1, Math.round(currentAmount / pacingRate)) : 0;
 
   const handleSelectPreset = (p) => {
     setSelectedPreset(p.amount);
@@ -565,7 +566,7 @@ export function AddFundsModal({
     const val = e.target.value.replace(/\D/g, '');
     setBudget(val);
     const num = parseInt(val, 10);
-    const matching = presets.find((p) => p.amount === num);
+    const matching = durationPresets.find((p) => p.amount === num);
     setSelectedPreset(matching ? matching.amount : null);
   };
 
@@ -714,100 +715,95 @@ export function AddFundsModal({
           </div>
         ) : (
           <form onSubmit={handleTopUpSubmit}>
-            {/* Current Balance Box */}
-            <div
-              style={{
-                border: '1.5px solid #e2e8f0',
-                borderRadius: '14px',
-                padding: '13px 18px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: '#f8fafc',
-                marginBottom: '18px',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '2px' }}>
-                  CURRENT WALLET BALANCE
-                </div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
-                  ₹{Number(walletBalance || 0).toLocaleString('en-IN')}
+            {/* 1. AD SPEND BUDGET | ÷ ₹300/day → | CAMPAIGN AD RUNTIME Split Row */}
+            <div className="payment-calc-split-row">
+              <div className="calc-col-budget">
+                <label className="calc-col-label">AD SPEND BUDGET</label>
+                <div className="budget-input-wrapper">
+                  <span className="currency-symbol">₹</span>
+                  <input
+                    type="text"
+                    className="budget-number-input"
+                    value={budget}
+                    onChange={handleCustomChange}
+                    placeholder="600"
+                    autoFocus
+                  />
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '2px' }}>
-                  BALANCE AFTER TOP-UP
-                </div>
-                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#059669', lineHeight: 1.1 }}>
-                  ₹{(Number(walletBalance || 0) + (currentAmount || 0)).toLocaleString('en-IN')}
-                </div>
-              </div>
-            </div>
 
-            {/* Set Amount Input */}
-            <div style={{ marginBottom: '16px' }}>
-              <label
-                className="calc-col-label"
-                style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 800, color: '#1e293b' }}
-              >
-                SET AMOUNT (MIN ₹300)
-              </label>
-              <div className="budget-input-wrapper" style={{ height: '54px' }}>
-                <span className="currency-symbol">₹</span>
-                <input
-                  type="text"
-                  placeholder="Enter amount (e.g. 1000)"
-                  value={budget}
-                  onChange={handleCustomChange}
-                  className="budget-number-input"
-                  autoFocus
-                />
+              <div className="calc-divider-pill-wrap">
+                <span className="calc-divider-pill">÷ ₹{pacingRate}/day →</span>
+              </div>
+
+              <div className="calc-col-runtime">
+                <label className="calc-col-label">CAMPAIGN AD RUNTIME</label>
+                <div className="runtime-display-box">
+                  <div className="runtime-cal-badge">
+                    <Calendar className="runtime-cal-icon" size={16} />
+                  </div>
+                  <div className="runtime-text-stack">
+                    <strong className="runtime-days-text">{calculatedDays} Days</strong>
+                    <span className="runtime-sub-text">Enter budget or select duration below</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Quick Amount Presets */}
-            <div className="presets-section-heading" style={{ marginTop: '14px', marginBottom: '10px' }}>
-              <span>QUICK TOP-UP AMOUNTS:</span>
-              <span className="presets-hint-text">Click to select amount</span>
+            {/* 2. Quick Duration Presets Header */}
+            <div className="presets-section-heading">
+              <span>QUICK DURATION PRESETS:</span>
+              <span className="presets-hint-text">Select duration to auto-calculate budget</span>
             </div>
 
-            <div className="duration-presets-unified-grid">
-              {presets.map((p) => {
+            {/* 3. Duration Presets 4x2 Grid Matching Screenshot */}
+            <div className="duration-presets-unified-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
+              {durationPresets.map((p) => {
                 const isSelected = selectedPreset === p.amount;
                 return (
                   <div
-                    key={p.amount}
+                    key={p.days}
                     className={`duration-preset-card ${isSelected ? 'selected' : ''}`}
                     onClick={() => handleSelectPreset(p)}
-                    style={{ height: '58px', justifyContent: 'center' }}
                   >
-                    <div className="preset-top-line" style={{ marginBottom: '2px' }}>
-                      <span className="preset-day-label" style={{ fontSize: '11px' }}>{p.label}</span>
+                    <div className="preset-top-line" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <span className="preset-day-label" style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.label}</span>
                       {p.tag ? (
-                        <span className="preset-mini-tag">{p.tag}</span>
+                        <span className="preset-mini-tag" style={{
+                          background: '#e0e7ff',
+                          color: '#4338ca',
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          padding: '2px 6px',
+                          borderRadius: '6px'
+                        }}>
+                          {p.tag}
+                        </span>
                       ) : isSelected ? (
-                        <span className="preset-check-dot-inline" />
+                        <span className="preset-check-dot-inline" style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#6366f1',
+                          display: 'inline-block'
+                        }} />
                       ) : null}
                     </div>
-                    <div className="preset-price-val">₹{p.amount.toLocaleString('en-IN')}</div>
+                    <div className="preset-price-val" style={{ fontSize: '1.1rem', fontWeight: 800 }}>
+                      ₹{p.amount.toLocaleString('en-IN')}
+                    </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Pay Button */}
+            {/* 4. Pay Now Button (Matching Screenshot) */}
             <button
               type="submit"
               className="btn-payment-modal-pay"
               disabled={isProcessing}
             >
-              <span>
-                {isProcessing
-                  ? 'Opening Razorpay Secure...'
-                  : `Add ₹${(currentAmount || 0).toLocaleString('en-IN')} to Wallet`}
-              </span>
-              <ArrowRight size={18} className="btn-arrow-icon" />
+              <span>{isProcessing ? 'Opening Razorpay Secure...' : 'Pay Now →'}</span>
             </button>
           </form>
         )}
@@ -1885,25 +1881,26 @@ export function MarketingGrowthPaymentModal({
   customer = {},
   dailyAdSpend = 300,
 }) {
-  const [budget, setBudget] = useState('1000');
-  const [selectedPreset, setSelectedPreset] = useState(1000);
+  const [budget, setBudget] = useState('600');
+  const [selectedPreset, setSelectedPreset] = useState(600);
   const [isProcessing, setIsProcessing] = useState(false);
   const [sweetAlert, setSweetAlert] = useState(null);
 
   if (!isOpen) return null;
 
-  const presets = [
-    { label: 'Min ₹300', amount: 300, tag: null },
-    { label: '+₹500', amount: 500, tag: null },
-    { label: '+₹1,000', amount: 1000, tag: 'Popular' },
-    { label: '+₹2,000', amount: 2000, tag: null },
-    { label: '+₹5,000', amount: 5000, tag: null },
-    { label: '+₹10,000', amount: 10000, tag: 'Best Value' },
-    { label: '+₹15,000', amount: 15000, tag: null },
-    { label: '+₹25,000', amount: 25000, tag: null },
+  const durationPresets = [
+    { days: 1, amount: 300, label: '1 Day', tag: null },
+    { days: 2, amount: 600, label: '2 Days', tag: null },
+    { days: 5, amount: 1500, label: '5 Days', tag: null },
+    { days: 7, amount: 2100, label: '7 Days', tag: '1 Wk' },
+    { days: 15, amount: 4500, label: '15 Days', tag: null },
+    { days: 30, amount: 9000, label: '30 Days', tag: '1 MONTH' },
+    { days: 60, amount: 18000, label: '60 Days', tag: '2 MONTHS' },
   ];
 
   const currentAmount = budget ? parseInt(budget, 10) : 0;
+  const pacingRate = dailyAdSpend || 300;
+  const calculatedDays = currentAmount > 0 ? Math.max(1, Math.round(currentAmount / pacingRate)) : 0;
 
   const handleSelectPreset = (p) => {
     setSelectedPreset(p.amount);
@@ -1914,7 +1911,7 @@ export function MarketingGrowthPaymentModal({
     const val = e.target.value.replace(/\D/g, '');
     setBudget(val);
     const num = parseInt(val, 10);
-    const matching = presets.find((p) => p.amount === num);
+    const matching = durationPresets.find((p) => p.amount === num);
     setSelectedPreset(matching ? matching.amount : null);
   };
 
@@ -2018,65 +2015,95 @@ export function MarketingGrowthPaymentModal({
 
         {/* Set Amount Input & Quick Presets */}
         <form onSubmit={handlePaySubmit}>
-          <div style={{ marginBottom: '16px' }}>
-            <label
-              className="calc-col-label"
-              style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 800, color: '#1e293b' }}
-            >
-              SET AMOUNT (MIN ₹300)
-            </label>
-            <div className="budget-input-wrapper" style={{ height: '54px' }}>
-              <span className="currency-symbol">₹</span>
-              <input
-                type="text"
-                placeholder="Enter amount (e.g. 1000)"
-                value={budget}
-                onChange={handleCustomChange}
-                className="budget-number-input"
-                autoFocus
-              />
+          {/* 1. AD SPEND BUDGET | ÷ ₹300/day → | CAMPAIGN AD RUNTIME Split Row */}
+          <div className="payment-calc-split-row">
+            <div className="calc-col-budget">
+              <label className="calc-col-label">AD SPEND BUDGET</label>
+              <div className="budget-input-wrapper">
+                <span className="currency-symbol">₹</span>
+                <input
+                  type="text"
+                  className="budget-number-input"
+                  value={budget}
+                  onChange={handleCustomChange}
+                  placeholder="600"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="calc-divider-pill-wrap">
+              <span className="calc-divider-pill">÷ ₹{pacingRate}/day →</span>
+            </div>
+
+            <div className="calc-col-runtime">
+              <label className="calc-col-label">CAMPAIGN AD RUNTIME</label>
+              <div className="runtime-display-box">
+                <div className="runtime-cal-badge">
+                  <Calendar className="runtime-cal-icon" size={16} />
+                </div>
+                <div className="runtime-text-stack">
+                  <strong className="runtime-days-text">{calculatedDays} Days</strong>
+                  <span className="runtime-sub-text">Enter budget or select duration below</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Presets Header */}
-          <div className="presets-section-heading" style={{ marginTop: '14px', marginBottom: '10px' }}>
-            <span>QUICK WALLET AMOUNTS:</span>
-            <span className="presets-hint-text">Click to select amount</span>
+          {/* 2. Quick Duration Presets Header */}
+          <div className="presets-section-heading">
+            <span>QUICK DURATION PRESETS:</span>
+            <span className="presets-hint-text">Select duration to auto-calculate budget</span>
           </div>
 
-          {/* Unified 4x2 Amount Presets Grid */}
-          <div className="duration-presets-unified-grid">
-            {presets.map((p) => {
+          {/* 3. Duration Presets 4x2 Grid Matching Screenshot */}
+          <div className="duration-presets-unified-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
+            {durationPresets.map((p) => {
               const isSelected = selectedPreset === p.amount;
               return (
                 <div
-                  key={p.amount}
+                  key={p.days}
                   className={`duration-preset-card ${isSelected ? 'selected' : ''}`}
                   onClick={() => handleSelectPreset(p)}
-                  style={{ height: '58px', justifyContent: 'center' }}
                 >
-                  <div className="preset-top-line" style={{ marginBottom: '2px' }}>
-                    <span className="preset-day-label" style={{ fontSize: '11px' }}>{p.label}</span>
+                  <div className="preset-top-line" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span className="preset-day-label" style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.label}</span>
                     {p.tag ? (
-                      <span className="preset-mini-tag">{p.tag}</span>
+                      <span className="preset-mini-tag" style={{
+                        background: '#e0e7ff',
+                        color: '#4338ca',
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        padding: '2px 6px',
+                        borderRadius: '6px'
+                      }}>
+                        {p.tag}
+                      </span>
                     ) : isSelected ? (
-                      <span className="preset-check-dot-inline" />
+                      <span className="preset-check-dot-inline" style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: '#6366f1',
+                        display: 'inline-block'
+                      }} />
                     ) : null}
                   </div>
-                  <div className="preset-price-val">₹{p.amount.toLocaleString('en-IN')}</div>
+                  <div className="preset-price-val" style={{ fontSize: '1.1rem', fontWeight: 800 }}>
+                    ₹{p.amount.toLocaleString('en-IN')}
+                  </div>
                 </div>
               );
             })}
           </div>
 
-          {/* Pay Button */}
+          {/* 4. Pay Now Button (Matching Screenshot) */}
           <button
             type="submit"
             className="btn-payment-modal-pay"
             disabled={isProcessing}
           >
-            <span>{isProcessing ? 'Opening Razorpay Secure...' : `Add ₹${(currentAmount || 0).toLocaleString('en-IN')} to Wallet`}</span>
-            <ArrowRight size={18} className="btn-arrow-icon" />
+            <span>{isProcessing ? 'Opening Razorpay Secure...' : 'Pay Now →'}</span>
           </button>
         </form>
       </div>
