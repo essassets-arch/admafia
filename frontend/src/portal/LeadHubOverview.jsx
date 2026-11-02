@@ -89,35 +89,31 @@ export default function LeadHubOverview({
   const todayCode = currentTodayItem?.code || 'MON';
 
   const [activeDays, setActiveDays] = useState(() => {
-    // If user has booked days, keep those + today
+    // If user has booked days, keep those
     const booked = new Set();
     if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => booked.add(b));
     if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => booked.add(b));
     if (customer.isDeductedToday && currentTodayItem?.code) booked.add(currentTodayItem.code);
 
     if (booked.size > 0) {
-      booked.add(todayCode);
       return Array.from(booked);
     }
 
-    const sessionPreset = typeof window !== 'undefined' ? window.sessionStorage.getItem('admafia_active_schedule_preset') : null;
-    if (sessionPreset && Array.isArray(customer.activeDays) && customer.activeDays.length > 0) {
+    if (Array.isArray(customer.activeDays)) {
       return customer.activeDays;
     }
 
-    // Default on initial load: ONLY select today's day
+    // Default on initial load: start with today's day (which can be unselected at will)
     return [todayCode];
   });
   const [unmaskedLeads, setUnmaskedLeads] = useState({});
 
   React.useEffect(() => {
-    const sessionPreset = typeof window !== 'undefined' ? window.sessionStorage.getItem('admafia_active_schedule_preset') : null;
-    if (sessionPreset && customer?.activeDays && Array.isArray(customer.activeDays)) {
-      const merged = new Set(customer.activeDays.length > 0 ? customer.activeDays : [todayCode]);
+    if (Array.isArray(customer?.activeDays)) {
+      const merged = new Set(customer.activeDays);
       if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
       if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
       if (customer.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
-      if (merged.size === 0) merged.add(todayCode);
       setActiveDays(Array.from(merged));
     }
   }, [customer?.activeDays, customer?.bookedDays, customer?.lockedDays, customer?.isDeductedToday, currentTodayItem?.code]);
@@ -223,9 +219,6 @@ export default function LeadHubOverview({
     try { window.sessionStorage.setItem('admafia_active_schedule_preset', 'custom'); } catch (e) {}
     if (activeDays.includes(code)) {
       next = activeDays.filter((d) => d !== code);
-      if (next.length === 0) {
-        next = [todayCode];
-      }
     } else {
       next = [...activeDays, code];
       if (isTogglingToday && walletBalance >= dailySpend) {
@@ -236,7 +229,7 @@ export default function LeadHubOverview({
     if (onUpdateCustomer) {
       onUpdateCustomer({
         activeDays: next,
-        ...(shouldActivate ? { adCampaignActive: true } : {}),
+        ...(shouldActivate ? { adCampaignActive: true } : (next.length === 0 ? { adCampaignActive: false } : {})),
       });
     }
   };
@@ -247,7 +240,7 @@ export default function LeadHubOverview({
     if (preset === 'all') next = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     if (preset === 'weekdays') next = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
     if (preset === 'weekends') next = ['SAT', 'SUN'];
-    if (preset === 'clear') next = [todayCode];
+    if (preset === 'clear') next = [];
 
     // All booked days in current view CANNOT be deselected by presets
     const bookedCodesInView = daysList.filter((d) => isDayBooked(d)).map((d) => d.code);
@@ -613,7 +606,7 @@ export default function LeadHubOverview({
                 <line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
               <span className="engine-title-text">
-                SELECT MARKETING DAYS ({activeDays.length} OF 7 DAYS ACTIVE
+                SELECT MARKETING DAYS ({activeDays.length > 0 ? `${activeDays.length} OF 7 DAYS ACTIVE` : 'SELECT ANY DAY'}
                 {totalBookedCount > 0 ? ` • ${totalBookedCount} DAY${totalBookedCount > 1 ? 'S' : ''} BOOKED` : ''})
               </span>
               {totalBookedCount > 0 ? (
@@ -632,6 +625,22 @@ export default function LeadHubOverview({
                 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
                   {totalBookedCount} Day{totalBookedCount > 1 ? 's' : ''} Marketing Booked
+                </span>
+              ) : activeDays.length === 0 ? (
+                <span className="engine-booked-highlight-pill" style={{
+                  background: '#f8fafc',
+                  color: '#475569',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '9999px',
+                  padding: '3px 10px',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  marginLeft: '8px'
+                }}>
+                  👆 Click any day below to select
                 </span>
               ) : (
                 <span className="engine-booked-highlight-pill" style={{
