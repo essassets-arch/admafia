@@ -1168,48 +1168,25 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       return;
     }
 
-    // 3. Low Balance Check with SweetAlert2
+    // 3. Low Balance Check: If balance is below daily spend, show prompt & open Top-Up modal directly
     if (nextActive && walletBalance < dailyLimit) {
       Swal.fire({
         icon: 'warning',
         title: 'Ad Wallet Balance is Low',
-        html: `Your available Ad Wallet balance is <strong>₹${walletBalance.toLocaleString('en-IN')}</strong>, which is below your daily spend pacing of <strong>₹${dailyLimit.toLocaleString('en-IN')}</strong>.<br/><br/>Please top up your wallet to start marketing campaigns.`,
+        html: `Your available Ad Wallet balance is <strong style="color:#ef4444;">₹${walletBalance.toLocaleString('en-IN')}</strong>, but today's daily ad spend is <strong>₹${dailyLimit.toLocaleString('en-IN')}</strong>.<br/><br/>Please top up your wallet to start marketing.`,
         showCancelButton: true,
-        confirmButtonText: 'Top Up Wallet Now',
-        confirmButtonColor: '#059669',
+        confirmButtonText: '+ Top Up Wallet Now',
+        confirmButtonColor: '#4f46e5',
         cancelButtonText: 'Cancel',
       }).then((res) => {
-        if (res.isConfirmed) handleSwitchTab('wallet');
+        if (res.isConfirmed) {
+          setIsAddFundsOpen(true);
+        }
       });
       return;
     }
 
-    // 4. SweetAlert2 Confirmation Dialog before Start or Stop
-    if (nextActive) {
-      const confirmStart = await Swal.fire({
-        icon: 'question',
-        title: 'Start Marketing Campaign?',
-        html: `Daily spend of <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong> will be scheduled.<br/>Meta &amp; local buyer lead capture will become active on scheduled days.<br/><br/>Current Wallet Balance: <strong style="color:#059669;">₹${walletBalance.toLocaleString('en-IN')}</strong>`,
-        showCancelButton: true,
-        confirmButtonText: '▶ Yes, Start Marketing',
-        confirmButtonColor: '#059669',
-        cancelButtonText: 'Cancel',
-      });
-      if (!confirmStart.isConfirmed) return;
-    } else {
-      const confirmStop = await Swal.fire({
-        icon: 'warning',
-        title: 'Stop Marketing Campaign?',
-        html: `Are you sure you want to stop/pause your marketing campaigns?<br/><br/>Daily ad deductions and active Meta buyer lead capture will be <strong>paused</strong>.`,
-        showCancelButton: true,
-        confirmButtonText: '⏹ Yes, Stop Marketing',
-        confirmButtonColor: '#dc2626',
-        cancelButtonText: 'Keep Running',
-      });
-      if (!confirmStop.isConfirmed) return;
-    }
-
-    // 5. Authoritative Backend Transaction
+    // 4. Starting Campaign -> Directly deduct daily amount from wallet in PostgreSQL
     const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const todayDayCode = dayCodes[kolkataNow.getDay()];
@@ -1244,30 +1221,71 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           } else if (typeof deductRes.balance === 'number') {
             setWalletBalance(deductRes.balance);
           }
+          if (deductRes.transaction) {
+            setTransactions((prev) => [deductRes.transaction, ...prev]);
+          }
 
           // Trigger state sync for fresh wallet transaction ledger
           crmApi.syncStateFromPostgres().catch(() => {});
 
-          Swal.fire({
-            icon: 'success',
-            title: 'Marketing is LIVE & Ad Booked!',
-            html: `Your marketing campaign is now active and pacing at <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong>.<br/><br/>Today's advertising slot is <strong>🎯 AD BOOKED</strong>.`,
-            timer: 2600,
-            showConfirmButton: false,
-          });
+          if (deductRes.alreadyDeducted) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Marketing is LIVE!',
+              html: `Today's ad slot was already booked &amp; paid.<br/>Campaign is now <strong>Running (Active)</strong> without duplicate deduction.`,
+              timer: 2400,
+              showConfirmButton: false,
+            });
+          } else {
+            Swal.fire({
+              icon: 'success',
+              title: 'Marketing Started & Slot Booked!',
+              html: `<strong>₹${dailyLimit.toLocaleString('en-IN')}</strong> deducted from your Ad Wallet.<br/>Today's advertising slot is now <strong>🎯 BOOKED &amp; RUNNING</strong>.<br/><br/>Remaining Wallet Balance: <strong style="color:#059669;">₹${(deductRes.walletBalance ?? (walletBalance - dailyLimit)).toLocaleString('en-IN')}</strong>`,
+              timer: 3000,
+              showConfirmButton: false,
+            });
+          }
+        } else {
+          throw new Error(deductRes?.error || 'Could not deduct ad spend');
         }
       } catch (err) {
         console.error('Failed to deduct and start campaign:', err);
-        Swal.fire({
-          icon: 'error',
-          title: 'Could Not Start Campaign',
-          text: err.message || 'An error occurred while starting the campaign. Please check your wallet balance.',
-          confirmButtonColor: '#059669',
-        });
+        if (err.message && (err.message.includes('Insufficient') || err.message.includes('balance'))) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Ad Wallet Balance is Low',
+            html: `${err.message}<br/><br/>Please top up your wallet to start marketing.`,
+            showCancelButton: true,
+            confirmButtonText: '+ Top Up Wallet Now',
+            confirmButtonColor: '#4f46e5',
+            cancelButtonText: 'Cancel',
+          }).then((res) => {
+            if (res.isConfirmed) {
+              setIsAddFundsOpen(true);
+            }
+          });
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Could Not Start Campaign',
+            text: err.message || 'An error occurred while starting the campaign. Please retry.',
+            confirmButtonColor: '#059669',
+          });
+        }
       }
     } else {
       // Stopping Campaign: Pause in PostgreSQL
       try {
+        const confirmStop = await Swal.fire({
+          icon: 'warning',
+          title: 'Stop Marketing Campaign?',
+          html: `Are you sure you want to stop/pause your marketing campaign?<br/><br/>Daily ad deductions and active Meta lead generation will be <strong>paused</strong>.`,
+          showCancelButton: true,
+          confirmButtonText: '⏹ Yes, Stop Marketing',
+          confirmButtonColor: '#dc2626',
+          cancelButtonText: 'Keep Running',
+        });
+        if (!confirmStop.isConfirmed) return;
         const patchRes = await crmApi.patchCustomer(customer.id, {
           adCampaignActive: false,
         });

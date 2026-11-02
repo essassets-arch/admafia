@@ -470,8 +470,15 @@ export default function LeadHubOverview({
                 {customer.adCampaignActive ? 'Running (Active)' : 'Paused (Off)'}
               </strong>
               {!customer.adCampaignActive && walletBalance < dailySpend && (
-                <span style={{ fontSize: '0.70rem', color: '#e11d48', fontWeight: 800, marginTop: 2 }}>
-                  ⚠️ Balance is Low
+                <span
+                  style={{ fontSize: '0.70rem', color: '#e11d48', fontWeight: 800, marginTop: 2, cursor: 'pointer', textDecoration: 'underline' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onOpenAddFunds) onOpenAddFunds();
+                  }}
+                  title="Click to Top Up Wallet"
+                >
+                  ⚠️ Balance is Low (Click to Top Up)
                 </span>
               )}
             </div>
