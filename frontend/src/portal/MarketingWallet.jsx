@@ -34,7 +34,7 @@ export default function MarketingWallet({
   const activeAmount = customAmount ? Number(customAmount) || 0 : (selectedPreset || 300);
   const calculatedRuntimeDays = Math.max(1, Math.floor(activeAmount / (dailyAdSpend || 300)));
   const daysRunway = Math.floor(walletBalance / (dailyAdSpend || 300));
-  const isCampaignLive = (customer.adCampaignActive ?? true) && walletBalance >= dailyAdSpend;
+  const isCampaignLive = Boolean(customer.adCampaignActive) && walletBalance >= dailyAdSpend;
 
   // Presets exact specification (Pure wallet amounts — no days configuration)
   const presets = [
@@ -288,7 +288,13 @@ export default function MarketingWallet({
           </div>
           <span className={`wallet-status-pill-badge ${isCampaignLive ? 'active' : 'paused'}`}>
             <span className="pulse-dot"></span>
-            <span>{isCampaignLive ? 'Live Campaign Active' : 'Paused (Low Balance)'}</span>
+            <span>
+              {!customer.adCampaignActive
+                ? 'Campaign Paused'
+                : walletBalance < dailyAdSpend
+                ? 'Paused (Low Balance)'
+                : 'Live Campaign Active'}
+            </span>
           </span>
         </div>
         <p className="wallet-desc-lead">
@@ -575,11 +581,25 @@ export default function MarketingWallet({
             <div className="mini-box-label">Today's Ad Delivery Status</div>
             <div className="engine-mini-content">
               <span className={`engine-status-pill ${isCampaignLive ? 'active' : 'paused'}`}>
-                {isCampaignLive ? 'Live & Delivering' : 'Paused (Low Balance)'}
+                {!customer.adCampaignActive
+                  ? 'Campaign Paused'
+                  : walletBalance < dailyAdSpend
+                  ? 'Paused (Low Balance)'
+                  : 'Live & Delivering'}
               </span>
-              <div className="mini-box-subline">{isDeductedToday ? 'Deduction Completed ✓' : 'Pending Deduction'}</div>
+              <div className="mini-box-subline">
+                {!customer.adCampaignActive
+                  ? 'Delivery Paused'
+                  : isDeductedToday
+                  ? 'Deduction Completed ✓'
+                  : 'Pending Deduction'}
+              </div>
               <div className="mini-box-caption">
-                {isDeductedToday ? `Today's ₹${dailyAdSpend} placement debited` : `Ready to cut ₹${dailyAdSpend} for today's placement`}
+                {!customer.adCampaignActive
+                  ? 'Campaign paused by user. Resume to start delivering ads.'
+                  : isDeductedToday
+                  ? `Today's ₹${dailyAdSpend} placement debited`
+                  : `Ready to cut ₹${dailyAdSpend} for today's placement`}
               </div>
             </div>
           </div>
@@ -588,9 +608,17 @@ export default function MarketingWallet({
           <div className="engine-mini-box">
             <div className="mini-box-label">Next Auto-Deduction</div>
             <div className="engine-mini-content">
-              <div className="mini-box-big-text">{isDeductedToday ? 'Tomorrow @ 12:00 AM' : 'Tonight @ 12:00 AM'}</div>
+              <div className="mini-box-big-text">
+                {!customer.adCampaignActive
+                  ? 'Schedule Paused'
+                  : isDeductedToday
+                  ? 'Tomorrow @ 12:00 AM'
+                  : 'Tonight @ 12:00 AM'}
+              </div>
               <div className="mini-box-caption text-coral">
-                -₹{dailyAdSpend} from wallet (Est. Bal: ₹{Math.max(0, walletBalance - dailyAdSpend).toLocaleString('en-IN')})
+                {!customer.adCampaignActive
+                  ? 'Resume campaign to re-enable scheduled daily cuts'
+                  : `-₹${dailyAdSpend} from wallet (Est. Bal: ₹${Math.max(0, walletBalance - dailyAdSpend).toLocaleString('en-IN')})`}
               </div>
             </div>
           </div>

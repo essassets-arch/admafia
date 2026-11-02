@@ -83,6 +83,7 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     dailyAdSpend: dailyPacing,
     amountPaid,
     totalLifetimePaid: amountPaid,
+    totalAdSpent: Number(row.total_ad_spent ?? 0),
     runwayDays: Number(row.runway_days ?? Math.floor(balance / Math.max(dailyPacing, 1))),
     totalLeadsDispatched: Number(row.total_leads_dispatched ?? 0),
     lastDeductedAt: row.last_deducted_at || null,

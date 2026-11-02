@@ -132,6 +132,15 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           walletBalance: typeof u.walletBalance === 'number' ? u.walletBalance : (typeof u.balance === 'number' ? u.balance : 0),
           amountPaid: typeof u.amountPaid === 'number' ? u.amountPaid : (typeof u.totalLifetimePaid === 'number' ? u.totalLifetimePaid : 0),
           totalLifetimePaid: typeof u.totalLifetimePaid === 'number' ? u.totalLifetimePaid : (typeof u.amountPaid === 'number' ? u.amountPaid : 0),
+          totalAdSpent: typeof u.totalAdSpent === 'number' ? u.totalAdSpent : 0,
+          dailyAdSpend: typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : 300,
+          dailyPacing: typeof u.dailyPacing === 'number' ? u.dailyPacing : (typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : 300),
+          adCampaignActive: typeof u.adCampaignActive === 'boolean' ? u.adCampaignActive : Boolean(u.adCampaignActive),
+          activeDays: Array.isArray(u.activeDays) && u.activeDays.length > 0 ? u.activeDays : ['MON', 'TUE', 'WED', 'THU', 'FRI'],
+          bookedDates: Array.isArray(u.bookedDates) ? u.bookedDates : [],
+          lockedDays: Array.isArray(u.lockedDays) ? u.lockedDays : [],
+          isDeductedToday: Boolean(u.isDeductedToday),
+          lastDeductedAt: u.lastDeductedAt || null,
         };
       }
     } catch (e) {}
@@ -1262,13 +1271,23 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           adCampaignActive: false,
         });
 
-        if (patchRes && patchRes.customer) {
-          setCustomer(patchRes.customer);
-          try {
-            localStorage.setItem('growthline_active_user', JSON.stringify(patchRes.customer));
-          } catch (e) {}
+        const updatedCust = patchRes?.customer || patchRes;
+        if (updatedCust && typeof updatedCust === 'object') {
+          setCustomer((prev) => {
+            const merged = { ...prev, ...updatedCust, adCampaignActive: false };
+            try {
+              localStorage.setItem('growthline_active_user', JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
+          });
         } else {
-          setCustomer((prev) => ({ ...prev, adCampaignActive: false }));
+          setCustomer((prev) => {
+            const merged = { ...prev, adCampaignActive: false };
+            try {
+              localStorage.setItem('growthline_active_user', JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
+          });
         }
 
         Swal.fire({
