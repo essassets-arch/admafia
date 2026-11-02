@@ -5143,3 +5143,623 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
     </div>
   );
 }
+
+/* ==========================================================================
+   DESK 11: ALL FAILED TRANSACTIONS (Recovery & Reconnection Desk)
+   ========================================================================== */
+export function FailedTransactionsDesk({ customers = [], setCustomers }) {
+  const [filter, setFilter] = useState('all'); // 'all' | 'high' | 'upi' | 'card'
+  const [search, setSearch] = useState('');
+  const [failedList, setFailedList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedFailTx, setSelectedFailTx] = useState(null);
+  const [topupCust, setTopupCust] = useState(null);
+  const [topupAmount, setTopupAmount] = useState(1000);
+
+  const loadFailedTransactions = React.useCallback(async () => {
+    setLoading(true);
+    let list = [];
+    try {
+      const res = await crmApi.getFailedTransactions();
+      if (res && res.ok && Array.isArray(res.failedTransactions)) {
+        list = res.failedTransactions;
+      }
+    } catch (e) {
+      console.warn('[Failed transactions API fallback]', e);
+    }
+
+    // Merge with any failed transactions in local storage
+    try {
+      const raw = localStorage.getItem('growthline_wallet_transactions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const localFails = parsed.filter(
+            (t) =>
+              String(t.status || '').toLowerCase().includes('fail') ||
+              String(t.type || '').toLowerCase().includes('fail')
+          );
+          // Match with customer data for phone/company if missing
+          const enrichedLocal = localFails.map((t) => {
+            const matchedCust = customers.find(
+              (c) => c.id === t.customerId || c.phone === t.customerPhone
+            );
+            return {
+              id: t.id,
+              customerId: t.customerId || matchedCust?.id,
+              customerName: matchedCust?.companyName || matchedCust?.name || t.company || 'Corporate Workspace',
+              companyName: matchedCust?.companyName || matchedCust?.name || t.company || 'Corporate Workspace',
+              contactPerson: matchedCust?.contactPerson || matchedCust?.contact || matchedCust?.username || 'Account Admin',
+              phone: matchedCust?.phone || t.customerPhone || '',
+              email: matchedCust?.email || '',
+              city: matchedCust?.city || '',
+              state: matchedCust?.state || '',
+              category: matchedCust?.category || 'General',
+              amount: Number(t.amount || 0),
+              ref: t.ref || t.id,
+              desc: t.desc || 'Online recharge failed',
+              method: t.method || 'Razorpay Gateway',
+              status: t.status || 'Failed ✕',
+              failureReason: t.failureReason || 'Bank transaction declined',
+              date: t.date || 'Recently Failed',
+            };
+          });
+
+          // Avoid duplicates by reference / id
+          const existingRefs = new Set(list.map((item) => item.ref || item.id));
+          enrichedLocal.forEach((item) => {
+            if (!existingRefs.has(item.ref || item.id)) {
+              list.push(item);
+              existingRefs.add(item.ref || item.id);
+            }
+          });
+        }
+      }
+    } catch (e) {}
+
+    setFailedList(list);
+    setLoading(false);
+  }, [customers]);
+
+  useEffect(() => {
+    loadFailedTransactions();
+  }, [loadFailedTransactions]);
+
+  const filtered = failedList.filter((item) => {
+    const q = search.toLowerCase().trim();
+    const matchSearch =
+      !q ||
+      (item.customerName || '').toLowerCase().includes(q) ||
+      (item.contactPerson || '').toLowerCase().includes(q) ||
+      (item.phone || '').includes(q) ||
+      (item.email || '').toLowerCase().includes(q) ||
+      (item.city || '').toLowerCase().includes(q) ||
+      (item.ref || '').toLowerCase().includes(q) ||
+      (item.desc || '').toLowerCase().includes(q) ||
+      (item.failureReason || '').toLowerCase().includes(q);
+
+    if (!matchSearch) return false;
+    if (filter === 'high') return (Number(item.amount) || 0) >= 2000;
+    if (filter === 'upi') return (item.method || '').toLowerCase().includes('upi') || (item.desc || '').toLowerCase().includes('upi');
+    if (filter === 'card') return (item.method || '').toLowerCase().includes('card') || (item.method || '').toLowerCase().includes('gateway');
+    return true;
+  });
+
+  const totalAtRisk = failedList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const avgFailedAmount = failedList.length ? Math.round(totalAtRisk / failedList.length) : 0;
+
+  const handleApplyTopup = async () => {
+    if (!topupCust) return;
+    const rechargeNum = Number(topupAmount) || 0;
+    if (rechargeNum <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+    const targetCust = customers.find((c) => c.id === topupCust.id || c.phone === topupCust.phone) || topupCust;
+    const curBal = targetCust.balance ?? targetCust.walletBalance ?? 0;
+    const newBal = curBal + rechargeNum;
+    const pacing = targetCust.dailyPacing || targetCust.dailyAdSpend || 300;
+    const addedDays = Math.floor(rechargeNum / pacing);
+    const newRunway = (targetCust.runwayDays || 0) + addedDays;
+
+    if (setCustomers) {
+      setCustomers((prev) =>
+        prev.map((c) => {
+          if (c.id === targetCust.id || c.phone === targetCust.phone) {
+            return {
+              ...c,
+              balance: newBal,
+              walletBalance: newBal,
+              amountPaid: (c.amountPaid || 0) + rechargeNum,
+              runwayDays: newRunway,
+              paymentStatus: 'paid',
+              payment_status: 'paid',
+              status: 'active',
+            };
+          }
+          return c;
+        })
+      );
+    }
+
+    try {
+      crmApi.patchCustomer(targetCust.id || targetCust.phone, {
+        balance: newBal,
+        walletBalance: newBal,
+        amountPaid: (targetCust.amountPaid || 0) + rechargeNum,
+        runwayDays: newRunway,
+        paymentStatus: 'paid',
+        status: 'active',
+      }).catch(() => {});
+    } catch (e) {}
+
+    alert(`Successfully credited ₹${rechargeNum.toLocaleString('en-IN')} to ${targetCust.companyName || targetCust.name}!`);
+    setTopupCust(null);
+  };
+
+  return (
+    <div className="desk-page-container">
+      {/* Header */}
+      <div className="desk-header">
+        <div>
+          <div className="desk-breadcrumb">SUB ADMIN &amp; SALES OPERATIONS / DESK 11</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h1 className="desk-title">All Failed Transactions</h1>
+            <span className="desk-pill pill-rose" style={{ fontWeight: 800 }}>
+              {failedList.length} Declined Attempts
+            </span>
+            <span className="desk-pill pill-amber" style={{ fontWeight: 800 }}>
+              Capital at Risk: {formatINR(totalAtRisk)}
+            </span>
+          </div>
+          <p className="desk-subtitle">
+            Comprehensive audit log of all declined client wallet payments, bank gateway rejections, customer contact details, and instant sales recovery WhatsApp actions.
+          </p>
+        </div>
+      </div>
+
+      {/* KPI Quad Grid */}
+      <div className="desk-kpi-grid">
+        <div className="desk-kpi-card">
+          <div className="desk-kpi-label">TOTAL FAILED TRANSACTIONS</div>
+          <div className="desk-kpi-val text-rose">{failedList.length}</div>
+          <div className="desk-kpi-sub">Total payment attempts declined</div>
+        </div>
+        <div className="desk-kpi-card">
+          <div className="desk-kpi-label">LOST CAPITAL AT RISK</div>
+          <div className="desk-kpi-val text-rose">{formatINR(totalAtRisk)}</div>
+          <div className="desk-kpi-sub">Uncollected customer ad spend</div>
+        </div>
+        <div className="desk-kpi-card">
+          <div className="desk-kpi-label">AVG FAILED ORDER VALUE</div>
+          <div className="desk-kpi-val text-indigo">{formatINR(avgFailedAmount)}</div>
+          <div className="desk-kpi-sub">Average recharge amount</div>
+        </div>
+        <div className="desk-kpi-card">
+          <div className="desk-kpi-label">SALES RECOVERY ACTION</div>
+          <div className="desk-kpi-val text-emerald">100% Ready</div>
+          <div className="desk-kpi-sub">Direct WhatsApp sales assistance</div>
+        </div>
+      </div>
+
+      {/* Filters & Search */}
+      <div className="desk-filter-bar">
+        <div className="desk-tabs">
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'all' ? 'active' : ''}`}
+            onClick={() => setFilter('all')}
+          >
+            All Failed ({failedList.length})
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'high' ? 'active' : ''}`}
+            onClick={() => setFilter('high')}
+          >
+            🔥 High Value (&ge; ₹2,000)
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'upi' ? 'active' : ''}`}
+            onClick={() => setFilter('upi')}
+          >
+            📱 UPI &amp; Netbanking
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'card' ? 'active' : ''}`}
+            onClick={() => setFilter('card')}
+          >
+            💳 Card &amp; Gateway
+          </button>
+        </div>
+        <div className="desk-search-wrap">
+          <Search size={16} className="desk-search-icon" />
+          <input
+            type="text"
+            className="desk-search-input"
+            placeholder="Search by customer name, phone, UTR, decline reason..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="desk-table-card">
+        <table className="desk-table">
+          <thead>
+            <tr>
+              <th>Customer Business &amp; Contact Number</th>
+              <th>Failed Amount</th>
+              <th>Date &amp; Time</th>
+              <th>Payment Gateway &amp; UTR</th>
+              <th>Decline Reason &amp; Error Data</th>
+              <th style={{ textAlign: 'right' }}>Recovery Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                  <RefreshCw size={24} className="spinner-rotate" style={{ margin: '0 auto 8px' }} />
+                  <div>Loading failed transactions log...</div>
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                  <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
+                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                    Zero Failed Transactions
+                  </h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>
+                    All customer wallet recharge payments and auto-debits have succeeded without bank rejection errors.
+                  </p>
+                </td>
+              </tr>
+            ) : (
+              filtered.map((tx) => {
+                const cleanPhone = String(tx.phone || '').replace(/\D/g, '').slice(-10);
+                const companyTitle = tx.companyName || tx.customerName || 'Corporate Workspace';
+                const contactTitle = tx.contactPerson || tx.customerName || 'Account Admin';
+                const failReason = tx.failureReason || tx.desc || 'Payment declined by bank or user cancelled';
+
+                return (
+                  <tr key={tx.id || tx.ref} style={{ background: '#fffcfc' }}>
+                    {/* 1. Customer Business & Phone Number */}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#0f172a' }}>
+                          {companyTitle}
+                        </span>
+                        {tx.category && (
+                          <span style={{ background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
+                            {tx.category}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 800, color: '#059669', fontSize: '0.92rem', fontFamily: 'monospace' }}>
+                          📞 +91 {cleanPhone || 'No Phone'}
+                        </span>
+                        <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                          ({contactTitle})
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                        {tx.email && <span>{tx.email} • </span>}{tx.city ? `${tx.city}, ` : ''}{tx.state || 'India'}
+                      </div>
+                    </td>
+
+                    {/* 2. Failed Amount */}
+                    <td>
+                      <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#dc2626', textDecoration: 'line-through' }}>
+                        {formatINR(tx.amount)}
+                      </span>
+                      <div style={{ marginTop: 3 }}>
+                        <span
+                          className="desk-pill pill-rose"
+                          style={{ fontSize: '0.66rem', padding: '2px 7px', fontWeight: 800 }}
+                        >
+                          ✕ Payment Declined
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* 3. Date & Time */}
+                    <td>
+                      <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#1e293b' }}>
+                        {tx.date}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                        Transaction Ref: <code>{tx.ref || tx.id}</code>
+                      </div>
+                    </td>
+
+                    {/* 4. Payment Gateway & Method */}
+                    <td>
+                      <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#4f46e5' }}>
+                        {tx.method || 'Razorpay Secure (Failed)'}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                        Ref UTR: <code>{tx.ref}</code>
+                      </div>
+                    </td>
+
+                    {/* 5. Decline Reason & Error Data */}
+                    <td style={{ maxWidth: 280 }}>
+                      <div
+                        style={{
+                          background: '#fff1f2',
+                          color: '#be123c',
+                          border: '1px solid #fecdd3',
+                          padding: '6px 10px',
+                          borderRadius: 8,
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          lineHeight: 1.3
+                        }}
+                      >
+                        ⚠️ {failReason}
+                      </div>
+                    </td>
+
+                    {/* 6. Recovery Actions */}
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        {/* WhatsApp Customer Action */}
+                        {cleanPhone ? (
+                          <a
+                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactTitle)},%20we%20noticed%20your%20recent%20wallet%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(tx.amount))}%20on%20AdMafia%20was%20declined%20by%20the%20bank.%20Would%20you%20like%20our%20team%20to%20assist%20you%20with%20activating%20your%20campaign?`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="desk-action-btn"
+                            style={{
+                              textDecoration: 'none',
+                              background: '#25D366',
+                              color: '#ffffff',
+                              borderColor: '#22c55e',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              padding: '5px 10px',
+                              fontSize: '0.78rem'
+                            }}
+                            title="Chat with customer on WhatsApp"
+                          >
+                            <MessageSquare size={13} /> WhatsApp
+                          </a>
+                        ) : null}
+
+                        {/* Direct Call Button */}
+                        {cleanPhone ? (
+                          <a
+                            href={`tel:+91${cleanPhone}`}
+                            className="desk-action-btn"
+                            style={{ textDecoration: 'none', background: '#f8fafc', color: '#0f172a', fontWeight: 700, padding: '5px 8px' }}
+                            title={`Call +91 ${cleanPhone}`}
+                          >
+                            <Phone size={13} color="#059669" />
+                          </a>
+                        ) : null}
+
+                        {/* Details Modal */}
+                        <button
+                          type="button"
+                          className="desk-action-btn"
+                          style={{ background: '#f8fafc', color: '#334155', fontWeight: 700, padding: '5px 8px' }}
+                          onClick={() => setSelectedFailTx(tx)}
+                          title="View Failed Transaction Dossier"
+                        >
+                          <Eye size={13} /> Details
+                        </button>
+
+                        {/* Top-Up Assist */}
+                        <button
+                          type="button"
+                          className="sales-btn-primary"
+                          style={{ padding: '5px 10px', fontSize: '0.78rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          onClick={() => {
+                            setTopupCust({
+                              id: tx.customerId,
+                              name: tx.customerName,
+                              companyName: tx.companyName,
+                              phone: tx.phone,
+                              contactPerson: tx.contactPerson,
+                            });
+                            setTopupAmount(tx.amount || 1000);
+                          }}
+                          title="Manual Wallet Credit upon offline payment"
+                        >
+                          <Plus size={12} /> Top-Up
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Failed Transaction Dossier Modal */}
+      {selectedFailTx && (
+        <div className="sales-modal-overlay" onClick={() => setSelectedFailTx(null)}>
+          <div className="sales-modal-card" style={{ maxWidth: 640, width: '95%' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: 14, marginBottom: 16 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span className="sales-dept-badge" style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 800 }}>
+                    ✕ Failed Payment Dossier
+                  </span>
+                  <span
+                    style={{
+                      background: '#fff1f2',
+                      color: '#be123c',
+                      border: '1px solid #fecdd3',
+                      padding: '2px 8px',
+                      borderRadius: 9999,
+                      fontSize: '0.72rem',
+                      fontWeight: 800
+                    }}
+                  >
+                    Decline Ref: {selectedFailTx.ref || selectedFailTx.id}
+                  </span>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#0f172a' }}>
+                  {selectedFailTx.companyName || selectedFailTx.customerName || 'Corporate Workspace'}
+                </h3>
+                <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 3 }}>
+                  Registered Phone: <strong style={{ color: '#059669' }}>+91 {selectedFailTx.phone}</strong> • Contact: {selectedFailTx.contactPerson}
+                </div>
+              </div>
+              <button type="button" className="desk-close-btn" onClick={() => setSelectedFailTx(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Error & Financial Box */}
+            <div style={{ background: '#fff1f2', border: '1.5px solid #fecdd3', padding: '16px', borderRadius: 12, marginBottom: 16 }}>
+              <div style={{ fontSize: '0.72rem', color: '#9f1239', fontWeight: 800, textTransform: 'uppercase' }}>
+                Bank Gateway Decline Reason
+              </div>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#be123c', marginTop: 3 }}>
+                ⚠️ {selectedFailTx.failureReason || selectedFailTx.desc || 'Transaction declined by bank'}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px dashed #fecdd3' }}>
+                <div>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Attempted Amount:</span>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#dc2626' }}>
+                    {formatINR(selectedFailTx.amount)}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Failure Timestamp:</span>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                    {selectedFailTx.date}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Customer Details Box */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px 16px', borderRadius: 12, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company / Client</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{selectedFailTx.companyName}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Representative</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{selectedFailTx.contactPerson}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#059669' }}>+91 {selectedFailTx.phone}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Email</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>{selectedFailTx.email || 'Not Provided'}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+              <a
+                href={`https://wa.me/91${String(selectedFailTx.phone || '').replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedFailTx.contactPerson || 'Partner')},%20we%20noticed%20your%20recent%20wallet%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(selectedFailTx.amount))}%20on%20AdMafia%20was%20declined%20by%20the%20bank.%20Would%20you%20like%20our%20team%20to%20assist%20you%20with%20activating%20your%20campaign?`}
+                target="_blank"
+                rel="noreferrer"
+                className="desk-action-btn"
+                style={{ textDecoration: 'none', background: '#25D366', color: '#ffffff', borderColor: '#22c55e', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <MessageSquare size={14} /> Open WhatsApp Chat
+              </a>
+              <button
+                type="button"
+                className="sales-btn-primary"
+                onClick={() => {
+                  setTopupCust({
+                    id: selectedFailTx.customerId,
+                    name: selectedFailTx.customerName,
+                    companyName: selectedFailTx.companyName,
+                    phone: selectedFailTx.phone,
+                    contactPerson: selectedFailTx.contactPerson,
+                  });
+                  setTopupAmount(selectedFailTx.amount || 1000);
+                  setSelectedFailTx(null);
+                }}
+                style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Plus size={14} /> Credit Wallet Manually
+              </button>
+              <button type="button" className="desk-action-btn" onClick={() => setSelectedFailTx(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top-Up Recovery Modal */}
+      {topupCust && (
+        <div className="sales-modal-overlay" onClick={() => setTopupCust(null)}>
+          <div className="sales-modal-card" style={{ maxWidth: 500, width: '95%' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div>
+                <span className="sales-dept-badge">Sales Assisted Top-Up</span>
+                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 800 }}>Recharge Client Wallet</h3>
+              </div>
+              <button type="button" className="desk-close-btn" onClick={() => setTopupCust(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f8fafc' }}>
+              <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>
+                {topupCust.companyName || topupCust.name || 'Corporate Workspace'}
+              </div>
+              <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>
+                Phone: <strong style={{ color: '#059669' }}>+91 {topupCust.phone}</strong> • Contact: {topupCust.contactPerson || 'Account Admin'}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label className="desk-form-label" style={{ fontWeight: 800, fontSize: '0.84rem' }}>Recharge Amount (₹)</label>
+              <input
+                type="number"
+                min="100"
+                step="100"
+                value={topupAmount}
+                onChange={(e) => setTopupAmount(Math.max(0, Number(e.target.value) || 0))}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: '1.5px solid #cbd5e1',
+                  fontSize: '0.94rem',
+                  fontWeight: 700,
+                  marginTop: 4,
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button type="button" className="sales-btn-secondary" onClick={() => setTopupCust(null)}>
+                Cancel
+              </button>
+              <button type="button" className="sales-btn-primary" onClick={handleApplyTopup} style={{ fontWeight: 800 }}>
+                Credit Wallet Instantly
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

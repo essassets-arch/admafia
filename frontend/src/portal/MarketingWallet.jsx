@@ -26,6 +26,7 @@ export default function MarketingWallet({
   const [customAmount, setCustomAmount] = useState('300');
   const [activeLedgerTab, setActiveLedgerTab] = useState('all'); // 'all' | 'recharges' | 'deductions' | 'failed' | 'invoices'
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [razorpayMode, setRazorpayMode] = useState(null);
   const [actionAlert, setActionAlert] = useState(null); // { type: 'success' | 'error', message: string }
   const [daysDeliveredCount, setDaysDeliveredCount] = useState(0);
   const [copiedTxId, setCopiedTxId] = useState(null);
@@ -141,6 +142,7 @@ export default function MarketingWallet({
       if (!order?.keyId || !order?.orderId || !order?.amount || !order?.currency) {
         throw new Error('Razorpay did not return a valid checkout order. Please try again.');
       }
+      setRazorpayMode(order.keyId.startsWith('rzp_test_') ? 'TEST MODE' : 'LIVE MODE');
 
       const options = {
         key: order.keyId,
@@ -620,7 +622,7 @@ export default function MarketingWallet({
                 <div className="gateway-box-text">
                   <div className="gateway-box-title-row">
                     <strong>Razorpay Secure Gateway</strong>
-                    <span className="test-mode-badge-green">TEST MODE</span>
+                    <span className="test-mode-badge-green">{razorpayMode || 'SECURE CHECKOUT'}</span>
                   </div>
                   <div className="gateway-box-sub">
                     Secured 256-Bit Encrypted Gateway
@@ -639,7 +641,7 @@ export default function MarketingWallet({
               type="button"
               className="btn-pay-green-exact"
               onClick={handlePayViaRazorpay}
-              disabled={isProcessingPayment}
+              disabled={isProcessingPayment || !Number.isSafeInteger(activeAmount) || activeAmount < 300}
             >
               {isProcessingPayment ? (
                 <>

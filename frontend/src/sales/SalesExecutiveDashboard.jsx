@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   Clock,
   UserCheck,
+  AlertCircle,
 } from 'lucide-react';
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import {
@@ -39,6 +40,7 @@ import {
   QuerySupportDesk,
   FollowupTasksDesk,
   CustomerGroupsDesk,
+  FailedTransactionsDesk,
 } from './OperationalDesksViews';
 import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
@@ -87,6 +89,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       if (h.includes('lead') || p.includes('lead')) return 'leads';
       if (h.includes('profile') || p.includes('profile')) return 'profiles';
       if (h.includes('payment') || p.includes('payment')) return 'payments';
+      if (h.includes('fail') || p.includes('fail')) return 'failed_transactions';
       if (h.includes('wallet') || p.includes('wallet')) return 'wallets';
       if (h.includes('group') || p.includes('group') || h.includes('admin/support') || p.includes('/admin/support') || h.includes('admin') || p.includes('/admin')) return 'groups';
       if (h.includes('quer') || h.includes('support') || p.includes('quer') || p.includes('support')) return 'queries';
@@ -97,6 +100,29 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   };
 
   const [activeTab, setActiveTab] = useState(getDeskFromUrl);
+  const [failedTxCount, setFailedTxCount] = useState(0);
+
+  useEffect(() => {
+    const updateFailedCount = async () => {
+      try {
+        let count = 0;
+        const res = await crmApi.getFailedTransactions();
+        if (res && res.ok && Array.isArray(res.failedTransactions)) {
+          count = res.failedTransactions.length;
+        }
+        const raw = localStorage.getItem('growthline_wallet_transactions');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const localFails = parsed.filter(t => String(t.status || '').toLowerCase().includes('fail'));
+            count = Math.max(count, localFails.length);
+          }
+        }
+        setFailedTxCount(count);
+      } catch (e) {}
+    };
+    updateFailedCount();
+  }, [activeTab]);
 
   const navigateToDesk = (deskKey, targetHash) => {
     setActiveTab(deskKey);
@@ -477,6 +503,27 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             </span>
           </button>
 
+          {/* Failed Transactions Recovery Desk */}
+          <button
+            type="button"
+            className={`sales-nav-btn ${activeTab === 'failed_transactions' ? 'active' : ''}`}
+            onClick={() => navigateToDesk('failed_transactions', '#failed-transactions')}
+          >
+            <AlertCircle size={18} strokeWidth={2.2} color={activeTab === 'failed_transactions' ? '#ffffff' : '#ef4444'} />
+            <span>Failed Transactions</span>
+            <span
+              className="sales-nav-badge"
+              style={{
+                background: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.25)' : '#fee2e2',
+                color: activeTab === 'failed_transactions' ? '#ffffff' : '#b91c1c',
+                borderColor: '#fca5a5',
+                fontWeight: 800,
+              }}
+            >
+              {failedTxCount}
+            </span>
+          </button>
+
           {/* 7. Query & Support */}
           <button
             type="button"
@@ -669,6 +716,13 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
 
           {activeTab === 'wallets' && (
             <WalletsBalancesDesk
+              customers={customers}
+              setCustomers={setCustomers}
+            />
+          )}
+
+          {activeTab === 'failed_transactions' && (
+            <FailedTransactionsDesk
               customers={customers}
               setCustomers={setCustomers}
             />

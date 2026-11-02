@@ -169,6 +169,13 @@ export const crmApi = {
     });
   },
 
+  /**
+   * Retrieve all failed transactions across all customers for Sales desk
+   */
+  async getFailedTransactions() {
+    return apiRequest('/sales/failed-transactions');
+  },
+
   async createRazorpayOrder(payload) {
     return apiRequest('/payments/razorpay/order', { method: 'POST', body: JSON.stringify(payload) });
   },

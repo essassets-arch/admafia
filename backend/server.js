@@ -1040,6 +1040,72 @@ app.get('/api/admin/customer-password/:identifier', async (req, res) => {
   }
 });
 
+// Sales Desk: Retrieve All Failed Transactions Across All Customers with Contact Numbers & Reason
+app.get('/api/sales/failed-transactions', async (req, res) => {
+  try {
+    const querySql = `
+      SELECT 
+        wt.id,
+        wt.customer_id,
+        wt.amount,
+        wt.reference_utr,
+        wt.description,
+        wt.payment_method,
+        wt.status,
+        wt.created_at,
+        c.name AS customer_name,
+        c.company_name,
+        c.contact_person,
+        c.phone,
+        c.email,
+        c.city,
+        c.state,
+        c.country,
+        c.category
+      FROM wallet_transactions wt
+      LEFT JOIN customers c ON wt.customer_id = c.id
+      WHERE LOWER(wt.status) LIKE '%fail%' 
+         OR LOWER(wt.tx_type) LIKE '%fail%'
+         OR LOWER(wt.description) LIKE '%fail%'
+         OR LOWER(wt.payment_method) LIKE '%fail%'
+      ORDER BY wt.created_at DESC
+    `;
+    const result = await query(querySql);
+    const mapped = result.rows.map((row) => ({
+      id: row.id,
+      customerId: row.customer_id,
+      customerName: row.company_name || row.customer_name || 'Corporate Workspace',
+      companyName: row.company_name || row.customer_name || 'Corporate Workspace',
+      contactPerson: row.contact_person || row.customer_name || 'Account Admin',
+      phone: row.phone || '',
+      email: row.email || '',
+      city: row.city || '',
+      state: row.state || '',
+      category: row.category || 'General',
+      amount: Number(row.amount || 0),
+      ref: row.reference_utr,
+      desc: row.description,
+      method: row.payment_method,
+      status: row.status || 'Failed ✕',
+      date: row.created_at
+        ? new Date(row.created_at).toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+        : 'Recently Failed',
+    }));
+    res.json({ ok: true, failedTransactions: mapped });
+  } catch (err) {
+    console.error('[GET /api/sales/failed-transactions]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.put('/api/customers/:id/profile', async (req, res) => {
   try {
     const rawId = req.params.id;
