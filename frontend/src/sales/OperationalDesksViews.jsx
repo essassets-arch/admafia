@@ -3631,26 +3631,6 @@ export function PaymentCollectionDesk({
             Master ledger recording which customers completed registration payments, invoice settlements, and marketing wallet top-ups.
           </p>
         </div>
-
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className="sales-btn-primary"
-            style={{
-              background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-              borderColor: '#059669',
-              color: '#ffffff',
-              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              fontWeight: 700,
-            }}
-            onClick={handleOpenAddModal}
-          >
-            <Plus size={16} strokeWidth={2.5} /> Record Payment / Top-Up
-          </button>
-        </div>
       </div>
 
       {/* 2. KPI Quad Grid */}
