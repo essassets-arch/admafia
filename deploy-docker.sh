@@ -29,8 +29,8 @@ systemctl disable postgresql 2>/dev/null || true
 
 # 4. Build and start all 4 Docker containers
 echo "📦 Building & starting containers..."
-docker compose down --remove-orphans 2>/dev/null || true
-docker compose up -d --build
+docker compose build --no-cache frontend backend
+docker compose up -d
 
 # 5. Configure Host Nginx Reverse Proxy for https://admafia.marketing
 echo "⚙️ Configuring Host Nginx reverse proxy..."

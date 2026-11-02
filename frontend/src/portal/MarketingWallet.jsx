@@ -29,6 +29,7 @@ export default function MarketingWallet({
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [razorpayMode, setRazorpayMode] = useState(null);
   const [actionAlert, setActionAlert] = useState(null); // { type: 'success' | 'error', message: string }
+  const [paymentResultModal, setPaymentResultModal] = useState(null); // { status: 'success'|'failed', ... }
   const [copiedTxId, setCopiedTxId] = useState(null);
 
   // Active recharge amount
@@ -60,6 +61,13 @@ export default function MarketingWallet({
       if (paymentStatus === 'success') {
         setIsVerifyingPayment(true);
         const creditedAmt = Number(amountStr) || activeAmount || 300;
+        setPaymentResultModal({
+          status: 'success',
+          title: 'Payment Successful!',
+          amount: creditedAmt,
+          paymentId: paymentId || 'Verified',
+          date: new Date().toLocaleString('en-IN'),
+        });
         setActionAlert({
           type: 'success',
           message: `Payment Verified! ₹${creditedAmt.toLocaleString('en-IN')} added directly to wallet via Razorpay (Ref: ${paymentId || 'Verified'}).`,
@@ -82,19 +90,66 @@ export default function MarketingWallet({
         const cleanPath = window.location.pathname;
         window.history.replaceState({}, document.title, cleanPath + cleanHash);
         try { localStorage.removeItem('admafia_pending_payment'); } catch (e) {}
-        setTimeout(() => setActionAlert(null), 6000);
+        setTimeout(() => setActionAlert(null), 8000);
       } else if (paymentStatus === 'failed') {
         const reason = urlParams.get('reason') || hashParams.get('reason') || 'Transaction was cancelled or declined';
+        let pending = null;
+        try {
+          const raw = localStorage.getItem('admafia_pending_payment');
+          if (raw) pending = JSON.parse(raw);
+        } catch (e) {}
+        const failedAmount = Number(amountStr || pending?.amount || 0);
+        const refUtr = paymentId || pending?.paymentLinkId || `FAIL-${Date.now().toString().slice(-6)}`;
+
+        setPaymentResultModal({
+          status: 'failed',
+          title: 'Transaction Failed',
+          reason: reason,
+          amount: failedAmount,
+          paymentId: refUtr,
+          date: new Date().toLocaleString('en-IN'),
+        });
+
         setActionAlert({
           type: 'error',
           message: `Payment Cancelled / Declined: ${reason}. No wallet funds were deducted.`,
         });
 
+        const failedTxObj = {
+          id: `tx_fail_${Date.now()}`,
+          ref: refUtr,
+          amount: failedAmount > 0 ? failedAmount : 300,
+          desc: `Online recharge failed: ${reason}`,
+          status: 'Failed ✕',
+          type: 'Credit',
+          method: 'Razorpay Gateway',
+          failureReason: reason,
+          date: 'Today, Just now',
+        };
+
+        if (onPaymentFailed) {
+          onPaymentFailed(failedTxObj);
+        }
+
+        const idOrPhone = customer?.id || customer?.phone || customer?.username;
+        if (idOrPhone) {
+          crmApi.recordFailedTransaction({
+            customerId: customer?.id,
+            phone: customer?.phone,
+            username: customer?.username,
+            amount: failedAmount > 0 ? failedAmount : 300,
+            referenceUtr: refUtr,
+            description: `Online recharge failed: ${reason}`,
+            failureReason: reason,
+            paymentMethod: 'Razorpay Gateway',
+          }).catch(() => {});
+        }
+
         const cleanHash = '#app/wallet';
         const cleanPath = window.location.pathname;
         window.history.replaceState({}, document.title, cleanPath + cleanHash);
         try { localStorage.removeItem('admafia_pending_payment'); } catch (e) {}
-        setTimeout(() => setActionAlert(null), 5000);
+        setTimeout(() => setActionAlert(null), 8000);
       }
     } catch (e) {}
   }, []);
@@ -1055,6 +1110,115 @@ export default function MarketingWallet({
           </div>
         )}
       </div>
+
+      {/* Payment Result Modal (Success or Failed) */}
+      {paymentResultModal && (
+        <div className="payment-result-modal-backdrop" onClick={() => setPaymentResultModal(null)}>
+          <div className="payment-result-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className={`result-modal-badge-glow ${paymentResultModal.status}`}>
+              {paymentResultModal.status === 'success' ? (
+                <div className="result-icon-circle success">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+              ) : (
+                <div className="result-icon-circle failed">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#e11d48" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </div>
+              )}
+            </div>
+
+            <h2 className="result-modal-title">
+              {paymentResultModal.status === 'success' ? 'Payment Successful!' : 'Transaction Failed'}
+            </h2>
+
+            <p className="result-modal-subtitle">
+              {paymentResultModal.status === 'success'
+                ? `₹${Number(paymentResultModal.amount || 0).toLocaleString('en-IN')} has been credited directly to your Ad Growth Wallet.`
+                : (paymentResultModal.reason || 'The transaction was cancelled or declined. No wallet funds were deducted.')}
+            </p>
+
+            <div className="result-modal-details-card">
+              <div className="result-detail-row">
+                <span className="result-detail-label">Status</span>
+                <span className={`result-status-pill ${paymentResultModal.status}`}>
+                  {paymentResultModal.status === 'success' ? 'SUCCESS ✓' : 'FAILED ✕'}
+                </span>
+              </div>
+              <div className="result-detail-row">
+                <span className="result-detail-label">Amount</span>
+                <strong className="result-detail-value">
+                  ₹{Number(paymentResultModal.amount || 0).toLocaleString('en-IN')}
+                </strong>
+              </div>
+              <div className="result-detail-row">
+                <span className="result-detail-label">Reference ID</span>
+                <span className="result-detail-value monospace">
+                  {paymentResultModal.paymentId || 'N/A'}
+                </span>
+              </div>
+              <div className="result-detail-row">
+                <span className="result-detail-label">Current Balance</span>
+                <strong className="result-detail-value highlight">
+                  ₹{walletBalance.toLocaleString('en-IN')}
+                </strong>
+              </div>
+              <div className="result-detail-row">
+                <span className="result-detail-label">Timestamp</span>
+                <span className="result-detail-value">
+                  {paymentResultModal.date || 'Just now'}
+                </span>
+              </div>
+            </div>
+
+            <div className="result-modal-actions-row">
+              {paymentResultModal.status === 'success' ? (
+                <button
+                  type="button"
+                  className="btn-modal-action-primary success"
+                  onClick={() => {
+                    setPaymentResultModal(null);
+                    setActiveLedgerTab('recharges');
+                    const el = document.getElementById('wallet-ledger-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  Done / View Wallet History →
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="btn-modal-action-primary failed"
+                    onClick={() => {
+                      setPaymentResultModal(null);
+                      scrollToTopUp();
+                    }}
+                  >
+                    Try Again ⟳
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-modal-action-secondary"
+                    onClick={() => {
+                      setPaymentResultModal(null);
+                      setActiveLedgerTab('failed');
+                      const el = document.getElementById('wallet-ledger-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                  >
+                    View Failed List
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

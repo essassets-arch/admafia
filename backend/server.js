@@ -1402,11 +1402,29 @@ app.post('/api/payments/razorpay/payment-link', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Enter an amount from ₹300 to ₹10,00,000.' });
     }
     const cleanPhone = String(req.body?.phone || req.body?.customerId || '').replace(/\D/g, '').slice(-10);
-    const customer = await query(
+    let customer = await query(
       `SELECT id, phone, username, contact_person, email, company_name FROM customers
        WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
       [req.body?.customerId || '', cleanPhone, req.body?.username || '']
     );
+    if (!customer.rowCount) {
+      if (cleanPhone || req.body?.username) {
+        const newCustId = req.body?.customerId && !String(req.body.customerId).startsWith('rzp_') ? req.body.customerId : `cust_${Date.now()}`;
+        const newPhone = cleanPhone || '9999999999';
+        const newName = req.body?.contactPerson || req.body?.username || `Client ${newPhone.slice(-4)}`;
+        await query(
+          `INSERT INTO customers (id, phone, username, contact_person, company_name, email, status, payment_status)
+           VALUES ($1, $2, $3, $4, $5, $6, 'active', 'pending')
+           ON CONFLICT DO NOTHING`,
+          [newCustId, newPhone, req.body?.username || newPhone, newName, req.body?.companyName || newName, req.body?.email || `${newPhone}@client.admafia.marketing`]
+        ).catch(() => {});
+        customer = await query(
+          `SELECT id, phone, username, contact_person, email, company_name FROM customers
+           WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
+          [newCustId, newPhone, req.body?.username || '']
+        );
+      }
+    }
     if (!customer.rowCount) {
       return res.status(404).json({ ok: false, error: 'Customer account not found.' });
     }
@@ -1491,12 +1509,23 @@ export async function creditCustomerWallet({
 
   return await withTransaction(async (txQuery) => {
     // 1. Resolve customer
-    const custRes = await txQuery(
+    let custRes = await txQuery(
       `SELECT * FROM customers
        WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3)
        LIMIT 1`,
       [customerId || '', cleanPhone, username || '']
     );
+
+    if (custRes.rowCount === 0) {
+      const fallbackId = customerId || `cust_${cleanPhone || Date.now()}`;
+      await txQuery(
+        `INSERT INTO customers (id, phone, username, contact_person, company_name, email, status, payment_status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'active', 'paid')
+         ON CONFLICT (id) DO NOTHING`,
+        [fallbackId, cleanPhone || '9999999999', username || cleanPhone || fallbackId, `Client ${cleanPhone || fallbackId}`, `Business ${cleanPhone || fallbackId}`, `${cleanPhone || fallbackId}@client.admafia.marketing`]
+      );
+      custRes = await txQuery(`SELECT * FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`, [fallbackId, cleanPhone]);
+    }
 
     if (custRes.rowCount === 0) {
       throw new Error(`Customer account not found for wallet credit (ID: ${customerId || 'N/A'}, Phone: ${cleanPhone || 'N/A'}).`);
@@ -1654,19 +1683,60 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
     const {
       razorpay_payment_id,
       razorpay_payment_link_id,
+      razorpay_payment_link_reference_id,
       razorpay_payment_link_status,
+      razorpay_signature,
     } = req.query || {};
 
     const paymentId = String(razorpay_payment_id || '').trim();
     const paymentLinkId = String(razorpay_payment_link_id || '').trim();
+    const linkRefId = String(razorpay_payment_link_reference_id || '').trim();
     const status = String(razorpay_payment_link_status || '').toLowerCase().trim();
+    const signature = String(razorpay_signature || '').trim();
 
-    if (status !== 'paid' && !paymentId) {
-      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&reason=Payment+cancelled+or+declined`);
+    // Verify Payment Link HMAC SHA-256 signature if signature params are present
+    if (signature && paymentLinkId && linkRefId && status && paymentId) {
+      const payload = `${paymentLinkId}|${linkRefId}|${status}|${paymentId}`;
+      const expected = createHmac('sha256', razorpayKeySecret).update(payload).digest('hex');
+      let valid = false;
+      try {
+        valid = timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+      } catch {
+        valid = false;
+      }
+      if (!valid) {
+        console.warn('[Razorpay Callback] Invalid Payment Link HMAC signature:', signature);
+        return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&reason=Invalid+payment+signature#app/wallet`);
+      }
     }
 
-    if (!paymentId) {
-      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&reason=Missing+payment+reference`);
+    if (status !== 'paid' || !paymentId) {
+      const failReason = status === 'cancelled' ? 'Payment Cancelled' : (status === 'failed' ? 'Transaction Failed' : 'Payment cancelled or declined');
+      let customerId = null;
+      if (paymentLinkId) {
+        try {
+          const plinkResp = await fetch(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(paymentLinkId)}`, {
+            headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
+          });
+          const plinkData = await plinkResp.json();
+          customerId = plinkData?.notes?.customer_id;
+        } catch (e) {}
+      }
+      if (customerId) {
+        await query(
+          `INSERT INTO wallet_transactions (
+            id, customer_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+          ) VALUES ($1, $2, 'Credit', 0, 0, $3, $4, 'Razorpay Secure (Failed)', 'Failed ✕')
+          ON CONFLICT (reference_utr) DO NOTHING`,
+          [
+            `tx_fail_${Date.now()}`,
+            customerId,
+            paymentId || `FAIL_${Date.now()}`,
+            `Online recharge ${failReason.toLowerCase()}`,
+          ]
+        ).catch(() => {});
+      }
+      return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&reason=${encodeURIComponent(failReason)}#app/wallet`);
     }
 
     // Verify payment directly with Razorpay API (Server-to-Server trusted evidence)
@@ -1677,12 +1747,12 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
 
     if (!paymentResp.ok || payment.status !== 'captured') {
       console.warn('[Razorpay Callback] Payment not captured:', paymentId, payment.status);
-      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&payment_id=${paymentId}&reason=Payment+not+captured`);
+      return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${paymentId}&reason=Payment+not+captured#app/wallet`);
     }
 
     const cleanAmount = Number(payment.amount || 0) / 100;
     if (cleanAmount < 300) {
-      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&payment_id=${paymentId}&reason=Amount+below+minimum`);
+      return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${paymentId}&reason=Amount+below+minimum#app/wallet`);
     }
 
     // Resolve customer identity from payment notes or contact
@@ -1704,17 +1774,17 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
       } catch (e) {}
     }
 
+    let targetCustId = null;
     const custRes = await query(
       `SELECT id FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`,
       [customerId || '', custPhone]
     );
 
-    if (custRes.rowCount === 0) {
-      console.error('[Razorpay Callback] Customer account not found for payment:', paymentId);
-      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&payment_id=${paymentId}&reason=Customer+account+mismatch`);
+    if (custRes.rowCount > 0) {
+      targetCustId = custRes.rows[0].id;
+    } else {
+      targetCustId = customerId || `cust_${custPhone || Date.now()}`;
     }
-
-    const targetCustId = custRes.rows[0].id;
 
     // Credit the wallet idempotently via atomic database transaction
     await creditCustomerWallet({
@@ -1727,11 +1797,11 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
 
     return res.redirect(
       303,
-      `${baseUrl}/app/lead#app/wallet?payment_status=success&payment_id=${encodeURIComponent(paymentId)}&amount=${cleanAmount}`
+      `${baseUrl}/app/lead?payment_status=success&payment_id=${encodeURIComponent(paymentId)}&amount=${cleanAmount}#app/wallet`
     );
   } catch (err) {
     console.error('[Razorpay Callback Error]', err);
-    return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&reason=${encodeURIComponent(err.message)}`);
+    return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&reason=${encodeURIComponent(err.message)}#app/wallet`);
   }
 });
 

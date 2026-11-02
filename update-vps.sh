@@ -34,16 +34,19 @@ echo "📦 3/5 Verifying backend dependencies..."
 cd "$APP_DIR/backend"
 npm install
 
-# 4. Restart Application Daemon (PM2 or Docker Compose)
+# 4. Restart Application Daemon (Docker Compose or PM2)
 echo "🚀 4/5 Restarting AdMafia application process on port $PORT..."
-if command -v pm2 > /dev/null 2>&1; then
+if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
+  echo "🐳 Rebuilding and launching Docker Compose stack (backend, frontend)..."
+  cd "$APP_DIR"
+  pm2 delete admafia 2>/dev/null || true
+  pm2 save 2>/dev/null || true
+  docker compose build --no-cache frontend backend
+  docker compose up -d
+elif command -v pm2 > /dev/null 2>&1; then
   pm2 delete admafia 2>/dev/null || true
   pm2 start server.js --name "admafia"
   pm2 save
-elif command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
-  cd "$APP_DIR"
-  docker compose down --remove-orphans 2>/dev/null || true
-  docker compose up -d --build
 fi
 
 # 5. Configure Nginx with Port 443 SSL for admafia.marketing (Eliminates gambling/casino collision)
