@@ -238,6 +238,7 @@ function mapWalletTxRow(row) {
     customerId: row.customer_id,
     type: row.tx_type,
     amount: Number(row.amount || 0),
+    balance: Number(row.balance_after || 0),
     balanceAfter: Number(row.balance_after || 0),
     ref: row.reference_utr,
     desc: row.description,
@@ -1596,7 +1597,7 @@ app.post('/api/wallets/failed-transaction', async (req, res) => {
 
 app.post('/api/wallets/deduct', async (req, res) => {
   try {
-    const { customerId, phone, username, amount, activeDays } = req.body || {};
+    const { customerId, phone, username, amount, activeDays, force, manual } = req.body || {};
     const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
 
     const custRes = await query(
@@ -1645,7 +1646,7 @@ app.post('/api/wallets/deduct', async (req, res) => {
       daySet.add(todayDayCode);
       finalActiveDays = Array.from(daySet).join(',');
 
-      if (isAlreadyDeductedToday) {
+      if (isAlreadyDeductedToday && !force && !manual) {
         // Idempotent: Do not double-deduct wallet balance!
         await txQuery(
           `UPDATE wallets SET

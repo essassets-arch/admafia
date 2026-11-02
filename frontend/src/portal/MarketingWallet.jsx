@@ -28,7 +28,6 @@ export default function MarketingWallet({
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [razorpayMode, setRazorpayMode] = useState(null);
   const [actionAlert, setActionAlert] = useState(null); // { type: 'success' | 'error', message: string }
-  const [daysDeliveredCount, setDaysDeliveredCount] = useState(0);
   const [copiedTxId, setCopiedTxId] = useState(null);
 
   // Active recharge amount
@@ -55,8 +54,23 @@ export default function MarketingWallet({
   const failedList = transactions.filter(isFailedTx);
   const creditsList = transactions.filter((t) => t.type === 'Credit' && !isFailedTx(t));
   const debitsList = transactions.filter((t) => t.type === 'Debit');
-  const totalSpent = debitsList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const totalPaidLifetime = creditsList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+  const actualDaysDelivered = debitsList.length;
+  const actualDebitedTotal = debitsList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const totalSpent = Math.max(actualDebitedTotal, Number(customer.totalAdSpent || 0));
+
+  const totalPaidLifetime = Math.max(
+    creditsList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
+    Number(customer.totalLifetimePaid || customer.amountPaid || 0),
+    walletBalance
+  );
+
+  const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date().getDay()];
+  const isDeductedToday = Boolean(
+    customer.isDeductedToday ||
+    (customer.activeDays && customer.activeDays.includes(todayDayCode) && customer.lockedDays?.includes(todayDayCode)) ||
+    debitsList.some((d) => String(d.date || '').includes('Today') || String(d.desc || '').includes(todayDayCode))
+  );
 
   // Filtered transactions for the selected ledger tab
   let filteredTxList = [];
@@ -259,11 +273,10 @@ export default function MarketingWallet({
   };
 
   // Trigger Deduct Today's ₹300 Ad Spend
-  const handleDeductTodaySpend = () => {
+  const handleDeductTodaySpend = async () => {
     if (onDeductDailyAdSpend) {
-      const res = onDeductDailyAdSpend();
+      const res = await onDeductDailyAdSpend();
       if (res && res.success) {
-        setDaysDeliveredCount((prev) => prev + 1);
         setActionAlert({ type: 'success', message: res.message });
       } else {
         setActionAlert({
@@ -621,8 +634,10 @@ export default function MarketingWallet({
               <span className={`engine-status-pill ${isCampaignLive ? 'active' : 'paused'}`}>
                 {isCampaignLive ? 'Live & Delivering' : 'Paused (Low Balance)'}
               </span>
-              <div className="mini-box-subline">Pending Deduction</div>
-              <div className="mini-box-caption">Ready to cut ₹{dailyAdSpend} for today's placement</div>
+              <div className="mini-box-subline">{isDeductedToday ? 'Deduction Completed ✓' : 'Pending Deduction'}</div>
+              <div className="mini-box-caption">
+                {isDeductedToday ? `Today's ₹${dailyAdSpend} placement debited` : `Ready to cut ₹${dailyAdSpend} for today's placement`}
+              </div>
             </div>
           </div>
 
@@ -630,7 +645,7 @@ export default function MarketingWallet({
           <div className="engine-mini-box">
             <div className="mini-box-label">Next Auto-Deduction</div>
             <div className="engine-mini-content">
-              <div className="mini-box-big-text">Tonight @ 12:00 AM</div>
+              <div className="mini-box-big-text">{isDeductedToday ? 'Tomorrow @ 12:00 AM' : 'Tonight @ 12:00 AM'}</div>
               <div className="mini-box-caption text-coral">
                 -₹{dailyAdSpend} from wallet (Est. Bal: ₹{Math.max(0, walletBalance - dailyAdSpend).toLocaleString('en-IN')})
               </div>
@@ -641,8 +656,8 @@ export default function MarketingWallet({
           <div className="engine-mini-box">
             <div className="mini-box-label">Total Runtime Deducted</div>
             <div className="engine-mini-content">
-              <div className="mini-box-big-text">{daysDeliveredCount} Days Delivered</div>
-              <div className="mini-box-caption">₹{(daysDeliveredCount * dailyAdSpend).toLocaleString('en-IN')} total debited from wallet</div>
+              <div className="mini-box-big-text">{actualDaysDelivered} Days Delivered</div>
+              <div className="mini-box-caption">₹{actualDebitedTotal.toLocaleString('en-IN')} total debited from wallet</div>
             </div>
           </div>
         </div>
@@ -658,7 +673,7 @@ export default function MarketingWallet({
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <span>Deduct Today's ₹{dailyAdSpend} Ad Spend</span>
+            <span>{isDeductedToday ? `Deduct ₹${dailyAdSpend} Ad Spend (Manual)` : `Deduct Today's ₹${dailyAdSpend} Ad Spend`}</span>
           </button>
 
           <button

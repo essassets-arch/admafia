@@ -62,22 +62,30 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     const cUser = String(cust.username || '').trim().toLowerCase();
     const cComp = String(cust.companyName || cust.name || '').trim().toLowerCase();
 
-    const itemCustId = String(item.customerId || '').trim();
-    const itemCustPhone = String(item.customerPhone || '').replace(/\D/g, '').slice(-10);
-    const itemCustUser = String(item.customerUsername || '').trim().toLowerCase();
+    const itemCustId = String(item.customerId || item.customer_id || '').trim();
+    const itemCustPhone = String(item.customerPhone || item.phone || '').replace(/\D/g, '').slice(-10);
+    const itemCustUser = String(item.customerUsername || item.username || '').trim().toLowerCase();
 
-    // Strict conflict guard: if item explicitly belongs to a different customer identity, reject immediately
-    if (itemCustId && cId && itemCustId !== cId) return false;
-    if (itemCustPhone && cPhone && itemCustPhone !== cPhone) return false;
+    const cIdDigits = cId.replace(/\D/g, '').slice(-10);
+    const itemIdDigits = itemCustId.replace(/\D/g, '').slice(-10);
+
+    // 1. Authoritative 10-digit mobile number match
+    if (cPhone && (cPhone === itemCustPhone || cPhone === itemIdDigits)) return true;
+    if (cIdDigits && cIdDigits.length === 10 && (cIdDigits === itemCustPhone || cIdDigits === itemIdDigits)) return true;
+
+    // 2. Authoritative Customer ID match (exact or normalized prefix)
+    const normCId = cId.replace(/^(cust_reg_|cust_)/, '');
+    const normItemId = itemCustId.replace(/^(cust_reg_|cust_)/, '');
+    if (normCId && normItemId && normCId === normItemId) return true;
+
+    // Strict conflict guard: if item explicitly belongs to a different customer phone or normalized ID, reject
+    if (cPhone && itemCustPhone && itemCustPhone.length === 10 && itemCustPhone !== cPhone) return false;
+    if (normCId && normItemId && normCId !== normItemId) return false;
     if (itemCustUser && cUser && itemCustUser !== cUser) return false;
 
-    // 1. Authoritative Customer ID match
-    if (cId && itemCustId && itemCustId === cId) return true;
-    // 2. Authoritative 10-digit mobile number match
-    if (cPhone && itemCustPhone && itemCustPhone === cPhone) return true;
-    if (cPhone && item.phone && String(item.phone).replace(/\D/g, '').slice(-10) === cPhone && (item.type === 'topup' || item.type === 'wallet')) return true;
     // 3. Authoritative username match
     if (cUser && itemCustUser && itemCustUser === cUser) return true;
+
     // 4. Company Name match (only fallback when item has no conflicting customer identity)
     if (cComp && cComp.length > 2) {
       if (item.company && String(item.company).trim().toLowerCase() === cComp) return true;
@@ -192,15 +200,66 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           }
           if (Array.isArray(res?.leads)) {
             const activeCustObj = res.customer || customer;
-            setLeads(res.leads.filter((item) => belongsToCustomer(item, activeCustObj)));
+            setLeads((prevLeads) => {
+              const backendLeads = res.leads.filter((item) => belongsToCustomer(item, activeCustObj));
+              const leadMap = new Map();
+              backendLeads.forEach((l) => leadMap.set(l.id || l.phone, l));
+              prevLeads.forEach((l) => {
+                const key = l.id || l.phone;
+                if (!leadMap.has(key) && belongsToCustomer(l, activeCustObj)) {
+                  leadMap.set(key, l);
+                }
+              });
+              return Array.from(leadMap.values());
+            });
           }
           if (Array.isArray(res?.transactions)) {
             const activeCustObj = res.customer || customer;
-            setTransactions(res.transactions.filter((tx) => belongsToCustomer(tx, activeCustObj)));
+            setTransactions((prevTx) => {
+              const backendTx = res.transactions.filter((tx) => belongsToCustomer(tx, activeCustObj));
+              const txMap = new Map();
+              backendTx.forEach((tx) => txMap.set(tx.ref || tx.id, tx));
+              prevTx.forEach((tx) => {
+                const key = tx.ref || tx.id;
+                if (!txMap.has(key) && belongsToCustomer(tx, activeCustObj)) {
+                  txMap.set(key, tx);
+                }
+              });
+              const mergedTx = Array.from(txMap.values());
+              try {
+                const rawAll = localStorage.getItem('growthline_wallet_transactions');
+                const allList = rawAll ? JSON.parse(rawAll) : [];
+                const globalTxMap = new Map();
+                allList.forEach((t) => globalTxMap.set(t.ref || t.id, t));
+                mergedTx.forEach((t) => globalTxMap.set(t.ref || t.id, t));
+                localStorage.setItem('growthline_wallet_transactions', JSON.stringify(Array.from(globalTxMap.values())));
+              } catch (e) {}
+              return mergedTx;
+            });
           }
           if (Array.isArray(res?.invoices)) {
             const activeCustObj = res.customer || customer;
-            setInvoices(res.invoices.filter((inv) => belongsToCustomer(inv, activeCustObj)));
+            setInvoices((prevInv) => {
+              const backendInv = res.invoices.filter((inv) => belongsToCustomer(inv, activeCustObj));
+              const invMap = new Map();
+              backendInv.forEach((inv) => invMap.set(inv.invoiceNo || inv.id, inv));
+              prevInv.forEach((inv) => {
+                const key = inv.invoiceNo || inv.id;
+                if (!invMap.has(key) && belongsToCustomer(inv, activeCustObj)) {
+                  invMap.set(key, inv);
+                }
+              });
+              const mergedInv = Array.from(invMap.values());
+              try {
+                const rawAll = localStorage.getItem('growthline_wallet_invoices');
+                const allList = rawAll ? JSON.parse(rawAll) : [];
+                const globalInvMap = new Map();
+                allList.forEach((i) => globalInvMap.set(i.invoiceNo || i.id, i));
+                mergedInv.forEach((i) => globalInvMap.set(i.invoiceNo || i.id, i));
+                localStorage.setItem('growthline_wallet_invoices', JSON.stringify(Array.from(globalInvMap.values())));
+              } catch (e) {}
+              return mergedInv;
+            });
           }
         })
         .catch(() => {});
@@ -467,45 +526,32 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   };
 
   const handleTopUpWallet = (amount, utr, sourceInfo = {}) => {
-    if (sourceInfo?.customer) {
-      const verifiedCustomer = sourceInfo.customer;
-      const verifiedBalance = Number(verifiedCustomer.walletBalance ?? verifiedCustomer.balance ?? 0);
-      setCustomer((prev) => {
-        const merged = { ...prev, ...verifiedCustomer };
-        try { localStorage.setItem('growthline_active_user', JSON.stringify(merged)); } catch (e) {}
-        return merged;
-      });
-      setWalletBalance(verifiedBalance);
-      if (Array.isArray(sourceInfo.transactions)) {
-        setTransactions(sourceInfo.transactions.filter((tx) => belongsToCustomer(tx, verifiedCustomer)));
-      }
-      if (Array.isArray(sourceInfo.invoices)) {
-        setInvoices(sourceInfo.invoices.filter((invoice) => belongsToCustomer(invoice, verifiedCustomer)));
-      }
-      return;
-    }
-
     const payNum = Number(amount) || 0;
     const currentBal = Number(walletBalance) || 0;
-    const newBal = currentBal + payNum;
+    const newBal = sourceInfo?.customer
+      ? Number(sourceInfo.customer.walletBalance ?? sourceInfo.customer.balance ?? (currentBal + payNum))
+      : (currentBal + payNum);
+
     setWalletBalance(newBal);
 
     const refCode = utr || `rzp_${Date.now().toString().slice(-8)}`;
     const nowTimeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ', Today';
     const runtimeDays = Math.max(1, Math.floor(payNum / (customer?.dailyAdSpend || 300)));
 
-    crmApi
-      .topUpWallet({
-        customerId: customer?.id,
-        phone: customer?.phone,
-        username: customer?.username,
-        amount: payNum,
-        referenceUtr: refCode,
-        paymentMethod: sourceInfo.method || 'Razorpay Secure (UPI/Card)',
-        description: sourceInfo.desc || `Marketing & Growth Budget Credit (₹${payNum.toLocaleString('en-IN')})`,
-      })
-      .then(() => crmApi.syncStateFromPostgres())
-      .catch(() => {});
+    if (!sourceInfo?.customer) {
+      crmApi
+        .topUpWallet({
+          customerId: customer?.id,
+          phone: customer?.phone,
+          username: customer?.username,
+          amount: payNum,
+          referenceUtr: refCode,
+          paymentMethod: sourceInfo.method || 'Razorpay Secure (UPI/Card)',
+          description: sourceInfo.desc || `Marketing & Growth Budget Credit (₹${payNum.toLocaleString('en-IN')})`,
+        })
+        .then(() => crmApi.syncStateFromPostgres())
+        .catch(() => {});
+    }
 
     const newTx = {
       id: `tx_${Date.now()}`,
@@ -524,13 +570,24 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     };
 
     setTransactions((prev) => {
-      const updated = [newTx, ...prev];
+      const mergedList = [newTx, ...prev.filter((t) => (t.ref || t.id) !== refCode && t.id !== newTx.id)];
+      if (Array.isArray(sourceInfo.transactions)) {
+        const extra = sourceInfo.transactions.filter((t) => belongsToCustomer(t, customer));
+        extra.forEach((t) => {
+          if (!mergedList.some((m) => (m.ref || m.id) === (t.ref || t.id))) {
+            mergedList.push(t);
+          }
+        });
+      }
       try {
         const rawAll = localStorage.getItem('growthline_wallet_transactions');
         const allList = rawAll ? JSON.parse(rawAll) : [];
-        localStorage.setItem('growthline_wallet_transactions', JSON.stringify([newTx, ...allList]));
+        const globalTxMap = new Map();
+        allList.forEach((t) => globalTxMap.set(t.ref || t.id, t));
+        mergedList.forEach((t) => globalTxMap.set(t.ref || t.id, t));
+        localStorage.setItem('growthline_wallet_transactions', JSON.stringify(Array.from(globalTxMap.values())));
       } catch (e) {}
-      return updated;
+      return mergedList;
     });
 
     // Also create official GST invoice isolated to this customer
@@ -554,23 +611,35 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     };
 
     setInvoices((prev) => {
-      const updated = [newInv, ...prev];
+      const mergedInv = [newInv, ...prev.filter((inv) => (inv.invoiceNo || inv.id) !== newInv.invoiceNo)];
+      if (Array.isArray(sourceInfo.invoices)) {
+        const extra = sourceInfo.invoices.filter((i) => belongsToCustomer(i, customer));
+        extra.forEach((i) => {
+          if (!mergedInv.some((m) => (m.invoiceNo || m.id) === (i.invoiceNo || i.id))) {
+            mergedInv.push(i);
+          }
+        });
+      }
       try {
         const rawAll = localStorage.getItem('growthline_wallet_invoices');
         const allList = rawAll ? JSON.parse(rawAll) : [];
-        localStorage.setItem('growthline_wallet_invoices', JSON.stringify([newInv, ...allList]));
+        const globalInvMap = new Map();
+        allList.forEach((i) => globalInvMap.set(i.invoiceNo || i.id, i));
+        mergedInv.forEach((i) => globalInvMap.set(i.invoiceNo || i.id, i));
+        localStorage.setItem('growthline_wallet_invoices', JSON.stringify(Array.from(globalInvMap.values())));
       } catch (e) {}
-      return updated;
+      return mergedInv;
     });
 
     // Update customer in state and in localStorage
     setCustomer((prev) => {
+      const baseCustomer = sourceInfo?.customer ? { ...prev, ...sourceInfo.customer } : prev;
       const updated = {
-        ...prev,
+        ...baseCustomer,
         balance: newBal,
         walletBalance: newBal,
-        amountPaid: (prev.amountPaid || prev.totalLifetimePaid || 0) + payNum,
-        totalLifetimePaid: (prev.totalLifetimePaid || prev.amountPaid || 0) + payNum,
+        amountPaid: (baseCustomer.amountPaid || baseCustomer.totalLifetimePaid || 0) + (sourceInfo?.customer ? 0 : payNum),
+        totalLifetimePaid: (baseCustomer.totalLifetimePaid || baseCustomer.amountPaid || 0) + (sourceInfo?.customer ? 0 : payNum),
         paymentStatus: 'paid',
         payment_status: 'paid',
         adCampaignActive: true,
@@ -683,7 +752,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     } catch (e) {}
   };
 
-  const handleDeductDailyAdSpend = (overrideSpend) => {
+  const handleDeductDailyAdSpend = async (overrideSpend) => {
     const spend = overrideSpend ? Number(overrideSpend) : (customer.dailyAdSpend || 300);
     if (walletBalance >= spend) {
       // Current day code in India / local time
@@ -697,42 +766,57 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         ? currentDays
         : [...currentDays, todayDayCode];
 
-      crmApi
-        .deductDailyAdSpend({
+      let newBal = walletBalance - spend;
+      let backendTx = null;
+
+      try {
+        const res = await crmApi.deductDailyAdSpend({
           customerId: customer?.id,
           phone: customer?.phone,
           username: customer?.username,
           amount: spend,
           activeDays: nextActiveDays,
-        })
-        .then(() => crmApi.syncStateFromPostgres())
-        .catch(() => {});
-      const newBal = walletBalance - spend;
+          force: true,
+          manual: true,
+        });
+        if (res && typeof res.walletBalance === 'number') {
+          newBal = res.walletBalance;
+        }
+        if (res && res.transaction) {
+          backendTx = res.transaction;
+        }
+      } catch (err) {
+        console.warn('[DeductDailyAdSpend] server error, updating local:', err);
+      }
+
       setWalletBalance(newBal);
-      const newTx = {
+
+      const newTx = backendTx || {
         id: `tx_${Date.now()}`,
         customerId: customer?.id || '',
         customerPhone: customer?.phone || '',
         customerUsername: customer?.username || '',
         company: customer?.companyName || customer?.name || '',
-        date: 'Today, 12:00 AM',
-        ref: `SYS-DAILY-ADSPEND-${Date.now().toString().slice(-4)}`,
-        desc: `Daily Meta Ad Spend Campaign Deduction (₹${spend}/day)`,
+        date: 'Today, Just now',
+        ref: `SYS-DAILY-${Date.now().toString().slice(-6)}`,
+        desc: `Daily Meta Ad Spend - Per-Day Service (${todayDayCode}) (-₹${spend})`,
         type: 'Debit',
         amount: spend,
         balance: newBal,
-        method: 'Auto-Debit',
+        method: 'Daily Auto-Debit',
         status: 'Settled ✓',
       };
+
       setTransactions((prev) => {
-        const updated = [newTx, ...prev];
+        const updated = [newTx, ...prev.filter((t) => (t.ref || t.id) !== (newTx.ref || newTx.id))];
         try {
           const rawAll = localStorage.getItem('growthline_wallet_transactions');
           const allList = rawAll ? JSON.parse(rawAll) : [];
-          localStorage.setItem('growthline_wallet_transactions', JSON.stringify([newTx, ...allList]));
+          localStorage.setItem('growthline_wallet_transactions', JSON.stringify([newTx, ...allList.filter((t) => (t.ref || t.id) !== (newTx.ref || newTx.id))]));
         } catch (e) {}
         return updated;
       });
+
       setCustomer((prev) => {
         const updated = {
           ...prev,
@@ -740,6 +824,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           walletBalance: newBal,
           dailyAdSpend: spend,
           dailyPacing: spend,
+          totalAdSpent: (Number(prev.totalAdSpent) || 0) + spend,
           adCampaignActive: true,
           activeDays: nextActiveDays,
           lastDeductedAt: new Date().toISOString(),
@@ -751,6 +836,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         } catch (e) {}
         return updated;
       });
+
       return { success: true, message: `Successfully deducted ₹${spend} ad spend for today!` };
     }
     return { success: false, message: `Insufficient balance! Wallet has ₹${walletBalance.toFixed(0)}, needs ₹${spend}.` };
