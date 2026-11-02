@@ -3803,57 +3803,121 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
   const [search, setSearch] = useState('');
   const [topupCust, setTopupCust] = useState(null);
   const [topupAmount, setTopupAmount] = useState(4500);
+  const [selectedWalletCust, setSelectedWalletCust] = useState(null);
 
   const filtered = customers.filter((c) => {
-    const q = search.toLowerCase();
+    const q = search.toLowerCase().trim();
     const matchSearch =
-      (c.name || c.companyName || '').toLowerCase().includes(q) ||
+      !q ||
+      (c.companyName || '').toLowerCase().includes(q) ||
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.contactPerson || '').toLowerCase().includes(q) ||
+      (c.contact || '').toLowerCase().includes(q) ||
       (c.username || '').toLowerCase().includes(q) ||
       (c.phone || '').includes(q) ||
-      (c.city || '').toLowerCase().includes(q);
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.personalEmail || '').toLowerCase().includes(q) ||
+      (c.city || '').toLowerCase().includes(q) ||
+      (c.state || '').toLowerCase().includes(q) ||
+      (c.category || '').toLowerCase().includes(q) ||
+      (c.industry || '').toLowerCase().includes(q) ||
+      (c.id || '').toLowerCase().includes(q);
+
     if (!matchSearch) return false;
-    if (filter === 'healthy') return (c.runwayDays || 0) > 15;
-    if (filter === 'low') return (c.runwayDays || 0) > 0 && (c.runwayDays || 0) <= 5;
-    if (filter === 'paused') return (c.runwayDays || 0) === 0;
+    const bal = c.balance ?? c.walletBalance ?? 0;
+    const pacing = c.dailyPacing || c.dailyAdSpend || 300;
+    const runway = c.runwayDays ?? Math.floor(bal / pacing);
+
+    if (filter === 'healthy') return runway > 15;
+    if (filter === 'low') return runway > 0 && runway <= 5;
+    if (filter === 'paused') return bal <= 0 || runway === 0;
     return true;
   });
 
-  const handleApplyTopup = () => {
+  const totalPlatformBalance = customers.reduce((sum, c) => sum + (c.balance ?? c.walletBalance ?? 0), 0);
+  const healthyCount = customers.filter((c) => {
+    const bal = c.balance ?? c.walletBalance ?? 0;
+    const pacing = c.dailyPacing || c.dailyAdSpend || 300;
+    const runway = c.runwayDays ?? Math.floor(bal / pacing);
+    return runway > 15;
+  }).length;
+  const lowCount = customers.filter((c) => {
+    const bal = c.balance ?? c.walletBalance ?? 0;
+    const pacing = c.dailyPacing || c.dailyAdSpend || 300;
+    const runway = c.runwayDays ?? Math.floor(bal / pacing);
+    return runway > 0 && runway <= 5;
+  }).length;
+  const pausedCount = customers.filter((c) => (c.balance ?? c.walletBalance ?? 0) <= 0).length;
+
+  const handleApplyTopup = async () => {
     if (!topupCust) return;
-    const addedDays = Math.floor(topupAmount / 300);
-    const newBal = (topupCust.balance || 0) + topupAmount;
+    const rechargeNum = Number(topupAmount) || 0;
+    if (rechargeNum <= 0) {
+      alert('Please enter a valid top-up amount.');
+      return;
+    }
+
+    const currentBal = topupCust.balance ?? topupCust.walletBalance ?? 0;
+    const pacing = topupCust.dailyPacing || topupCust.dailyAdSpend || 300;
+    const addedDays = Math.floor(rechargeNum / pacing);
+    const newBal = currentBal + rechargeNum;
+    const currentPaid = topupCust.amountPaid || topupCust.totalLifetimePaid || 0;
+    const newPaid = currentPaid + rechargeNum;
+    const newRunway = Math.max(0, (topupCust.runwayDays || 0) + addedDays);
+
+    const updatedCustomer = {
+      ...topupCust,
+      balance: newBal,
+      walletBalance: newBal,
+      amountPaid: newPaid,
+      totalLifetimePaid: newPaid,
+      runwayDays: newRunway,
+      paymentStatus: 'paid',
+      payment_status: 'paid',
+      status: 'active',
+    };
+
+    // Update in-memory state
     setCustomers((prev) =>
-      prev.map((c) => {
-        if (c.id !== topupCust.id) return c;
-        return {
-          ...c,
-          balance: newBal,
-          walletBalance: newBal,
-          amountPaid: (c.amountPaid || 0) + topupAmount,
-          runwayDays: (c.runwayDays || 0) + addedDays,
-          paymentStatus: 'paid',
-          payment_status: 'paid',
-          status: 'active',
-        };
-      })
+      prev.map((c) => (c.id === topupCust.id ? updatedCustomer : c))
     );
+    if (selectedWalletCust?.id === topupCust.id) {
+      setSelectedWalletCust(updatedCustomer);
+    }
+
+    // Persist to PostgreSQL backend database
+    try {
+      crmApi.patchCustomer(topupCust.id, {
+        balance: newBal,
+        walletBalance: newBal,
+        amountPaid: newPaid,
+        totalLifetimePaid: newPaid,
+        runwayDays: newRunway,
+        paymentStatus: 'paid',
+        payment_status: 'paid',
+        status: 'active',
+      }).catch((err) => console.warn('[Top-up patch API non-fatal]', err));
+    } catch (e) {}
 
     // Record top-up in Desk 05 Payment Records Ledger & isolated customer wallet
     try {
       const utrRef = `UTR-TOPUP-${Date.now().toString().slice(-6)}`;
+      const companyTitle = topupCust.companyName || topupCust.name || 'Corporate Workspace';
+      const contactTitle = topupCust.contactPerson || topupCust.contact || topupCust.username || 'Account Admin';
+
       const topupRecord = {
         id: `pay_top_${Date.now()}`,
         customerId: topupCust.id,
         receiptNumber: `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-        company: topupCust.companyName || topupCust.name,
-        contact: topupCust.contactPerson || topupCust.contact || topupCust.username || 'Account Admin',
+        company: companyTitle,
+        contact: contactTitle,
         phone: topupCust.phone,
         city: topupCust.city || 'India',
         type: 'topup',
         typeLabel: 'Wallet Top-Up',
-        amount: topupAmount,
-        gstAmount: Math.round(topupAmount * 0.18),
-        total: topupAmount,
+        amount: rechargeNum,
+        gstAmount: Math.round(rechargeNum * 0.18),
+        total: rechargeNum,
         paymentMode: 'Bank Transfer (IMPS/NEFT)',
         utr: utrRef,
         date: getLiveNowFormatted(),
@@ -3873,12 +3937,12 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
         customerId: topupCust.id,
         customerPhone: topupCust.phone,
         customerUsername: topupCust.username,
-        company: topupCust.companyName || topupCust.name,
+        company: companyTitle,
         date: getLiveNowFormatted(),
         ref: utrRef,
-        desc: `Sub-Admin Wallet Top-Up Credit (₹${topupAmount.toLocaleString('en-IN')})`,
+        desc: `Sub-Admin Wallet Top-Up Credit (₹${rechargeNum.toLocaleString('en-IN')})`,
         type: 'Credit',
-        amount: topupAmount,
+        amount: rechargeNum,
         balance: newBal,
         method: 'Sub-Admin Credit (IMPS/NEFT)',
         status: 'Verified ✓',
@@ -3899,7 +3963,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
       window.dispatchEvent(new CustomEvent('growthline_payment_recorded', { detail: topupRecord }));
     } catch (e) {}
 
-    alert(`₹${topupAmount.toLocaleString('en-IN')} added to ${topupCust.name}!`);
+    alert(`Successfully credited ₹${rechargeNum.toLocaleString('en-IN')} to ${topupCust.companyName || topupCust.name}! New Balance: ₹${newBal.toLocaleString('en-IN')}`);
     setTopupCust(null);
   };
 
@@ -3909,9 +3973,10 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
       <div className="desk-header">
         <div>
           <div className="desk-breadcrumb">SUB ADMIN &amp; SUPPORT OPERATIONS / DESK 06</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h1 className="desk-title">Wallets &amp; Balances</h1>
             <span className="desk-pill pill-indigo" style={{ fontWeight: 800 }}>{customers.length} Accounts</span>
+            <span className="desk-pill pill-emerald" style={{ fontWeight: 800 }}>Platform Funds: {formatINR(totalPlatformBalance)}</span>
           </div>
           <p className="desk-subtitle">
             Centralized client advertising ledger, daily ₹300 auto-cut deduction monitoring, runway health alerts, and instant top-ups.
@@ -3924,39 +3989,39 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
         <div className="desk-kpi-card">
           <div className="desk-kpi-label">TOTAL BILLING ACCOUNTS</div>
           <div className="desk-kpi-val text-indigo">{customers.length}</div>
-          <div className="desk-kpi-sub">Managed client ledgers</div>
+          <div className="desk-kpi-sub">Managed client ad ledgers</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">DAILY BURN RATE</div>
-          <div className="desk-kpi-val text-emerald">₹300 / day</div>
-          <div className="desk-kpi-sub">Transparent daily auto-cut</div>
+          <div className="desk-kpi-label">TOTAL PLATFORM FUNDS</div>
+          <div className="desk-kpi-val text-emerald">{formatINR(totalPlatformBalance)}</div>
+          <div className="desk-kpi-sub">Total active client balances</div>
         </div>
         <div className="desk-kpi-card">
           <div className="desk-kpi-label">HEALTHY RUNWAY (&gt;15d)</div>
-          <div className="desk-kpi-val text-emerald">{customers.filter((c) => (c.runwayDays || 0) > 15).length}</div>
+          <div className="desk-kpi-val text-emerald">{healthyCount}</div>
           <div className="desk-kpi-sub">Uninterrupted ad placement</div>
         </div>
         <div className="desk-kpi-card">
           <div className="desk-kpi-label">PAUSED (ZERO BAL)</div>
-          <div className="desk-kpi-val text-rose">{customers.filter((c) => (c.balance || 0) <= 0).length}</div>
+          <div className="desk-kpi-val text-rose">{pausedCount}</div>
           <div className="desk-kpi-sub">Awaiting recharge to resume</div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters & Search */}
       <div className="desk-filter-bar">
         <div className="desk-tabs">
           <button type="button" className={`desk-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
             All Accounts ({customers.length})
           </button>
           <button type="button" className={`desk-tab ${filter === 'healthy' ? 'active' : ''}`} onClick={() => setFilter('healthy')}>
-            Healthy Runway (&gt;15 Days)
+            🟢 Healthy (&gt;15 Days) ({healthyCount})
           </button>
           <button type="button" className={`desk-tab ${filter === 'low' ? 'active' : ''}`} onClick={() => setFilter('low')}>
-            Low Balance (&le;5 Days)
+            ⚠️ Low Balance (&le;5 Days) ({lowCount})
           </button>
           <button type="button" className={`desk-tab ${filter === 'paused' ? 'active' : ''}`} onClick={() => setFilter('paused')}>
-            Paused (0 Days)
+            🔴 Paused (₹0) ({pausedCount})
           </button>
         </div>
         <div className="desk-search-wrap">
@@ -3964,7 +4029,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
           <input
             type="text"
             className="desk-search-input"
-            placeholder="Search accounts..."
+            placeholder="Search company, name, phone, city, email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -3976,83 +4041,317 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
         <table className="desk-table">
           <thead>
             <tr>
-              <th>Client Account</th>
+              <th>Client Business Identity</th>
+              <th>Contact &amp; Location</th>
               <th>Available Balance</th>
               <th>Daily Burn</th>
-              <th>Campaign Runway</th>
-              <th style={{ textAlign: 'right' }}>Placement Delivery</th>
+              <th>Runway</th>
+              <th>Delivery Status</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((c) => {
-              const pacing = c.dailyPacing || 300;
-              const isLow = (c.balance || 0) < pacing || (c.balance || 0) <= 0 || (c.runwayDays || 0) <= 1;
-              return (
-              <tr key={c.id}>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 800, color: '#0f172a' }}>{c.name}</span>
-                    {isLow && (
-                      <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
-                        ⚠️ Low Balance
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{c.contact} • {c.city}</div>
-                </td>
-                <td>
-                  <span style={{ fontSize: '1rem', fontWeight: 800, color: !isLow ? '#0f172a' : '#e11d48' }}>{formatINR(c.balance)}</span>
-                  {isLow && (
-                    <div style={{ fontSize: '0.70rem', color: '#e11d48', fontWeight: 800, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
-                      <AlertTriangle size={11} /> ⚠️ Customer Balance is Low
-                    </div>
-                  )}
-                </td>
-                <td>
-                  <span style={{ fontWeight: 700, color: '#4f46e5' }}>₹{pacing} / day</span>
-                </td>
-                <td>
-                  <span className={`desk-pill ${c.runwayDays > 15 ? 'pill-emerald' : !isLow ? 'pill-amber' : 'pill-rose'}`}>
-                    {c.runwayDays || 0} Days
-                  </span>
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: !isLow ? '#059669' : '#e11d48' }}>
-                    {(c.balance || 0) <= 0
-                      ? '🔴 Delivery Paused (Zero Balance)'
-                      : isLow
-                      ? '⚠️ Customer Balance is Low (Recharge Req.)'
-                      : '🟢 Active Lead Ingestion'}
-                  </span>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                  <Building2 size={32} color="#94a3b8" style={{ margin: '0 auto 8px' }} />
+                  <div style={{ fontWeight: 700, color: '#334155' }}>No client wallets matching search or filter criteria</div>
                 </td>
               </tr>
-            );
-          })}
+            ) : (
+              filtered.map((c) => {
+                const bal = c.balance ?? c.walletBalance ?? 0;
+                const pacing = c.dailyPacing || c.dailyAdSpend || 300;
+                const runway = c.runwayDays ?? Math.floor(bal / pacing);
+                const isDepleted = bal <= 0;
+                const isLow = isDepleted || bal < pacing * 2 || runway <= 1;
+
+                const companyName = c.companyName || c.name || 'Corporate Workspace';
+                const contactPerson = c.contactPerson || c.contact || c.username || 'Account Admin';
+
+                return (
+                  <tr key={c.id}>
+                    {/* 1. Client Business Identity (Proper Name, Category, ID) */}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#0f172a' }}>
+                          {companyName}
+                        </span>
+                        {c.category && (
+                          <span style={{ background: '#f1f5f9', color: '#475569', padding: '1px 7px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
+                            {c.category}
+                          </span>
+                        )}
+                        {isDepleted ? (
+                          <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
+                            🔴 Zero Balance
+                          </span>
+                        ) : isLow ? (
+                          <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
+                            ⚠️ Low Balance
+                          </span>
+                        ) : null}
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 3 }}>
+                        Workspace ID: <code>{c.id}</code> • Registered: {c.registeredAt || 'Active'}
+                      </div>
+                    </td>
+
+                    {/* 2. Contact & Location */}
+                    <td>
+                      <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.86rem' }}>
+                        {contactPerson}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>
+                        +91 {c.phone}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        {c.email || 'No Email'} • {c.city ? `${c.city}, ` : ''}{c.state || c.country || 'India'}
+                      </div>
+                    </td>
+
+                    {/* 3. Available Balance & Lifetime Paid */}
+                    <td>
+                      <span style={{ fontSize: '1.05rem', fontWeight: 900, color: !isLow ? '#059669' : '#e11d48' }}>
+                        {formatINR(bal)}
+                      </span>
+                      <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 600, marginTop: 2 }}>
+                        Total Paid: {formatINR(c.amountPaid || c.totalLifetimePaid || 0)}
+                      </div>
+                      {isLow && (
+                        <div style={{ fontSize: '0.70rem', color: '#e11d48', fontWeight: 800, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <AlertTriangle size={11} /> ⚠️ Balance is Low
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 4. Daily Burn Rate */}
+                    <td>
+                      <span style={{ fontWeight: 800, color: '#4f46e5' }}>₹{pacing} / day</span>
+                      <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 2 }}>
+                        {Array.isArray(c.activeDays) && c.activeDays.length > 0 ? c.activeDays.join(', ') : 'Weekdays'}
+                      </div>
+                    </td>
+
+                    {/* 5. Campaign Runway */}
+                    <td>
+                      <span className={`desk-pill ${runway > 15 ? 'pill-emerald' : !isLow ? 'pill-amber' : 'pill-rose'}`} style={{ fontWeight: 800 }}>
+                        {runway} Days
+                      </span>
+                    </td>
+
+                    {/* 6. Placement Delivery Status */}
+                    <td>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: !isLow ? '#059669' : '#e11d48' }}>
+                        {isDepleted
+                          ? '🔴 Delivery Paused (Zero Balance)'
+                          : isLow
+                          ? '⚠️ Low Balance (Recharge Req.)'
+                          : '🟢 Active Lead Ingestion'}
+                      </span>
+                    </td>
+
+                    {/* 7. Interactive Action Buttons */}
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        {/* Details Modal Button */}
+                        <button
+                          type="button"
+                          className="desk-action-btn"
+                          style={{ background: '#f8fafc', color: '#334155', borderColor: '#cbd5e1', fontWeight: 700 }}
+                          onClick={() => setSelectedWalletCust(c)}
+                          title="View 360° Account Details & Ledger"
+                        >
+                          <Eye size={13} /> Details
+                        </button>
+
+                        {/* Top-Up Quick Action Button */}
+                        <button
+                          type="button"
+                          className="sales-btn-primary"
+                          style={{ padding: '5px 12px', fontSize: '0.78rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          onClick={() => {
+                            setTopupCust(c);
+                            setTopupAmount(4500);
+                          }}
+                          title="Instant Wallet Top-Up Credit"
+                        >
+                          <Plus size={13} /> Top-Up
+                        </button>
+
+                        {/* Direct WhatsApp Chat Action */}
+                        <a
+                          href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(contactPerson)},%20your%20current%20AdMafia%20wallet%20balance%20is%20${encodeURIComponent(formatINR(bal))}%20(${runway}%20days%20runway).`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="desk-action-btn"
+                          style={{ textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}
+                          title="Open WhatsApp Chat"
+                        >
+                          <MessageSquare size={13} color="#059669" />
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
 
+      {/* Comprehensive Customer Wallet 360° Dossier Details Modal */}
+      {selectedWalletCust && (
+        <div className="sales-modal-overlay" onClick={() => setSelectedWalletCust(null)}>
+          <div className="sales-modal-card" style={{ maxWidth: 740, width: '95%', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: 14, marginBottom: 16 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span className="sales-dept-badge" style={{ background: '#e0e7ff', color: '#4338ca', fontWeight: 800 }}>
+                    Client Wallet Ledger
+                  </span>
+                  <span
+                    style={{
+                      background: (selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? '#ecfdf5' : '#fff1f2',
+                      color: (selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? '#047857' : '#be123c',
+                      padding: '2px 8px',
+                      borderRadius: 9999,
+                      fontSize: '0.74rem',
+                      fontWeight: 800
+                    }}
+                  >
+                    {(selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? '● Funded & Active' : '🔴 Depleted'}
+                  </span>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+                  {selectedWalletCust.companyName || selectedWalletCust.name || 'Corporate Workspace'}
+                </h3>
+                <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 3 }}>
+                  Workspace ID: <code>{selectedWalletCust.id}</code> • Registered Phone: <strong style={{ color: '#0f172a' }}>+91 {selectedWalletCust.phone}</strong>
+                </div>
+              </div>
+              <button type="button" className="desk-close-btn" onClick={() => setSelectedWalletCust(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Financial Overview Metrics Quad */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
+              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Available Balance</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: (selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? '#059669' : '#e11d48', marginTop: 2 }}>
+                  {formatINR(selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0)}
+                </div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Daily Ad Burn</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#4f46e5', marginTop: 2 }}>
+                  ₹{selectedWalletCust.dailyPacing || selectedWalletCust.dailyAdSpend || 300}/d
+                </div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Runway Health</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
+                  {selectedWalletCust.runwayDays ?? Math.floor((selectedWalletCust.balance ?? 0) / (selectedWalletCust.dailyPacing || 300))} Days
+                </div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Total Lifetime Paid</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
+                  {formatINR(selectedWalletCust.amountPaid || selectedWalletCust.totalLifetimePaid || 0)}
+                </div>
+              </div>
+            </div>
+
+            {/* Business & Authorized Contact Details */}
+            <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 10, border: '1px solid #e2e8f0', marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company / Brand</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{selectedWalletCust.companyName || selectedWalletCust.name}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{selectedWalletCust.contactPerson || selectedWalletCust.contact || selectedWalletCust.username || 'Not Set'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#059669' }}>+91 {selectedWalletCust.phone}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Business Email</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>{selectedWalletCust.email || 'Not Provided'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Category &amp; Industry</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>{selectedWalletCust.category || 'General'} • {selectedWalletCust.industry || 'IT & Software'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Operating City &amp; State</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>{selectedWalletCust.city ? `${selectedWalletCust.city}, ` : ''}{selectedWalletCust.state || selectedWalletCust.country || 'India'}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+              <a
+                href={`https://wa.me/91${selectedWalletCust.phone}?text=Hello%20${encodeURIComponent(selectedWalletCust.contactPerson || selectedWalletCust.contact || selectedWalletCust.name || 'Partner')},%20your%20current%20AdMafia%20wallet%20balance%20is%20${encodeURIComponent(formatINR(selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0))}.`}
+                target="_blank"
+                rel="noreferrer"
+                className="desk-action-btn"
+                style={{ textDecoration: 'none', background: '#25D366', color: '#ffffff', borderColor: '#22c55e', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <MessageSquare size={14} /> Open WhatsApp Chat
+              </a>
+              <button
+                type="button"
+                className="sales-btn-primary"
+                onClick={() => {
+                  setTopupCust(selectedWalletCust);
+                  setTopupAmount(4500);
+                  setSelectedWalletCust(null);
+                }}
+                style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Plus size={14} /> Top-Up Wallet
+              </button>
+              <button type="button" className="desk-action-btn" onClick={() => setSelectedWalletCust(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top-Up Modal */}
       {topupCust && (
         <div className="sales-modal-overlay" onClick={() => setTopupCust(null)}>
-          <div className="sales-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="sales-modal-card" style={{ maxWidth: 520, width: '95%' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <span className="sales-dept-badge">Instant Ad Spend Recharge</span>
-                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 800 }}>Top-Up Client Wallet</h3>
+                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.3rem', fontWeight: 800 }}>Top-Up Client Wallet</h3>
               </div>
               <button type="button" className="desk-close-btn" onClick={() => setTopupCust(null)}>
                 <X size={18} />
               </button>
             </div>
 
-            <div className="desk-modal-box" style={{ marginBottom: 14 }}>
-              <div style={{ fontWeight: 800 }}>{topupCust.name}</div>
-              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Current Balance: {formatINR(topupCust.balance)} ({topupCust.runwayDays} Days Runway)</div>
+            <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f8fafc' }}>
+              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
+                {topupCust.companyName || topupCust.name || 'Corporate Workspace'}
+              </div>
+              <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>
+                Contact: <strong style={{ color: '#0f172a' }}>{topupCust.contactPerson || topupCust.contact || topupCust.username}</strong> • Phone: <strong style={{ color: '#059669' }}>+91 {topupCust.phone}</strong>
+              </div>
+              <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 4 }}>
+                Current Balance: <strong style={{ color: (topupCust.balance || 0) > 0 ? '#059669' : '#e11d48' }}>{formatINR(topupCust.balance ?? topupCust.walletBalance ?? 0)}</strong> ({topupCust.runwayDays || 0} Days Runway @ ₹{topupCust.dailyPacing || 300}/d)
+              </div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label className="desk-form-label">Select Recharge Preset</label>
+            <div style={{ marginBottom: 14 }}>
+              <label className="desk-form-label" style={{ fontWeight: 800, fontSize: '0.84rem' }}>Select Recharge Preset</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 6 }}>
                 {[600, 1500, 2100, 4500, 9000, 18000].map((amt) => (
                   <button
@@ -4062,9 +4361,34 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
                     onClick={() => setTopupAmount(amt)}
                   >
                     <div style={{ fontWeight: 800 }}>₹{amt.toLocaleString('en-IN')}</div>
-                    <div style={{ fontSize: '0.68rem', color: '#64748b' }}>+{Math.floor(amt / 300)} Days</div>
+                    <div style={{ fontSize: '0.68rem', color: '#64748b' }}>+{Math.floor(amt / (topupCust.dailyPacing || 300))} Days</div>
                   </button>
                 ))}
+              </div>
+
+              {/* Custom Top-Up Amount Input */}
+              <div style={{ marginTop: 12 }}>
+                <label className="desk-form-label" style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 700 }}>
+                  Or Enter Custom Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  min="100"
+                  step="100"
+                  value={topupAmount}
+                  onChange={(e) => setTopupAmount(Math.max(0, Number(e.target.value) || 0))}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1.5px solid #cbd5e1',
+                    fontSize: '0.94rem',
+                    fontWeight: 700,
+                    marginTop: 4,
+                    outline: 'none'
+                  }}
+                  placeholder="e.g. 10000"
+                />
               </div>
             </div>
 
@@ -4072,12 +4396,15 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700 }}>Total Wallet Credit</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#15803d' }}>+{formatINR(topupAmount)}</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#15803d' }}>+{formatINR(topupAmount)}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700 }}>Runway Added</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#15803d' }}>+{Math.floor(topupAmount / 300)} Days</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#15803d' }}>+{Math.floor(topupAmount / (topupCust.dailyPacing || 300))} Days</div>
                 </div>
+              </div>
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #bbf7d0', fontSize: '0.78rem', color: '#166534' }}>
+                New Balance After Recharge: <strong>{formatINR((topupCust.balance ?? topupCust.walletBalance ?? 0) + Number(topupAmount || 0))}</strong>
               </div>
             </div>
 
@@ -4085,7 +4412,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
               <button type="button" className="sales-btn-secondary" onClick={() => setTopupCust(null)}>
                 Cancel
               </button>
-              <button type="button" className="sales-btn-primary" onClick={handleApplyTopup}>
+              <button type="button" className="sales-btn-primary" onClick={handleApplyTopup} style={{ fontWeight: 800 }}>
                 Apply Credit Instantly
               </button>
             </div>
