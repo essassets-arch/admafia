@@ -655,7 +655,8 @@ export function AddFundsModal({
       prefill: {
         name: customer?.contactPerson || customer?.name || customer?.username || '',
         email: customer?.email || '',
-        contact: customer?.phone || '',
+        contact: customer?.phone ? String(customer.phone).replace(/\D/g, '').slice(-10) : '',
+        method: 'upi',
       },
       theme: {
         color: '#4f46e5',
@@ -2053,7 +2054,8 @@ export function MarketingGrowthPaymentModal({
       prefill: {
         name: customer?.contactPerson || customer?.name || customer?.username || '',
         email: customer?.email || '',
-        contact: customer?.phone || '',
+        contact: customer?.phone ? String(customer.phone).replace(/\D/g, '').slice(-10) : '',
+        method: 'upi',
       },
       notes: {
         purpose: 'Lead Hub Marketing & Growth Wallet Balance',

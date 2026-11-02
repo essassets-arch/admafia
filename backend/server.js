@@ -1402,6 +1402,71 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
   }
 });
 
+app.post('/api/payments/razorpay/webhook', async (req, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || razorpayKeySecret;
+    if (!signature || !secret) {
+      return res.status(400).json({ ok: false, error: 'Missing webhook signature or secret.' });
+    }
+    const shasum = createHmac('sha256', secret);
+    shasum.update(typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
+    const digest = shasum.digest('hex');
+    let valid = false;
+    try {
+      valid = timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      return res.status(400).json({ ok: false, error: 'Invalid webhook signature.' });
+    }
+
+    const event = req.body?.event;
+    if (event === 'payment.captured') {
+      const payment = req.body?.payload?.payment?.entity;
+      const paymentId = payment?.id;
+      const amount = Number(payment?.amount || 0) / 100;
+      const customerId = payment?.notes?.customer_id;
+
+      if (customerId && amount >= 300) {
+        await fetch(`http://127.0.0.1:${PORT}/api/wallets/topup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Internal-Wallet-Credit': walletCreditToken },
+          body: JSON.stringify({
+            customerId,
+            amount,
+            referenceUtr: paymentId,
+            paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
+            description: `AdMafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
+          }),
+        }).catch((e) => console.error('[Razorpay Webhook Top-Up]', e));
+      }
+    } else if (event === 'payment.failed') {
+      const payment = req.body?.payload?.payment?.entity;
+      const customerId = payment?.notes?.customer_id;
+      if (customerId && payment?.id) {
+        await query(
+          `INSERT INTO wallet_transactions (
+            id, customer_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+          ) VALUES ($1, $2, 'Credit', $3, 0, $4, $5, 'Razorpay Secure (Failed)', 'Failed ✕')
+          ON CONFLICT (reference_utr) DO NOTHING`,
+          [
+            `tx_fail_${Date.now()}`,
+            customerId,
+            Number(payment.amount || 0) / 100,
+            payment.id,
+            `Online recharge failed: ${payment.error_description || 'Payment declined'}`,
+          ]
+        ).catch(() => {});
+      }
+    }
+    res.json({ ok: true, status: 'processed' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/wallets/topup', async (req, res) => {
   if (req.get('X-Internal-Wallet-Credit') !== walletCreditToken) {
     return res.status(410).json({ ok: false, error: 'Direct wallet credits are disabled. Use a verified payment flow.' });

@@ -164,11 +164,29 @@ export default function MarketingWallet({
         key: order.keyId,
         order_id: order.orderId,
         amount: order.amount,
-        currency: order.currency,
+        currency: order.currency || 'INR',
         name: 'AdMafia',
-        description: `Wallet top-up • ₹${activeAmount.toLocaleString('en-IN')}`,
+        description: `Instant Wallet Top-Up • ₹${activeAmount.toLocaleString('en-IN')}`,
         image: `${window.location.origin}/favicon.ico`,
         retry: { enabled: true, max_count: 3 },
+        prefill: {
+          name: customer?.contactPerson || customer?.name || customer?.username || '',
+          email: customer?.email || '',
+          contact: customer?.phone ? String(customer.phone).replace(/\D/g, '').slice(-10) : '',
+          method: 'upi',
+        },
+        theme: {
+          color: '#4f46e5',
+          backdrop_color: 'rgba(15, 23, 42, 0.75)',
+        },
+        modal: {
+          backdropclose: false,
+          escape: true,
+          handleback: true,
+          ondismiss: function () {
+            setIsProcessingPayment(false);
+          },
+        },
         handler: async function (response) {
           try {
             await crmApi.verifyRazorpayPayment({
@@ -196,17 +214,6 @@ export default function MarketingWallet({
             setIsProcessingPayment(false);
             setActionAlert({ type: 'error', message: 'Payment was received, but wallet verification or refresh failed: ' + err.message + '. Contact support before retrying.' });
           }
-        },
-        prefill: {
-          name: customer?.contactPerson || customer?.name || customer?.username || '',
-          email: customer?.email || '',
-          contact: customer?.phone || '',
-        },
-        theme: { color: '#4f46e5' },
-        modal: {
-          ondismiss: function () {
-            setIsProcessingPayment(false);
-          },
         },
       };
 
