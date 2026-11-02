@@ -382,16 +382,21 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
               fontWeight: activeTab === 'overview' ? 800 : 600,
             }}
           >
-            <LayoutDashboard size={18} strokeWidth={2.2} />
+            <LayoutDashboard size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Dashboard Overview</span>
             <span
               className="sales-nav-badge"
               style={{
-                background: activeTab === 'overview' ? 'rgba(255,255,255,0.25)' : '#eff6ff',
+                background: activeTab === 'overview' ? 'rgba(255,255,255,0.22)' : '#eff6ff',
                 color: activeTab === 'overview' ? '#ffffff' : '#1d4ed8',
-                borderColor: '#bfdbfe',
+                borderColor: activeTab === 'overview' ? 'rgba(255,255,255,0.3)' : '#bfdbfe',
+                borderWidth: 1,
+                borderStyle: 'solid',
                 fontWeight: 800,
                 fontSize: '0.68rem',
+                padding: '2px 8px',
+                width: 'auto',
+                minWidth: 'unset',
               }}
             >
               All 9 Desks
@@ -406,7 +411,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'customers' ? 'active' : ''}`}
             onClick={() => navigateToDesk('customers', '#customers')}
           >
-            <Users size={18} strokeWidth={2.2} />
+            <Users size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Customer Registrations</span>
           </button>
 
@@ -416,14 +421,16 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'pending_verification' ? 'active' : ''}`}
             onClick={() => navigateToDesk('pending_verification', '#verification')}
           >
-            <ShieldCheck size={18} strokeWidth={2.2} />
+            <ShieldCheck size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Verification Audit</span>
             <span
               className="sales-nav-badge"
               style={{
-                background: '#ecfdf5',
-                color: '#059669',
-                borderColor: '#a7f3d0',
+                background: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
+                color: activeTab === 'pending_verification' ? '#ffffff' : '#059669',
+                borderColor: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
+                borderWidth: 1,
+                borderStyle: 'solid',
                 fontWeight: 800,
               }}
             >
@@ -437,14 +444,16 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'approved' ? 'active' : ''}`}
             onClick={() => navigateToDesk('approved', '#approved')}
           >
-            <UserCheck size={18} strokeWidth={2.2} />
+            <UserCheck size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Approved Members</span>
             <span
               className="sales-nav-badge"
               style={{
-                background: '#f0fdf4',
-                color: '#15803d',
-                borderColor: '#bbf7d0',
+                background: activeTab === 'approved' ? 'rgba(255,255,255,0.22)' : '#f0fdf4',
+                color: activeTab === 'approved' ? '#ffffff' : '#15803d',
+                borderColor: activeTab === 'approved' ? 'rgba(255,255,255,0.3)' : '#bbf7d0',
+                borderWidth: 1,
+                borderStyle: 'solid',
                 fontWeight: 800,
               }}
             >
@@ -458,7 +467,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'leads' ? 'active' : ''}`}
             onClick={() => navigateToDesk('leads', '#leads')}
           >
-            <Layers size={18} strokeWidth={2.2} />
+            <Layers size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Lead Management</span>
           </button>
 
@@ -468,7 +477,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'profiles' ? 'active' : ''}`}
             onClick={() => navigateToDesk('profiles', '#profiles')}
           >
-            <FileCheck2 size={18} strokeWidth={2.2} />
+            <FileCheck2 size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Profile Completion</span>
           </button>
 
@@ -478,7 +487,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'payments' ? 'active' : ''}`}
             onClick={() => navigateToDesk('payments', '#payments')}
           >
-            <CreditCard size={18} strokeWidth={2.2} />
+            <CreditCard size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Payment Collection</span>
           </button>
 
@@ -488,14 +497,16 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'wallets' ? 'active' : ''}`}
             onClick={() => navigateToDesk('wallets', '#wallets')}
           >
-            <Wallet size={18} strokeWidth={2.2} />
+            <Wallet size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Wallets &amp; Balances</span>
             <span
               className="sales-nav-badge"
               style={{
-                background: '#eef2ff',
-                color: '#4338ca',
-                borderColor: '#c7d2fe',
+                background: activeTab === 'wallets' ? 'rgba(255,255,255,0.22)' : '#eef2ff',
+                color: activeTab === 'wallets' ? '#ffffff' : '#4338ca',
+                borderColor: activeTab === 'wallets' ? 'rgba(255,255,255,0.3)' : '#c7d2fe',
+                borderWidth: 1,
+                borderStyle: 'solid',
                 fontWeight: 800,
               }}
             >
@@ -509,14 +520,16 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'failed_transactions' ? 'active' : ''}`}
             onClick={() => navigateToDesk('failed_transactions', '#failed-transactions')}
           >
-            <AlertCircle size={18} strokeWidth={2.2} color={activeTab === 'failed_transactions' ? '#ffffff' : '#ef4444'} />
+            <AlertCircle size={18} strokeWidth={2.2} color={activeTab === 'failed_transactions' ? '#ffffff' : '#ef4444'} style={{ flexShrink: 0 }} />
             <span>Failed Transactions</span>
             <span
               className="sales-nav-badge"
               style={{
                 background: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.25)' : '#fee2e2',
                 color: activeTab === 'failed_transactions' ? '#ffffff' : '#b91c1c',
-                borderColor: '#fca5a5',
+                borderColor: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.3)' : '#fca5a5',
+                borderWidth: 1,
+                borderStyle: 'solid',
                 fontWeight: 800,
               }}
             >
@@ -530,7 +543,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'queries' ? 'active' : ''}`}
             onClick={() => navigateToDesk('queries', '#queries')}
           >
-            <Headphones size={18} strokeWidth={2.2} />
+            <Headphones size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Query &amp; Support</span>
           </button>
 
@@ -540,7 +553,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className={`sales-nav-btn ${activeTab === 'groups' ? 'active' : ''}`}
             onClick={() => navigateToDesk('groups', '#groups')}
           >
-            <FolderTree size={18} strokeWidth={2.2} />
+            <FolderTree size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Lead Distribution</span>
           </button>
         </nav>
