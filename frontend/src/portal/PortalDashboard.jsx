@@ -297,6 +297,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       const tab = getTabFromHash();
       setActiveTab(tab);
       setIsMobileDrawerOpen(false);
+      if (tab === 'wallet') {
+        setIsPaymentModalOpen(false);
+        setIsAddFundsOpen(false);
+      }
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
@@ -305,6 +309,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   const handleSwitchTab = (newTab) => {
     setActiveTab(newTab);
     setIsMobileDrawerOpen(false);
+    if (newTab === 'wallet') {
+      setIsPaymentModalOpen(false);
+      setIsAddFundsOpen(false);
+    }
     const slugMap = {
       dashboard: 'dashboard',
       leads: 'lead',
@@ -334,9 +342,19 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   const [isConfigureDomainOpen, setIsConfigureDomainOpen] = useState(false);
   const [isCompleteRegistrationOpen, setIsCompleteRegistrationOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(() => {
+    if (typeof window !== 'undefined' && (window.location.hash.includes('wallet') || window.location.pathname.includes('wallet'))) {
+      return false;
+    }
     const isPaid = customer?.paymentStatus === 'paid' || customer?.payment_status === 'paid';
     return !isPaid;
   });
+
+  useEffect(() => {
+    if (activeTab === 'wallet') {
+      setIsPaymentModalOpen(false);
+      setIsAddFundsOpen(false);
+    }
+  }, [activeTab]);
   const [isBusinessProfileModalOpen, setIsBusinessProfileModalOpen] = useState(false);
   // Invoices (isolated strictly to current customer)
   const [invoices, setInvoices] = useState(() => {
@@ -1060,7 +1078,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         confirmButtonColor: '#059669',
         cancelButtonText: 'Cancel',
       }).then((res) => {
-        if (res.isConfirmed) setIsPaymentModalOpen(true);
+        if (res.isConfirmed) handleSwitchTab('wallet');
       });
       return;
     }
@@ -1468,7 +1486,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 setSelectedLeadForFollowUp(lead || null);
                 setIsScheduleOpen(true);
               }}
-              onOpenAddFunds={() => setIsPaymentModalOpen(true)}
+              onOpenAddFunds={() => handleSwitchTab('wallet')}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
               onOpenSetDailyLimit={() => setIsSetDailyLimitOpen(true)}
               onOpenLanguageModal={() => setIsLangOpen(true)}
@@ -1492,7 +1510,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 setSelectedLeadForFollowUp(lead || null);
                 setIsScheduleOpen(true);
               }}
-              onOpenAddFunds={() => setIsAddFundsOpen(true)}
+              onOpenAddFunds={() => handleSwitchTab('wallet')}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
             />
           )}
@@ -1503,7 +1521,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               customer={customer}
               walletBalance={walletBalance}
               onUpdateLead={handleUpdateLead}
-              onOpenAddFunds={() => setIsAddFundsOpen(true)}
+              onOpenAddFunds={() => handleSwitchTab('wallet')}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
             />
           )}

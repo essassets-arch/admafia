@@ -22,7 +22,7 @@ export default function MarketingWallet({
   onViewInvoice,
   invoices = [],
 }) {
-  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [selectedPreset, setSelectedPreset] = useState(300);
   const [customAmount, setCustomAmount] = useState('300');
   const [activeLedgerTab, setActiveLedgerTab] = useState('all'); // 'all' | 'recharges' | 'deductions' | 'failed' | 'invoices'
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -73,14 +73,16 @@ export default function MarketingWallet({
   // Handle preset click
   const handleSelectPreset = (amount) => {
     setSelectedPreset(amount);
-    setCustomAmount('');
+    setCustomAmount(String(amount));
   };
 
   // Handle custom amount input
   const handleCustomAmountChange = (e) => {
     const val = e.target.value.replace(/[^\d]/g, '');
-    setSelectedPreset(null);
     setCustomAmount(val);
+    const num = Number(val);
+    const matched = presets.find((p) => p.amount === num);
+    setSelectedPreset(matched ? matched.amount : null);
   };
 
   const handleQuickAddAmount = (addVal) => {
@@ -468,7 +470,127 @@ export default function MarketingWallet({
         </div>
       )}
 
-      {/* 4. 📅 Day-Wise Ad Spend Engine Master Card */}
+      {/* 4. ⚡ Instant Wallet Top-Up Card */}
+      <div className="instant-wallet-topup-card" id="instant-topup-section">
+        <div className="topup-card-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="#f97316" stroke="#f97316" strokeWidth="1">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+              Instant Wallet Top-Up
+            </h2>
+          </div>
+          <p className="topup-card-desc">
+            Select a budget preset or enter a custom amount. Recharges are credited immediately to keep your ads running #1 in {customer.city ? customer.city.toLowerCase() : 'ahmedabad'}.
+          </p>
+        </div>
+
+        {/* 2-Column Split Layout */}
+        <div className="topup-split-grid-layout">
+          {/* Left Column: Presets + Custom Amount */}
+          <div className="topup-left-col">
+            <div className="topup-section-micro-heading">RECOMMENDED RECHARGE PRESETS:</div>
+
+            <div className="topup-presets-3x2-grid">
+              {presets.map((p) => {
+                const isSelected = selectedPreset === p.amount;
+                return (
+                  <div
+                    key={p.amount}
+                    className={`topup-preset-card-exact ${isSelected ? 'selected' : ''}`}
+                    onClick={() => handleSelectPreset(p.amount)}
+                  >
+                    {p.tag && <span className="preset-pill-tag-exact">{p.tag}</span>}
+                    <div className="preset-card-val-exact">{p.label}</div>
+                    <div className="preset-card-runtime-exact">Instant Wallet Credit</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="topup-section-micro-heading">OR ENTER CUSTOM AMOUNT (MIN ₹300):</div>
+            <div className="custom-amount-input-row-exact">
+              <div className="custom-input-box-exact" style={{ width: '100%' }}>
+                <span className="currency-prefix-exact">₹</span>
+                <input
+                  type="text"
+                  className="custom-field-exact"
+                  placeholder="Enter amount (e.g. 300)"
+                  value={customAmount}
+                  onChange={handleCustomAmountChange}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Payment Method + Razorpay Box + Pay Button */}
+          <div className="topup-right-col">
+            <div className="payment-method-top-line">
+              <span className="payment-method-heading">PAYMENT METHOD:</span>
+              <div className="razorpay-verified-chip">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+                <span>RAZORPAY VERIFIED</span>
+              </div>
+            </div>
+
+            {/* Selected Gateway Card */}
+            <div className="razorpay-gateway-box-exact">
+              <div className="gateway-box-left">
+                <div className="razorpay-icon-black">R</div>
+                <div className="gateway-box-text">
+                  <div className="gateway-box-title-row">
+                    <strong>Razorpay Secure Gateway</strong>
+                    <span className="test-mode-badge-green">{razorpayMode || 'TEST MODE'}</span>
+                  </div>
+                  <div className="gateway-box-sub">
+                    Secured 256-Bit Encrypted Gateway
+                  </div>
+                </div>
+              </div>
+              <div className="gateway-check-circle">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.2">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Big Green Pay Button */}
+            <button
+              type="button"
+              className="btn-pay-green-exact"
+              onClick={handlePayViaRazorpay}
+              disabled={isProcessingPayment || !Number.isSafeInteger(activeAmount) || activeAmount < 300}
+            >
+              {isProcessingPayment ? (
+                <>
+                  <span className="spinner-rotate-inline">⟳</span>
+                  <span>Opening Razorpay...</span>
+                </>
+              ) : (
+                <>
+                  <span>Pay ₹{activeAmount.toLocaleString('en-IN')} via Razorpay</span>
+                  <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>&rarr;</span>
+                </>
+              )}
+            </button>
+
+            {/* Guarantee line */}
+            <div className="guarantee-line-exact">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9 12l2 2 4-4" />
+              </svg>
+              <span>100% added directly to wallet • Zero setup fee</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. 📅 Day-Wise Ad Spend Engine Master Card */}
       <div className="daywise-adspend-engine-card">
         <div className="engine-card-header">
           <div className="engine-title-strip">
@@ -550,126 +672,6 @@ export default function MarketingWallet({
           <span className="engine-realtime-note">
             Real-time balance deduction • Runway automatically updates
           </span>
-        </div>
-      </div>
-
-      {/* 5. ⚡ Instant Wallet Top-Up Card */}
-      <div className="instant-wallet-topup-card" id="instant-topup-section">
-        <div className="topup-card-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="#f97316" stroke="#f97316" strokeWidth="1">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
-              Instant Wallet Top-Up
-            </h2>
-          </div>
-          <p className="topup-card-desc">
-            Select a budget preset or enter a custom amount. Recharges are credited immediately to keep your ads running #1 in {customer.city || customer.territory || 'Mumbai'}.
-          </p>
-        </div>
-
-        {/* 2-Column Split Layout */}
-        <div className="topup-split-grid-layout">
-          {/* Left Column: Presets + Custom Amount */}
-          <div className="topup-left-col">
-            <div className="topup-section-micro-heading">RECOMMENDED RECHARGE PRESETS:</div>
-
-            <div className="topup-presets-3x2-grid">
-              {presets.map((p) => {
-                const isSelected = selectedPreset === p.amount;
-                return (
-                  <div
-                    key={p.amount}
-                    className={`topup-preset-card-exact ${isSelected ? 'selected' : ''}`}
-                    onClick={() => handleSelectPreset(p.amount)}
-                  >
-                    {p.tag && <span className="preset-pill-tag-exact">{p.tag}</span>}
-                    <div className="preset-card-val-exact">{p.label}</div>
-                    <div className="preset-card-runtime-exact">Instant Wallet Credit</div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="topup-section-micro-heading">OR ENTER CUSTOM AMOUNT (MIN ₹300):</div>
-            <div className="custom-amount-input-row-exact">
-              <div className="custom-input-box-exact" style={{ width: '100%' }}>
-                <span className="currency-prefix-exact">₹</span>
-                <input
-                  type="text"
-                  className="custom-field-exact"
-                  placeholder="Enter amount (e.g. 1000)"
-                  value={customAmount}
-                  onChange={handleCustomAmountChange}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Payment Method + Razorpay Box + Pay Button */}
-          <div className="topup-right-col">
-            <div className="payment-method-top-line">
-              <span className="payment-method-heading">PAYMENT METHOD:</span>
-              <div className="razorpay-verified-chip">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                  <path d="M9 12l2 2 4-4" />
-                </svg>
-                <span>RAZORPAY VERIFIED</span>
-              </div>
-            </div>
-
-            {/* Selected Gateway Card */}
-            <div className="razorpay-gateway-box-exact">
-              <div className="gateway-box-left">
-                <div className="razorpay-icon-black">R</div>
-                <div className="gateway-box-text">
-                  <div className="gateway-box-title-row">
-                    <strong>Razorpay Secure Gateway</strong>
-                    <span className="test-mode-badge-green">{razorpayMode || 'SECURE CHECKOUT'}</span>
-                  </div>
-                  <div className="gateway-box-sub">
-                    Secured 256-Bit Encrypted Gateway
-                  </div>
-                </div>
-              </div>
-              <div className="gateway-check-circle">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.2">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-            </div>
-
-            {/* Big Green Pay Button */}
-            <button
-              type="button"
-              className="btn-pay-green-exact"
-              onClick={handlePayViaRazorpay}
-              disabled={isProcessingPayment || !Number.isSafeInteger(activeAmount) || activeAmount < 300}
-            >
-              {isProcessingPayment ? (
-                <>
-                  <span className="spinner-rotate-inline">⟳</span>
-                  <span>Opening Razorpay...</span>
-                </>
-              ) : (
-                <>
-                  <span>Pay ₹{activeAmount.toLocaleString('en-IN')} via Razorpay</span>
-                  <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>&rarr;</span>
-                </>
-              )}
-            </button>
-
-            {/* Guarantee line */}
-            <div className="guarantee-line-exact">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M9 12l2 2 4-4" />
-              </svg>
-              <span>100% added directly to wallet • Zero setup fee</span>
-            </div>
-          </div>
         </div>
       </div>
 
