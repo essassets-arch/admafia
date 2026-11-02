@@ -5949,26 +5949,6 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
                         >
                           <Eye size={13} /> Details
                         </button>
-
-                        {/* Top-Up Assist */}
-                        <button
-                          type="button"
-                          className="sales-btn-primary"
-                          style={{ padding: '5px 10px', fontSize: '0.78rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          onClick={() => {
-                            setTopupCust({
-                              id: tx.customerId,
-                              name: tx.customerName,
-                              companyName: tx.companyName,
-                              phone: tx.phone,
-                              contactPerson: tx.contactPerson,
-                            });
-                            setTopupAmount(tx.amount || 1000);
-                          }}
-                          title="Manual Wallet Credit upon offline payment"
-                        >
-                          <Plus size={12} /> Top-Up
-                        </button>
                       </div>
                     </td>
                   </tr>
