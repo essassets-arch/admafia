@@ -99,23 +99,25 @@ export default function LeadHubOverview({
       return Array.from(booked);
     }
 
-    if (Array.isArray(customer.activeDays)) {
+    if (Array.isArray(customer.activeDays) && customer.activeDays.length > 0) {
       return customer.activeDays;
     }
 
-    // Default on initial load: start with today's day (which can be unselected at will)
+    // By default: ONLY select today's day
     return [todayCode];
   });
   const [unmaskedLeads, setUnmaskedLeads] = useState({});
 
   React.useEffect(() => {
-    if (Array.isArray(customer?.activeDays)) {
-      const merged = new Set(customer.activeDays);
-      if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
-      if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
-      if (customer.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
-      setActiveDays(Array.from(merged));
-    }
+    const baseDays = (Array.isArray(customer?.activeDays) && customer.activeDays.length > 0)
+      ? customer.activeDays
+      : [todayCode];
+
+    const merged = new Set(baseDays);
+    if (Array.isArray(customer?.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
+    if (Array.isArray(customer?.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
+    if (customer?.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
+    setActiveDays(Array.from(merged));
   }, [customer?.activeDays, customer?.bookedDays, customer?.lockedDays, customer?.isDeductedToday, currentTodayItem?.code]);
 
   // Compute how many days are funded by the current wallet balance
@@ -219,6 +221,9 @@ export default function LeadHubOverview({
     try { window.sessionStorage.setItem('admafia_active_schedule_preset', 'custom'); } catch (e) {}
     if (activeDays.includes(code)) {
       next = activeDays.filter((d) => d !== code);
+      if (next.length === 0) {
+        next = [todayCode];
+      }
     } else {
       next = [...activeDays, code];
       if (isTogglingToday && walletBalance >= dailySpend) {
@@ -229,7 +234,7 @@ export default function LeadHubOverview({
     if (onUpdateCustomer) {
       onUpdateCustomer({
         activeDays: next,
-        ...(shouldActivate ? { adCampaignActive: true } : (next.length === 0 ? { adCampaignActive: false } : {})),
+        ...(shouldActivate ? { adCampaignActive: true } : {}),
       });
     }
   };
@@ -240,7 +245,7 @@ export default function LeadHubOverview({
     if (preset === 'all') next = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     if (preset === 'weekdays') next = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
     if (preset === 'weekends') next = ['SAT', 'SUN'];
-    if (preset === 'clear') next = [];
+    if (preset === 'clear') next = [todayCode];
 
     // All booked days in current view CANNOT be deselected by presets
     const bookedCodesInView = daysList.filter((d) => isDayBooked(d)).map((d) => d.code);
