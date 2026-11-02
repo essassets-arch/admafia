@@ -40,6 +40,7 @@ import {
   Globe,
   User,
   Copy,
+  Trash2,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
@@ -5716,6 +5717,64 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     setTopupCust(null);
   };
 
+  const handleDeleteFailedTx = async (tx) => {
+    if (!window.confirm(`Are you sure you want to remove this failed transaction record (${tx.companyName || tx.customerName} - ₹${tx.amount})?`)) {
+      return;
+    }
+    const targetId = tx.id || tx.ref;
+    try {
+      await crmApi.deleteFailedTransaction(targetId);
+    } catch (e) {
+      console.warn('[Delete failed tx non-fatal]', e);
+    }
+
+    try {
+      const raw = localStorage.getItem('growthline_wallet_transactions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.filter(t => t.id !== tx.id && t.reference_utr !== tx.ref && t.ref !== tx.ref);
+          localStorage.setItem('growthline_wallet_transactions', JSON.stringify(updated));
+        }
+      }
+    } catch (e) {}
+
+    setFailedList((prev) => prev.filter((t) => t.id !== tx.id && t.ref !== tx.ref));
+    if (selectedFailTx && (selectedFailTx.id === tx.id || selectedFailTx.ref === tx.ref)) {
+      setSelectedFailTx(null);
+    }
+  };
+
+  const handleClearAllFailed = async () => {
+    if (!window.confirm('Are you sure you want to clear and remove ALL failed transaction records?')) {
+      return;
+    }
+    try {
+      await crmApi.clearAllFailedTransactions();
+    } catch (e) {
+      console.warn('[Clear all failed tx non-fatal]', e);
+    }
+
+    try {
+      const raw = localStorage.getItem('growthline_wallet_transactions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.filter(
+            (t) =>
+              !String(t.status || '').toLowerCase().includes('fail') &&
+              !String(t.type || '').toLowerCase().includes('fail') &&
+              !String(t.ref || t.reference_utr || '').startsWith('DISMISS-')
+          );
+          localStorage.setItem('growthline_wallet_transactions', JSON.stringify(updated));
+        }
+      }
+    } catch (e) {}
+
+    setFailedList([]);
+    setSelectedFailTx(null);
+  };
+
   return (
     <div className="desk-page-container">
       {/* Header */}
@@ -5730,6 +5789,29 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
             <span className="desk-pill pill-amber" style={{ fontWeight: 800 }}>
               Capital at Risk: {formatINR(totalAtRisk)}
             </span>
+            {failedList.length > 0 && (
+              <button
+                type="button"
+                className="sales-btn-secondary"
+                style={{
+                  padding: '4px 12px',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: '#dc2626',
+                  borderColor: '#fecdd3',
+                  background: '#fff1f2',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  cursor: 'pointer',
+                  borderRadius: 6,
+                }}
+                onClick={handleClearAllFailed}
+                title="Clear all failed transaction records"
+              >
+                <Trash2 size={13} /> Clear All Records
+              </button>
+            )}
           </div>
           <p className="desk-subtitle">
             Comprehensive audit log of all declined client wallet payments, bank gateway rejections, customer contact details, and instant sales recovery WhatsApp actions.
@@ -5988,6 +6070,23 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
                         >
                           <Eye size={13} /> Details
                         </button>
+
+                        {/* Remove / Delete Failed Transaction */}
+                        <button
+                          type="button"
+                          className="desk-action-btn"
+                          style={{
+                            background: '#fff1f2',
+                            color: '#dc2626',
+                            borderColor: '#fecdd3',
+                            fontWeight: 700,
+                            padding: '5px 8px',
+                          }}
+                          onClick={() => handleDeleteFailedTx(tx)}
+                          title="Remove this failed transaction record"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -6108,6 +6207,23 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
                 style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
                 <Plus size={14} /> Credit Wallet Manually
+              </button>
+              <button
+                type="button"
+                className="sales-btn-secondary"
+                style={{
+                  color: '#dc2626',
+                  borderColor: '#fecdd3',
+                  background: '#fff1f2',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontWeight: 700,
+                }}
+                onClick={() => handleDeleteFailedTx(selectedFailTx)}
+                title="Delete this record"
+              >
+                <Trash2 size={14} /> Remove Record
               </button>
               <button type="button" className="desk-action-btn" onClick={() => setSelectedFailTx(null)}>
                 Close

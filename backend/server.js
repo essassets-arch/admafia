@@ -1170,6 +1170,87 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
   }
 });
 
+// Sales Desk: Delete / Remove a Failed Transaction (or 'all' / 'dismissed')
+app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
+  try {
+    const rawId = decodeURIComponent(req.params.id || '').trim();
+    if (rawId === 'all' || rawId === 'clear-all') {
+      const delRes = await query(`
+        DELETE FROM wallet_transactions 
+        WHERE LOWER(status) LIKE '%fail%' 
+           OR LOWER(tx_type) LIKE '%fail%'
+           OR LOWER(description) LIKE '%fail%'
+           OR LOWER(payment_method) LIKE '%fail%'
+           OR reference_utr LIKE 'DISMISS-%'
+        RETURNING id
+      `);
+      return res.json({ ok: true, deletedCount: delRes.rowCount });
+    }
+
+    if (rawId === 'dismissed') {
+      const delRes = await query(`
+        DELETE FROM wallet_transactions 
+        WHERE reference_utr LIKE 'DISMISS-%'
+        RETURNING id
+      `);
+      return res.json({ ok: true, deletedCount: delRes.rowCount });
+    }
+
+    const delRes = await query(
+      `DELETE FROM wallet_transactions WHERE id = $1 OR reference_utr = $1 RETURNING id`,
+      [rawId]
+    );
+    res.json({ ok: true, deletedCount: delRes.rowCount });
+  } catch (err) {
+    console.error('[DELETE /api/sales/failed-transactions/:id]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete('/api/sales/failed-transactions', async (req, res) => {
+  try {
+    const { id, ids, type } = req.body || req.query || {};
+    if (type === 'all' || id === 'all') {
+      const delRes = await query(`
+        DELETE FROM wallet_transactions 
+        WHERE LOWER(status) LIKE '%fail%' 
+           OR LOWER(tx_type) LIKE '%fail%'
+           OR LOWER(description) LIKE '%fail%'
+           OR LOWER(payment_method) LIKE '%fail%'
+           OR reference_utr LIKE 'DISMISS-%'
+        RETURNING id
+      `);
+      return res.json({ ok: true, deletedCount: delRes.rowCount });
+    }
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      const delRes = await query(
+        `DELETE FROM wallet_transactions WHERE id = ANY($1) OR reference_utr = ANY($1) RETURNING id`,
+        [ids]
+      );
+      return res.json({ ok: true, deletedCount: delRes.rowCount });
+    }
+
+    if (id) {
+      const delRes = await query(
+        `DELETE FROM wallet_transactions WHERE id = $1 OR reference_utr = $1 RETURNING id`,
+        [id]
+      );
+      return res.json({ ok: true, deletedCount: delRes.rowCount });
+    }
+
+    const delRes = await query(`
+      DELETE FROM wallet_transactions 
+      WHERE reference_utr LIKE 'DISMISS-%'
+      RETURNING id
+    `);
+    res.json({ ok: true, deletedCount: delRes.rowCount });
+  } catch (err) {
+    console.error('[DELETE /api/sales/failed-transactions]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.put('/api/customers/:id/profile', async (req, res) => {
   try {
     const rawId = req.params.id;
@@ -3158,6 +3239,18 @@ app.listen(PORT, () => {
   initDatabase()
     .then((info) => {
       console.log(`🚀 Growthline CRM Backend API listening on http://localhost:${PORT} (DB mode: ${info.mode})`);
+
+      // Clean up dismissed test failed transactions
+      query(`
+        DELETE FROM wallet_transactions 
+        WHERE reference_utr LIKE 'DISMISS-%' 
+           OR id IN ('tx_fail_1793614599726_c2mx', 'tx_fail_1793614589017_m0gm', 'tx_fail_1793626722094_be89')
+      `).then((delRes) => {
+        if (delRes.rowCount > 0) {
+          console.log(`[DB Cleanup] Purged ${delRes.rowCount} dismissed test failed transactions.`);
+        }
+      }).catch((err) => console.warn('[DB Cleanup Warning]', err.message));
+
       // Run daily ad spend pacing evaluation 3s after startup, then every 30 minutes
       setTimeout(() => {
         processDailyAdSpendPacing()

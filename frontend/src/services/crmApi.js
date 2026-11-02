@@ -176,6 +176,17 @@ export const crmApi = {
     return apiRequest('/sales/failed-transactions');
   },
 
+  /**
+   * Delete a specific failed transaction or all failed transactions
+   */
+  async deleteFailedTransaction(id) {
+    return apiRequest(`/sales/failed-transactions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  async clearAllFailedTransactions() {
+    return apiRequest('/sales/failed-transactions/all', { method: 'DELETE' });
+  },
+
   async getRazorpayConfig() {
     return apiRequest('/payments/razorpay/config', { method: 'GET' });
   },
