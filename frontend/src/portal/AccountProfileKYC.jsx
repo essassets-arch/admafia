@@ -1,4 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import {
+  Building2,
+  Briefcase,
+  MapPin,
+  Mail,
+  Phone,
+  Globe,
+  User,
+  ShieldCheck,
+  CheckCircle2,
+  ExternalLink,
+  Edit3,
+  Wallet,
+  Clock,
+  Sparkles,
+} from 'lucide-react';
 import crmApi from '../services/crmApi';
 
 export default function AccountProfileKYC({
@@ -19,13 +35,13 @@ export default function AccountProfileKYC({
       companyName: c.companyName || c.name || u.companyName || u.name || '',
       category: c.category || u.category || 'IT & Software',
       websiteUrl: c.website || c.domain || u.website || u.domain || '',
-      industry: c.industry || u.industry || 'Other',
+      industry: c.industry || u.industry || '',
       contactPerson: c.contactPerson || c.contact || u.contactPerson || u.contact || c.username || u.username || '',
       email: c.email || u.email || '',
       phone: c.phone || u.phone || '',
       personalEmail: c.personalEmail || u.personalEmail || '',
       city: c.city || c?.address?.city || u.city || '',
-      state: c.state || c?.address?.state || u.state || 'Maharashtra',
+      state: c.state || c?.address?.state || u.state || '',
       country: c.country || u.country || 'India',
       profile_status: c.profileStatus || c.profile_status || u.profileStatus || u.profile_status || 'incomplete',
     };
@@ -43,13 +59,13 @@ export default function AccountProfileKYC({
         companyName: customer.companyName || customer.name || prev.companyName || '',
         category: customer.category || prev.category || 'IT & Software',
         websiteUrl: customer.website || customer.domain || prev.websiteUrl || '',
-        industry: customer.industry || prev.industry || 'Other',
+        industry: customer.industry || prev.industry || '',
         contactPerson: customer.contactPerson || customer.contact || customer.username || prev.contactPerson || '',
         email: customer.email || prev.email || '',
         phone: customer.phone || prev.phone || '',
         personalEmail: customer.personalEmail || prev.personalEmail || '',
         city: customer.city || customer?.address?.city || prev.city || '',
-        state: customer.state || customer?.address?.state || prev.state || 'Maharashtra',
+        state: customer.state || customer?.address?.state || prev.state || '',
         country: customer.country || prev.country || 'India',
         profile_status: customer.profileStatus || customer.profile_status || prev.profile_status || 'incomplete',
       }));
@@ -69,13 +85,13 @@ export default function AccountProfileKYC({
               companyName: c.companyName || c.name || prev.companyName || '',
               category: c.category || prev.category || 'IT & Software',
               websiteUrl: c.website || c.domain || prev.websiteUrl || '',
-              industry: c.industry || prev.industry || 'Other',
+              industry: c.industry || prev.industry || '',
               contactPerson: c.contactPerson || c.contact || c.username || prev.contactPerson || '',
               email: c.email || prev.email || '',
               phone: c.phone || prev.phone || '',
               personalEmail: c.personalEmail || prev.personalEmail || '',
               city: c.city || c?.address?.city || prev.city || '',
-              state: c.state || c?.address?.state || prev.state || 'Maharashtra',
+              state: c.state || c?.address?.state || prev.state || '',
               country: c.country || prev.country || 'India',
               profile_status: c.profileStatus || c.profile_status || prev.profile_status || 'complete',
             }));
@@ -94,13 +110,13 @@ export default function AccountProfileKYC({
           companyName: u.companyName || u.name || prev.companyName || '',
           category: u.category || prev.category || 'IT & Software',
           websiteUrl: u.website || u.domain || prev.websiteUrl || '',
-          industry: u.industry || prev.industry || 'Other',
+          industry: u.industry || prev.industry || '',
           contactPerson: u.contactPerson || u.contact || u.username || prev.contactPerson || '',
           email: u.email || prev.email || '',
           phone: u.phone || prev.phone || '',
           personalEmail: u.personalEmail || prev.personalEmail || '',
           city: u.city || prev.city || '',
-          state: u.state || prev.state || 'Maharashtra',
+          state: u.state || prev.state || '',
           country: u.country || prev.country || 'India',
           profile_status: u.profileStatus || u.profile_status || prev.profile_status || 'complete',
         }));
@@ -123,6 +139,7 @@ export default function AccountProfileKYC({
     const contactName = (profileData.contactPerson || '').trim();
     const rawPhone = String(profileData.phone || '').replace(/\D/g, '').slice(-10);
     const opCity = (profileData.city || '').trim();
+    const opEmail = (profileData.email || '').trim();
 
     if (!compName) {
       setSaveError('Company Name is required.');
@@ -134,6 +151,10 @@ export default function AccountProfileKYC({
     }
     if (rawPhone.length !== 10) {
       setSaveError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (!opEmail) {
+      setSaveError('Business Email is required.');
       return;
     }
     if (!opCity) {
@@ -152,14 +173,14 @@ export default function AccountProfileKYC({
       domain: (profileData.websiteUrl || '').trim(),
       website: (profileData.websiteUrl || '').trim(),
       category: profileData.category || 'IT & Software',
-      industry: (profileData.industry || 'Other').trim(),
+      industry: (profileData.industry || '').trim() || 'Software & Services',
       contactPerson: contactName,
       contact: contactName,
-      email: (profileData.email || '').trim(),
+      email: opEmail,
       phone: rawPhone,
       personalEmail: (profileData.personalEmail || '').trim(),
       city: opCity,
-      state: (profileData.state || 'Maharashtra').trim(),
+      state: (profileData.state || '').trim(),
       country: (profileData.country || 'India').trim(),
       profile_status: 'complete',
       profileStatus: 'complete',
@@ -169,7 +190,7 @@ export default function AccountProfileKYC({
       address: {
         ...(customer?.address || {}),
         city: opCity,
-        state: (profileData.state || 'Maharashtra').trim(),
+        state: (profileData.state || '').trim(),
         country: (profileData.country || 'India').trim(),
       },
     };
@@ -285,63 +306,235 @@ export default function AccountProfileKYC({
     setTimeout(() => setSavedSuccess(false), 5000);
   };
 
+  const isProfileComplete = profileData.profile_status === 'complete' || customer?.profileStatus === 'complete';
+  const effectiveWallet = Number(customer?.walletBalance ?? customer?.balance ?? 0);
+  const effectivePacing = Number(customer?.dailyAdSpend || 300);
+  const isLeadEligible = effectiveWallet >= effectivePacing && isProfileComplete;
+
+  const handleScrollToEdit = () => {
+    const el = document.getElementById('profile-edit-section');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <div className="portal-profile-view">
-      {/* Header */}
+      {/* 1. Header Card */}
       <div className="profile-header-card">
         <div>
-          <h2>Account &amp; Business Profile Setup</h2>
+          <h2>Account &amp; Business Profile</h2>
           <p className="profile-sub">
-            The business identity, organization contacts, and geographic operational base.
+            Verified organization details, authorized administrator contacts, geographic territory, and ad distribution eligibility.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleScrollToEdit}
+          className="btn-jump-edit"
+          title="Scroll down to edit profile form"
+        >
+          <Edit3 size={15} />
+          <span>✏️ Edit Profile</span>
+        </button>
       </div>
 
-      {/* 1. Registration Status Banner */}
-      <div className="registration-status-banner-card">
-        <div className="reg-status-left">
-          <div className="reg-status-icon">🛡️</div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              {profileData.profile_status === 'complete' || customer?.profileStatus === 'complete' ? (
-                <span className="badge-step-required" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
-                  ✓ Profile Registered &amp; Active
+      {/* 2. Comprehensive Profile Overview Dashboard — Displays ALL customer-filled data cleanly */}
+      <div className="profile-overview-dashboard">
+        <div className="profile-overview-top">
+          <div className="profile-overview-title-block">
+            <span style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', fontWeight: 800 }}>
+              Business Profile Record
+            </span>
+            <h3>{profileData.companyName || customer?.companyName || customer?.name || 'Registered Organization'}</h3>
+            <div className="profile-badges-strip">
+              {isProfileComplete ? (
+                <span className="badge-kyc-verified">
+                  <ShieldCheck size={14} /> ✓ Verified KYC (100%)
                 </span>
               ) : (
-                <span className="badge-step-required" style={{ background: '#fffbeb', color: '#b45309', borderColor: '#fde68a' }}>
-                  ⏳ Profile Setup Pending
+                <span className="badge-kyc-pending">
+                  <Clock size={14} /> ⏳ Profile Setup (25%)
                 </span>
               )}
-              <span className="badge-category-tag">{profileData.category || 'IT & Software'}</span>
+              <span className="badge-category-pill">
+                🏷️ {profileData.category || customer?.category || 'IT & Software'}
+              </span>
               {(profileData.city || profileData.state) && (
-                <span style={{ fontSize: '0.78rem', background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
-                  {[profileData.city, profileData.state].filter(Boolean).join(', ')}
+                <span style={{ fontSize: '0.8rem', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
+                  📍 {[profileData.city, profileData.state].filter(Boolean).join(', ')}
+                </span>
+              )}
+              <span className="badge-wallet-info">
+                💰 Wallet: ₹{effectiveWallet.toLocaleString('en-IN')}
+              </span>
+              {isLeadEligible ? (
+                <span style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <Sparkles size={13} /> Active for Lead Distribution
+                </span>
+              ) : (
+                <span style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700 }}>
+                  ⚠️ {effectiveWallet < effectivePacing ? 'Low Balance (Min ₹' + effectivePacing + ')' : 'Profile Incomplete'}
                 </span>
               )}
             </div>
-            <h4 style={{ margin: '8px 0 4px', fontSize: '1.08rem', color: '#0f172a' }}>
-              {profileData.companyName || 'Organization Name Not Set'}
-            </h4>
-            <p style={{ margin: 0, fontSize: '0.84rem', color: '#64748b' }}>
-              Administrator: <strong>{profileData.contactPerson || '—'}</strong> • Phone: <strong>{profileData.phone ? `+91 ${profileData.phone}` : '—'}</strong> • Email: <strong>{profileData.email || '—'}</strong>
-            </p>
+          </div>
+
+          <div style={{ minWidth: '220px' }}>
+            <div className="progress-bar-container">
+              <div className="progress-bar-label">
+                <span>Profile Readiness</span>
+                <strong>{isProfileComplete ? '100%' : '25%'}</strong>
+              </div>
+              <div className="progress-track">
+                <div
+                  className="progress-fill"
+                  style={{
+                    width: isProfileComplete ? '100%' : '25%',
+                    background: isProfileComplete ? '#10b981' : '#f59e0b',
+                  }}
+                ></div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="reg-status-right">
-          <div className="progress-bar-container">
-            <div className="progress-bar-label">
-              <span>Profile Completion</span>
-              <strong>{profileData.profile_status === 'complete' || customer?.profileStatus === 'complete' ? '100%' : '25%'}</strong>
+        {/* 4 Multi-Card Structured Panels */}
+        <div className="profile-overview-cards-grid">
+          {/* Panel 1: Company & Organization */}
+          <div className="profile-info-card-box">
+            <div className="profile-info-card-header">
+              <div className="profile-info-card-icon">
+                <Building2 size={18} />
+              </div>
+              <h4>Company Information</h4>
             </div>
-            <div className="progress-track">
-              <div
-                className="progress-fill"
-                style={{
-                  width: profileData.profile_status === 'complete' || customer?.profileStatus === 'complete' ? '100%' : '25%',
-                  background: profileData.profile_status === 'complete' || customer?.profileStatus === 'complete' ? '#10b981' : '#f59e0b',
-                }}
-              ></div>
+            <div className="profile-key-values">
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Company Name:</span>
+                <span className="profile-kv-val">{profileData.companyName || customer?.companyName || customer?.name || '—'}</span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Business Category:</span>
+                <span className="profile-kv-val">{profileData.category || customer?.category || 'IT & Software'}</span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Primary Industry:</span>
+                <span className="profile-kv-val">{profileData.industry || customer?.industry || 'Not specified'}</span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Website / Domain:</span>
+                <span className="profile-kv-val">
+                  {profileData.websiteUrl || customer?.website || customer?.domain ? (
+                    <a
+                      href={(profileData.websiteUrl || customer?.website || customer?.domain).startsWith('http') ? (profileData.websiteUrl || customer?.website || customer?.domain) : `https://${profileData.websiteUrl || customer?.website || customer?.domain}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      {profileData.websiteUrl || customer?.website || customer?.domain} <ExternalLink size={12} />
+                    </a>
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontStyle: 'italic', fontWeight: 500 }}>Not provided</span>
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Panel 2: Authorized Administrator & Contacts */}
+          <div className="profile-info-card-box">
+            <div className="profile-info-card-header">
+              <div className="profile-info-card-icon" style={{ color: '#059669' }}>
+                <User size={18} />
+              </div>
+              <h4>Primary Administrator Contact</h4>
+            </div>
+            <div className="profile-key-values">
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Contact Person:</span>
+                <span className="profile-kv-val">{profileData.contactPerson || customer?.contactPerson || customer?.contact || '—'}</span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Mobile / WhatsApp:</span>
+                <span className="profile-kv-val" style={{ color: '#059669' }}>
+                  {profileData.phone ? `+91 ${profileData.phone}` : (customer?.phone ? `+91 ${customer.phone}` : '—')}
+                </span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Official Email:</span>
+                <span className="profile-kv-val">{profileData.email || customer?.email || '—'}</span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Personal Email:</span>
+                <span className="profile-kv-val">
+                  {profileData.personalEmail || customer?.personalEmail || (
+                    <span style={{ color: '#94a3b8', fontStyle: 'italic', fontWeight: 500 }}>Not provided</span>
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Panel 3: Headquarters & Geographic Base */}
+          <div className="profile-info-card-box">
+            <div className="profile-info-card-header">
+              <div className="profile-info-card-icon" style={{ color: '#d97706' }}>
+                <MapPin size={18} />
+              </div>
+              <h4>Operational Headquarters</h4>
+            </div>
+            <div className="profile-key-values">
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Operating City:</span>
+                <span className="profile-kv-val">{profileData.city || customer?.city || 'Not specified'}</span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">State / Province:</span>
+                <span className="profile-kv-val">{profileData.state || customer?.state || 'Not specified'}</span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Operating Country:</span>
+                <span className="profile-kv-val">{profileData.country || customer?.country || 'India'}</span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Delivery Scope:</span>
+                <span className="profile-kv-val" style={{ color: '#4f46e5' }}>Pan-India Targeted Ads</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Panel 4: Account & Marketing Distribution Ledger */}
+          <div className="profile-info-card-box">
+            <div className="profile-info-card-header">
+              <div className="profile-info-card-icon" style={{ color: '#7c3aed' }}>
+                <ShieldCheck size={18} />
+              </div>
+              <h4>Account &amp; Distribution Ledger</h4>
+            </div>
+            <div className="profile-key-values">
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Customer UID:</span>
+                <span className="profile-kv-val" style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>
+                  {customer?.id || `cust_${profileData.phone || '9876543210'}`}
+                </span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Username:</span>
+                <span className="profile-kv-val" style={{ color: '#4338ca' }}>
+                  @{customer?.username || (profileData.contactPerson || 'customer').toLowerCase().replace(/\s+/g, '')}
+                </span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Daily Ad Spend:</span>
+                <span className="profile-kv-val">₹{effectivePacing.toLocaleString('en-IN')} / day</span>
+              </div>
+              <div className="profile-kv-row">
+                <span className="profile-kv-label">Wallet Balance:</span>
+                <span className="profile-kv-val" style={{ color: effectiveWallet >= effectivePacing ? '#059669' : '#dc2626' }}>
+                  ₹{effectiveWallet.toLocaleString('en-IN')}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -364,12 +557,12 @@ export default function AccountProfileKYC({
 
       {savedSuccess && (
         <div className="profile-success-alert">
-          ✓ Business profile successfully saved and synchronized with database &amp; CRM lead distribution!
+          ✓ Business profile successfully updated and synchronized with PostgreSQL &amp; sales lead distribution engine!
         </div>
       )}
 
-      {/* 2. Profile Form Sections: EXACT 3 SUBMITTED SECTIONS */}
-      <form onSubmit={handleSubmit} className="profile-form-layout">
+      {/* 3. Profile Form Sections: Full 3 sections for editing details */}
+      <form id="profile-edit-section" onSubmit={handleSubmit} className="profile-form-layout">
         
         {/* Section 1: Company Information */}
         <div className="profile-form-section">
@@ -377,7 +570,7 @@ export default function AccountProfileKYC({
             <span className="sec-number">1</span>
             <div>
               <h3>🏢 Company Information</h3>
-              <small>Organization and brand details</small>
+              <small>Organization and business identity</small>
             </div>
           </div>
 
@@ -390,7 +583,7 @@ export default function AccountProfileKYC({
                 value={profileData.companyName}
                 onChange={(e) => setProfileData({ ...profileData, companyName: e.target.value })}
                 className="clean-input"
-                placeholder="Enter your company name"
+                placeholder="e.g. Acme Technologies Pvt Ltd"
               />
             </div>
 
@@ -427,7 +620,7 @@ export default function AccountProfileKYC({
                 value={profileData.websiteUrl}
                 onChange={(e) => setProfileData({ ...profileData, websiteUrl: e.target.value })}
                 className="clean-input"
-                placeholder="www.emperorsmartsolutions.com"
+                placeholder="e.g. https://yourcompany.com"
               />
               <small style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
                 Optional — leave blank if currently in development
@@ -442,10 +635,10 @@ export default function AccountProfileKYC({
                 value={profileData.industry}
                 onChange={(e) => setProfileData({ ...profileData, industry: e.target.value })}
                 className="clean-input"
-                placeholder="Other"
+                placeholder="e.g. Cloud Solutions, Retail Supply, Construction, etc."
               />
               <small style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
-                Choose from suggestions or type your custom niche
+                Specify your exact industry niche
               </small>
             </div>
           </div>
@@ -457,7 +650,7 @@ export default function AccountProfileKYC({
             <span className="sec-number">2</span>
             <div>
               <h3>👤 Primary Contact Information</h3>
-              <small>Workspace administrator</small>
+              <small>Authorized administrator &amp; communication channel</small>
             </div>
           </div>
 
@@ -470,7 +663,7 @@ export default function AccountProfileKYC({
                 value={profileData.contactPerson}
                 onChange={(e) => setProfileData({ ...profileData, contactPerson: e.target.value })}
                 className="clean-input"
-                placeholder="Enter administrator full name"
+                placeholder="e.g. Rajesh Sharma"
               />
             </div>
 
@@ -482,7 +675,7 @@ export default function AccountProfileKYC({
                 value={profileData.email}
                 onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
                 className="clean-input"
-                placeholder="Enter business email address"
+                placeholder="e.g. contact@yourcompany.com"
               />
             </div>
 
@@ -498,21 +691,21 @@ export default function AccountProfileKYC({
                 placeholder="Enter 10-digit mobile number"
               />
               <small style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
-                10-digit mobile number
+                10-digit mobile number for immediate lead dispatch &amp; WhatsApp alerts
               </small>
             </div>
 
             <div className="form-group-block">
-              <label>Personal Email</label>
+              <label>Personal Email (Optional Backup)</label>
               <input
                 type="email"
                 value={profileData.personalEmail}
                 onChange={(e) => setProfileData({ ...profileData, personalEmail: e.target.value })}
                 className="clean-input"
-                placeholder="Optional backup email address"
+                placeholder="e.g. rajesh.backup@gmail.com"
               />
               <small style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
-                Optional backup address
+                Optional secondary emergency address
               </small>
             </div>
           </div>
@@ -537,7 +730,7 @@ export default function AccountProfileKYC({
                 value={profileData.city}
                 onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
                 className="clean-input"
-                placeholder="Indore"
+                placeholder="e.g. Mumbai"
               />
             </div>
 
@@ -548,7 +741,7 @@ export default function AccountProfileKYC({
                 value={profileData.state}
                 onChange={(e) => setProfileData({ ...profileData, state: e.target.value })}
                 className="clean-input"
-                placeholder="Maharashtra"
+                placeholder="e.g. Maharashtra"
               />
             </div>
 

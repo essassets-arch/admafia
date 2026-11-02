@@ -67,10 +67,49 @@ pm2 delete admafia 2>/dev/null || true
 pm2 start server.js --name "admafia"
 pm2 save
 
-# 6. Configure Nginx Reverse Proxy for $DOMAIN -> 127.0.0.1:$PORT
-cat > /etc/nginx/sites-available/admafia <<EOF
+# 6. Configure Nginx Reverse Proxy for $DOMAIN -> 127.0.0.1:$PORT with SSL
+rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+
+CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+KEY_PATH="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+
+if [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]; then
+  cat > /etc/nginx/sites-available/admafia <<EOF
 server {
     listen 80;
+    listen [::]:80;
+    server_name $DOMAIN www.$DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $DOMAIN www.$DOMAIN;
+
+    ssl_certificate $CERT_PATH;
+    ssl_certificate_key $KEY_PATH;
+
+    client_max_body_size 50M;
+
+    location / {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+}
+EOF
+else
+  cat > /etc/nginx/sites-available/admafia <<EOF
+server {
+    listen 80;
+    listen [::]:80;
     server_name $DOMAIN www.$DOMAIN;
 
     client_max_body_size 50M;
@@ -88,16 +127,19 @@ server {
     }
 }
 EOF
+  ln -sf /etc/nginx/sites-available/admafia /etc/nginx/sites-enabled/admafia
+  nginx -t && systemctl reload nginx
+  certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos -m "admin@$DOMAIN" --redirect || true
+fi
 
 ln -sf /etc/nginx/sites-available/admafia /etc/nginx/sites-enabled/admafia
 nginx -t && systemctl reload nginx
 
 echo "======================================================================"
 echo "✅ AdMafia CRM is LIVE in $APP_DIR on Port $PORT!"
-echo "🌐 Website:      http://$DOMAIN"
-echo "🔐 Login:        http://$DOMAIN/#login"
-echo "📝 Register:     http://$DOMAIN/#register"
-echo "📊 Customer CRM: http://$DOMAIN/portal"
-echo "💼 Sales Desk:   http://$DOMAIN/sales"
-echo "🔒 Enable SSL:   certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+echo "🌐 Website:            https://$DOMAIN"
+echo "🔐 Login:              https://$DOMAIN/#login"
+echo "📝 Register:           https://$DOMAIN/#register"
+echo "📊 Customer Profile:   https://$DOMAIN/app/lead#app/profile"
+echo "💼 Sales Desk:         https://$DOMAIN/sales"
 echo "======================================================================"

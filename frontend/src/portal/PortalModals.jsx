@@ -1601,7 +1601,7 @@ export function RescheduleCallbackModal({ isOpen, onClose, followUp, onSaveResch
 
 // Modal 9: Configure & Launch Web Domain Modal
 export function ConfigureDomainModal({ isOpen, onClose, customer, onUpdateDomain }) {
-  const [domainName, setDomainName] = useState(customer?.domain || 'www.emperorsmartsolutions.com');
+  const [domainName, setDomainName] = useState(customer?.domain || customer?.website || '');
   const [testingDns, setTestingDns] = useState(false);
   const [dnsSuccess, setDnsSuccess] = useState(true);
 
@@ -1640,7 +1640,7 @@ export function ConfigureDomainModal({ isOpen, onClose, customer, onUpdateDomain
               value={domainName}
               onChange={(e) => setDomainName(e.target.value)}
               className="clean-input"
-              placeholder="e.g. www.emperorsmartsolutions.com"
+              placeholder="e.g. www.yourcompany.com"
             />
           </div>
 
@@ -2181,13 +2181,13 @@ export function BusinessProfileModal({
     companyName: customer.companyName || customer.name || '',
     category: customer.category || 'IT & Software',
     website: customer.website || customer.domain || '',
-    industry: customer.industry || 'Other',
+    industry: customer.industry || '',
     contactPerson: customer.contactPerson || customer.contact || customer.username || '',
     email: customer.email || '',
     phone: customer.phone || '',
     personalEmail: customer.personalEmail || '',
     city: customer.city || '',
-    state: customer.state || 'Maharashtra',
+    state: customer.state || '',
     country: customer.country || 'India',
   });
 
@@ -2197,13 +2197,13 @@ export function BusinessProfileModal({
         companyName: customer.companyName || customer.name || '',
         category: customer.category || 'IT & Software',
         website: customer.website || customer.domain || '',
-        industry: customer.industry || 'Other',
+        industry: customer.industry || '',
         contactPerson: customer.contactPerson || customer.contact || customer.username || '',
         email: customer.email || '',
         phone: customer.phone || '',
         personalEmail: customer.personalEmail || '',
         city: customer.city || '',
-        state: customer.state || 'Maharashtra',
+        state: customer.state || '',
         country: customer.country || 'India',
       });
     }
@@ -2351,7 +2351,7 @@ export function BusinessProfileModal({
                   <Globe size={17} className="biz-input-icon" />
                   <input
                     type="text"
-                    placeholder="www.emperorsmartsolutions.com"
+                    placeholder="e.g. www.yourcompany.com"
                     value={formData.website}
                     onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                   />
@@ -2370,7 +2370,7 @@ export function BusinessProfileModal({
                   <input
                     type="text"
                     required
-                    placeholder="Other"
+                    placeholder="e.g. Software Services / Consulting"
                     value={formData.industry}
                     onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
                   />
@@ -2487,7 +2487,7 @@ export function BusinessProfileModal({
                   <input
                     type="text"
                     required
-                    placeholder="Indore"
+                    placeholder="e.g. Mumbai"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                   />
@@ -2503,7 +2503,7 @@ export function BusinessProfileModal({
                   <MapPin size={17} className="biz-input-icon" />
                   <input
                     type="text"
-                    placeholder="Maharashtra"
+                    placeholder="e.g. Maharashtra"
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                   />
