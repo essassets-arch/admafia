@@ -1487,6 +1487,47 @@ app.post('/api/wallets/topup', async (req, res) => {
   }
 });
 
+// Record failed / declined payment attempts into customer wallet transaction ledger
+app.post('/api/wallets/failed-transaction', async (req, res) => {
+  try {
+    const { customerId, phone, username, amount, referenceUtr, description, paymentMethod, failureReason } = req.body || {};
+    const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
+    const custRes = await query(
+      `SELECT * FROM customers WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
+      [customerId || '', cleanPhone, username || '']
+    );
+    if (!custRes.rowCount) {
+      return res.status(404).json({ ok: false, error: 'Customer not found' });
+    }
+    const cust = custRes.rows[0];
+    const walRes = await query('SELECT id, available_balance FROM wallets WHERE customer_id = $1 LIMIT 1', [cust.id]);
+    const walletId = walRes.rows[0]?.id || null;
+    const currentBal = Number(walRes.rows[0]?.available_balance || 0);
+    const cleanAmount = Number(amount || 0);
+    const txId = `tx_fail_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const utr = (referenceUtr || `FAIL-${Date.now().toString().slice(-6)}`).trim();
+    const reasonText = failureReason || 'Payment declined by bank or cancelled';
+    const txDesc = description || `Wallet recharge attempt failed: ${reasonText}`;
+    const meth = paymentMethod || 'Razorpay Gateway';
+
+    const txInsert = await query(
+      `INSERT INTO wallet_transactions (
+        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+      ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Failed ✕')
+      RETURNING *`,
+      [txId, cust.id, walletId, cleanAmount > 0 ? cleanAmount : 300, currentBal, utr, txDesc, meth]
+    );
+
+    res.json({
+      ok: true,
+      transaction: mapWalletTxRow(txInsert.rows[0]),
+    });
+  } catch (err) {
+    console.error('[POST /api/wallets/failed-transaction]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/wallets/deduct', async (req, res) => {
   try {
     const { customerId, phone, username, amount, activeDays } = req.body || {};

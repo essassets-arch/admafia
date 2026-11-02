@@ -529,6 +529,7 @@ export function AddFundsModal({
   isOpen,
   onClose,
   onTopUp,
+  onPaymentFailed,
   transactions = [],
   dailyAdSpend = 300,
   walletBalance = 0,
@@ -670,10 +671,32 @@ export function AddFundsModal({
       const rzp = new window.Razorpay(options);
       rzp.on('payment.failed', function (resp) {
         setIsProcessing(false);
+        const failUtr = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
+        const failReason = resp.error?.description || resp.error?.reason || 'Transaction could not be completed';
+        
+        if (typeof onPaymentFailed === 'function') {
+          onPaymentFailed({
+            id: `tx_fail_${Date.now()}`,
+            customerId: customer?.id,
+            customerPhone: customer?.phone,
+            customerUsername: customer?.username,
+            company: customer?.companyName || customer?.name,
+            date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+            ref: failUtr,
+            desc: `Online recharge failed: ${failReason}`,
+            type: 'Credit',
+            amount: currentAmount,
+            balance: walletBalance || customer?.balance || 0,
+            method: 'Razorpay Secure (Failed)',
+            status: 'Failed ✕',
+            failureReason: failReason,
+          });
+        }
+
         setSweetAlert({
           type: 'error',
           title: 'Payment Failed',
-          message: resp.error?.description || 'Transaction could not be completed. Please try again.',
+          message: failReason,
           confirmText: 'OK',
           onConfirm: () => setSweetAlert(null),
         });
@@ -1921,6 +1944,7 @@ export function MarketingGrowthPaymentModal({
   isOpen,
   onClose,
   onPay,
+  onPaymentFailed,
   customer = {},
   dailyAdSpend = 300,
 }) {
@@ -2048,10 +2072,32 @@ export function MarketingGrowthPaymentModal({
       const rzp = new window.Razorpay(options);
       rzp.on('payment.failed', function (resp) {
         setIsProcessing(false);
+        const failUtr = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
+        const failReason = resp.error?.description || resp.error?.reason || 'Transaction could not be completed';
+        
+        if (typeof onPaymentFailed === 'function') {
+          onPaymentFailed({
+            id: `tx_fail_${Date.now()}`,
+            customerId: customer?.id,
+            customerPhone: customer?.phone,
+            customerUsername: customer?.username,
+            company: customer?.companyName || customer?.name,
+            date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+            ref: failUtr,
+            desc: `Online recharge failed: ${failReason}`,
+            type: 'Credit',
+            amount: currentAmount,
+            balance: walletBalance || customer?.balance || 0,
+            method: 'Razorpay Secure (Failed)',
+            status: 'Failed ✕',
+            failureReason: failReason,
+          });
+        }
+
         setSweetAlert({
           type: 'error',
           title: 'Payment Failed',
-          message: resp.error?.description || 'Transaction could not be completed. Please try again.',
+          message: failReason,
           confirmText: 'OK',
           onConfirm: () => setSweetAlert(null),
         });

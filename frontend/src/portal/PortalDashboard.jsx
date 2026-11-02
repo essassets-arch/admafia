@@ -621,6 +621,32 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     });
   };
 
+  const handlePaymentFailed = (failedTx) => {
+    if (!failedTx) return;
+    setTransactions((prev) => {
+      const updated = [failedTx, ...prev];
+      try {
+        const rawAll = localStorage.getItem('growthline_wallet_transactions');
+        const allList = rawAll ? JSON.parse(rawAll) : [];
+        localStorage.setItem('growthline_wallet_transactions', JSON.stringify([failedTx, ...allList]));
+      } catch (e) {}
+      return updated;
+    });
+
+    try {
+      crmApi.recordFailedTransaction({
+        customerId: customer?.id,
+        phone: customer?.phone,
+        username: customer?.username,
+        amount: failedTx.amount,
+        referenceUtr: failedTx.ref,
+        description: failedTx.desc,
+        failureReason: failedTx.failureReason,
+        paymentMethod: failedTx.method,
+      }).catch((err) => console.warn('[Record failed tx non-fatal]', err));
+    } catch (e) {}
+  };
+
   const handleDeductDailyAdSpend = (overrideSpend) => {
     const spend = overrideSpend ? Number(overrideSpend) : (customer.dailyAdSpend || 300);
     if (walletBalance >= spend) {
@@ -1472,6 +1498,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               customer={customer}
               leadsCount={leads.length}
               onTopUpWallet={handleTopUpWallet}
+              onPaymentFailed={handlePaymentFailed}
               onDeductDailyAdSpend={handleDeductDailyAdSpend}
               onToggleCampaign={handleToggleCampaign}
               onOpenSetDailyLimit={() => setIsSetDailyLimitOpen(true)}
@@ -1498,6 +1525,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         customer={customer}
         onClose={() => setIsPaymentModalOpen(false)}
         onPay={handlePaymentModalPay}
+        onPaymentFailed={handlePaymentFailed}
         onGoToProfile={() => {
           setIsPaymentModalOpen(false);
           handleSwitchTab('profile');
@@ -1535,6 +1563,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         isOpen={isAddFundsOpen}
         onClose={() => setIsAddFundsOpen(false)}
         onTopUp={handleTopUpWallet}
+        onPaymentFailed={handlePaymentFailed}
         transactions={transactions}
         dailyAdSpend={customer.dailyAdSpend || 300}
         walletBalance={walletBalance}

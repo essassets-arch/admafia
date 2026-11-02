@@ -159,6 +159,16 @@ export const crmApi = {
     });
   },
 
+  /**
+   * Record a failed transaction in the customer's wallet ledger
+   */
+  async recordFailedTransaction(payload) {
+    return apiRequest('/wallets/failed-transaction', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async createRazorpayOrder(payload) {
     return apiRequest('/payments/razorpay/order', { method: 'POST', body: JSON.stringify(payload) });
   },

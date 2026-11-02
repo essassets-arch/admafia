@@ -1,4 +1,12 @@
 import React, { useState } from 'react';
+import {
+  CheckCircle2,
+  AlertTriangle,
+  AlertCircle,
+  RotateCcw,
+  ExternalLink,
+} from 'lucide-react';
+import crmApi from '../services/crmApi';
 
 export default function MarketingWallet({
   walletBalance = 0,
@@ -7,6 +15,7 @@ export default function MarketingWallet({
   customer = {},
   leadsCount = 0,
   onTopUpWallet,
+  onPaymentFailed,
   onDeductDailyAdSpend,
   onToggleCampaign,
   onOpenSetDailyLimit,
@@ -15,7 +24,7 @@ export default function MarketingWallet({
 }) {
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [customAmount, setCustomAmount] = useState('300');
-  const [activeLedgerTab, setActiveLedgerTab] = useState('all'); // 'all' | 'recharges' | 'deductions' | 'invoices'
+  const [activeLedgerTab, setActiveLedgerTab] = useState('all'); // 'all' | 'recharges' | 'deductions' | 'failed' | 'invoices'
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [actionAlert, setActionAlert] = useState(null); // { type: 'success' | 'error', message: string }
   const [daysDeliveredCount, setDaysDeliveredCount] = useState(0);
@@ -37,8 +46,13 @@ export default function MarketingWallet({
     { label: '₹10,000', amount: 10000, tag: 'Best Value' },
   ];
 
-  // Ledger counts
-  const creditsList = transactions.filter((t) => t.type === 'Credit');
+  // Ledger lists categorization
+  const isFailedTx = (t) =>
+    String(t.status || '').toLowerCase().includes('fail') ||
+    String(t.type || '').toLowerCase().includes('fail');
+
+  const failedList = transactions.filter(isFailedTx);
+  const creditsList = transactions.filter((t) => t.type === 'Credit' && !isFailedTx(t));
   const debitsList = transactions.filter((t) => t.type === 'Debit');
   const totalSpent = debitsList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const totalPaidLifetime = creditsList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -51,6 +65,8 @@ export default function MarketingWallet({
     filteredTxList = creditsList;
   } else if (activeLedgerTab === 'deductions') {
     filteredTxList = debitsList;
+  } else if (activeLedgerTab === 'failed') {
+    filteredTxList = failedList;
   }
 
   // Handle preset click
@@ -82,8 +98,8 @@ export default function MarketingWallet({
     }
   };
 
-  // Trigger Razorpay payment top-up
-  const handlePayViaRazorpay = () => {
+  // Trigger Razorpay payment top-up with failed transaction logging
+  const handlePayViaRazorpay = async () => {
     if (activeAmount < 300) {
       setActionAlert({ type: 'error', message: 'Minimum wallet recharge amount is ₹300.' });
       setTimeout(() => setActionAlert(null), 3000);
@@ -91,18 +107,141 @@ export default function MarketingWallet({
     }
 
     setIsProcessingPayment(true);
-    setTimeout(() => {
-      setIsProcessingPayment(false);
-      const generatedUtr = `rzp_test_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-      if (onTopUpWallet) {
-        onTopUpWallet(activeAmount, generatedUtr);
-      }
-      setActionAlert({
-        type: 'success',
-        message: `Payment Verified! ₹${activeAmount.toLocaleString('en-IN')} added directly to wallet via Razorpay (Ref: ${generatedUtr}).`,
+
+    const loadRazorpayScript = () => {
+      return new Promise((resolve) => {
+        if (window.Razorpay) {
+          resolve(true);
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
       });
+    };
+
+    try {
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded || !window.Razorpay) {
+        throw new Error('Razorpay script could not be loaded. Please check your internet connection.');
+      }
+
+      let order;
+      try {
+        order = await crmApi.createRazorpayOrder({
+          customerId: customer?.id,
+          phone: customer?.phone,
+          username: customer?.username,
+          amount: activeAmount,
+        });
+      } catch (err) {
+        throw new Error(err.message || 'Could not initiate Razorpay order.');
+      }
+
+      const options = {
+        key: order.keyId,
+        order_id: order.orderId,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'AdMafia',
+        description: `Ad Wallet Balance Top-Up (₹${activeAmount.toLocaleString('en-IN')})`,
+        handler: async function (response) {
+          try {
+            await crmApi.verifyRazorpayPayment({
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+              customerId: customer?.id,
+              phone: customer?.phone,
+              username: customer?.username,
+              amount: activeAmount,
+            });
+            setIsProcessingPayment(false);
+            if (onTopUpWallet) {
+              onTopUpWallet(activeAmount, response.razorpay_payment_id);
+            }
+            setActionAlert({
+              type: 'success',
+              message: `Payment Verified! ₹${activeAmount.toLocaleString('en-IN')} added directly to wallet via Razorpay (Ref: ${response.razorpay_payment_id}).`,
+            });
+            setTimeout(() => setActionAlert(null), 4000);
+          } catch (err) {
+            setIsProcessingPayment(false);
+            setActionAlert({ type: 'error', message: 'Payment verification failed: ' + err.message });
+          }
+        },
+        prefill: {
+          name: customer?.contactPerson || customer?.name || customer?.username || '',
+          email: customer?.email || '',
+          contact: customer?.phone || '',
+        },
+        theme: { color: '#4f46e5' },
+        modal: {
+          ondismiss: function () {
+            setIsProcessingPayment(false);
+          },
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        setIsProcessingPayment(false);
+        const failUtr = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
+        const failReason = resp.error?.description || resp.error?.reason || 'Transaction declined / payment failed';
+        const failTx = {
+          id: `tx_fail_${Date.now()}`,
+          customerId: customer?.id,
+          customerPhone: customer?.phone,
+          customerUsername: customer?.username,
+          company: customer?.companyName || customer?.name,
+          date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+          ref: failUtr,
+          desc: `Online recharge failed: ${failReason}`,
+          type: 'Credit',
+          amount: activeAmount,
+          balance: walletBalance,
+          method: 'Razorpay Secure (Failed)',
+          status: 'Failed ✕',
+          failureReason: failReason,
+        };
+        if (onPaymentFailed) {
+          onPaymentFailed(failTx);
+        }
+        setActionAlert({
+          type: 'error',
+          message: `Payment Failed: ${failReason}. Logged in your failed transaction history.`,
+        });
+        setTimeout(() => setActionAlert(null), 5000);
+      });
+      rzp.open();
+    } catch (err) {
+      setIsProcessingPayment(false);
+      const failUtr = `FAIL-ERR-${Date.now().toString().slice(-6)}`;
+      const failReason = err.message || 'Payment initiation error';
+      const failTx = {
+        id: `tx_fail_${Date.now()}`,
+        customerId: customer?.id,
+        customerPhone: customer?.phone,
+        customerUsername: customer?.username,
+        company: customer?.companyName || customer?.name,
+        date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+        ref: failUtr,
+        desc: `Online recharge failed: ${failReason}`,
+        type: 'Credit',
+        amount: activeAmount,
+        balance: walletBalance,
+        method: 'Razorpay Secure (Failed)',
+        status: 'Failed ✕',
+        failureReason: failReason,
+      };
+      if (onPaymentFailed) {
+        onPaymentFailed(failTx);
+      }
+      setActionAlert({ type: 'error', message: failReason });
       setTimeout(() => setActionAlert(null), 4000);
-    }, 800);
+    }
   };
 
   // Trigger Deduct Today's ₹300 Ad Spend
@@ -539,8 +678,8 @@ export default function MarketingWallet({
           </p>
         </div>
 
-        {/* 4 Filter Tabs */}
-        <div className="ledger-tabs-row">
+        {/* 5 Filter Tabs Including Failed Transactions */}
+        <div className="ledger-tabs-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
             className={`ledger-tab-btn ${activeLedgerTab === 'all' ? 'active' : ''}`}
@@ -564,6 +703,20 @@ export default function MarketingWallet({
           </button>
           <button
             type="button"
+            className={`ledger-tab-btn ${activeLedgerTab === 'failed' ? 'active' : ''}`}
+            onClick={() => setActiveLedgerTab('failed')}
+            style={
+              activeLedgerTab === 'failed'
+                ? { background: '#ef4444', borderColor: '#dc2626', color: '#ffffff', fontWeight: 800 }
+                : failedList.length > 0
+                ? { borderColor: '#fca5a5', color: '#dc2626', fontWeight: 800 }
+                : {}
+            }
+          >
+            Failed Transactions (✕) ({failedList.length})
+          </button>
+          <button
+            type="button"
             className={`ledger-tab-btn ${activeLedgerTab === 'invoices' ? 'active' : ''}`}
             onClick={() => setActiveLedgerTab('invoices')}
           >
@@ -584,73 +737,193 @@ export default function MarketingWallet({
                   <th>Amount</th>
                   <th>Method</th>
                   <th>Status</th>
-                  <th>Receipt</th>
+                  <th>Receipt / Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTxList.length > 0 ? (
-                  filteredTxList.map((tx) => (
-                    <tr key={tx.id}>
-                      <td>
-                        <div className="tx-code-wrap">
-                          <code className="tx-ref-code">{tx.ref || tx.id}</code>
-                          <button
-                            type="button"
-                            className="btn-copy-tx"
-                            onClick={() => handleCopyTxId(tx.ref || tx.id)}
-                            title="Copy Transaction ID"
-                          >
-                            {copiedTxId === (tx.ref || tx.id) ? '✓' : '⧉'}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="tx-date-cell">{tx.date}</td>
-                      <td className="tx-desc-cell">{tx.desc}</td>
-                      <td>
-                        <span className={`exact-type-pill ${tx.type === 'Credit' ? 'credit' : 'debit'}`}>
-                          {tx.type}
-                        </span>
-                      </td>
-                      <td>
-                        <strong className={`tx-amount-text ${tx.type === 'Credit' ? 'credit' : 'debit'}`}>
-                          {tx.type === 'Credit' ? `+₹${Number(tx.amount).toLocaleString('en-IN')}` : `-₹${Number(tx.amount).toLocaleString('en-IN')}`}
-                        </strong>
-                      </td>
-                      <td className="tx-method-cell">{tx.method || (tx.type === 'Credit' ? 'Razorpay Verified' : 'Auto-Debit')}</td>
-                      <td>
-                        <span className="tx-status-verified-pill">{tx.status || 'Verified ✓'}</span>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (invoices.length > 0 && onViewInvoice) {
-                              onViewInvoice(invoices[0]);
-                            } else {
-                              handlePrintStatement();
-                            }
-                          }}
-                          className="btn-receipt-view"
-                        >
-                          [Invoice / Receipt]
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  filteredTxList.map((tx) => {
+                    const isFailed = isFailedTx(tx);
+                    return (
+                      <tr key={tx.id} style={isFailed ? { background: '#fffcfc' } : {}}>
+                        <td>
+                          <div className="tx-code-wrap">
+                            <code className="tx-ref-code" style={isFailed ? { color: '#dc2626' } : {}}>
+                              {tx.ref || tx.id}
+                            </code>
+                            <button
+                              type="button"
+                              className="btn-copy-tx"
+                              onClick={() => handleCopyTxId(tx.ref || tx.id)}
+                              title="Copy Transaction ID"
+                            >
+                              {copiedTxId === (tx.ref || tx.id) ? '✓' : '⧉'}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="tx-date-cell">{tx.date}</td>
+                        <td className="tx-desc-cell">
+                          <div style={{ fontWeight: 600, color: isFailed ? '#991b1b' : '#1e293b' }}>
+                            {tx.desc}
+                          </div>
+                          {tx.failureReason && (
+                            <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: 2 }}>
+                              Decline Reason: {tx.failureReason}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          {isFailed ? (
+                            <span
+                              className="exact-type-pill pill-failed"
+                              style={{
+                                background: '#fee2e2',
+                                color: '#b91c1c',
+                                border: '1px solid #fecaca',
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                borderRadius: 9999,
+                                fontSize: '0.72rem'
+                              }}
+                            >
+                              Failed
+                            </span>
+                          ) : (
+                            <span className={`exact-type-pill ${tx.type === 'Credit' ? 'credit' : 'debit'}`}>
+                              {tx.type}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {isFailed ? (
+                            <strong style={{ color: '#dc2626', textDecoration: 'line-through', fontWeight: 800 }}>
+                              ₹{Number(tx.amount || 0).toLocaleString('en-IN')}
+                            </strong>
+                          ) : (
+                            <strong className={`tx-amount-text ${tx.type === 'Credit' ? 'credit' : 'debit'}`}>
+                              {tx.type === 'Credit'
+                                ? `+₹${Number(tx.amount || 0).toLocaleString('en-IN')}`
+                                : `-₹${Number(tx.amount || 0).toLocaleString('en-IN')}`}
+                            </strong>
+                          )}
+                        </td>
+                        <td className="tx-method-cell">
+                          {tx.method || (isFailed ? 'Razorpay (Declined)' : tx.type === 'Credit' ? 'Razorpay Verified' : 'Auto-Debit')}
+                        </td>
+                        <td>
+                          {isFailed ? (
+                            <span
+                              className="tx-status-failed-pill"
+                              style={{
+                                background: '#fff1f2',
+                                color: '#e11d48',
+                                border: '1px solid #fecdd3',
+                                padding: '3px 9px',
+                                borderRadius: 9999,
+                                fontSize: '0.74rem',
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                            >
+                              ✕ Payment Failed
+                            </span>
+                          ) : (
+                            <span className="tx-status-verified-pill">{tx.status || 'Verified ✓'}</span>
+                          )}
+                        </td>
+                        <td>
+                          {isFailed ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const retryAmount = Number(tx.amount) || 1000;
+                                setSelectedPreset(retryAmount);
+                                setCustomAmount('');
+                                const topupSection = document.getElementById('wallet-topup-section') || document.querySelector('.wallet-recharge-section');
+                                if (topupSection) {
+                                  topupSection.scrollIntoView({ behavior: 'smooth' });
+                                }
+                              }}
+                              className="btn-retry-failed-tx"
+                              style={{
+                                background: '#4f46e5',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderRadius: 6,
+                                padding: '5px 12px',
+                                fontSize: '0.75rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                boxShadow: '0 2px 6px rgba(79, 70, 229, 0.25)'
+                              }}
+                              title="Retry this recharge amount"
+                            >
+                              ↻ Retry
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (invoices.length > 0 && onViewInvoice) {
+                                  onViewInvoice(invoices[0]);
+                                } else {
+                                  handlePrintStatement();
+                                }
+                              }}
+                              className="btn-receipt-view"
+                            >
+                              [Invoice / Receipt]
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={8} className="empty-ledger-state-cell">
                       <div className="empty-ledger-box">
-                        <div className="empty-ledger-icon">
-                          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                            <line x1="16" y1="13" x2="8" y2="13" />
-                            <line x1="16" y1="17" x2="8" y2="17" />
-                          </svg>
+                        <div
+                          className="empty-ledger-icon"
+                          style={
+                            activeLedgerTab === 'failed'
+                              ? {
+                                  background: '#ecfdf5',
+                                  borderRadius: '50%',
+                                  width: 54,
+                                  height: 54,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  margin: '0 auto 12px'
+                                }
+                              : {}
+                          }
+                        >
+                          {activeLedgerTab === 'failed' ? (
+                            <CheckCircle2 size={32} color="#059669" />
+                          ) : (
+                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                              <line x1="16" y1="13" x2="8" y2="13" />
+                              <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                          )}
                         </div>
-                        <div className="empty-ledger-title">No transactions found</div>
-                        <div className="empty-ledger-subtitle">Transactions will appear here as soon as wallet recharges or daily ad spend deductions occur.</div>
+                        <div className="empty-ledger-title" style={activeLedgerTab === 'failed' ? { color: '#059669' } : {}}>
+                          {activeLedgerTab === 'failed' ? 'No Failed Transactions' : 'No transactions found'}
+                        </div>
+                        <div className="empty-ledger-subtitle">
+                          {activeLedgerTab === 'failed'
+                            ? 'All your wallet recharge attempts and daily ad spend auto-cuts have completed successfully with zero transaction errors.'
+                            : 'Transactions will appear here as soon as wallet recharges or daily ad spend deductions occur.'}
+                        </div>
                       </div>
                     </td>
                   </tr>
