@@ -619,93 +619,28 @@ export function AddFundsModal({
 
     setIsProcessing(true);
 
-    const scriptLoaded = await loadRazorpayScript();
-    if (!scriptLoaded || !window.Razorpay) {
-      setIsProcessing(false);
-      setSweetAlert({ type: 'error', title: 'Checkout unavailable', message: 'Could not load Razorpay. Check your connection and try again.', confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
-      return;
-    }
-
-    let order;
     try {
-      order = await crmApi.createRazorpayOrder({ customerId: customer?.id, phone: customer?.phone, username: customer?.username, amount: currentAmount });
-    } catch (err) {
-      setIsProcessing(false);
-      setSweetAlert({ type: 'error', title: 'Could not start payment', message: err.message, confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
-      return;
-    }
-
-    const options = {
-      key: order.keyId,
-      order_id: order.orderId,
-      amount: order.amount,
-      currency: order.currency,
-      name: 'AdMafia',
-      description: `Ad Wallet Balance Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
-      image: 'https://cdn-icons-png.flaticon.com/512/992/992651.png',
-      handler: async function (response) {
-        try {
-          await crmApi.verifyRazorpayPayment({ orderId: response.razorpay_order_id, paymentId: response.razorpay_payment_id, signature: response.razorpay_signature, customerId: customer?.id, phone: customer?.phone, username: customer?.username, amount: currentAmount });
-          finalizeTopUp(currentAmount, response.razorpay_payment_id);
-        } catch (err) {
-          setIsProcessing(false);
-          setSweetAlert({ type: 'error', title: 'Payment verification failed', message: err.message, confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
-        }
-      },
-      prefill: {
-        name: customer?.contactPerson || customer?.name || customer?.username || '',
-        email: customer?.email || '',
-        contact: customer?.phone ? String(customer.phone).replace(/\D/g, '').slice(-10) : '',
-        method: 'upi',
-      },
-      theme: {
-        color: '#4f46e5',
-      },
-      modal: {
-        ondismiss: function () {
-          setIsProcessing(false);
-        },
-      },
-    };
-
-    try {
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (resp) {
-        setIsProcessing(false);
-        const failUtr = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
-        const failReason = resp.error?.description || resp.error?.reason || 'Transaction could not be completed';
-        
-        if (typeof onPaymentFailed === 'function') {
-          onPaymentFailed({
-            id: `tx_fail_${Date.now()}`,
-            customerId: customer?.id,
-            customerPhone: customer?.phone,
-            customerUsername: customer?.username,
-            company: customer?.companyName || customer?.name,
-            date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
-            ref: failUtr,
-            desc: `Online recharge failed: ${failReason}`,
-            type: 'Credit',
-            amount: currentAmount,
-            balance: walletBalance || customer?.balance || 0,
-            method: 'Razorpay Secure (Failed)',
-            status: 'Failed ✕',
-            failureReason: failReason,
-          });
-        }
-
-        setSweetAlert({
-          type: 'error',
-          title: 'Payment Failed',
-          message: failReason,
-          confirmText: 'OK',
-          onConfirm: () => setSweetAlert(null),
-        });
+      const res = await crmApi.createRazorpayPaymentLink({
+        customerId: customer?.id,
+        phone: customer?.phone,
+        username: customer?.username,
+        amount: currentAmount,
       });
-      rzp.open();
+
+      if (!res?.paymentUrl) {
+        throw new Error(res?.error || 'Could not start payment. Please try again.');
+      }
+
+      window.location.href = res.paymentUrl;
     } catch (err) {
       setIsProcessing(false);
-      setSweetAlert({ type: 'error', title: 'Could not open Razorpay', message: err.message || 'Please try again.', confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
+      setSweetAlert({
+        type: 'error',
+        title: 'Could not start payment',
+        message: err.message || 'Payment initiation failed. Please try again.',
+        confirmText: 'OK',
+        onConfirm: () => setSweetAlert(null),
+      });
     }
   };
 
@@ -2017,98 +1952,28 @@ export function MarketingGrowthPaymentModal({
 
     setIsProcessing(true);
 
-    const scriptLoaded = await loadRazorpayScript();
-    if (!scriptLoaded || !window.Razorpay) {
-      setIsProcessing(false);
-      setSweetAlert({ type: 'error', title: 'Checkout unavailable', message: 'Could not load Razorpay. Check your connection and try again.', confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
-      return;
-    }
-
-    let order;
     try {
-      order = await crmApi.createRazorpayOrder({ customerId: customer?.id, phone: customer?.phone, username: customer?.username, amount: currentAmount });
-    } catch (err) {
-      setIsProcessing(false);
-      setSweetAlert({ type: 'error', title: 'Could not start payment', message: err.message, confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
-      return;
-    }
-
-    const options = {
-      key: order.keyId,
-      order_id: order.orderId,
-      amount: order.amount,
-      currency: order.currency,
-      name: 'AdMafia',
-      description: `Marketing & Growth Wallet Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
-      image: 'https://cdn-icons-png.flaticon.com/512/992/992651.png',
-      handler: async function (response) {
-        try {
-          await crmApi.verifyRazorpayPayment({ orderId: response.razorpay_order_id, paymentId: response.razorpay_payment_id, signature: response.razorpay_signature, customerId: customer?.id, phone: customer?.phone, username: customer?.username, amount: currentAmount });
-          setIsProcessing(false);
-          onPay(currentAmount, response.razorpay_payment_id);
-        } catch (err) {
-          setIsProcessing(false);
-          setSweetAlert({ type: 'error', title: 'Payment verification failed', message: err.message, confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
-        }
-      },
-      prefill: {
-        name: customer?.contactPerson || customer?.name || customer?.username || '',
-        email: customer?.email || '',
-        contact: customer?.phone ? String(customer.phone).replace(/\D/g, '').slice(-10) : '',
-        method: 'upi',
-      },
-      notes: {
-        purpose: 'Lead Hub Marketing & Growth Wallet Balance',
-      },
-      theme: {
-        color: '#4f46e5',
-      },
-      modal: {
-        ondismiss: function () {
-          setIsProcessing(false);
-        },
-      },
-    };
-
-    try {
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (resp) {
-        setIsProcessing(false);
-        const failUtr = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
-        const failReason = resp.error?.description || resp.error?.reason || 'Transaction could not be completed';
-        
-        if (typeof onPaymentFailed === 'function') {
-          onPaymentFailed({
-            id: `tx_fail_${Date.now()}`,
-            customerId: customer?.id,
-            customerPhone: customer?.phone,
-            customerUsername: customer?.username,
-            company: customer?.companyName || customer?.name,
-            date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
-            ref: failUtr,
-            desc: `Online recharge failed: ${failReason}`,
-            type: 'Credit',
-            amount: currentAmount,
-            balance: walletBalance || customer?.balance || 0,
-            method: 'Razorpay Secure (Failed)',
-            status: 'Failed ✕',
-            failureReason: failReason,
-          });
-        }
-
-        setSweetAlert({
-          type: 'error',
-          title: 'Payment Failed',
-          message: failReason,
-          confirmText: 'OK',
-          onConfirm: () => setSweetAlert(null),
-        });
+      const res = await crmApi.createRazorpayPaymentLink({
+        customerId: customer?.id,
+        phone: customer?.phone,
+        username: customer?.username,
+        amount: currentAmount,
       });
-      rzp.open();
+
+      if (!res?.paymentUrl) {
+        throw new Error(res?.error || 'Could not start payment. Please try again.');
+      }
+
+      window.location.href = res.paymentUrl;
     } catch (err) {
-      console.error('Failed to open Razorpay modal', err);
       setIsProcessing(false);
-      setSweetAlert({ type: 'error', title: 'Could not open Razorpay', message: err.message || 'Please try again.', confirmText: 'OK', onConfirm: () => setSweetAlert(null) });
+      setSweetAlert({
+        type: 'error',
+        title: 'Could not start payment',
+        message: err.message || 'Payment initiation failed. Please try again.',
+        confirmText: 'OK',
+        onConfirm: () => setSweetAlert(null),
+      });
     }
   };
 

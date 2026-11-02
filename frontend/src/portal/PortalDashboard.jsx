@@ -32,8 +32,13 @@ import Swal from 'sweetalert2';
 
 export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab }) {
   const getTabFromHash = () => {
-    const h = window.location.hash.toLowerCase();
-    const p = window.location.pathname.toLowerCase();
+    const s = typeof window !== 'undefined' ? window.location.search.toLowerCase() : '';
+    const h = typeof window !== 'undefined' ? window.location.hash.toLowerCase() : '';
+    const p = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+
+    // If returning from payment link callback, immediately activate wallet tab
+    if (s.includes('payment_status') || h.includes('payment_status')) return 'wallet';
+
     // Prioritize specific hash if present
     if (h.includes('dashboard')) return 'dashboard';
     if (h.includes('wallet')) return 'wallet';

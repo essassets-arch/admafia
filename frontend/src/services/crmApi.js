@@ -180,6 +180,10 @@ export const crmApi = {
     return apiRequest('/payments/razorpay/order', { method: 'POST', body: JSON.stringify(payload) });
   },
 
+  async createRazorpayPaymentLink(payload) {
+    return apiRequest('/payments/razorpay/payment-link', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
   async verifyRazorpayPayment(payload) {
     return apiRequest('/payments/razorpay/verify', { method: 'POST', body: JSON.stringify(payload) });
   },

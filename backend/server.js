@@ -1364,6 +1364,179 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
   }
 });
 
+app.post('/api/payments/razorpay/payment-link', async (req, res) => {
+  try {
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
+    }
+    const amount = Number(req.body?.amount);
+    if (!Number.isSafeInteger(amount) || amount < 300 || amount > 1000000) {
+      return res.status(400).json({ ok: false, error: 'Enter an amount from ₹300 to ₹10,00,000.' });
+    }
+    const cleanPhone = String(req.body?.phone || req.body?.customerId || '').replace(/\D/g, '').slice(-10);
+    const customer = await query(
+      `SELECT id, phone, username, contact_person, email, company_name FROM customers
+       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
+      [req.body?.customerId || '', cleanPhone, req.body?.username || '']
+    );
+    if (!customer.rowCount) {
+      return res.status(404).json({ ok: false, error: 'Customer account not found.' });
+    }
+    const cust = customer.rows[0];
+
+    const hostHeader = req.get('x-forwarded-host') || req.get('host') || 'admafia.marketing';
+    const protoHeader = req.get('x-forwarded-proto') || (hostHeader.includes('localhost') ? 'http' : 'https');
+    const baseUrl = `${protoHeader}://${hostHeader}`;
+    const callbackUrl = `${baseUrl}/api/payments/razorpay/callback`;
+
+    const response = await fetch('https://api.razorpay.com/v1/payment_links', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: amount * 100,
+        currency: 'INR',
+        accept_partial: false,
+        reference_id: `plink_ref_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        description: `AdMafia Instant Wallet Top-Up (₹${amount.toLocaleString('en-IN')})`,
+        customer: {
+          name: cust.contact_person || cust.company_name || cust.username || 'Customer',
+          contact: cleanPhone || cust.phone || '9999999999',
+          email: cust.email || 'support@admafia.marketing',
+        },
+        notify: { sms: false, email: false },
+        reminder_enable: false,
+        notes: {
+          customer_id: String(cust.id),
+          customer_phone: cleanPhone || String(cust.phone || ''),
+          customer_username: String(cust.username || ''),
+        },
+        callback_url: callbackUrl,
+        callback_method: 'get',
+      }),
+    });
+
+    const plink = await response.json();
+    if (!response.ok || !plink.id || !plink.short_url) {
+      console.error('[Razorpay Payment Link] Creation failed:', plink.error?.description || response.status);
+      return res.status(502).json({
+        ok: false,
+        error: plink.error?.description || 'Could not generate Razorpay payment link. Please try again.',
+      });
+    }
+
+    res.status(201).json({
+      ok: true,
+      paymentLinkId: plink.id,
+      paymentUrl: plink.short_url,
+      amount,
+      currency: plink.currency || 'INR',
+      keyId: razorpayKeyId,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/payments/razorpay/callback', async (req, res) => {
+  const hostHeader = req.get('x-forwarded-host') || req.get('host') || 'admafia.marketing';
+  const protoHeader = req.get('x-forwarded-proto') || (hostHeader.includes('localhost') ? 'http' : 'https');
+  const baseUrl = `${protoHeader}://${hostHeader}`;
+
+  try {
+    const {
+      razorpay_payment_id,
+      razorpay_payment_link_id,
+      razorpay_payment_link_status,
+    } = req.query || {};
+
+    const paymentId = String(razorpay_payment_id || '').trim();
+    const paymentLinkId = String(razorpay_payment_link_id || '').trim();
+    const status = String(razorpay_payment_link_status || '').toLowerCase().trim();
+
+    if (status !== 'paid' && !paymentId) {
+      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&reason=Payment+cancelled+or+declined`);
+    }
+
+    if (!paymentId) {
+      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&reason=Missing+payment+reference`);
+    }
+
+    // Verify payment directly with Razorpay API (Server-to-Server trusted evidence)
+    const paymentResp = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
+    });
+    const payment = await paymentResp.json();
+
+    if (!paymentResp.ok || payment.status !== 'captured') {
+      console.warn('[Razorpay Callback] Payment not captured:', paymentId, payment.status);
+      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&payment_id=${paymentId}&reason=Payment+not+captured`);
+    }
+
+    const cleanAmount = Number(payment.amount || 0) / 100;
+    if (cleanAmount < 300) {
+      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&payment_id=${paymentId}&reason=Amount+below+minimum`);
+    }
+
+    // Resolve customer identity from payment notes or contact
+    let customerId = payment.notes?.customer_id;
+    let custPhone = String(payment.contact || '').replace(/\D/g, '').slice(-10);
+
+    if (paymentLinkId) {
+      try {
+        const plinkResp = await fetch(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(paymentLinkId)}`, {
+          headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
+        });
+        const plinkData = await plinkResp.json();
+        if (plinkData?.notes?.customer_id) {
+          customerId = customerId || plinkData.notes.customer_id;
+        }
+        if (plinkData?.notes?.customer_phone) {
+          custPhone = custPhone || plinkData.notes.customer_phone;
+        }
+      } catch (e) {}
+    }
+
+    const custRes = await query(
+      `SELECT id FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`,
+      [customerId || '', custPhone]
+    );
+
+    if (custRes.rowCount === 0) {
+      console.error('[Razorpay Callback] Customer account not found for payment:', paymentId);
+      return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&payment_id=${paymentId}&reason=Customer+account+mismatch`);
+    }
+
+    const targetCustId = custRes.rows[0].id;
+
+    // Credit the wallet idempotently
+    await fetch(`http://127.0.0.1:${PORT}/api/wallets/topup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Wallet-Credit': walletCreditToken,
+      },
+      body: JSON.stringify({
+        customerId: targetCustId,
+        amount: cleanAmount,
+        referenceUtr: paymentId,
+        paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
+        description: `AdMafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
+      }),
+    });
+
+    return res.redirect(
+      303,
+      `${baseUrl}/app/lead#app/wallet?payment_status=success&payment_id=${encodeURIComponent(paymentId)}&amount=${cleanAmount}`
+    );
+  } catch (err) {
+    console.error('[Razorpay Callback Error]', err);
+    return res.redirect(303, `${baseUrl}/app/lead#app/wallet?payment_status=failed&reason=${encodeURIComponent(err.message)}`);
+  }
+});
+
 app.post('/api/payments/razorpay/verify', async (req, res) => {
   try {
     if (!razorpayKeySecret) return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });

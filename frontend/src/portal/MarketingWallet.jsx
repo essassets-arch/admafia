@@ -46,6 +46,53 @@ export default function MarketingWallet({
     { label: '₹10,000', amount: 10000, tag: 'Best Value' },
   ];
 
+  // Reconcile return from Razorpay Hosted Payment Link callback
+  React.useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hashParts = window.location.hash.split('?');
+      const hashParams = new URLSearchParams(hashParts[1] || '');
+      const paymentStatus = urlParams.get('payment_status') || hashParams.get('payment_status');
+      const paymentId = urlParams.get('payment_id') || hashParams.get('payment_id');
+      const amountStr = urlParams.get('amount') || hashParams.get('amount');
+
+      if (paymentStatus === 'success') {
+        const creditedAmt = Number(amountStr) || activeAmount || 300;
+        setActionAlert({
+          type: 'success',
+          message: `Payment Verified! ₹${creditedAmt.toLocaleString('en-IN')} added directly to wallet via Razorpay (Ref: ${paymentId || 'Verified'}).`,
+        });
+
+        const idOrPhone = customer?.id || customer?.phone || customer?.username;
+        if (idOrPhone) {
+          crmApi.getCustomerWorkspace(idOrPhone).then((workspace) => {
+            if (workspace?.customer && onTopUpWallet) {
+              onTopUpWallet(creditedAmt, paymentId || `rzp_${Date.now()}`, workspace);
+            }
+          }).catch(() => {});
+        }
+
+        const cleanHash = '#app/wallet';
+        const cleanPath = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanPath + cleanHash);
+        try { localStorage.removeItem('admafia_pending_payment'); } catch (e) {}
+        setTimeout(() => setActionAlert(null), 6000);
+      } else if (paymentStatus === 'failed') {
+        const reason = urlParams.get('reason') || hashParams.get('reason') || 'Transaction was cancelled or declined';
+        setActionAlert({
+          type: 'error',
+          message: `Payment Cancelled / Declined: ${reason}. No wallet funds were deducted.`,
+        });
+
+        const cleanHash = '#app/wallet';
+        const cleanPath = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanPath + cleanHash);
+        try { localStorage.removeItem('admafia_pending_payment'); } catch (e) {}
+        setTimeout(() => setActionAlert(null), 5000);
+      }
+    } catch (e) {}
+  }, []);
+
   // Ledger lists categorization
   const isFailedTx = (t) =>
     String(t.status || '').toLowerCase().includes('fail') ||
@@ -115,7 +162,7 @@ export default function MarketingWallet({
     }
   };
 
-  // Trigger Razorpay payment top-up with failed transaction logging
+  // Trigger Hosted Razorpay Payment Link flow (full-page experience, zero popup overlay)
   const handlePayViaRazorpay = async () => {
     if (!Number.isSafeInteger(activeAmount) || activeAmount < 300) {
       setActionAlert({ type: 'error', message: 'Minimum wallet recharge amount is ₹300.' });
@@ -125,155 +172,44 @@ export default function MarketingWallet({
 
     setIsProcessingPayment(true);
 
-    const loadRazorpayScript = () => {
-      return new Promise((resolve) => {
-        if (window.Razorpay) {
-          resolve(true);
-          return;
-        }
-        const script = document.createElement('script');
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        script.onload = () => resolve(true);
-        script.onerror = () => resolve(false);
-        document.body.appendChild(script);
-      });
-    };
-
     try {
-      const scriptLoaded = await loadRazorpayScript();
-      if (!scriptLoaded || !window.Razorpay) {
-        throw new Error('Razorpay script could not be loaded. Please check your internet connection.');
-      }
-
       if (!customer?.id && !customer?.phone && !customer?.username) {
         throw new Error('Customer account details are missing. Please sign in again and retry.');
       }
 
-      const order = await crmApi.createRazorpayOrder({
+      const res = await crmApi.createRazorpayPaymentLink({
         customerId: customer?.id,
         phone: customer?.phone,
         username: customer?.username,
         amount: activeAmount,
       });
-      if (!order?.keyId || !order?.orderId || !order?.amount || !order?.currency) {
-        throw new Error('Razorpay did not return a valid checkout order. Please try again.');
+
+      if (!res?.paymentUrl) {
+        throw new Error(res?.error || 'Could not generate Razorpay payment link. Please try again.');
       }
-      setRazorpayMode(order.keyId.startsWith('rzp_test_') ? 'TEST MODE' : 'LIVE MODE');
 
-      const options = {
-        key: order.keyId,
-        order_id: order.orderId,
-        amount: order.amount,
-        currency: order.currency || 'INR',
-        name: 'AdMafia',
-        description: `Instant Wallet Top-Up • ₹${activeAmount.toLocaleString('en-IN')}`,
-        image: `${window.location.origin}/favicon.ico`,
-        retry: { enabled: true, max_count: 3 },
-        prefill: {
-          name: customer?.contactPerson || customer?.name || customer?.username || '',
-          email: customer?.email || '',
-          contact: customer?.phone ? String(customer.phone).replace(/\D/g, '').slice(-10) : '',
-          method: 'upi',
-        },
-        theme: {
-          color: '#4f46e5',
-          backdrop_color: 'rgba(15, 23, 42, 0.75)',
-        },
-        modal: {
-          backdropclose: false,
-          escape: true,
-          handleback: true,
-          ondismiss: function () {
-            setIsProcessingPayment(false);
-          },
-        },
-        handler: async function (response) {
-          try {
-            await crmApi.verifyRazorpayPayment({
-              orderId: response.razorpay_order_id,
-              paymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature,
-              customerId: customer?.id,
-              phone: customer?.phone,
-              username: customer?.username,
-              amount: activeAmount,
-            });
-            setIsProcessingPayment(false);
-            // The verification endpoint credits the wallet atomically. Refresh server state
-            // instead of sending a second top-up request from the browser.
-            const workspace = await crmApi.getCustomerWorkspace(customer?.id || customer?.phone || customer?.username);
-            if (workspace?.customer && onTopUpWallet) {
-              onTopUpWallet(activeAmount, response.razorpay_payment_id, workspace);
-            }
-            setActionAlert({
-              type: 'success',
-              message: `Payment Verified! ₹${activeAmount.toLocaleString('en-IN')} added directly to wallet via Razorpay (Ref: ${response.razorpay_payment_id}).`,
-            });
-            setTimeout(() => setActionAlert(null), 4000);
-          } catch (err) {
-            setIsProcessingPayment(false);
-            setActionAlert({ type: 'error', message: 'Payment was received, but wallet verification or refresh failed: ' + err.message + '. Contact support before retrying.' });
-          }
-        },
-      };
+      setRazorpayMode(res.keyId?.startsWith('rzp_test_') ? 'TEST MODE' : 'LIVE MODE');
 
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (resp) {
-        setIsProcessingPayment(false);
-        const failUtr = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
-        const failReason = resp.error?.description || resp.error?.reason || 'Transaction declined / payment failed';
-        const failTx = {
-          id: `tx_fail_${Date.now()}`,
-          customerId: customer?.id,
-          customerPhone: customer?.phone,
-          customerUsername: customer?.username,
-          company: customer?.companyName || customer?.name,
-          date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
-          ref: failUtr,
-          desc: `Online recharge failed: ${failReason}`,
-          type: 'Credit',
-          amount: activeAmount,
-          balance: walletBalance,
-          method: 'Razorpay Secure (Failed)',
-          status: 'Failed ✕',
-          failureReason: failReason,
-        };
-        if (onPaymentFailed) {
-          onPaymentFailed(failTx);
-        }
-        setActionAlert({
-          type: 'error',
-          message: `Payment Failed: ${failReason}. Logged in your failed transaction history.`,
-        });
-        setTimeout(() => setActionAlert(null), 5000);
-      });
-      rzp.open();
+      // Store pending payment in localStorage so return handler can reconcile
+      try {
+        localStorage.setItem(
+          'admafia_pending_payment',
+          JSON.stringify({
+            paymentLinkId: res.paymentLinkId,
+            amount: activeAmount,
+            initiatedAt: Date.now(),
+          })
+        );
+      } catch (e) {}
+
+      // Redirect browser directly to Razorpay's full-page hosted checkout
+      window.location.href = res.paymentUrl;
     } catch (err) {
       setIsProcessingPayment(false);
-      const failUtr = `FAIL-ERR-${Date.now().toString().slice(-6)}`;
       const failReason = err.message || 'Payment initiation error';
-      const failTx = {
-        id: `tx_fail_${Date.now()}`,
-        customerId: customer?.id,
-        customerPhone: customer?.phone,
-        customerUsername: customer?.username,
-        company: customer?.companyName || customer?.name,
-        date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
-        ref: failUtr,
-        desc: `Online recharge failed: ${failReason}`,
-        type: 'Credit',
-        amount: activeAmount,
-        balance: walletBalance,
-        method: 'Razorpay Secure (Failed)',
-        status: 'Failed ✕',
-        failureReason: failReason,
-      };
-      if (onPaymentFailed) {
-        onPaymentFailed(failTx);
-      }
       setActionAlert({
         type: 'error',
-        message: `${failReason} No wallet funds were added. Please try again or contact support.`,
+        message: `${failReason}. Please try again or contact support.`,
       });
       setTimeout(() => setActionAlert(null), 4000);
     }
