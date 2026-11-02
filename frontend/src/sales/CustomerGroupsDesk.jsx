@@ -42,6 +42,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
 
   // Selected Category Live Recipient Preview in Create Lead Form
   const [previewRecipients, setPreviewRecipients] = useState([]);
+  const [previewExcludedRecipients, setPreviewExcludedRecipients] = useState([]);
+  const [previewSkippedBreakdown, setPreviewSkippedBreakdown] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   // 2. View Group Customers Modal State
@@ -136,6 +138,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
   useEffect(() => {
     if (!isCreateLeadOpen || !leadForm.category) {
       setPreviewRecipients([]);
+      setPreviewExcludedRecipients([]);
+      setPreviewSkippedBreakdown(null);
       return;
     }
 
@@ -150,11 +154,17 @@ export default function CustomerGroupsDesk({ customers = [] }) {
       .then((res) => {
         if (isMounted) {
           setPreviewRecipients(res.recipients || []);
+          setPreviewExcludedRecipients(res.excludedRecipients || []);
+          setPreviewSkippedBreakdown(res.skippedBreakdown || null);
         }
       })
       .catch((err) => {
         console.warn('[Preview error]:', err.message);
-        if (isMounted) setPreviewRecipients([]);
+        if (isMounted) {
+          setPreviewRecipients([]);
+          setPreviewExcludedRecipients([]);
+          setPreviewSkippedBreakdown(null);
+        }
       })
       .finally(() => {
         if (isMounted) setPreviewLoading(false);
@@ -215,7 +225,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
     const eligibleCount = previewRecipients.length;
 
     if (eligibleCount === 0) {
-      showToast(`Cannot distribute: 0 eligible customers in ${leadForm.category}.`, 'error');
+      showToast('No Eligible Customers: No customers in this group currently meet the wallet balance and marketing eligibility requirements. Please review their wallet balances and campaign status.', 'error');
       return;
     }
 
@@ -257,7 +267,9 @@ export default function CustomerGroupsDesk({ customers = [] }) {
     setViewLoading(true);
     try {
       const res = await crmApi.previewCategoryRecipients(row.category, row.groupId || '');
-      setViewingMembers(res.recipients || []);
+      const eligible = (res.recipients || []).map((m) => ({ ...m, isEligible: true }));
+      const excluded = (res.excludedRecipients || []).map((m) => ({ ...m, isEligible: false }));
+      setViewingMembers([...eligible, ...excluded]);
     } catch {
       setViewingMembers([]);
     } finally {
@@ -779,24 +791,31 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                     {previewLoading ? (
                       <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Checking matching accounts...</div>
                     ) : previewRecipients.length > 0 ? (
-                      <div
-                        style={{
-                          background: '#f0fdf4',
-                          border: '1px solid #bbf7d0',
-                          color: '#15803d',
-                          padding: '8px 12px',
-                          borderRadius: 6,
-                          fontSize: '0.84rem',
-                          fontWeight: 700,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                        }}
-                      >
-                        <CheckCircle2 size={16} />
-                        <span>
-                          Distribute this lead to {previewRecipients.length} eligible {leadForm.category} customer{previewRecipients.length === 1 ? '' : 's'}?
-                        </span>
+                      <div>
+                        <div
+                          style={{
+                            background: '#f0fdf4',
+                            border: '1px solid #bbf7d0',
+                            color: '#15803d',
+                            padding: '8px 12px',
+                            borderRadius: 6,
+                            fontSize: '0.84rem',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          <CheckCircle2 size={16} />
+                          <span>
+                            Distribute this lead to {previewRecipients.length} eligible {leadForm.category} customer{previewRecipients.length === 1 ? '' : 's'}?
+                          </span>
+                        </div>
+                        {previewExcludedRecipients.length > 0 && (
+                          <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 4, paddingLeft: 4 }}>
+                            ℹ {previewExcludedRecipients.length} customer(s) excluded due to wallet balance or marketing inactive status.
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div
@@ -804,19 +823,33 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           background: '#fef2f2',
                           border: '1px solid #fecaca',
                           color: '#b91c1c',
-                          padding: '8px 12px',
+                          padding: '10px 12px',
                           borderRadius: 6,
                           fontSize: '0.84rem',
                           fontWeight: 600,
                           display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
+                          flexDirection: 'column',
+                          gap: 4,
                         }}
                       >
-                        <AlertTriangle size={16} />
-                        <span>
-                          0 eligible active customers found in {leadForm.category}. Lead cannot be distributed.
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
+                          <AlertTriangle size={16} />
+                          <span>No Eligible Customers</span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#7f1d1d' }}>
+                          No customers in this group currently meet the wallet balance and marketing eligibility requirements. Please review their wallet balances and campaign status.
+                        </div>
+                        {previewSkippedBreakdown && (
+                          <div style={{ fontSize: '0.74rem', color: '#991b1b', marginTop: 4 }}>
+                            Excluded: {[
+                              previewSkippedBreakdown.insufficientBalance ? `${previewSkippedBreakdown.insufficientBalance} low balance (< daily spend)` : null,
+                              previewSkippedBreakdown.marketingInactive ? `${previewSkippedBreakdown.marketingInactive} marketing paused/inactive` : null,
+                              previewSkippedBreakdown.kycIncomplete ? `${previewSkippedBreakdown.kycIncomplete} KYC incomplete` : null,
+                              previewSkippedBreakdown.accountInactive ? `${previewSkippedBreakdown.accountInactive} account inactive` : null,
+                              previewSkippedBreakdown.missingWallet ? `${previewSkippedBreakdown.missingWallet} missing wallet` : null,
+                            ].filter(Boolean).join(' • ') || 'Criteria not met'}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -978,10 +1011,10 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                         Contact Person
                       </th>
                       <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                        Phone &amp; Email
+                        Balance / Daily Spend
                       </th>
                       <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                        Status
+                        Distribution Eligibility
                       </th>
                     </tr>
                   </thead>
@@ -999,28 +1032,58 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                       .map((m) => (
                         <tr key={m.customerId} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
-                            {m.companyName}
+                            <div>{m.companyName}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>{m.category || 'General'}</div>
                           </td>
                           <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
-                            {m.contactPerson}
+                            <div>{m.contactPerson}</div>
+                            <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{m.phone}</div>
                           </td>
-                          <td style={{ padding: '10px 14px', fontSize: '0.78rem', color: '#334155' }}>
-                            <div>{m.phone}</div>
-                            {m.email && <div style={{ color: '#94a3b8' }}>{m.email}</div>}
+                          <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#334155' }}>
+                            <div style={{ fontWeight: 700, color: Number(m.balance || 0) >= Number(m.dailyAdSpend || 300) ? '#15803d' : '#b91c1c' }}>
+                              ₹{Number(m.balance || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                              Spend: ₹{Number(m.dailyAdSpend || 300)}/day
+                            </div>
                           </td>
                           <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                            <span
-                              style={{
-                                padding: '2px 8px',
-                                borderRadius: 10,
-                                fontSize: '0.72rem',
-                                fontWeight: 700,
-                                backgroundColor: '#ecfdf5',
-                                color: '#047857',
-                              }}
-                            >
-                              Eligible
-                            </span>
+                            {m.isEligible ? (
+                              <span
+                                style={{
+                                  padding: '3px 8px',
+                                  borderRadius: 10,
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  backgroundColor: '#ecfdf5',
+                                  color: '#047857',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                }}
+                              >
+                                ✓ Eligible
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  padding: '3px 8px',
+                                  borderRadius: 10,
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  backgroundColor: '#fef2f2',
+                                  color: '#b91c1c',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  maxWidth: 180,
+                                  textAlign: 'left',
+                                }}
+                                title={(m.reasons || []).join(' • ')}
+                              >
+                                ✕ {m.reason || 'Ineligible'}
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))}

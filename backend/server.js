@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
+import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
 import { superadminRouter } from './routes/superadmin.js';
@@ -319,7 +320,11 @@ function mapGroupRow(row) {
     icon: row.icon || '🏢',
     description: row.description || '',
     status: row.status || 'active',
-    customerCount: Number(row.customer_count ?? 0),
+    customerCount: Number(row.customer_count ?? row.eligible_count ?? 0),
+    eligibleCount: Number(row.eligible_count ?? row.customer_count ?? 0),
+    totalMembers: Number(row.total_members ?? 0),
+    excludedCount: Number(row.excluded_count ?? 0),
+    skippedBreakdown: row.skipped_breakdown || null,
     leadsReceived: Number(row.leads_received ?? 0),
     leadsDistributed: Number(row.leads_distributed ?? 0),
     createdAt: row.created_at,
@@ -1771,28 +1776,10 @@ app.post('/api/tasks', async (req, res) => {
 // List all Customer Groups with dynamic counts
 app.get('/api/groups', async (req, res) => {
   try {
-    const result = await query(`
-      SELECT 
-        cg.*,
-        (
-          SELECT COUNT(DISTINCT c.id) 
-          FROM customers c
-          LEFT JOIN customer_group_memberships cgm ON cgm.customer_id = c.id
-          WHERE c.status = 'active'
-            AND (
-              cgm.group_id = cg.id 
-              OR c.group_id = cg.id
-              OR LOWER(c.category) = LOWER(cg.category)
-              OR LOWER(c.category) = LOWER(cg.name)
-            )
-        ) AS customer_count,
-        (SELECT COUNT(*) FROM master_leads ml WHERE ml.group_id = cg.id OR LOWER(ml.category) = LOWER(cg.category) OR LOWER(ml.category) = LOWER(cg.name)) AS leads_received,
-        (SELECT COUNT(*) FROM lead_assignments la WHERE la.group_id = cg.id) AS leads_distributed
-      FROM customer_groups cg
-      ORDER BY cg.created_at ASC
-    `);
-    res.json({ ok: true, groups: result.rows.map(mapGroupRow) });
+    const groups = await getGroupEligibilityCounts(query);
+    res.json({ ok: true, groups: groups.map(mapGroupRow) });
   } catch (err) {
+    console.error('[GET /api/groups]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -1800,79 +1787,11 @@ app.get('/api/groups', async (req, res) => {
 // List all categories and customer groups with live eligible customer counts
 app.get('/api/categories', async (req, res) => {
   try {
-    const groupsRes = await query(`
-      SELECT 
-        cg.*,
-        (
-          SELECT COUNT(DISTINCT c.id) 
-          FROM customers c
-          LEFT JOIN customer_group_memberships cgm ON cgm.customer_id = c.id
-          WHERE c.status = 'active'
-            AND (
-              cgm.group_id = cg.id 
-              OR c.group_id = cg.id
-              OR LOWER(c.category) = LOWER(cg.category)
-              OR LOWER(c.category) = LOWER(cg.name)
-            )
-        ) AS customer_count,
-        (SELECT COUNT(*) FROM master_leads ml WHERE ml.group_id = cg.id OR LOWER(ml.category) = LOWER(cg.category) OR LOWER(ml.category) = LOWER(cg.name)) AS leads_received,
-        (SELECT COUNT(*) FROM lead_assignments la WHERE la.group_id = cg.id) AS leads_distributed
-      FROM customer_groups cg
-      ORDER BY cg.created_at ASC
-    `);
-
-    const custCatRes = await query(`
-      SELECT DISTINCT category FROM customers WHERE category IS NOT NULL AND category != ''
-    `);
-
-    const categoryMap = new Map();
-
-    for (const g of groupsRes.rows) {
-      const catKey = g.category || g.name;
-      if (!categoryMap.has(catKey)) {
-        categoryMap.set(catKey, {
-          category: catKey,
-          name: g.name,
-          groupId: g.id,
-          icon: g.icon || '🏢',
-          description: g.description || '',
-          eligibleCount: Number(g.customer_count || 0),
-          leadsReceived: Number(g.leads_received || 0),
-          leadsDistributed: Number(g.leads_distributed || 0),
-        });
-      } else {
-        const existing = categoryMap.get(catKey);
-        existing.eligibleCount = Math.max(existing.eligibleCount, Number(g.customer_count || 0));
-      }
-    }
-
-    for (const row of custCatRes.rows) {
-      const cat = row.category;
-      if (!categoryMap.has(cat)) {
-        const countRes = await query(
-          `SELECT COUNT(DISTINCT c.id) as count 
-           FROM customers c 
-           WHERE c.status = 'active' AND (LOWER(c.category) = LOWER($1) OR LOWER(c.industry) = LOWER($1))`,
-          [cat]
-        );
-        categoryMap.set(cat, {
-          category: cat,
-          name: cat,
-          groupId: null,
-          icon: '🏢',
-          description: `${cat} Industry Segment`,
-          eligibleCount: Number(countRes.rows[0]?.count || 0),
-          leadsReceived: 0,
-          leadsDistributed: 0,
-        });
-      }
-    }
-
-    const categories = Array.from(categoryMap.values());
+    const { categories, groups } = await getCategoryEligibilityCounts(query);
     res.json({
       ok: true,
       categories,
-      groups: groupsRes.rows.map(mapGroupRow),
+      groups: groups.map(mapGroupRow),
     });
   } catch (err) {
     console.error('[GET /api/categories]', err);
@@ -1885,58 +1804,31 @@ app.get('/api/categories/preview', async (req, res) => {
   try {
     const targetCat = (req.query.category || '').trim();
     const targetGroupId = (req.query.groupId || '').trim();
+    const masterLeadId = (req.query.masterLeadId || '').trim() || null;
 
     if (!targetCat && !targetGroupId) {
       return res.status(400).json({ ok: false, error: 'Category or groupId parameter is required' });
     }
 
-    const customersRes = await query(
-      `SELECT DISTINCT 
-         c.id, c.username, c.company_name, c.contact_person, c.phone, c.email,
-         c.category, c.city, c.state, c.status, c.profile_status, c.payment_status,
-         COALESCE(w.available_balance, 0) AS balance
-       FROM customers c
-       LEFT JOIN customer_group_memberships cgm ON cgm.customer_id = c.id
-       LEFT JOIN customer_groups cg ON (cg.id = cgm.group_id OR cg.id = c.group_id)
-       LEFT JOIN wallets w ON w.customer_id = c.id
-       WHERE c.status = 'active'
-         AND (
-           ( $1 <> '' AND (
-             LOWER(c.category) = LOWER($1)
-             OR LOWER(c.industry) = LOWER($1)
-             OR LOWER(cg.category) = LOWER($1)
-             OR LOWER(cg.name) = LOWER($1)
-           ) )
-           OR ( $2 <> '' AND (
-             cgm.group_id = $2
-             OR c.group_id = $2
-             OR cg.id = $2
-           ) )
-         )
-       ORDER BY c.company_name ASC`,
-      [targetCat, targetGroupId || '']
-    );
-
-    const recipients = customersRes.rows.map((r) => ({
-      customerId: r.id,
-      companyName: r.company_name,
-      contactPerson: r.contact_person,
-      phone: (r.phone || '').trim(),
-      email: r.email || '',
-      category: r.category || 'Other',
-      city: r.city || '',
-      balance: Number(r.balance || 0),
-      notificationStatus: 'Ready to Dispatch',
-    }));
+    const evalData = await getEvaluatedRecipients(query, {
+      category: targetCat,
+      groupId: targetGroupId,
+      masterLeadId,
+    });
 
     res.json({
       ok: true,
       category: targetCat,
       groupId: targetGroupId || null,
-      eligibleCount: recipients.length,
-      recipients,
+      eligibleCount: evalData.eligibleCount,
+      excludedCount: evalData.excludedCount,
+      totalCandidates: evalData.totalCandidates,
+      recipients: evalData.eligible,
+      excludedRecipients: evalData.excluded,
+      skippedBreakdown: evalData.skippedBreakdown,
     });
   } catch (err) {
+    console.error('[GET /api/categories/preview]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -2125,58 +2017,31 @@ app.delete('/api/groups/:id/members/:customerId', async (req, res) => {
 app.get('/api/groups/:id/preview-recipients', async (req, res) => {
   try {
     const groupId = req.params.id;
+    const masterLeadId = (req.query.masterLeadId || '').trim() || null;
     const grpRes = await query('SELECT * FROM customer_groups WHERE id = $1', [groupId]);
     if (grpRes.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Customer group not found' });
     }
     const group = grpRes.rows[0];
 
-    const membersRes = await query(
-      `SELECT 
-         c.id, c.username, c.company_name, c.contact_person, c.phone, c.email,
-         c.category, c.city, c.state, c.status, c.profile_status, c.payment_status,
-         COALESCE(w.available_balance, 0) AS balance
-       FROM customer_group_memberships cgm
-       JOIN customers c ON c.id = cgm.customer_id
-       LEFT JOIN wallets w ON w.customer_id = c.id
-       WHERE cgm.group_id = $1
-       ORDER BY c.company_name ASC`,
-      [groupId]
-    );
-
-    const eligible = [];
-    const excluded = [];
-
-    for (const row of membersRes.rows) {
-      const item = {
-        customerId: row.id,
-        companyName: row.company_name,
-        contactPerson: row.contact_person,
-        phone: (row.phone || '').trim(),
-        email: row.email || '',
-        category: row.category,
-        city: row.city || '',
-        status: row.status,
-        balance: Number(row.balance || 0),
-        notificationStatus: 'Ready to Dispatch',
-      };
-      if (row.status === 'active') {
-        eligible.push(item);
-      } else {
-        excluded.push({ ...item, reason: `Account status is '${row.status}'` });
-      }
-    }
+    const evalData = await getEvaluatedRecipients(query, {
+      groupId,
+      category: group.category || group.name,
+      masterLeadId,
+    });
 
     res.json({
       ok: true,
       group: mapGroupRow(group),
-      totalMembers: membersRes.rowCount,
-      eligibleCount: eligible.length,
-      excludedCount: excluded.length,
-      eligibleRecipients: eligible,
-      excludedRecipients: excluded,
+      totalMembers: evalData.totalCandidates,
+      eligibleCount: evalData.eligibleCount,
+      excludedCount: evalData.excludedCount,
+      eligibleRecipients: evalData.eligible,
+      excludedRecipients: evalData.excluded,
+      skippedBreakdown: evalData.skippedBreakdown,
     });
   } catch (err) {
+    console.error('[GET /api/groups/:id/preview-recipients]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -2246,48 +2111,44 @@ app.post('/api/leads/distribute', async (req, res) => {
     const leadTitle = (title || '').trim() || `${finalCategory} Buyer Requirement`;
     const reqText = (requirement || description || '').trim() || `Inbound customer requirement for ${finalCategory} products and commercial services.`;
     const bName = (buyerName || '').trim() || 'Verified Buyer';
-
-    // Query active eligible customers for this category or group
-    const eligibleRes = await query(
-      `SELECT DISTINCT 
-         c.id, c.username, c.company_name, c.contact_person, c.phone, c.email,
-         c.category, c.city, c.state, c.status, c.profile_status, c.payment_status,
-         COALESCE(w.available_balance, 0) AS balance
-       FROM customers c
-       LEFT JOIN customer_group_memberships cgm ON cgm.customer_id = c.id
-       LEFT JOIN customer_groups cg ON (cg.id = cgm.group_id OR cg.id = c.group_id)
-       LEFT JOIN wallets w ON w.customer_id = c.id
-       WHERE c.status = 'active'
-         AND (
-           ( $1 <> '' AND (
-             LOWER(c.category) = LOWER($1)
-             OR LOWER(c.industry) = LOWER($1)
-             OR LOWER(cg.category) = LOWER($1)
-             OR LOWER(cg.name) = LOWER($1)
-           ) )
-           OR ( $2 <> '' AND (
-             cgm.group_id = $2
-             OR c.group_id = $2
-             OR cg.id = $2
-           ) )
-         )
-       ORDER BY c.company_name ASC`,
-      [finalCategory, targetGroupId || '']
-    );
-
-    if (eligibleRes.rowCount === 0) {
-      return res.status(400).json({
-        ok: false,
-        error: `No active eligible customers found in category "${finalCategory}". Assign or register customers before distributing leads.`,
-      });
-    }
-
-    const eligibleCustomers = eligibleRes.rows;
     const masterLeadId = id || `mlead_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const displayPhone = `+91 ${cleanBuyerDigits}`;
 
-    // Execute atomic transaction for lead creation & assignments
+    // Preliminary authoritative evaluation before opening transaction
+    const initialEval = await getEvaluatedRecipients(query, {
+      groupId: finalGroupId,
+      category: finalCategory,
+      masterLeadId,
+    });
+
+    if (initialEval.eligibleCount === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: 'No Eligible Customers',
+        message: 'No customers in this group currently meet the wallet balance and marketing eligibility requirements. Please review their wallet balances and campaign status.',
+        eligibleCount: 0,
+        skippedCount: initialEval.excludedCount,
+        skippedBreakdown: initialEval.skippedBreakdown,
+      });
+    }
+
+    // Execute atomic transaction for lead creation & assignments (NO wallet deductions whatsoever)
     const result = await withTransaction(async (txQuery) => {
+      // Re-evaluate within transaction isolation to prevent race conditions
+      const txEvalData = await getEvaluatedRecipients(txQuery, {
+        groupId: finalGroupId,
+        category: finalCategory,
+        masterLeadId,
+      });
+
+      if (txEvalData.eligibleCount === 0) {
+        const err = new Error('No Eligible Customers');
+        err.statusCode = 400;
+        err.skippedCount = txEvalData.excludedCount;
+        err.skippedBreakdown = txEvalData.skippedBreakdown;
+        throw err;
+      }
+
       // 1. Insert Master Lead
       const mLeadInsert = await txQuery(
         `INSERT INTO master_leads (
@@ -2326,9 +2187,10 @@ app.post('/api/leads/distribute', async (req, res) => {
       const savedMasterLead = mLeadInsert.rows[0];
       const createdAssignments = [];
 
-      for (const cust of eligibleCustomers) {
-        const custLeadId = `lead_${masterLeadId}_${cust.id}`.slice(0, 64);
-        const assignId = `asgn_${masterLeadId}_${cust.id}`.slice(0, 64);
+      // 2. Dispatch ONLY to strictly eligible customers
+      for (const cust of txEvalData.eligible) {
+        const custLeadId = `lead_${masterLeadId}_${cust.customerId}`.slice(0, 64);
+        const assignId = `asgn_${masterLeadId}_${cust.customerId}`.slice(0, 64);
 
         // Insert / update customer-specific lead so it displays in their individual CRM /app/lead
         await txQuery(
@@ -2346,11 +2208,11 @@ app.post('/api/leads/distribute', async (req, res) => {
            ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`,
           [
             custLeadId,
-            cust.id,
+            cust.customerId,
             masterLeadId,
             cust.phone,
-            cust.username,
-            cust.company_name,
+            cust.username || cust.phone,
+            cust.companyName,
             finalCategory,
             cleanBuyerDigits,
             displayPhone,
@@ -2377,14 +2239,14 @@ app.post('/api/leads/distribute', async (req, res) => {
              NOW()
            )
            ON CONFLICT (master_lead_id, customer_id) DO UPDATE SET assigned_at = NOW()`,
-          [assignId, masterLeadId, cust.id, finalGroupId, custLeadId]
+          [assignId, masterLeadId, cust.customerId, finalGroupId, custLeadId]
         );
 
         createdAssignments.push({
           id: assignId,
-          customerId: cust.id,
-          companyName: cust.company_name,
-          contactPerson: cust.contact_person,
+          customerId: cust.customerId,
+          companyName: cust.companyName,
+          contactPerson: cust.contactPerson,
           phone: cust.phone,
           status: 'new',
           responseInterest: 'Pending',
@@ -2395,22 +2257,36 @@ app.post('/api/leads/distribute', async (req, res) => {
       return {
         masterLead: savedMasterLead,
         assignments: createdAssignments,
+        excludedCount: txEvalData.excludedCount,
+        skippedBreakdown: txEvalData.skippedBreakdown,
       };
     });
 
     res.status(201).json({
       ok: true,
-      message: `Lead "${title}" successfully distributed to all ${eligibleCustomers.length} active customer(s) in "${finalCategory}".`,
+      message: `Lead "${leadTitle}" successfully distributed to ${result.assignments.length} eligible customer(s) in "${finalCategory}".`,
       masterLead: mapMasterLeadRow({
         ...result.masterLead,
         group_name: finalGroupName,
-        recipients_count: eligibleCustomers.length,
+        recipients_count: result.assignments.length,
         interested_count: 0,
       }),
-      recipientsCount: eligibleCustomers.length,
+      recipientsCount: result.assignments.length,
       assignments: result.assignments,
+      skippedCount: result.excludedCount,
+      skippedBreakdown: result.skippedBreakdown,
     });
   } catch (err) {
+    if (err.statusCode === 400 || err.message === 'No Eligible Customers') {
+      return res.status(400).json({
+        ok: false,
+        error: 'No Eligible Customers',
+        message: 'No customers in this group currently meet the wallet balance and marketing eligibility requirements. Please review their wallet balances and campaign status.',
+        eligibleCount: 0,
+        skippedCount: err.skippedCount || 0,
+        skippedBreakdown: err.skippedBreakdown || {},
+      });
+    }
     console.error('[POST /api/leads/distribute]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
