@@ -544,8 +544,9 @@ export function AddFundsModal({
   if (!isOpen) return null;
 
   const durationPresets = [
-    { days: 1, amount: 300, label: '1 Day', tag: null },
+    { days: 1, amount: 300, label: '1 Day', tag: 'Min' },
     { days: 2, amount: 600, label: '2 Days', tag: null },
+    { days: 3, amount: 900, label: '3 Days', tag: null },
     { days: 5, amount: 1500, label: '5 Days', tag: null },
     { days: 7, amount: 2100, label: '7 Days', tag: '1 Wk' },
     { days: 15, amount: 4500, label: '15 Days', tag: null },
@@ -1889,8 +1890,9 @@ export function MarketingGrowthPaymentModal({
   if (!isOpen) return null;
 
   const durationPresets = [
-    { days: 1, amount: 300, label: '1 Day', tag: null },
+    { days: 1, amount: 300, label: '1 Day', tag: 'Min' },
     { days: 2, amount: 600, label: '2 Days', tag: null },
+    { days: 3, amount: 900, label: '3 Days', tag: null },
     { days: 5, amount: 1500, label: '5 Days', tag: null },
     { days: 7, amount: 2100, label: '7 Days', tag: '1 Wk' },
     { days: 15, amount: 4500, label: '15 Days', tag: null },
