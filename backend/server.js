@@ -531,6 +531,126 @@ function mapDeletedFailedTxRow(row) {
     deletedBy: row.deleted_by || 'Sales Admin',
   };
 }
+function mapTransactionItem(row, fallbackCustomers = []) {
+  if (!row) return null;
+  const isGeneric = (str) =>
+    !str ||
+    str.trim().toLowerCase() === 'registered business' ||
+    str.trim().toLowerCase() === 'corporate workspace' ||
+    str.trim().toLowerCase() === 'workspace' ||
+    str.trim().toLowerCase() === 'customer' ||
+    str.trim().toLowerCase() === 'client member' ||
+    str.trim().toLowerCase() === 'account admin';
+
+  const cleanPhone = String(row.phone || row.cust_phone || row.customer_id || '').replace(/\D/g, '').slice(-10);
+  const matchedCust = fallbackCustomers.find(
+    (c) => c.id === row.customer_id || (cleanPhone && c.phone && String(c.phone).includes(cleanPhone))
+  );
+
+  const rawUser = String(row.username || matchedCust?.username || '').replace(/^@/, '').trim();
+  const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : '';
+
+  const rawCompany = String(row.company_name || row.cust_company || matchedCust?.companyName || matchedCust?.name || '').trim();
+  const rawContact = String(row.contact_person || row.cust_contact || matchedCust?.contactPerson || matchedCust?.contact || '').trim();
+
+  const properCompany = !isGeneric(rawCompany) ? rawCompany : (capUser || (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account'));
+  const properContact = !isGeneric(rawContact) ? rawContact : (capUser || properCompany);
+
+  const rawStatus = String(row.status || '').toLowerCase();
+  let normalizedStatus = 'verified';
+  let statusBadge = 'Verified ✓';
+
+  if (
+    rawStatus.includes('fail') ||
+    rawStatus.includes('declin') ||
+    rawStatus.includes('cancel') ||
+    rawStatus.includes('reject') ||
+    rawStatus.includes('dismiss')
+  ) {
+    normalizedStatus = 'failed';
+    statusBadge = 'Payment Declined ✗';
+  } else if (rawStatus.includes('refund')) {
+    normalizedStatus = 'refunded';
+    statusBadge = 'Refunded ↺';
+  } else if (rawStatus.includes('pend') || rawStatus.includes('await') || rawStatus === 'pending') {
+    normalizedStatus = 'pending';
+    statusBadge = 'Pending ⏳';
+  } else {
+    normalizedStatus = 'verified';
+    statusBadge = 'Settled ✓';
+  }
+
+  const rawType = String(row.tx_type || row.type || '').toLowerCase();
+  let normalizedType = 'topup';
+  let typeLabel = 'Wallet Top-Up';
+
+  if (rawType.includes('debit') || String(row.description || '').toLowerCase().includes('auto-debit') || String(row.description || '').toLowerCase().includes('daily burn')) {
+    normalizedType = 'daily_burn';
+    typeLabel = 'Daily Ad Spend Auto-Debit';
+  } else if (rawType.includes('reg') || String(row.description || '').toLowerCase().includes('registration')) {
+    normalizedType = 'registration';
+    typeLabel = 'Registration Package';
+  } else if (rawType.includes('invoice')) {
+    normalizedType = 'invoice';
+    typeLabel = 'Invoice Settlement';
+  } else if (rawType.includes('refund') || normalizedStatus === 'refunded') {
+    normalizedType = 'refund';
+    typeLabel = 'Online Refund';
+  }
+
+  const receiptVal =
+    row.receipt_number ||
+    row.receiptNumber ||
+    row.receiptNo ||
+    row.invoice_number ||
+    row.invoiceNumber ||
+    (row.id ? 'RCP-2026-' + String(row.id).replace(/\D/g, '').slice(-4).padStart(4, '0') : 'RCP-2026-1001');
+
+  const rawDate = row.created_at || row.paid_at || new Date();
+  const formattedDate = new Date(rawDate).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  return {
+    id: row.id,
+    ref: row.reference_utr || row.utr || row.utr_reference || row.id,
+    receiptNo: receiptVal,
+    receiptNumber: receiptVal,
+    customerId: row.customer_id,
+    company: properCompany,
+    companyName: properCompany,
+    contact: properContact,
+    contactPerson: properContact,
+    username: rawUser,
+    phone: cleanPhone || (row.phone ? String(row.phone).trim() : ''),
+    email: row.email || row.cust_email || matchedCust?.email || '',
+    city: row.city || row.cust_city || matchedCust?.city || 'India',
+    state: row.state || row.cust_state || matchedCust?.state || 'Maharashtra',
+    category: row.category || row.cust_category || matchedCust?.category || 'IT & Software',
+    amount: Number(row.amount || 0),
+    gstAmount: Number(row.gst_amount || 0),
+    totalAmount: Number(row.total_amount || row.amount || 0),
+    balanceAfter: row.balance_after != null ? Number(row.balance_after) : null,
+    status: normalizedStatus,
+    statusBadge,
+    rawStatus: row.status,
+    type: normalizedType,
+    typeLabel,
+    paymentMode: row.payment_method || row.payment_mode || (normalizedStatus === 'failed' ? 'Razorpay Gateway (Declined)' : 'Razorpay Secure (UPI/Card)'),
+    date: formattedDate,
+    createdAt: rawDate,
+    createdAtRaw: rawDate,
+    description: row.description || row.notes || (normalizedStatus === 'failed' ? 'Payment declined by customer bank or user cancelled checkout' : 'Marketing Ad Wallet Top-Up'),
+    failureReason: normalizedStatus === 'failed' ? (row.description || 'Payment declined by customer bank or user cancelled checkout') : null,
+  };
+}
+
 
 function mapGroupRow(row) {
   if (!row) return null;
@@ -610,7 +730,7 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/api/state', async (req, res) => {
   try {
-    const [custRes, leadsRes, payRes, pvRes, qRes, tRes, grpRes, mLeadsRes, failedRes, delFailedRes] = await Promise.all([
+    const [custRes, leadsRes, payRes, pvRes, qRes, tRes, grpRes, mLeadsRes, failedRes, delFailedRes, allWtRes] = await Promise.all([
       query('SELECT * FROM vw_sales_customer_accounts ORDER BY registered_at DESC'),
       query('SELECT * FROM leads ORDER BY created_at DESC'),
       query(`
@@ -690,6 +810,7 @@ app.get('/api/state', async (req, res) => {
         ORDER BY wt.created_at DESC
       `),
       query('SELECT * FROM deleted_failed_transactions ORDER BY deleted_at DESC'),
+      query(`SELECT wt.*, c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.category FROM wallet_transactions wt LEFT JOIN customers c ON (wt.customer_id = c.id OR wt.customer_id = c.phone OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)) ORDER BY wt.created_at DESC`),
     ]);
 
     res.json({
@@ -742,6 +863,23 @@ app.get('/api/state', async (req, res) => {
       masterLeads: mLeadsRes.rows.map(mapMasterLeadRow),
       failedTransactions: failedRes.rows.map(mapFailedTxRow),
       deletedFailedTransactions: delFailedRes.rows.map(mapDeletedFailedTxRow),
+      allTransactions: (() => {
+        const customers = custRes.rows.map(r => mapCustomerRow(r));
+        const seenRefs = new Set();
+        const list = [];
+        for (const r of allWtRes.rows) {
+          const it = mapTransactionItem(r, customers);
+          if (it) { if (it.ref) seenRefs.add(it.ref); list.push(it); }
+        }
+        for (const r of payRes.rows) {
+          const ref = r.utr_reference || r.utr;
+          if (ref && seenRefs.has(ref)) continue;
+          const it = mapTransactionItem({ ...r, reference_utr: ref, payment_method: r.payment_mode, created_at: r.paid_at, tx_type: r.tx_type || 'Credit' }, customers);
+          if (it) { if (it.ref) seenRefs.add(it.ref); list.push(it); }
+        }
+        list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        return list;
+      })(),
     });
   } catch (err) {
     console.error('[GET /api/state]', err);
@@ -1324,6 +1462,122 @@ app.get('/api/admin/customer-password/:identifier', async (req, res) => {
   }
 });
 
+// Sales Desk: Unified Master Transaction Logs (Verified, Failed, Pending, Top-Ups, Debits)
+app.get('/api/sales/transactions', async (req, res) => {
+  try {
+    const [wtRes, prRes, custRes] = await Promise.all([
+      query(`
+        SELECT 
+          wt.id, wt.customer_id, wt.wallet_id, wt.tx_type, wt.amount, wt.balance_after,
+          wt.reference_utr, wt.description, wt.payment_method, wt.status, wt.created_at,
+          c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.category
+        FROM wallet_transactions wt
+        LEFT JOIN customers c ON (
+          wt.customer_id = c.id 
+          OR wt.customer_id = c.phone 
+          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        ORDER BY wt.created_at DESC
+      `),
+      query(`
+        SELECT 
+          pr.*,
+          c.username, c.company_name AS cust_company, c.contact_person AS cust_contact,
+          c.phone AS cust_phone, c.email AS cust_email, c.city AS cust_city, c.state AS cust_state, c.category AS cust_category
+        FROM payment_records pr
+        LEFT JOIN customers c ON (
+          pr.customer_id = c.id 
+          OR pr.phone = c.phone 
+          OR c.phone = RIGHT(REGEXP_REPLACE(pr.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        ORDER BY pr.paid_at DESC
+      `),
+      query('SELECT * FROM vw_sales_customer_accounts'),
+    ]);
+
+    const customers = custRes.rows.map((r) => mapCustomerRow(r));
+    const seenRefs = new Set();
+    const transactions = [];
+
+    // 1. Process wallet_transactions
+    for (const r of wtRes.rows) {
+      const item = mapTransactionItem(r, customers);
+      if (item) {
+        if (item.ref) seenRefs.add(item.ref);
+        transactions.push(item);
+      }
+    }
+
+    // 2. Process payment_records (deduplicating by reference)
+    for (const r of prRes.rows) {
+      const ref = r.utr_reference || r.utr;
+      if (ref && seenRefs.has(ref)) continue;
+      const item = mapTransactionItem({
+        ...r,
+        reference_utr: ref,
+        payment_method: r.payment_mode,
+        created_at: r.paid_at,
+        tx_type: r.tx_type || 'Credit',
+      }, customers);
+      if (item) {
+        if (item.ref) seenRefs.add(item.ref);
+        transactions.push(item);
+      }
+    }
+
+    // Sort newest first
+    transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Analytics stats
+    let totalVolume = 0;
+    let verifiedCount = 0;
+    let verifiedVolume = 0;
+    let failedCount = 0;
+    let failedVolume = 0;
+    let pendingCount = 0;
+    let pendingVolume = 0;
+    let refundedCount = 0;
+    let refundedVolume = 0;
+
+    for (const t of transactions) {
+      totalVolume += t.amount;
+      if (t.status === 'verified') {
+        verifiedCount++;
+        verifiedVolume += t.amount;
+      } else if (t.status === 'failed') {
+        failedCount++;
+        failedVolume += t.amount;
+      } else if (t.status === 'pending') {
+        pendingCount++;
+        pendingVolume += t.amount;
+      } else if (t.status === 'refunded') {
+        refundedCount++;
+        refundedVolume += t.amount;
+      }
+    }
+
+    res.json({
+      ok: true,
+      transactions,
+      stats: {
+        totalCount: transactions.length,
+        totalVolume,
+        verifiedCount,
+        verifiedVolume,
+        failedCount,
+        failedVolume,
+        pendingCount,
+        pendingVolume,
+        refundedCount,
+        refundedVolume,
+        settlementRate: transactions.length > 0 ? Math.round((verifiedCount / transactions.length) * 100) : 100,
+      },
+    });
+  } catch (err) {
+    console.error('[GET /api/sales/transactions]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 // Sales Desk: Retrieve All Failed Transactions Across All Customers with Contact Numbers & Reason
 app.get('/api/sales/failed-transactions', async (req, res) => {
   try {

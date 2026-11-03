@@ -6203,6 +6203,7 @@ export function FollowupTasksDesk({ tasks, setTasks }) {
    DESK 08: CUSTOMER GROUPS & CATEGORY-BASED LEAD DISTRIBUTION
    ========================================================================== */
 export { default as CustomerGroupsDesk } from './CustomerGroupsDesk';
+export { default as MasterTransactionLogsDesk } from './MasterTransactionLogsDesk';
 
 /* ==========================================================================
    APPROVED MEMBERS DESK: Customers who completed Payment & Profile KYC

@@ -67,6 +67,9 @@ export const crmApi = {
       if (Array.isArray(fresh.failedTransactions)) {
         localStorage.setItem('growthline_failed_transactions', JSON.stringify(fresh.failedTransactions));
       }
+      if (Array.isArray(fresh.allTransactions)) {
+        localStorage.setItem('growthline_all_transactions', JSON.stringify(fresh.allTransactions));
+      }
       if (Array.isArray(fresh.deletedFailedTransactions)) {
         localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(fresh.deletedFailedTransactions));
       }
@@ -172,6 +175,13 @@ export const crmApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  /**
+   * Retrieve all master transaction logs across all customers for Sales desk
+   */
+  async fetchAllTransactions() {
+    return apiRequest('/sales/transactions', { method: 'GET' });
   },
 
   /**

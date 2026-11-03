@@ -18,6 +18,7 @@ import {
   Clock,
   UserCheck,
   AlertCircle,
+  Receipt,
 } from 'lucide-react';
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import {
@@ -41,6 +42,7 @@ import {
   FollowupTasksDesk,
   CustomerGroupsDesk,
   FailedTransactionsDesk,
+  MasterTransactionLogsDesk,
 } from './OperationalDesksViews';
 import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
@@ -134,6 +136,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
     try {
       const h = (window.location.hash || '').toLowerCase();
       const p = (window.location.pathname || '').toLowerCase();
+      if (h.includes('transaction') || p.includes('transaction') || h.includes('log') || p.includes('log')) return 'transactions';
       if (h.includes('approved') || h.includes('member')) return 'approved';
       if (h.includes('verification') || p.includes('verification')) return 'pending_verification';
       if (h.includes('lead') || p.includes('lead')) return 'leads';
@@ -192,6 +195,16 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   const [customers, setCustomersState] = useState(loadStoredCustomers);
   const [verifications, setVerificationsState] = useState(loadStoredVerifications);
   const [invoices, setInvoices] = useState(INITIAL_INVOICES);
+  const [allTransactions, setAllTransactions] = useState(() => {
+    try {
+      const raw = localStorage.getItem('growthline_all_transactions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
   const [queries, setQueries] = useState(() => {
     try {
       const raw = localStorage.getItem('growthline_support_queries');
@@ -255,6 +268,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         }
         if (Array.isArray(state.queries)) setQueries(state.queries);
         if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
+        if (Array.isArray(state.allTransactions)) setAllTransactions(state.allTransactions);
       }
     });
 
@@ -265,6 +279,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
         if (Array.isArray(state.queries)) setQueries(state.queries);
         if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
+        if (Array.isArray(state.allTransactions)) setAllTransactions(state.allTransactions);
       }
     };
 
@@ -616,6 +631,32 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             </span>
           </button>
 
+          {/* Master Transaction Logs Desk (All Verified, Failed, Pending Ledger) */}
+          <button
+            type="button"
+            className={`sales-nav-btn ${activeTab === 'transactions' ? 'active' : ''}`}
+            onClick={() => navigateToDesk('transactions', '#transactions')}
+            style={{
+              fontWeight: activeTab === 'transactions' ? 800 : 600,
+            }}
+          >
+            <Receipt size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+            <span>Transaction Logs</span>
+            <span
+              className="sales-nav-badge"
+              style={{
+                background: activeTab === 'transactions' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
+                color: activeTab === 'transactions' ? '#ffffff' : '#047857',
+                borderColor: activeTab === 'transactions' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                fontWeight: 800,
+              }}
+            >
+              {allTransactions.length || (invoices.length + failedTxCount)}
+            </span>
+          </button>
+
           {/* 7. Query & Support */}
           <button
             type="button"
@@ -828,6 +869,21 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             <FailedTransactionsDesk
               customers={customers}
               setCustomers={setCustomers}
+            />
+          )}
+
+          {activeTab === 'transactions' && (
+            <MasterTransactionLogsDesk
+              customers={customers}
+              setCustomers={setCustomers}
+              allTransactions={allTransactions}
+              onRefresh={() => {
+                crmApi.syncStateFromPostgres().then((state) => {
+                  if (state && Array.isArray(state.allTransactions)) {
+                    setAllTransactions(state.allTransactions);
+                  }
+                });
+              }}
             />
           )}
 
