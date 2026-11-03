@@ -146,8 +146,8 @@ export default function LeadHubOverview({
       });
     }
 
-    // 2. Allocate funded runway days starting from today across active days
-    if (fundedRunwayDays > 0 && currentTodayItem) {
+    // 2. Allocate funded runway days starting from today across active days ONLY when campaign is active
+    if (customer.adCampaignActive && fundedRunwayDays > 0 && currentTodayItem) {
       let count = fundedRunwayDays;
       const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
       const baseDate = new Date(kolkataNow);
@@ -174,26 +174,30 @@ export default function LeadHubOverview({
     }
 
     return set;
-  }, [customer.bookedDates, customer.isDeductedToday, customer.bookedDays, currentTodayItem?.isoDate, fundedRunwayDays, activeDays]);
+  }, [customer.adCampaignActive, customer.bookedDates, customer.isDeductedToday, customer.bookedDays, currentTodayItem?.isoDate, fundedRunwayDays, activeDays]);
 
   const isTodayBooked = Boolean(
     customer.isDeductedToday ||
-    bookedDatesSet.has(currentTodayItem?.isoDate) ||
-    (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(currentTodayItem.isoDate)) ||
-    (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(currentTodayItem.code)) ||
-    (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(currentTodayItem.code))
+    (customer.adCampaignActive && (
+      bookedDatesSet.has(currentTodayItem?.isoDate) ||
+      (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(currentTodayItem.isoDate)) ||
+      (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(currentTodayItem.code)) ||
+      (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(currentTodayItem.code))
+    ))
   );
 
   const isDayBooked = (dayObj) => {
     if (!dayObj) return false;
-    if (bookedDatesSet.has(dayObj.isoDate)) return true;
     if (dayObj.isToday && isTodayBooked) return true;
-    if (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(dayObj.isoDate)) return true;
-    if (dayObj.isToday && Array.isArray(customer.bookedDays) && customer.bookedDays.includes(dayObj.code)) return true;
+    if (customer.isDeductedToday && dayObj.isToday) return true;
+    if (customer.adCampaignActive && bookedDatesSet.has(dayObj.isoDate)) return true;
+    if (customer.adCampaignActive && Array.isArray(customer.bookedDates) && customer.bookedDates.includes(dayObj.isoDate)) return true;
     return false;
   };
 
-  const totalBookedCount = fundedRunwayDays + (customer.isDeductedToday ? 1 : 0);
+  const totalBookedCount = customer.adCampaignActive
+    ? fundedRunwayDays + (customer.isDeductedToday ? 1 : 0)
+    : (customer.isDeductedToday ? 1 : 0);
 
   const weeklyPacing = activeDays.length * dailySpend;
   const weekRangeStr = `${daysList[0].dateFormatted} – ${daysList[6].dateFormatted} ${daysList[6].fullDateString.split(' ')[2]}`;
@@ -221,9 +225,6 @@ export default function LeadHubOverview({
     }
 
     let next;
-    const isTogglingToday = (code === currentTodayItem.code);
-    let shouldActivate = false;
-
     try { window.sessionStorage.setItem('admafia_active_schedule_preset', 'custom'); } catch (e) {}
     if (activeDays.includes(code)) {
       next = activeDays.filter((d) => d !== code);
@@ -232,15 +233,11 @@ export default function LeadHubOverview({
       }
     } else {
       next = [...activeDays, code];
-      if (isTogglingToday && walletBalance >= dailySpend) {
-        shouldActivate = true;
-      }
     }
     setActiveDays(next);
     if (onUpdateCustomer) {
       onUpdateCustomer({
         activeDays: next,
-        ...(shouldActivate ? { adCampaignActive: true } : {}),
       });
     }
   };
@@ -273,14 +270,10 @@ export default function LeadHubOverview({
 
     setActiveDays(next);
 
-    const activatesToday = next.includes(currentTodayItem.code);
-    const shouldActivate = activatesToday && walletBalance >= dailySpend;
-
     if (onUpdateCustomer) {
       onUpdateCustomer({
         activeDays: next,
         schedulePreset: preset,
-        ...(shouldActivate ? { adCampaignActive: true } : {}),
       });
     }
   };
@@ -606,8 +599,10 @@ export default function LeadHubOverview({
               <span>Runway: <strong className={walletBalance < dailySpend ? 'text-red-alert' : ''}>{fundedRunwayDays} days funded</strong></span>
               {walletBalance < dailySpend ? (
                 <span className="text-red-alert" style={{ fontWeight: 800 }}>● Balance is Low (Needs Top Up)</span>
-              ) : (
+              ) : customer.adCampaignActive ? (
                 <span style={{ color: '#047857', fontWeight: 800 }}>● {fundedRunwayDays}d Marketing Booked</span>
+              ) : (
+                <span style={{ color: '#0284c7', fontWeight: 800 }}>● Ready to Launch (Click Start)</span>
               )}
             </div>
           </div>
@@ -660,7 +655,7 @@ export default function LeadHubOverview({
                 }}>
                   👆 Click any day below to select
                 </span>
-              ) : (
+              ) : walletBalance < dailySpend ? (
                 <span className="engine-booked-highlight-pill" style={{
                   background: '#fff1f2',
                   color: '#e11d48',
@@ -676,6 +671,22 @@ export default function LeadHubOverview({
                   cursor: 'pointer'
                 }} onClick={onOpenAddFunds} title="Click to Top Up & Book Marketing Days">
                   ⚠️ 0 Days Booked (Top Up to Book)
+                </span>
+              ) : (
+                <span className="engine-booked-highlight-pill" style={{
+                  background: '#eff6ff',
+                  color: '#1d4ed8',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '9999px',
+                  padding: '3px 10px',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  marginLeft: '8px',
+                }}>
+                  ● Click Start to Launch Ad
                 </span>
               )}
             </div>
@@ -867,7 +878,7 @@ export default function LeadHubOverview({
                     : 'Marketing is LIVE (Meta Ads Running)')
                   : walletBalance < dailySpend
                   ? 'Marketing is OFF (Customer Balance is Low - Needs Top Up)'
-                  : 'Marketing is OFF (Campaign Paused)'}
+                  : 'Marketing is OFF (Click Start to Launch Ad & Book Today)'}
               </span>
               {isTodayBooked && (
                 <span className="pill-ad-booked-badge">

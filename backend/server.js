@@ -753,12 +753,11 @@ app.post('/api/auth/register', async (req, res) => {
     await query(
       `INSERT INTO wallets (
         id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active
-      ) VALUES ($1, $2, $3, 300.00, $3, $4)
+      ) VALUES ($1, $2, $3, 300.00, $3, FALSE)
       ON CONFLICT (customer_id) DO UPDATE SET
         available_balance = wallets.available_balance + EXCLUDED.available_balance,
-        total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
-        ad_campaign_active = CASE WHEN (wallets.available_balance + EXCLUDED.available_balance) >= 300 THEN TRUE ELSE wallets.ad_campaign_active END`,
-      [walId, custId, initialDeposit, initialDeposit >= 300]
+        total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid`,
+      [walId, custId, initialDeposit]
     );
 
     if (initialDeposit > 0) {
@@ -2124,11 +2123,10 @@ export async function creditCustomerWallet({
     const walRes = await txQuery(
       `INSERT INTO wallets (
         id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active
-      ) VALUES ($1, $2, $3, 300.00, $3, TRUE)
+      ) VALUES ($1, $2, $3, 300.00, $3, FALSE)
       ON CONFLICT (customer_id) DO UPDATE SET
         available_balance = wallets.available_balance + EXCLUDED.available_balance,
         total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
-        ad_campaign_active = TRUE,
         updated_at = NOW()
       RETURNING *`,
       [`wal_${Date.now()}`, cust.id, cleanAmount]

@@ -991,9 +991,11 @@ export function SetDailyLimitModal({
   const todayItem = dayDefinitions.find((d) => d.isToday) || dayDefinitions[5];
 
   const isTodayAlreadyBooked = Boolean(
-    (customer?.isDeductedToday || customer?.adCampaignActive) ||
-    (Array.isArray(customer?.bookedDays) && customer.bookedDays.includes(todayItem.code)) ||
-    (Array.isArray(customer?.lockedDays) && customer.lockedDays.includes(todayItem.code))
+    customer?.isDeductedToday ||
+    (customer?.adCampaignActive && (
+      (Array.isArray(customer?.bookedDays) && customer.bookedDays.includes(todayItem.code)) ||
+      (Array.isArray(customer?.lockedDays) && customer.lockedDays.includes(todayItem.code))
+    ))
   );
 
   React.useEffect(() => {
@@ -1078,8 +1080,10 @@ export function SetDailyLimitModal({
       ? selectedDays
       : [...selectedDays, todayItem.code];
 
-    // 1. Deduct daily ad spend & lock today
-    if (onDeductDailyAdSpend) {
+    const isAlreadyActive = Boolean(customer?.adCampaignActive);
+
+    // 1. Only deduct ad spend if campaign is already running and today was not yet debited
+    if (isAlreadyActive && onDeductDailyAdSpend && !customer?.isDeductedToday) {
       onDeductDailyAdSpend(finalAmount);
     }
 
@@ -1091,61 +1095,54 @@ export function SetDailyLimitModal({
       onUpdateCustomer({
         dailyAdSpend: finalAmount,
         activeDays: finalActiveDays,
-        adCampaignActive: true,
-        isDeductedToday: true,
-        lockedDays: [todayItem.code],
+        ...(isAlreadyActive ? { adCampaignActive: true } : {}),
       });
     }
 
     // 3. Close modal
     onClose();
 
-    // 4. Calculate post-deduction values for SweetAlert2
-    const remainingWallet = Math.max(0, (walletBalance || 0) - finalAmount);
-    const calculatedRunway = Math.floor(remainingWallet / Math.max(finalAmount, 1));
+    if (isAlreadyActive) {
+      // 4. Calculate post-deduction values for SweetAlert2
+      const remainingWallet = Math.max(0, (walletBalance || 0) - (customer?.isDeductedToday ? 0 : finalAmount));
+      const calculatedRunway = Math.floor(remainingWallet / Math.max(finalAmount, 1));
 
-    // 5. Fire rich, prominent SweetAlert2 Confirmation Dialog
-    Swal.fire({
-      icon: 'success',
-      title: `🎯 Ad Booked: ₹${finalAmount.toLocaleString('en-IN')}/day`,
-      html: `
-        <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 16px; margin: 12px 0; font-family: inherit;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Daily Burn Rate:</span>
-            <strong style="color:#4f46e5; font-size:1.1rem; font-weight:800;">₹${finalAmount.toLocaleString('en-IN')} / active day</strong>
+      // 5. Fire rich, prominent SweetAlert2 Confirmation Dialog for active campaigns
+      Swal.fire({
+        icon: 'success',
+        title: `🎯 Ad Budget Updated: ₹${finalAmount.toLocaleString('en-IN')}/day`,
+        html: `
+          <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 16px; margin: 12px 0; font-family: inherit;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Daily Burn Rate:</span>
+              <strong style="color:#4f46e5; font-size:1.1rem; font-weight:800;">₹${finalAmount.toLocaleString('en-IN')} / active day</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Marketing Campaign:</span>
+              <span style="background:#ecfdf5; color:#059669; font-weight:800; font-size:0.82rem; padding: 3px 10px; border-radius:9999px;">
+                ● Running (Active)
+              </span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Remaining Ad Wallet:</span>
+              <strong style="color:#059669; font-size:1.1rem; font-weight:800;">₹${remainingWallet.toLocaleString('en-IN')} (${calculatedRunway}d runway)</strong>
+            </div>
           </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Marketing Campaign:</span>
-            <span style="background:#ecfdf5; color:#059669; font-weight:800; font-size:0.82rem; padding: 3px 10px; border-radius:9999px;">
-              ● Running (Active)
-            </span>
-          </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Booking Status:</span>
-            <span style="background:#ecfdf5; color:#065f46; border: 1px solid #a7f3d0; font-weight:800; font-size:0.82rem; padding: 3px 10px; border-radius:9999px;">
-              🎯 ${todayItem.label} Ad Booked ✓
-            </span>
-          </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Wallet Deduction:</span>
-            <strong style="color:#dc2626; font-size:0.95rem; font-weight:800;">- ₹${finalAmount.toLocaleString('en-IN')} (Done ✓)</strong>
-          </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
-            <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Remaining Ad Wallet:</span>
-            <strong style="color:#059669; font-size:1.1rem; font-weight:800;">₹${remainingWallet.toLocaleString('en-IN')} (${calculatedRunway}d runway)</strong>
-          </div>
-        </div>
-        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 8px; text-align: left;">
-          <span style="font-size: 1.15rem;">🎯</span>
-          <span style="font-size: 0.84rem; color: #065f46; font-weight: 600;">
-            <strong>${todayItem.label}</strong> is <strong>Ad Booked &amp; Locked</strong>. Meta Verified Ads &amp; local buyer lead capture are now live. Once started, this day cannot be de-selected.
-          </span>
-        </div>
-      `,
-      confirmButtonText: 'Done & View Dashboard',
-      confirmButtonColor: '#059669',
-      buttonsStyling: true,
-    });
+        `,
+        confirmButtonText: 'Done & View Dashboard',
+        confirmButtonColor: '#059669',
+        buttonsStyling: true,
+      });
+    } else {
+      // Campaign is currently paused/off: save settings without deduction
+      Swal.fire({
+        icon: 'success',
+        title: `Daily Budget Set: ₹${finalAmount.toLocaleString('en-IN')}/day`,
+        html: `Your daily ad spend has been saved as <strong>₹${finalAmount.toLocaleString('en-IN')}/day</strong>.<br/><br/>Your marketing campaign is currently <strong>Paused (Off)</strong>. Click <strong>Start</strong> on your dashboard whenever you are ready to launch ads and deduct today's ad spend.`,
+        confirmButtonText: 'Understood',
+        confirmButtonColor: '#4f46e5',
+      });
+    }
   };
 
   return (

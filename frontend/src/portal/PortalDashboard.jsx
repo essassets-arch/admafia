@@ -457,14 +457,18 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         ? customDays
         : (Array.isArray(prev?.activeDays) && !isLegacy ? prev.activeDays : [todayDayCode]);
       const finalDays = Array.from(new Set([...existingDays, todayDayCode]));
+      const isCurrentlyActive = Boolean(prev?.adCampaignActive);
+      const isAlreadyDeducted = Boolean(prev?.isDeductedToday);
       const updated = {
         ...prev,
         dailyAdSpend: safeLimit,
         dailyPacing: safeLimit,
-        adCampaignActive: true,
+        adCampaignActive: isCurrentlyActive,
         activeDays: finalDays,
-        isDeductedToday: true,
-        lockedDays: Array.from(new Set([...(prev?.lockedDays || []), todayDayCode])),
+        isDeductedToday: isAlreadyDeducted,
+        lockedDays: isAlreadyDeducted
+          ? Array.from(new Set([...(prev?.lockedDays || []), todayDayCode]))
+          : (prev?.lockedDays || []),
       };
       try {
         localStorage.setItem('growthline_active_user', JSON.stringify(updated));
@@ -657,7 +661,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         totalLifetimePaid: (baseCustomer.totalLifetimePaid || baseCustomer.amountPaid || 0) + (sourceInfo?.customer ? 0 : payNum),
         paymentStatus: 'paid',
         payment_status: 'paid',
-        adCampaignActive: true,
+        adCampaignActive: Boolean(baseCustomer.adCampaignActive),
       };
 
       try {
@@ -1200,6 +1204,36 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       : currentDays;
 
     if (nextActive) {
+      const confirmStart = await Swal.fire({
+        icon: 'question',
+        title: 'Start Meta Ads Campaign?',
+        html: `
+          <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px; margin: 10px 0; font-family: inherit;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b; font-size: 0.85rem;">Daily Ad Spend:</span>
+              <strong style="color: #059669; font-size: 1rem;">₹${dailyLimit.toLocaleString('en-IN')}/day</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b; font-size: 0.85rem;">Ad Wallet Balance:</span>
+              <strong style="color: #4f46e5; font-size: 1rem;">₹${walletBalance.toLocaleString('en-IN')}</strong>
+            </div>
+            <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; display: flex; justify-content: space-between;">
+              <span style="color: #64748b; font-size: 0.85rem;">Today's Placement:</span>
+              <span style="color: #047857; font-weight: 700; font-size: 0.85rem;">${customer.isDeductedToday ? 'Already Debited ✓' : `Deduct ₹${dailyLimit.toLocaleString('en-IN')}`}</span>
+            </div>
+          </div>
+          <p style="font-size: 0.88rem; color: #475569; margin: 0;">
+            Clicking <strong>Start</strong> will activate your Meta advertising and book today's ad delivery.
+          </p>
+        `,
+        showCancelButton: true,
+        confirmButtonText: customer.isDeductedToday ? '▶ Start Campaign' : `▶ Deduct ₹${dailyLimit.toLocaleString('en-IN')} & Start`,
+        confirmButtonColor: '#059669',
+        cancelButtonText: 'Cancel',
+      });
+
+      if (!confirmStart.isConfirmed) return;
+
       try {
         const deductRes = await crmApi.deductDailyAdSpend({
           customerId: customer.id,
