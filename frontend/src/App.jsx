@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Menu, X, ChevronRight, ChevronDown, Laptop, Shield, 
-  Crown, Sparkles, Palette, Briefcase, Layers, ArrowRight, CheckCircle2 
+  Crown, Sparkles, Palette, Briefcase, Layers, ArrowRight, CheckCircle2,
+  Mail, Phone, MessageCircle, Clock 
 } from 'lucide-react';
 import MetaAdsCalculator from './components/MetaAdsCalculator';
 import WhatsAppWidget from './components/WhatsAppWidget';
@@ -42,8 +43,11 @@ try {
 const site = {
   name: 'AdMafia Marketing',
   url: 'https://admafia.marketing/',       // canonical (trailing slash ke saath)
-  email: 'hello@admafia.marketing',        // lead form yahin aayega
+  email: 'info@admafia.marketing',         // official contact email
   phone: '+91 6359 120 081',
+  phoneRaw: '+916359120081',
+  instagram: 'https://www.instagram.com/admafia.marketing/',
+  facebook: 'https://www.facebook.com/profile.php?id=61596014007136',
   title: 'Facebook & Instagram Lead Generation Ads from ₹300/Day | AdMafia Marketing',
   desc: 'Get customer enquiries with names and phone numbers through targeted Meta Ads. Start Facebook & Instagram lead generation campaigns from ₹300/day with AdMafia Marketing.',
 };
@@ -1287,7 +1291,7 @@ export default function App() {
       <footer className="site-footer">
         <div className="wrap">
           <div className="footer-grid">
-            {/* Col 1: Brand Info */}
+            {/* Col 1: Brand Info & Social Links */}
             <div className="footer-col footer-col-brand">
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
                 <img
@@ -1299,13 +1303,40 @@ export default function App() {
               <p style={{ fontSize: '0.86rem', lineHeight: '1.6', color: '#94a3b8', margin: '0 0 16px' }}>
                 High-performance Meta Ads lead generation engine. Turn targeted Facebook and Instagram traffic into verified customer enquiries from just ₹300/day.
               </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#10b981' }}>
-                <CheckCircle2 size={14} />
-                <span>PostgreSQL Relational Ledger &amp; Customer Isolation</span>
+              
+              <div className="footer-social-links">
+                <a
+                  href={site.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="footer-social-btn instagram"
+                  title="Follow AdMafia on Instagram"
+                  aria-label="Instagram"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                  </svg>
+                  <span>Instagram</span>
+                </a>
+                <a
+                  href={site.facebook}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="footer-social-btn facebook"
+                  title="Connect with AdMafia on Facebook"
+                  aria-label="Facebook"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                  <span>Facebook</span>
+                </a>
               </div>
             </div>
 
-            {/* Col 2: Client Workspace */}
+            {/* Col 2: Customer Workspace */}
             <div className="footer-col">
               <h4>Customer Workspace</h4>
               <ul className="footer-links">
@@ -1364,7 +1395,7 @@ export default function App() {
               </ul>
             </div>
 
-            {/* Col 4: Advertising Solutions */}
+            {/* Col 3: Advertising Solutions */}
             <div className="footer-col">
               <h4>Ad Solutions</h4>
               <ul className="footer-links">
@@ -1373,6 +1404,40 @@ export default function App() {
                 <li><a href="#services" onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }}>Local City Targeting</a></li>
                 <li><a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }}>Multi-Industry Campaigns</a></li>
                 <li><a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }}>How AdMafia Works</a></li>
+              </ul>
+            </div>
+
+            {/* Col 4: Contact & Support */}
+            <div className="footer-col">
+              <h4>Contact &amp; Support</h4>
+              <ul className="footer-links">
+                <li>
+                  <a href={`mailto:${site.email}`} className="footer-contact-item">
+                    <Mail size={15} color="#ffb800" />
+                    <span>{site.email}</span>
+                  </a>
+                </li>
+                <li>
+                  <a href={`tel:${site.phoneRaw}`} className="footer-contact-item">
+                    <Phone size={15} color="#10b981" />
+                    <span>{site.phone}</span>
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href={`https://wa.me/916359120081?text=${encodeURIComponent('Hi AdMafia Team, I want to start Meta Ads lead generation for my business.')}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="footer-contact-item"
+                  >
+                    <MessageCircle size={15} color="#22c55e" />
+                    <span>WhatsApp Support</span>
+                  </a>
+                </li>
+                <li className="footer-contact-sub">
+                  <Clock size={13} color="#94a3b8" />
+                  <span>Mon – Sat: 9:30 AM – 7:00 PM IST</span>
+                </li>
               </ul>
             </div>
           </div>
