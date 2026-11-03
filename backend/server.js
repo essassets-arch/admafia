@@ -2074,6 +2074,10 @@ export async function creditCustomerWallet({
   const utr = String(referenceUtr || `rzp_${Date.now()}`).trim();
 
   return await withTransaction(async (txQuery) => {
+    // 0. Concurrency Protection: Acquire PostgreSQL transaction-level advisory lock on this exact payment reference!
+    // This serializes concurrent /verify calls and webhook deliveries for the same payment ID.
+    await txQuery(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`credit_${utr}`]);
+
     // 1. Resolve customer
     let custRes = await txQuery(
       `SELECT * FROM customers
@@ -2084,7 +2088,8 @@ export async function creditCustomerWallet({
 
     if (custRes.rowCount === 0) {
       const fallbackId = customerId || `cust_${cleanPhone || Date.now()}`;
-      const secureRandomPass = `Client@${randomBytes(8).toString('hex')}!`;
+      // Inactive, unguessable locked credential hash requiring proper activation
+      const lockedCredentialHash = `$2b$12$${randomBytes(32).toString('hex')}!LOCKED`;
       await txQuery(
         `INSERT INTO customers (id, phone, username, contact_person, company_name, email, password_hash, status, payment_status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', 'paid')
@@ -2096,7 +2101,7 @@ export async function creditCustomerWallet({
           `Client ${cleanPhone || fallbackId}`,
           `Business ${cleanPhone || fallbackId}`,
           `${cleanPhone || fallbackId}@client.admafia.marketing`,
-          secureRandomPass,
+          lockedCredentialHash,
         ]
       );
       custRes = await txQuery(`SELECT * FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`, [fallbackId, cleanPhone]);
@@ -2547,21 +2552,136 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
       }
     } else if (event === 'order.paid') {
       const order = req.body?.payload?.order?.entity;
+      const orderId = order?.id;
+      const amount = Number(order?.amount_paid || order?.amount || 0) / 100;
       const customerId = order?.notes?.customer_id;
       const cleanPhone = String(order?.notes?.customer_phone || '').replace(/\D/g, '').slice(-10);
-      const amount = Number(order?.amount_paid || order?.amount || 0) / 100;
-      const orderId = order?.id;
 
-      if ((customerId || cleanPhone) && amount >= 300 && orderId) {
-        await creditCustomerWallet({
-          customerId,
-          phone: cleanPhone,
-          username: order?.notes?.customer_username,
-          amount,
-          referenceUtr: orderId,
-          paymentMethod: 'Razorpay Online Order',
-          description: `AdMafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
-        }).catch((e) => console.error('[Razorpay Webhook Order Paid]', e));
+      if (orderId && amount >= 300) {
+        // Fetch the payments under this order to get the canonical payment_id (e.g., pay_...)
+        // This ensures order.paid and payment.captured share the exact same idempotency reference!
+        try {
+          const ordPaymentsResp = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}/payments`, {
+            headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
+          });
+          const ordPayments = await ordPaymentsResp.json();
+          const items = Array.isArray(ordPayments?.items) ? ordPayments.items : [];
+          const capturedPayment = items.find((p) => p.status === 'captured') || items[0];
+          const canonicalPaymentId = capturedPayment?.id || orderId;
+
+          await creditCustomerWallet({
+            customerId,
+            phone: cleanPhone,
+            username: order?.notes?.customer_username,
+            amount,
+            referenceUtr: canonicalPaymentId,
+            paymentMethod: capturedPayment?.method ? `Razorpay ${capturedPayment.method.toUpperCase()}` : 'Razorpay Secure (Order)',
+            description: `AdMafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
+          });
+        } catch (ordErr) {
+          console.error('[Razorpay Webhook] Order payments fetch error:', ordErr);
+        }
+      }
+    } else if (event === 'refund.processed' || event === 'refund.created') {
+      const refund = req.body?.payload?.refund?.entity;
+      const payment = req.body?.payload?.payment?.entity;
+      const refundId = refund?.id;
+      const paymentId = refund?.payment_id || payment?.id;
+      const refundAmt = Number(refund?.amount || 0) / 100;
+
+      if (refundId && refundAmt > 0) {
+        console.log(`[Razorpay Webhook] Processing refund: ${refundId} for payment: ${paymentId}, amount: ₹${refundAmt}`);
+        await withTransaction(async (txQuery) => {
+          // 1. Transaction-level advisory lock on refundId
+          await txQuery(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`refund_${refundId}`]);
+
+          // 2. Check if refund was already recorded
+          const existingRef = await txQuery(
+            `SELECT id FROM wallet_transactions WHERE reference_utr = $1 LIMIT 1`,
+            [refundId]
+          );
+          if (existingRef.rowCount > 0) {
+            console.log(`[Razorpay Webhook] Refund ${refundId} already processed.`);
+            return;
+          }
+
+          // 3. Find the original payment transaction
+          const origTx = await txQuery(
+            `SELECT customer_id, wallet_id FROM wallet_transactions WHERE reference_utr = $1 LIMIT 1`,
+            [paymentId]
+          );
+          let targetCustId = origTx.rows[0]?.customer_id || payment?.notes?.customer_id;
+          let targetWalletId = origTx.rows[0]?.wallet_id;
+
+          if (!targetCustId && payment?.contact) {
+            const cleanP = String(payment.contact).replace(/\D/g, '').slice(-10);
+            const cRes = await txQuery(`SELECT id FROM customers WHERE phone = $1 LIMIT 1`, [cleanP]);
+            targetCustId = cRes.rows[0]?.id;
+          }
+
+          if (targetCustId) {
+            // Deduct refunded amount from wallet available balance and lifetime paid
+            const walRes = await txQuery(
+              `UPDATE wallets SET
+                available_balance = GREATEST(0, available_balance - $1::NUMERIC),
+                total_lifetime_paid = GREATEST(0, total_lifetime_paid - $1::NUMERIC),
+                updated_at = NOW()
+               WHERE customer_id = $2
+               RETURNING id, available_balance`,
+              [refundAmt, targetCustId]
+            );
+            const updatedBal = Number(walRes.rows[0]?.available_balance || 0);
+            const walId = walRes.rows[0]?.id || targetWalletId;
+
+            // Insert into wallet_transactions as Debit (Refund)
+            await txQuery(
+              `INSERT INTO wallet_transactions (
+                id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+              ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Razorpay Online Refund', 'Refunded ✓')
+              ON CONFLICT (reference_utr) DO NOTHING`,
+              [
+                `tx_rfnd_${Date.now()}_${randomBytes(3).toString('hex')}`,
+                targetCustId,
+                walId,
+                refundAmt,
+                updatedBal,
+                refundId,
+                `Online refund processed via Razorpay (Ref: ${paymentId})`,
+              ]
+            );
+
+            // Record in refund_requests desk
+            await txQuery(
+              `INSERT INTO refund_requests (
+                id, customer_id, wallet_id, original_tx_ref, amount, reason, status, provider_ref, reviewed_by, reviewed_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, 'Completed', $7, 'Razorpay Webhook (Automated)', NOW())
+              ON CONFLICT (id) DO NOTHING`,
+              [
+                `rfnd_req_${Date.now()}_${randomBytes(3).toString('hex')}`,
+                targetCustId,
+                walId,
+                paymentId,
+                refundAmt,
+                `Razorpay automated webhook refund (${refund.notes?.reason || 'Customer requested / Bank reversal'})`,
+                refundId,
+              ]
+            );
+
+            // Update payment_records status to 'refunded'
+            await txQuery(
+              `UPDATE payment_records SET status = 'refunded', notes = notes || ' • Refunded via Razorpay (' || $1 || ')' WHERE utr_reference = $2`,
+              [refundId, paymentId]
+            );
+
+            // Update tax_invoices status to 'Refunded'
+            await txQuery(
+              `UPDATE tax_invoices SET status = 'Refunded' WHERE particulars ILIKE '%' || $1 || '%' OR payment_mode ILIKE '%' || $1 || '%'`,
+              [paymentId]
+            );
+
+            console.log(`[Razorpay Webhook] Refund ${refundId} completed successfully for customer ${targetCustId}.`);
+          }
+        }).catch((err) => console.error('[Razorpay Webhook Refund Error]', err));
       }
     } else if (event === 'payment.failed') {
       const payment = req.body?.payload?.payment?.entity;
@@ -2579,15 +2699,6 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
             failAmount,
             payment.id,
             `Online recharge failed: ${payment.error_description || payment.error_reason || 'Payment declined'}`,
-          ]
-        ).catch(() => {});
-      }
-    }
-    res.json({ ok: true, status: 'processed' });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
           ]
         ).catch(() => {});
       }
