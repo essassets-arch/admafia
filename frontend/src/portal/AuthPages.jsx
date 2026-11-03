@@ -181,6 +181,33 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
 
   return (
     <div className="auth-fullpage-shell">
+      {/* 1. Global Navigation Topbar */}
+      <header className="auth-fullpage-topbar">
+        <div className="auth-fullpage-topbar-inner">
+          <div 
+            className="auth-fullpage-brand" 
+            onClick={onBackToWebsite}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            title="AdMafia Marketing"
+          >
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
+              className="auth-topbar-logo"
+            />
+          </div>
+          <div className="auth-fullpage-topbar-actions">
+            <span className="auth-topbar-Question">Already have an account?</span>
+            <button type="button" className="auth-topbar-switch-btn" onClick={onSwitchToLogin}>
+              Sign In to Workspace
+            </button>
+            <button type="button" className="auth-topbar-back-btn" onClick={onBackToWebsite}>
+              ← Back to Website
+            </button>
+          </div>
+        </div>
+      </header>
+
       {/* Main Full-Page Split Grid */}
       <main className="auth-fullpage-grid">
         {/* LEFT COLUMN: Enterprise Showcase & Value Proposition */}
@@ -492,6 +519,11 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                 Sign In to Workspace
               </button>
             </div>
+
+            <div className="auth-mobile-trust-bar">
+              <ShieldCheck size={14} color="#10b981" />
+              <span>Official 256-bit Encrypted AdMafia Client Portal</span>
+            </div>
           </div>
         </section>
       </main>
@@ -584,6 +616,33 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
 
   return (
     <div className="auth-fullpage-shell">
+      {/* 1. Global Navigation Topbar */}
+      <header className="auth-fullpage-topbar">
+        <div className="auth-fullpage-topbar-inner">
+          <div 
+            className="auth-fullpage-brand" 
+            onClick={onBackToWebsite}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            title="AdMafia Marketing"
+          >
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
+              className="auth-topbar-logo"
+            />
+          </div>
+          <div className="auth-fullpage-topbar-actions">
+            <span className="auth-topbar-Question">Need a client account?</span>
+            <button type="button" className="auth-topbar-switch-btn" onClick={onSwitchToRegister}>
+              Create Business Account
+            </button>
+            <button type="button" className="auth-topbar-back-btn" onClick={onBackToWebsite}>
+              ← Back to Website
+            </button>
+          </div>
+        </div>
+      </header>
+
       {/* Main Full-Page Split Grid */}
       <main className="auth-fullpage-grid">
         {/* LEFT COLUMN: Customer Portal Command Center Showcase */}
@@ -865,6 +924,11 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
               <button type="button" onClick={onSwitchToRegister} className="link-button-bold">
                 Create Business Account
               </button>
+            </div>
+
+            <div className="auth-mobile-trust-bar">
+              <ShieldCheck size={14} color="#10b981" />
+              <span>Official 256-bit Encrypted AdMafia Client Portal</span>
             </div>
           </div>
         </section>
