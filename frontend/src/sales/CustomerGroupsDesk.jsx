@@ -1029,14 +1029,22 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           (m.phone || '').includes(q)
                         );
                       })
-                      .map((m) => (
+                      .map((m) => {
+                        const isGen = (s) => !s || s.toLowerCase() === 'registered business' || s.toLowerCase() === 'corporate workspace';
+                        const cleanU = (m.username || '').replace(/^@/, '').trim();
+                        const capU = cleanU ? cleanU.charAt(0).toUpperCase() + cleanU.slice(1) : '';
+                        const cleanPhone = String(m.phone || '').replace(/\D/g, '').slice(-10);
+                        const fallback = capU || (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
+                        const resolvedComp = !isGen(m.companyName) ? m.companyName : fallback;
+                        const resolvedCont = !isGen(m.contactPerson) ? m.contactPerson : (capU || resolvedComp);
+                        return (
                         <tr key={m.customerId} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
-                            <div>{m.companyName}</div>
+                            <div>{resolvedComp}</div>
                             <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>{m.category || 'General'}</div>
                           </td>
                           <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
-                            <div>{m.contactPerson}</div>
+                            <div>{resolvedCont}</div>
                             <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{m.phone}</div>
                           </td>
                           <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#334155' }}>
@@ -1086,7 +1094,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                             )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                   </tbody>
                 </table>
               )}
@@ -1242,7 +1251,12 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                     {inspectRecipients.map((r, i) => (
                       <tr key={r.id || i} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.84rem', color: '#1e293b' }}>
-                          {r.companyName || r.company_name || 'Customer'}
+                          {(() => {
+                            const raw = r.companyName || r.company_name || '';
+                            const isGen = !raw || raw.toLowerCase() === 'registered business' || raw.toLowerCase() === 'corporate workspace';
+                            const cleanPhone = String(r.phone || '').replace(/\D/g, '').slice(-10);
+                            return !isGen ? raw : (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
+                          })()}
                         </td>
                         <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
                           {r.phone}

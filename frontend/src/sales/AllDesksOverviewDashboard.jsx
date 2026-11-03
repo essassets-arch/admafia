@@ -754,10 +754,20 @@ export default function AllDesksOverviewDashboard({
                 >
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#0f172a' }}>
-                      {c.companyName || c.name}
+                      {(() => {
+                        const isGen = (s) => !s || s.toLowerCase() === 'registered business' || s.toLowerCase() === 'corporate workspace';
+                        const cleanU = (c.username || '').replace(/^@/, '').trim();
+                        const capU = cleanU ? cleanU.charAt(0).toUpperCase() + cleanU.slice(1) : '';
+                        return !isGen(c.companyName) ? c.companyName : (!isGen(c.name) ? c.name : (capU || 'Client Account'));
+                      })()}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      👤 {c.contactPerson || c.contact} • +91 {c.phone} • {c.city || 'India'} • ⏱️ {formatIndianDateTime(c.completedAt || c.registeredAt, c.completedAt || c.registeredAtRaw || c.registered_at)}
+                      👤 {(() => {
+                        const isGen = (s) => !s || s.toLowerCase() === 'registered business' || s.toLowerCase() === 'corporate workspace';
+                        const cleanU = (c.username || '').replace(/^@/, '').trim();
+                        const capU = cleanU ? cleanU.charAt(0).toUpperCase() + cleanU.slice(1) : '';
+                        return !isGen(c.contactPerson) ? c.contactPerson : (!isGen(c.contact) ? c.contact : (capU || 'Account Admin'));
+                      })()} • +91 {c.phone} • {c.city || 'India'} • ⏱️ {formatIndianDateTime(c.completedAt || c.registeredAt, c.completedAt || c.registeredAtRaw || c.registered_at)}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -836,7 +846,12 @@ export default function AllDesksOverviewDashboard({
                   >
                     <div>
                       <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <span>{c.name || c.companyName}</span>
+                        <span>{(() => {
+                          const isGen = (s) => !s || s.toLowerCase() === 'registered business' || s.toLowerCase() === 'corporate workspace';
+                          const cleanU = (c.username || '').replace(/^@/, '').trim();
+                          const capU = cleanU ? cleanU.charAt(0).toUpperCase() + cleanU.slice(1) : '';
+                          return !isGen(c.companyName) ? c.companyName : (!isGen(c.name) ? c.name : (capU || 'Client Account'));
+                        })()}</span>
                         {isLowBalance && (
                           <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
                             ⚠️ Low Balance

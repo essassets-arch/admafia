@@ -148,6 +148,96 @@ export const formatIndianDateTime = (val, rawVal) => {
   return target || getLiveNowFormatted();
 };
 
+export const isGenericBusinessName = (str) => {
+  if (!str) return true;
+  const s = String(str).trim().toLowerCase();
+  return (
+    s === 'registered business' ||
+    s === 'corporate workspace' ||
+    s === 'workspace' ||
+    s === 'client member' ||
+    s === 'account admin' ||
+    s === 'authorized lead' ||
+    s === 'customer' ||
+    s === 'user' ||
+    s === 'not set' ||
+    s === 'not provided' ||
+    s === 'null' ||
+    s === 'undefined'
+  );
+};
+
+export const resolveCustomerIdentity = (custOrObj, customers = []) => {
+  if (!custOrObj) {
+    return {
+      displayName: 'Client Account',
+      companyName: 'Client Account',
+      contactPerson: 'Client Lead',
+      username: '',
+      cleanUsername: '',
+      initials: 'CA',
+    };
+  }
+
+  const cleanPhone = String(custOrObj.phone || custOrObj.mobile || '').replace(/\D/g, '').slice(-10);
+  const matchedCust =
+    customers && customers.length
+      ? customers.find(
+          (c) =>
+            c.id === custOrObj.customerId ||
+            c.id === custOrObj.id ||
+            (cleanPhone && c.phone && String(c.phone).replace(/\D/g, '').slice(-10) === cleanPhone)
+        )
+      : null;
+
+  const rawUser = String(custOrObj.username || matchedCust?.username || '').replace(/^@/, '').trim();
+  const capUser = rawUser
+    ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1)
+    : '';
+
+  const rawCompany = String(
+    custOrObj.companyName ||
+    custOrObj.company ||
+    custOrObj.name ||
+    custOrObj.customerName ||
+    matchedCust?.companyName ||
+    matchedCust?.name ||
+    ''
+  ).trim();
+
+  const rawContact = String(
+    custOrObj.contactPerson ||
+    custOrObj.contact ||
+    matchedCust?.contactPerson ||
+    matchedCust?.contact ||
+    ''
+  ).trim();
+
+  const validCompany = !isGenericBusinessName(rawCompany) ? rawCompany : '';
+  const validContact = !isGenericBusinessName(rawContact) ? rawContact : '';
+
+  const resolvedCompany =
+    validCompany ||
+    capUser ||
+    validContact ||
+    (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
+
+  const resolvedContact = validContact || capUser || resolvedCompany || 'Account Admin';
+
+  const avatarBase = capUser || resolvedCompany || resolvedContact || 'AM';
+  const cleanChars = avatarBase.replace(/[^a-zA-Z0-9]/g, '');
+  const initials = (cleanChars.length >= 2 ? cleanChars.slice(0, 2) : (cleanChars || 'AM')).toUpperCase();
+
+  return {
+    displayName: resolvedCompany,
+    companyName: resolvedCompany,
+    contactPerson: resolvedContact,
+    username: rawUser,
+    cleanUsername: capUser,
+    initials,
+  };
+};
+
 /* ==========================================================================
    DESK 1: CUSTOMER REGISTRATIONS (Real Intake from http://localhost:5173/#register)
    ========================================================================== */
@@ -769,20 +859,22 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((c) => (
+              filtered.map((c) => {
+                const identity = resolveCustomerIdentity(c);
+                return (
                 <tr key={c.id}>
                   {/* 1. Username & Workspace */}
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.84rem' }}>
-                        @{c.username || 'user'}
+                        @{identity.username || c.username || 'user'}
                       </span>
                       <span className="desk-pill" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.68rem', fontWeight: 800, padding: '1px 6px' }}>
                         🌐 #register
                       </span>
                     </div>
                     <div style={{ fontWeight: 700, color: '#0f172a', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span>{c.name || 'Workspace'}</span>
+                      <span>{identity.displayName}</span>
                       {((c.balance || 0) < (c.dailyPacing || 300) || (c.runwayDays || 0) <= 1) && (
                         <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
                           ⚠️ Low Balance
@@ -828,7 +920,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                         {c.email}
                       </a>
                     </div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{c.contact || c.username}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{identity.contactPerson}</div>
                   </td>
 
                   {/* 4. Profile Status (Single Column - 100% Automatic) */}
@@ -918,7 +1010,8 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                     </div>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -931,9 +1024,14 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div>
                 <span className="sales-dept-badge">Customer 360° Intake Profile</span>
-                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.3rem', fontWeight: 800 }}>
-                  @{selectedCust.username} • {selectedCust.name}
-                </h3>
+                {(() => {
+                  const selIdentity = resolveCustomerIdentity(selectedCust);
+                  return (
+                    <h3 style={{ margin: '4px 0 0 0', fontSize: '1.3rem', fontWeight: 800 }}>
+                      @{selIdentity.username || selectedCust.username} • {selIdentity.displayName}
+                    </h3>
+                  );
+                })()}
                 <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
                   Registered Source: <code>{selectedCust.registeredFrom || 'http://localhost:5173/#register'}</code>
                 </div>
@@ -1400,18 +1498,20 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
 
       {/* Verification Queue Cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {filtered.map((item) => (
+        {filtered.map((item) => {
+          const vIdentity = resolveCustomerIdentity(item, customers);
+          return (
           <div key={item.id} className="desk-card-row">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{item.company}</h3>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{vIdentity.displayName}</h3>
                   <span className={`desk-pill ${item.paymentStatus === 'paid' ? 'pill-emerald' : 'pill-amber'}`}>
                     {item.paymentStatus === 'paid' ? '✓ Auto-Verified & Paid' : '✓ Auto-Verified (Budget Pending)'}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 4 }}>
-                  Contact: <span style={{ fontWeight: 600, color: '#334155' }}>{item.contact}</span> • Phone: <a href={`tel:${item.phone}`} style={{ color: '#4f46e5' }}>+91 {item.phone}</a> • Submitted: {formatIndianDateTime(item.submittedAt, item.submittedAtRaw || item.submitted_at)}
+                  Contact: <span style={{ fontWeight: 600, color: '#334155' }}>{vIdentity.contactPerson}</span> • Phone: <a href={`tel:${item.phone}`} style={{ color: '#4f46e5' }}>+91 {item.phone}</a> • Submitted: {formatIndianDateTime(item.submittedAt, item.submittedAtRaw || item.submitted_at)}
                 </div>
               </div>
 
@@ -1500,7 +1600,8 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Customer 360 Detail Modal */}
@@ -2637,8 +2738,9 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
               ) : (
                 displayedList.map((c) => {
                   const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
-                  const companyDisplayName = c.companyName || c.name || 'Corporate Workspace';
-                  const contactDisplayName = c.contactPerson || c.contact || c.username || 'Not Set';
+                  const identity = resolveCustomerIdentity(c, customers);
+                  const companyDisplayName = identity.displayName;
+                  const contactDisplayName = identity.contactPerson;
                   const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
 
                   return (
@@ -2821,8 +2923,9 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
           ) : (
             displayedList.map((c) => {
               const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
-              const companyDisplayName = c.companyName || c.name || 'Corporate Workspace';
-              const contactDisplayName = c.contactPerson || c.contact || c.username || 'Not Set';
+              const identity = resolveCustomerIdentity(c, customers);
+              const companyDisplayName = identity.displayName;
+              const contactDisplayName = identity.contactPerson;
               const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
 
               return (
@@ -3070,9 +3173,14 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                     Account: {selectedProfileCust.status === 'active' ? 'Active' : 'Suspended'}
                   </span>
                 </div>
-                <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: '#0f172a' }}>
-                  {selectedProfileCust.companyName || selectedProfileCust.name || 'Corporate Workspace'}
-                </h2>
+                {(() => {
+                  const pIdentity = resolveCustomerIdentity(selectedProfileCust, customers);
+                  return (
+                    <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: '#0f172a' }}>
+                      {pIdentity.displayName}
+                    </h2>
+                  );
+                })()}
                 <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 4 }}>
                   Workspace ID: <code>{selectedProfileCust.id}</code> • Registered: {selectedProfileCust.registeredAt || 'Active'}
                 </div>
@@ -3101,7 +3209,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company / Brand Name</div>
                     <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                      {selectedProfileCust.companyName || selectedProfileCust.name || 'Not Specified'}
+                      {resolveCustomerIdentity(selectedProfileCust, customers).displayName}
                     </div>
                   </div>
                   <div>
@@ -3148,7 +3256,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person / Representative</div>
                     <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                      {selectedProfileCust.contactPerson || selectedProfileCust.contact || selectedProfileCust.username || 'Not Specified'}
+                      {resolveCustomerIdentity(selectedProfileCust, customers).contactPerson}
                     </div>
                   </div>
                   <div>
@@ -3796,6 +3904,7 @@ export function PaymentCollectionDesk({
             ) : (
               filteredRecords.map((r) => {
                 const isPaid = r.status === 'paid';
+                const identity = resolveCustomerIdentity(r, customers);
                 return (
                   <tr key={r.id}>
                     <td>
@@ -3809,10 +3918,10 @@ export function PaymentCollectionDesk({
                     <td>
                       <div>
                         <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.9rem' }}>
-                          {r.company}
+                          {identity.displayName}
                         </div>
                         <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 1 }}>
-                          👤 {r.contact} • 📞 +91 {r.phone}
+                          👤 {identity.contactPerson} • 📞 +91 {r.phone}
                         </div>
                       </div>
                     </td>
@@ -4148,12 +4257,19 @@ export function PaymentCollectionDesk({
               <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: '#64748b', marginBottom: 4 }}>
                 CUSTOMER / BILLED TO:
               </div>
-              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-                {activeReceipt.company}
-              </div>
-              <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: 2 }}>
-                Attention: <b>{activeReceipt.contact}</b> • Phone: <b>+91 {activeReceipt.phone}</b> • Location: {activeReceipt.city || 'India'}
-              </div>
+              {(() => {
+                const rcptIdentity = resolveCustomerIdentity(activeReceipt, customers);
+                return (
+                  <>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                      {rcptIdentity.displayName}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: 2 }}>
+                      Attention: <b>{rcptIdentity.contactPerson}</b> • Phone: <b>+91 {activeReceipt.phone}</b> • Location: {activeReceipt.city || 'India'}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Particulars Table */}
@@ -4601,8 +4717,9 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
                 const isDepleted = bal <= 0;
                 const isLow = isDepleted || bal < pacing * 2 || runway <= 1;
 
-                const companyName = c.companyName || c.name || 'Corporate Workspace';
-                const contactPerson = c.contactPerson || c.contact || c.username || 'Account Admin';
+                const identity = resolveCustomerIdentity(c, customers);
+                const companyName = identity.displayName;
+                const contactPerson = identity.contactPerson;
 
                 return (
                   <tr key={c.id}>
@@ -4747,9 +4864,14 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
                     {(selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? '● Funded & Active' : '🔴 Depleted'}
                   </span>
                 </div>
-                <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
-                  {selectedWalletCust.companyName || selectedWalletCust.name || 'Corporate Workspace'}
-                </h3>
+                {(() => {
+                  const wIdentity = resolveCustomerIdentity(selectedWalletCust, customers);
+                  return (
+                    <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+                      {wIdentity.displayName}
+                    </h3>
+                  );
+                })()}
                 <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 3 }}>
                   Workspace ID: <code>{selectedWalletCust.id}</code> • Registered Phone: <strong style={{ color: '#0f172a' }}>+91 {selectedWalletCust.phone}</strong>
                 </div>
@@ -4792,11 +4914,11 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company / Brand</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{selectedWalletCust.companyName || selectedWalletCust.name}</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{resolveCustomerIdentity(selectedWalletCust, customers).displayName}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{selectedWalletCust.contactPerson || selectedWalletCust.contact || selectedWalletCust.username || 'Not Set'}</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{resolveCustomerIdentity(selectedWalletCust, customers).contactPerson}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone</div>
@@ -4863,9 +4985,14 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
             </div>
 
             <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f8fafc' }}>
-              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
-                {topupCust.companyName || topupCust.name || 'Corporate Workspace'}
-              </div>
+              {(() => {
+                const tIdentity = resolveCustomerIdentity(topupCust, customers);
+                return (
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
+                    {tIdentity.displayName}
+                  </div>
+                );
+              })()}
               <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>
                 Contact: <strong style={{ color: '#0f172a' }}>{topupCust.contactPerson || topupCust.contact || topupCust.username}</strong> • Phone: <strong style={{ color: '#059669' }}>+91 {topupCust.phone}</strong>
               </div>
@@ -6080,49 +6207,11 @@ export { default as CustomerGroupsDesk } from './CustomerGroupsDesk';
 /* ==========================================================================
    APPROVED MEMBERS DESK: Customers who completed Payment & Profile KYC
    ========================================================================== */
-export const resolveProperMemberName = (m) => {
-  if (!m) return { displayName: 'Client Member', contactName: 'Client Lead', username: '', initials: 'CM' };
-
-  const isGeneric = (str) =>
-    !str ||
-    str.trim().toLowerCase() === 'registered business' ||
-    str.trim().toLowerCase() === 'corporate workspace' ||
-    str.trim().toLowerCase() === 'workspace' ||
-    str.trim().toLowerCase() === 'user';
-
-  const cleanUsername = (m.username || '').replace(/^@/, '').trim();
-  const rawCompany = (m.companyName || m.name || '').trim();
-  const rawContact = (m.contactPerson || m.contact || '').trim();
-
-  let mainName = !isGeneric(rawCompany) ? rawCompany : '';
-  let contactName = !isGeneric(rawContact) ? rawContact : '';
-
-  if (!mainName && !contactName && cleanUsername) {
-    mainName = cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1);
-    contactName = mainName;
-  } else if (!mainName) {
-    mainName = contactName || (cleanUsername ? cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1) : '');
-  } else if (!contactName) {
-    contactName = cleanUsername || mainName;
-  }
-
-  const avatarSource = cleanUsername || mainName || 'AM';
-  const initials = avatarSource.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'AM';
-
-  return {
-    displayName: mainName || (cleanUsername ? `@${cleanUsername}` : 'Verified Client'),
-    contactName: contactName || (cleanUsername ? `@${cleanUsername}` : 'Authorized Lead'),
-    username: cleanUsername,
-    initials,
-  };
-};
-
 export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDesk }) {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [balanceFilter, setBalanceFilter] = useState('all'); // 'all' | 'healthy' | 'low' | 'zero'
   const [selectedMember, setSelectedMember] = useState(null);
-  const selProper = selectedMember ? resolveProperMemberName(selectedMember) : null;
 
   // Criteria: Member who has completed both Gate 1 Payment and Gate 2 Profile Submission
   const isApproved = (c) => {
@@ -6150,7 +6239,6 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
     const q = search.trim().toLowerCase();
     const matchSearch =
       !q ||
-      (c.username || '').toLowerCase().includes(q) ||
       (c.companyName || c.name || '').toLowerCase().includes(q) ||
       (c.contactPerson || c.contact || '').toLowerCase().includes(q) ||
       (c.phone || '').includes(q) ||
@@ -6382,8 +6470,8 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                 const isLow = runway > 0 && runway <= 3;
                 const isLowBalance = bal < pacing || bal <= 0 || runway <= 1;
                 const cleanPhone = (m.phone || '').trim();
-                const proper = resolveProperMemberName(m);
 
+                const proper = resolveCustomerIdentity(m, customers);
                 return (
                   <tr key={m.id || m.phone}>
                     {/* 1. Client & Entity Details */}
@@ -6414,11 +6502,11 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                             )}
                           </div>
                           <div className="appr-client-lead">
-                            👤 <b>{proper.contactName}</b> • +91{' '}
+                            👤 <b>{m.contactPerson || m.contact || 'Authorized Lead'}</b> • +91{' '}
                             <span className="appr-phone">{cleanPhone}</span>
                           </div>
                           <div className="appr-client-meta">
-                            ✉️ {m.email || 'Registered via Web Portal'} • 📍 {m.city || m.state || 'India'}
+                            ✉️ {m.email || 'Registered via Web Portal'} • 📍 {m.city || 'India'}
                           </div>
                         </div>
                       </div>
@@ -6521,19 +6609,26 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
           <div className="sales-modal-card" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
             <div className="desk-modal-header" style={{ marginBottom: 20 }}>
               <div>
-                <div className="desk-modal-tag" style={{ color: '#059669', marginBottom: 4 }}>
-                  ✓ 100% KYC &amp; PAYMENT VERIFIED MEMBER
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    {selProper?.username && (
-                      <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.80rem' }}>
-                        @{selProper.username}
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="desk-modal-title" style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
-                    {selProper?.displayName || selectedMember.companyName || selectedMember.name}
-                  </h3>
+{(() => {
+                  const selProper = resolveCustomerIdentity(selectedMember, customers);
+                  return (
+                    <div>
+                      <div className="desk-modal-tag" style={{ color: '#059669', marginBottom: 4 }}>
+                        ✓ 100% KYC &amp; PAYMENT VERIFIED MEMBER
+                      </div>
+                      {selProper.username && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.80rem' }}>
+                            @{selProper.username}
+                          </span>
+                        </div>
+                      )}
+                      <h3 className="desk-modal-title" style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+                        {selProper.displayName}
+                      </h3>
+                    </div>
+                  );
+                })()}
               </div>
               <button type="button" className="desk-close-btn" onClick={() => setSelectedMember(null)}>
                 <X size={18} />
@@ -6543,7 +6638,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 22 }}>
               <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Authorized Contact</div>
-                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{selProper?.contactName || selectedMember.contactPerson || selectedMember.contact}</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{resolveCustomerIdentity(selectedMember, customers).contactPerson}</div>
                 <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>+91 {selectedMember.phone}</div>
               </div>
 

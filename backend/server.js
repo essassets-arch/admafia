@@ -63,16 +63,30 @@ app.use('/uploads', express.static(uploadsDir));
 // Helper: Format DB customer row from vw_sales_customer_accounts to frontend shape
 function mapCustomerRow(row, passwordPlain = '••••••••••••') {
   if (!row) return null;
+  const isGeneric = (str) =>
+    !str ||
+    str.trim().toLowerCase() === 'registered business' ||
+    str.trim().toLowerCase() === 'corporate workspace' ||
+    str.trim().toLowerCase() === 'workspace';
+
+  const cleanUsername = (row.username || '').replace(/^@/, '').trim();
+  const fallbackName = cleanUsername
+    ? cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1)
+    : 'Client Member';
+
+  const resolvedCompany = !isGeneric(row.company_name) ? row.company_name : (!isGeneric(row.name) ? row.name : fallbackName);
+  const resolvedContact = !isGeneric(row.contact_person) ? row.contact_person : (!isGeneric(row.contact) ? row.contact : fallbackName);
+
   const balance = Number(row.balance ?? row.wallet_balance ?? 0);
   const dailyPacing = Number(row.daily_pacing ?? 300);
   const amountPaid = Number(row.amount_paid ?? 0);
   return {
     id: row.id,
-    username: row.username,
-    name: row.company_name || row.name || row.username,
-    companyName: row.company_name || row.name || row.username,
-    contact: row.contact_person || row.contact || row.username,
-    contactPerson: row.contact_person || row.contact || row.username,
+    username: cleanUsername,
+    name: resolvedCompany,
+    companyName: resolvedCompany,
+    contact: resolvedContact,
+    contactPerson: resolvedContact,
     phone: (row.phone || '').trim(),
     email: row.email || '',
     personalEmail: row.personal_email || '',
@@ -317,6 +331,20 @@ function mapInvoiceRow(row) {
 }
 
 function mapPaymentRecordRow(row) {
+  const isGeneric = (str) =>
+    !str ||
+    str.trim().toLowerCase() === 'registered business' ||
+    str.trim().toLowerCase() === 'corporate workspace' ||
+    str.trim().toLowerCase() === 'workspace';
+
+  const cleanUsername = (row.username || '').replace(/^@/, '').trim();
+  const fallback = cleanUsername
+    ? cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1)
+    : (row.phone ? `Customer ${String(row.phone).slice(-4)}` : 'Client Account');
+
+  const resolvedCompany = !isGeneric(row.company_name) ? row.company_name : (!isGeneric(row.cust_company) ? row.cust_company : fallback);
+  const resolvedContact = !isGeneric(row.contact_person) ? row.contact_person : (!isGeneric(row.cust_contact) ? row.cust_contact : fallback);
+
   const receiptVal =
     row.receipt_number ||
     row.receiptNumber ||
@@ -330,8 +358,8 @@ function mapPaymentRecordRow(row) {
     invoiceNumber: row.invoice_number || receiptVal,
     invoice_number: row.invoice_number || receiptVal,
     customerId: row.customer_id,
-    company: row.company_name,
-    contact: row.contact_person,
+    company: resolvedCompany,
+    contact: resolvedContact,
     phone: (row.phone || '').trim(),
     city: row.city || 'India',
     type: row.tx_type || 'topup',
@@ -585,8 +613,34 @@ app.get('/api/state', async (req, res) => {
     const [custRes, leadsRes, payRes, pvRes, qRes, tRes, grpRes, mLeadsRes, failedRes, delFailedRes] = await Promise.all([
       query('SELECT * FROM vw_sales_customer_accounts ORDER BY registered_at DESC'),
       query('SELECT * FROM leads ORDER BY created_at DESC'),
-      query('SELECT * FROM payment_records ORDER BY paid_at DESC'),
-      query('SELECT * FROM pending_verifications ORDER BY submitted_at DESC'),
+      query(`
+        SELECT 
+          pr.*,
+          c.username,
+          c.company_name AS cust_company,
+          c.contact_person AS cust_contact
+        FROM payment_records pr
+        LEFT JOIN customers c ON (
+          pr.customer_id = c.id 
+          OR pr.phone = c.phone 
+          OR c.phone = RIGHT(REGEXP_REPLACE(pr.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        ORDER BY pr.paid_at DESC
+      `),
+      query(`
+        SELECT 
+          pv.*,
+          c.username,
+          c.company_name AS cust_company,
+          c.contact_person AS cust_contact
+        FROM pending_verifications pv
+        LEFT JOIN customers c ON (
+          pv.customer_id = c.id 
+          OR pv.phone = c.phone 
+          OR c.phone = RIGHT(REGEXP_REPLACE(pv.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        ORDER BY pv.submitted_at DESC
+      `),
       query('SELECT * FROM support_queries ORDER BY created_at DESC'),
       query('SELECT * FROM sales_tasks ORDER BY created_at DESC'),
       query(`
@@ -643,11 +697,22 @@ app.get('/api/state', async (req, res) => {
       customers: custRes.rows.map((r) => mapCustomerRow(r)),
       leads: leadsRes.rows.map(mapLeadRow),
       payments: payRes.rows.map(mapPaymentRecordRow),
-      verifications: pvRes.rows.map((r) => ({
+      verifications: pvRes.rows.map((r) => {
+        const isGeneric = (str) =>
+          !str ||
+          str.trim().toLowerCase() === 'registered business' ||
+          str.trim().toLowerCase() === 'corporate workspace';
+        const cleanUser = (r.username || '').replace(/^@/, '').trim();
+        const fallback = cleanUser
+          ? cleanUser.charAt(0).toUpperCase() + cleanUser.slice(1)
+          : (r.phone ? `Customer ${String(r.phone).slice(-4)}` : 'Client Account');
+        const resolvedComp = !isGeneric(r.company_name) ? r.company_name : (!isGeneric(r.cust_company) ? r.cust_company : fallback);
+        const resolvedCont = !isGeneric(r.contact_person) ? r.contact_person : (!isGeneric(r.cust_contact) ? r.cust_contact : fallback);
+        return {
         id: r.id,
         customerId: r.customer_id,
-        company: r.company_name,
-        contact: r.contact_person,
+        company: resolvedComp,
+        contact: resolvedCont,
         phone: (r.phone || '').trim(),
         packageTier: r.package_tier,
         amount: Number(r.amount || 0),
@@ -669,7 +734,8 @@ app.get('/api/state', async (req, res) => {
           : 'Today',
         submittedAtRaw: r.submitted_at,
         submitted_at_raw: r.submitted_at,
-      })),
+      };
+      }),
       queries: qRes.rows.map(mapQueryRow),
       tasks: tRes.rows,
       groups: grpRes.rows.map(mapGroupRow),
@@ -707,13 +773,16 @@ app.post('/api/auth/register', async (req, res) => {
     if (cleanPhone.length !== 10) {
       return res.status(400).json({ ok: false, error: 'Valid 10-digit mobile number is required.' });
     }
-    const cleanUsername = (username || `user_${cleanPhone.slice(-4)}`).trim();
-    const formattedName =
-      (companyName || '').trim() ||
-      cleanUsername
-        .replace(/[._-]+/g, ' ')
-        .replace(/\b\w/g, (l) => l.toUpperCase());
-    const contactName = (contactPerson || '').trim() || formattedName;
+    const cleanUsername = (username || `user_${cleanPhone.slice(-4)}`).trim().replace(/^@/, '');
+    const isGeneric = (str) =>
+      !str ||
+      str.trim().toLowerCase() === 'registered business' ||
+      str.trim().toLowerCase() === 'corporate workspace';
+    const fallbackFormatted = cleanUsername
+      ? cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1)
+      : 'Client Member';
+    const formattedName = !isGeneric(companyName) ? companyName.trim() : fallbackFormatted;
+    const contactName = !isGeneric(contactPerson) ? contactPerson.trim() : formattedName;
     const custId = `cust_reg_${cleanPhone}`;
     const walId = `wal_${cleanPhone}`;
     const pvId = `pv_${cleanPhone}`;
@@ -1680,7 +1749,7 @@ app.put('/api/customers/:id/profile', async (req, res) => {
 
     const cleanPhone = String(phone || rawId).replace(/\D/g, '').slice(-10);
     const lookupRes = await query(
-      'SELECT id, phone FROM customers WHERE id = $1 OR phone = $2 LIMIT 1',
+      'SELECT id, phone, username FROM customers WHERE id = $1 OR phone = $2 LIMIT 1',
       [rawId, cleanPhone]
     );
 
@@ -1688,9 +1757,17 @@ app.put('/api/customers/:id/profile', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Customer record not found' });
     }
 
-    const custId = lookupRes.rows[0].id;
-    const orgName = (companyName || name || '').trim() || 'Registered Business';
-    const personName = (contactPerson || contact || '').trim() || orgName;
+    const custRow = lookupRes.rows[0];
+    const custId = custRow.id;
+    const cleanU = (custRow.username || '').replace(/^@/, '').trim();
+    const fallbackU = cleanU ? cleanU.charAt(0).toUpperCase() + cleanU.slice(1) : 'Client Member';
+    const isGeneric = (str) =>
+      !str ||
+      str.trim().toLowerCase() === 'registered business' ||
+      str.trim().toLowerCase() === 'corporate workspace';
+
+    const orgName = !isGeneric(companyName || name) ? (companyName || name).trim() : fallbackU;
+    const personName = !isGeneric(contactPerson || contact) ? (contactPerson || contact).trim() : orgName;
     const siteUrl = (website || domain || '').trim();
 
     await query(

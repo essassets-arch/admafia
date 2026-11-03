@@ -50,12 +50,62 @@ import './sales.css';
 const STORAGE_CUSTOMERS = 'growthline_registered_customers';
 const STORAGE_VERIFICATIONS = 'growthline_pending_verifications';
 
+const sanitizeCustomer = (c) => {
+  if (!c) return c;
+  const isGeneric = (str) =>
+    !str ||
+    str.trim().toLowerCase() === 'registered business' ||
+    str.trim().toLowerCase() === 'corporate workspace' ||
+    str.trim().toLowerCase() === 'workspace' ||
+    str.trim().toLowerCase() === 'user' ||
+    str.trim().toLowerCase() === 'account admin' ||
+    str.trim().toLowerCase() === 'client member';
+
+  const cleanU = (c.username || '').replace(/^@/, '').trim();
+  const capU = cleanU ? cleanU.charAt(0).toUpperCase() + cleanU.slice(1) : null;
+  const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
+  const fallback = capU || (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
+
+  const resolvedComp = !isGeneric(c.companyName) ? c.companyName : (!isGeneric(c.name) ? c.name : fallback);
+  const resolvedContact = !isGeneric(c.contactPerson) ? c.contactPerson : (!isGeneric(c.contact) ? c.contact : fallback);
+
+  return {
+    ...c,
+    companyName: resolvedComp,
+    name: resolvedComp,
+    contactPerson: resolvedContact,
+    contact: resolvedContact,
+    username: cleanU,
+  };
+};
+
+const sanitizeVerification = (v) => {
+  if (!v) return v;
+  const isGeneric = (str) =>
+    !str ||
+    str.trim().toLowerCase() === 'registered business' ||
+    str.trim().toLowerCase() === 'corporate workspace';
+  const cleanPhone = String(v.phone || '').replace(/\D/g, '').slice(-10);
+  const cleanUser = (v.username || '').replace(/^@/, '').trim();
+  const capUser = cleanUser ? cleanUser.charAt(0).toUpperCase() + cleanUser.slice(1) : null;
+  const fallback = capUser || (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
+
+  const resolvedComp = !isGeneric(v.company) ? v.company : fallback;
+  const resolvedContact = !isGeneric(v.contact) ? v.contact : fallback;
+
+  return {
+    ...v,
+    company: resolvedComp,
+    contact: resolvedContact,
+  };
+};
+
 const loadStoredCustomers = () => {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOMERS);
     if (raw) {
       const stored = JSON.parse(raw);
-      if (Array.isArray(stored)) return stored;
+      if (Array.isArray(stored)) return stored.map(sanitizeCustomer);
     }
     return [];
   } catch (err) {
@@ -67,7 +117,7 @@ const loadStoredVerifications = () => {
   try {
     const raw = localStorage.getItem(STORAGE_VERIFICATIONS);
     const stored = raw ? JSON.parse(raw) : [];
-    return Array.isArray(stored) ? stored : [];
+    return Array.isArray(stored) ? stored.map(sanitizeVerification) : [];
   } catch (err) {
     return [];
   }
@@ -165,7 +215,8 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   // Wrapper to save customers persistently
   const setCustomers = useCallback((updater) => {
     setCustomersState((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
+      const rawNext = typeof updater === 'function' ? updater(prev) : updater;
+      const next = Array.isArray(rawNext) ? rawNext.map(sanitizeCustomer) : rawNext;
       try {
         localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(next));
       } catch (e) {
@@ -192,8 +243,16 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   useEffect(() => {
     crmApi.syncStateFromPostgres().then((state) => {
       if (state) {
-        if (Array.isArray(state.customers)) setCustomersState(state.customers);
-        if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
+        if (Array.isArray(state.customers)) {
+          const sanitized = state.customers.map(sanitizeCustomer);
+          setCustomersState(sanitized);
+          try { localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(sanitized)); } catch (_) {}
+        }
+        if (Array.isArray(state.verifications)) {
+          const sanitizedV = state.verifications.map(sanitizeVerification);
+          setVerificationsState(sanitizedV);
+          try { localStorage.setItem(STORAGE_VERIFICATIONS, JSON.stringify(sanitizedV)); } catch (_) {}
+        }
         if (Array.isArray(state.queries)) setQueries(state.queries);
         if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
       }
