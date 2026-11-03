@@ -93,6 +93,12 @@ export const crmApi = {
       if (Array.isArray(fresh.queries)) {
         localStorage.setItem('growthline_support_queries', JSON.stringify(fresh.queries));
       }
+      if (Array.isArray(fresh.failedTransactions)) {
+        localStorage.setItem('growthline_failed_transactions', JSON.stringify(fresh.failedTransactions));
+      }
+      if (Array.isArray(fresh.deletedFailedTransactions)) {
+        localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(fresh.deletedFailedTransactions));
+      }
 
       window.dispatchEvent(new CustomEvent('growthline_postgres_synced', { detail: fresh }));
       return fresh;

@@ -404,6 +404,52 @@ function mapQueryRow(row) {
   };
 }
 
+function mapFailedTxRow(row) {
+  if (!row) return null;
+  const cleanPhone = String(row.phone || row.customer_id || '').replace(/\D/g, '').slice(-10);
+  const rawUser = String(row.username || '').trim();
+  const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : '';
+
+  const rawContact = String(row.contact_person || '').trim();
+  const isGenericContact = !rawContact || rawContact.toLowerCase() === 'registered business' || rawContact.toLowerCase() === 'account admin';
+  const properContact = (!isGenericContact ? rawContact : '') || capUser || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
+
+  const rawCompany = String(row.company_name || '').trim();
+  const isGenericCompany = !rawCompany || rawCompany.toLowerCase() === 'registered business' || rawCompany.toLowerCase() === 'corporate workspace';
+  const properCompany = (!isGenericCompany ? rawCompany : '') || (capUser ? `${capUser} Enterprises` : '') || properContact;
+
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    customerName: properCompany,
+    companyName: properCompany,
+    contactPerson: properContact,
+    username: rawUser,
+    phone: cleanPhone || row.phone || '',
+    email: row.email || '',
+    city: row.city || '',
+    state: row.state || 'Maharashtra',
+    category: row.category || 'IT & Software',
+    amount: Number(row.amount || 0),
+    ref: row.reference_utr,
+    desc: row.description,
+    method: row.payment_method,
+    status: row.status || 'Failed ✕',
+    failureReason: row.description || 'Bank transaction declined by customer',
+    date: row.created_at
+      ? new Date(row.created_at).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+      : 'Recently Failed',
+  };
+}
+
 function mapDeletedFailedTxRow(row) {
   if (!row) return null;
   const cleanPhone = String(row.phone || row.customer_id || '').replace(/\D/g, '').slice(-10);
@@ -535,7 +581,7 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/api/state', async (req, res) => {
   try {
-    const [custRes, leadsRes, payRes, pvRes, qRes, tRes, grpRes, mLeadsRes] = await Promise.all([
+    const [custRes, leadsRes, payRes, pvRes, qRes, tRes, grpRes, mLeadsRes, failedRes, delFailedRes] = await Promise.all([
       query('SELECT * FROM vw_sales_customer_accounts ORDER BY registered_at DESC'),
       query('SELECT * FROM leads ORDER BY created_at DESC'),
       query('SELECT * FROM payment_records ORDER BY paid_at DESC'),
@@ -563,6 +609,32 @@ app.get('/api/state', async (req, res) => {
         LEFT JOIN customer_groups cg ON cg.id = ml.group_id
         ORDER BY ml.created_at DESC
       `),
+      query(`
+        SELECT 
+          wt.id, wt.customer_id, wt.amount, wt.reference_utr, wt.description, wt.payment_method, wt.status, wt.created_at,
+          c.id AS matched_cust_id, c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.country, c.category
+        FROM wallet_transactions wt
+        LEFT JOIN customers c ON (
+          wt.customer_id = c.id 
+          OR wt.customer_id = c.phone 
+          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        WHERE LOWER(wt.status) LIKE '%fail%' 
+           OR LOWER(wt.status) LIKE '%declin%'
+           OR LOWER(wt.status) LIKE '%cancel%'
+           OR LOWER(wt.status) LIKE '%dismiss%'
+           OR LOWER(wt.status) LIKE '%reject%'
+           OR LOWER(wt.tx_type) LIKE '%fail%'
+           OR LOWER(wt.description) LIKE '%fail%'
+           OR LOWER(wt.description) LIKE '%declin%'
+           OR LOWER(wt.description) LIKE '%dismiss%'
+           OR LOWER(wt.description) LIKE '%cancel%'
+           OR LOWER(wt.payment_method) LIKE '%fail%'
+           OR wt.reference_utr LIKE 'DISMISS-%'
+           OR wt.reference_utr LIKE 'FAIL-%'
+        ORDER BY wt.created_at DESC
+      `),
+      query('SELECT * FROM deleted_failed_transactions ORDER BY deleted_at DESC'),
     ]);
 
     res.json({
@@ -601,6 +673,8 @@ app.get('/api/state', async (req, res) => {
       tasks: tRes.rows,
       groups: grpRes.rows.map(mapGroupRow),
       masterLeads: mLeadsRes.rows.map(mapMasterLeadRow),
+      failedTransactions: failedRes.rows.map(mapFailedTxRow),
+      deletedFailedTransactions: delFailedRes.rows.map(mapDeletedFailedTxRow),
     });
   } catch (err) {
     console.error('[GET /api/state]', err);
@@ -1211,57 +1285,23 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
         OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
       )
       WHERE LOWER(wt.status) LIKE '%fail%' 
+         OR LOWER(wt.status) LIKE '%declin%'
+         OR LOWER(wt.status) LIKE '%cancel%'
+         OR LOWER(wt.status) LIKE '%dismiss%'
+         OR LOWER(wt.status) LIKE '%reject%'
          OR LOWER(wt.tx_type) LIKE '%fail%'
          OR LOWER(wt.description) LIKE '%fail%'
+         OR LOWER(wt.description) LIKE '%declin%'
+         OR LOWER(wt.description) LIKE '%dismiss%'
+         OR LOWER(wt.description) LIKE '%cancel%'
+         OR LOWER(wt.description) LIKE '%reject%'
          OR LOWER(wt.payment_method) LIKE '%fail%'
+         OR wt.reference_utr LIKE 'DISMISS-%'
+         OR wt.reference_utr LIKE 'FAIL-%'
       ORDER BY wt.created_at DESC
     `;
     const result = await query(querySql);
-    const mapped = result.rows.map((row) => {
-      const cleanPhone = String(row.phone || row.customer_id || '').replace(/\D/g, '').slice(-10);
-      const rawUser = String(row.username || '').trim();
-      const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : '';
-
-      const rawContact = String(row.contact_person || '').trim();
-      const isGenericContact = !rawContact || rawContact.toLowerCase() === 'registered business' || rawContact.toLowerCase() === 'account admin';
-      const properContact = (!isGenericContact ? rawContact : '') || capUser || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
-
-      const rawCompany = String(row.company_name || '').trim();
-      const isGenericCompany = !rawCompany || rawCompany.toLowerCase() === 'registered business' || rawCompany.toLowerCase() === 'corporate workspace';
-      const properCompany = (!isGenericCompany ? rawCompany : '') || (capUser ? `${capUser} Enterprises` : '') || properContact;
-
-      return {
-        id: row.id,
-        customerId: row.customer_id,
-        customerName: properCompany,
-        companyName: properCompany,
-        contactPerson: properContact,
-        username: rawUser,
-        phone: cleanPhone || row.phone || '',
-        email: row.email || '',
-        city: row.city || '',
-        state: row.state || 'Maharashtra',
-        category: row.category || 'IT & Software',
-        amount: Number(row.amount || 0),
-        ref: row.reference_utr,
-        desc: row.description,
-        method: row.payment_method,
-        status: row.status || 'Failed ✕',
-        failureReason: row.description || 'Bank transaction declined by customer',
-        date: row.created_at
-          ? new Date(row.created_at).toLocaleString('en-IN', {
-              timeZone: 'Asia/Kolkata',
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            })
-          : 'Recently Failed',
-      };
-    });
-    res.json({ ok: true, failedTransactions: mapped });
+    res.json({ ok: true, failedTransactions: result.rows.map(mapFailedTxRow) });
   } catch (err) {
     console.error('[GET /api/sales/failed-transactions]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -1380,59 +1420,7 @@ app.get('/api/sales/failed-transactions/history', async (req, res) => {
       SELECT * FROM deleted_failed_transactions 
       ORDER BY deleted_at DESC
     `);
-    let list = result.rows.map(mapDeletedFailedTxRow);
-
-    // Initial fallback historical records if database has no archived records yet
-    if (list.length === 0) {
-      list = [
-        {
-          id: 'del_hist_599471',
-          originalId: 'tx_fail_599471',
-          customerId: '9724916167',
-          customerName: 'Harsh Enterprises',
-          companyName: 'Harsh Enterprises',
-          contactPerson: 'Harsh',
-          phone: '9724916167',
-          email: 'harsh@enterprises.com',
-          city: 'Pune',
-          state: 'Maharashtra',
-          category: 'IT & Software',
-          amount: 300,
-          ref: 'DISMISS-599471',
-          desc: 'Payment checkout dismissed by user',
-          method: 'Razorpay Secure',
-          status: 'Deleted Record',
-          failureReason: 'Payment checkout dismissed by user',
-          originalDate: '02 Nov 2026, 03:46 pm',
-          deletedAt: '02 Nov 2026, 08:15 pm',
-          deletedBy: 'Sales Admin',
-        },
-        {
-          id: 'del_hist_588777',
-          originalId: 'tx_fail_588777',
-          customerId: '9724916167',
-          customerName: 'Harsh Enterprises',
-          companyName: 'Harsh Enterprises',
-          contactPerson: 'Harsh',
-          phone: '9724916167',
-          email: 'harsh@enterprises.com',
-          city: 'Pune',
-          state: 'Maharashtra',
-          category: 'IT & Software',
-          amount: 600,
-          ref: 'DISMISS-588777',
-          desc: 'Payment checkout dismissed by user',
-          method: 'Razorpay Secure',
-          status: 'Deleted Record',
-          failureReason: 'Payment checkout dismissed by user',
-          originalDate: '02 Nov 2026, 03:46 pm',
-          deletedAt: '02 Nov 2026, 08:15 pm',
-          deletedBy: 'Sales Admin',
-        },
-      ];
-    }
-
-    res.json({ ok: true, history: list });
+    res.json({ ok: true, history: result.rows.map(mapDeletedFailedTxRow) });
   } catch (err) {
     console.error('[GET /api/sales/failed-transactions/history]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -1511,10 +1499,19 @@ app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
       await archiveFailedTransactions({
         whereClause: `
           LOWER(wt.status) LIKE '%fail%' 
+          OR LOWER(wt.status) LIKE '%declin%'
+          OR LOWER(wt.status) LIKE '%cancel%'
+          OR LOWER(wt.status) LIKE '%dismiss%'
+          OR LOWER(wt.status) LIKE '%reject%'
           OR LOWER(wt.tx_type) LIKE '%fail%'
           OR LOWER(wt.description) LIKE '%fail%'
+          OR LOWER(wt.description) LIKE '%declin%'
+          OR LOWER(wt.description) LIKE '%dismiss%'
+          OR LOWER(wt.description) LIKE '%cancel%'
+          OR LOWER(wt.description) LIKE '%reject%'
           OR LOWER(wt.payment_method) LIKE '%fail%'
           OR wt.reference_utr LIKE 'DISMISS-%'
+          OR wt.reference_utr LIKE 'FAIL-%'
         `,
         txSnapshot,
       });
@@ -1522,10 +1519,19 @@ app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
       const delRes = await query(`
         DELETE FROM wallet_transactions 
         WHERE LOWER(status) LIKE '%fail%' 
+           OR LOWER(status) LIKE '%declin%'
+           OR LOWER(status) LIKE '%cancel%'
+           OR LOWER(status) LIKE '%dismiss%'
+           OR LOWER(status) LIKE '%reject%'
            OR LOWER(tx_type) LIKE '%fail%'
            OR LOWER(description) LIKE '%fail%'
+           OR LOWER(description) LIKE '%declin%'
+           OR LOWER(description) LIKE '%dismiss%'
+           OR LOWER(description) LIKE '%cancel%'
+           OR LOWER(description) LIKE '%reject%'
            OR LOWER(payment_method) LIKE '%fail%'
            OR reference_utr LIKE 'DISMISS-%'
+           OR reference_utr LIKE 'FAIL-%'
         RETURNING id
       `);
       return res.json({ ok: true, deletedCount: delRes.rowCount });
@@ -1569,10 +1575,19 @@ app.delete('/api/sales/failed-transactions', async (req, res) => {
       await archiveFailedTransactions({
         whereClause: `
           LOWER(wt.status) LIKE '%fail%' 
+          OR LOWER(wt.status) LIKE '%declin%'
+          OR LOWER(wt.status) LIKE '%cancel%'
+          OR LOWER(wt.status) LIKE '%dismiss%'
+          OR LOWER(wt.status) LIKE '%reject%'
           OR LOWER(wt.tx_type) LIKE '%fail%'
           OR LOWER(wt.description) LIKE '%fail%'
+          OR LOWER(wt.description) LIKE '%declin%'
+          OR LOWER(wt.description) LIKE '%dismiss%'
+          OR LOWER(wt.description) LIKE '%cancel%'
+          OR LOWER(wt.description) LIKE '%reject%'
           OR LOWER(wt.payment_method) LIKE '%fail%'
           OR wt.reference_utr LIKE 'DISMISS-%'
+          OR wt.reference_utr LIKE 'FAIL-%'
         `,
         txSnapshot,
       });
@@ -1580,10 +1595,19 @@ app.delete('/api/sales/failed-transactions', async (req, res) => {
       const delRes = await query(`
         DELETE FROM wallet_transactions 
         WHERE LOWER(status) LIKE '%fail%' 
+           OR LOWER(status) LIKE '%declin%'
+           OR LOWER(status) LIKE '%cancel%'
+           OR LOWER(status) LIKE '%dismiss%'
+           OR LOWER(status) LIKE '%reject%'
            OR LOWER(tx_type) LIKE '%fail%'
            OR LOWER(description) LIKE '%fail%'
+           OR LOWER(description) LIKE '%declin%'
+           OR LOWER(description) LIKE '%dismiss%'
+           OR LOWER(description) LIKE '%cancel%'
+           OR LOWER(description) LIKE '%reject%'
            OR LOWER(payment_method) LIKE '%fail%'
            OR reference_utr LIKE 'DISMISS-%'
+           OR reference_utr LIKE 'FAIL-%'
         RETURNING id
       `);
       return res.json({ ok: true, deletedCount: delRes.rowCount });
@@ -2461,19 +2485,48 @@ app.post('/api/wallets/topup', async (req, res) => {
 // Record failed / declined payment attempts into customer wallet transaction ledger
 app.post('/api/wallets/failed-transaction', async (req, res) => {
   try {
-    const { customerId, phone, username, amount, referenceUtr, description, paymentMethod, failureReason } = req.body || {};
+    const { customerId, phone, username, companyName, company, amount, referenceUtr, description, paymentMethod, failureReason } = req.body || {};
     const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
-    const custRes = await query(
-      `SELECT * FROM customers WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
-      [customerId || '', cleanPhone, username || '']
+
+    let custRes = await query(
+      `SELECT * FROM customers 
+       WHERE id = $1 
+          OR (phone IS NOT NULL AND phone != '' AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = $2)
+          OR (username IS NOT NULL AND username != '' AND LOWER(username) = LOWER($3))
+       LIMIT 1`,
+      [customerId || '', cleanPhone || '9999999999', username || '']
     );
-    if (!custRes.rowCount) {
-      return res.status(404).json({ ok: false, error: 'Customer not found' });
+
+    let cust = custRes.rows[0];
+    if (!cust) {
+      const newCustId = customerId || (cleanPhone ? `cust_${cleanPhone}` : `cust_${Date.now()}`);
+      const newUsername = username || (cleanPhone ? `user_${cleanPhone}` : `client_${Date.now().toString().slice(-4)}`);
+      const newComp = companyName || company || 'Client Account';
+      const insCust = await query(`
+        INSERT INTO customers (id, username, company_name, contact_person, phone, registered_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone
+        RETURNING *
+      `, [newCustId, newUsername, newComp, newUsername, cleanPhone || '9999999999']);
+      cust = insCust.rows[0];
     }
-    const cust = custRes.rows[0];
+
     const walRes = await query('SELECT id, available_balance FROM wallets WHERE customer_id = $1 LIMIT 1', [cust.id]);
-    const walletId = walRes.rows[0]?.id || null;
-    const currentBal = Number(walRes.rows[0]?.available_balance || 0);
+    let walletId = walRes.rows[0]?.id;
+    let currentBal = Number(walRes.rows[0]?.available_balance || 0);
+
+    if (!walletId) {
+      const newWalId = `wal_${cust.id}`;
+      const walIns = await query(`
+        INSERT INTO wallets (id, customer_id, available_balance)
+        VALUES ($1, $2, 0)
+        ON CONFLICT (customer_id) DO UPDATE SET customer_id = EXCLUDED.customer_id
+        RETURNING id, available_balance
+      `, [newWalId, cust.id]);
+      walletId = walIns.rows[0]?.id || newWalId;
+      currentBal = 0;
+    }
+
     const cleanAmount = Number(amount || 0);
     const txId = `tx_fail_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const utr = (referenceUtr || `FAIL-${Date.now().toString().slice(-6)}`).trim();
@@ -2483,8 +2536,11 @@ app.post('/api/wallets/failed-transaction', async (req, res) => {
 
     const txInsert = await query(
       `INSERT INTO wallet_transactions (
-        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-      ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Failed ✕')
+        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
+      ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Payment Declined ✕', NOW())
+      ON CONFLICT (reference_utr) DO UPDATE SET 
+        status = 'Payment Declined ✕',
+        description = EXCLUDED.description
       RETURNING *`,
       [txId, cust.id, walletId, cleanAmount > 0 ? cleanAmount : 300, currentBal, utr, txDesc, meth]
     );

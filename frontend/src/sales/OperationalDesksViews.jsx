@@ -6413,149 +6413,60 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
 export function FailedTransactionsDesk({ customers = [], setCustomers }) {
   const [filter, setFilter] = useState('all'); // 'all' | 'high' | 'upi' | 'card' | 'deleted'
   const [search, setSearch] = useState('');
-  const [failedList, setFailedList] = useState([]);
+  const [failedList, setFailedList] = useState(() => {
+    try {
+      const raw = localStorage.getItem('growthline_failed_transactions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
   const [loading, setLoading] = useState(true);
   const [selectedFailTx, setSelectedFailTx] = useState(null);
   const [topupCust, setTopupCust] = useState(null);
   const [topupAmount, setTopupAmount] = useState(1000);
 
-  // Deleted history archive state
+  // Deleted history archive state (dynamically fetched from PostgreSQL & synced)
   const [deletedHistoryList, setDeletedHistoryList] = useState(() => {
     try {
       const raw = localStorage.getItem('growthline_deleted_failed_transactions');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
-    return [
-      {
-        id: 'del_hist_599471',
-        originalId: 'tx_fail_599471',
-        customerId: '9724916167',
-        customerName: 'Harsh Enterprises',
-        companyName: 'Harsh Enterprises',
-        contactPerson: 'Harsh',
-        phone: '9724916167',
-        email: 'harsh@enterprises.com',
-        city: 'Pune',
-        state: 'Maharashtra',
-        category: 'IT & Software',
-        amount: 300,
-        ref: 'DISMISS-599471',
-        desc: 'Payment checkout dismissed by user',
-        method: 'Razorpay Secure',
-        status: 'Deleted Record',
-        failureReason: 'Payment checkout dismissed by user',
-        originalDate: '02 Nov 2026, 03:46 pm',
-        deletedAt: '02 Nov 2026, 08:15 pm',
-        deletedBy: 'Sales Admin',
-      },
-      {
-        id: 'del_hist_588777',
-        originalId: 'tx_fail_588777',
-        customerId: '9724916167',
-        customerName: 'Harsh Enterprises',
-        companyName: 'Harsh Enterprises',
-        contactPerson: 'Harsh',
-        phone: '9724916167',
-        email: 'harsh@enterprises.com',
-        city: 'Pune',
-        state: 'Maharashtra',
-        category: 'IT & Software',
-        amount: 600,
-        ref: 'DISMISS-588777',
-        desc: 'Payment checkout dismissed by user',
-        method: 'Razorpay Secure',
-        status: 'Deleted Record',
-        failureReason: 'Payment checkout dismissed by user',
-        originalDate: '02 Nov 2026, 03:46 pm',
-        deletedAt: '02 Nov 2026, 08:15 pm',
-        deletedBy: 'Sales Admin',
-      },
-    ];
+    return [];
   });
 
   const loadFailedTransactions = React.useCallback(async () => {
     setLoading(true);
-    let list = [];
     try {
       const res = await crmApi.getFailedTransactions();
       if (res && res.ok && Array.isArray(res.failedTransactions)) {
-        list = res.failedTransactions;
+        setFailedList(res.failedTransactions);
+        try {
+          localStorage.setItem('growthline_failed_transactions', JSON.stringify(res.failedTransactions));
+        } catch (e) {}
+        setLoading(false);
+        return;
       }
     } catch (e) {
       console.warn('[Failed transactions API fallback]', e);
     }
 
-    // Merge with any failed transactions in local storage
     try {
-      const raw = localStorage.getItem('growthline_wallet_transactions');
+      const raw = localStorage.getItem('growthline_failed_transactions');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          const localFails = parsed.filter(
-            (t) =>
-              String(t.status || '').toLowerCase().includes('fail') ||
-              String(t.type || '').toLowerCase().includes('fail')
-          );
-          // Match with customer data for phone/company if missing
-          const enrichedLocal = localFails.map((t) => {
-            const cleanPhone = String(t.customerPhone || t.phone || t.customerId || '').replace(/\D/g, '').slice(-10);
-            const matchedCust = customers.find(
-              (c) => c.id === t.customerId || (cleanPhone && c.phone && String(c.phone).includes(cleanPhone))
-            );
-
-            const rawUser = matchedCust?.username || t.customerUsername || '';
-            const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : '';
-
-            let contactTitle = matchedCust?.contactPerson || matchedCust?.name || t.contactPerson || '';
-            if (!contactTitle || contactTitle.toLowerCase() === 'registered business' || contactTitle.toLowerCase() === 'account admin') {
-              contactTitle = capUser || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
-            }
-
-            let companyTitle = matchedCust?.companyName || t.company || '';
-            if (!companyTitle || companyTitle.toLowerCase() === 'registered business' || companyTitle.toLowerCase() === 'corporate workspace') {
-              companyTitle = capUser ? `${capUser} Enterprises` : contactTitle;
-            }
-
-            return {
-              id: t.id,
-              customerId: t.customerId || matchedCust?.id,
-              customerName: companyTitle,
-              companyName: companyTitle,
-              contactPerson: contactTitle,
-              username: rawUser,
-              phone: matchedCust?.phone || cleanPhone || '',
-              email: matchedCust?.email || '',
-              city: matchedCust?.city || '',
-              state: matchedCust?.state || 'Maharashtra',
-              category: matchedCust?.category || 'IT & Software',
-              amount: Number(t.amount || 0),
-              ref: t.ref || t.id,
-              desc: t.desc || 'Online recharge failed',
-              method: t.method || 'Razorpay Gateway',
-              status: t.status || 'Failed ✕',
-              failureReason: t.failureReason || 'Bank transaction declined by customer',
-              date: t.date || 'Recently Failed',
-            };
-          });
-
-          // Avoid duplicates by reference / id
-          const existingRefs = new Set(list.map((item) => item.ref || item.id));
-          enrichedLocal.forEach((item) => {
-            if (!existingRefs.has(item.ref || item.id)) {
-              list.push(item);
-              existingRefs.add(item.ref || item.id);
-            }
-          });
+          setFailedList(parsed);
         }
       }
     } catch (e) {}
-
-    setFailedList(list);
     setLoading(false);
-  }, [customers]);
+  }, []);
 
   const loadDeletedHistory = React.useCallback(async () => {
     try {
@@ -6565,15 +6476,51 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
         try {
           localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(res.history));
         } catch (e) {}
+        return;
       }
     } catch (e) {
       console.warn('[Load deleted history fallback]', e);
     }
+
+    try {
+      const raw = localStorage.getItem('growthline_deleted_failed_transactions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setDeletedHistoryList(parsed);
+        }
+      }
+    } catch (e) {}
   }, []);
 
   useEffect(() => {
     loadFailedTransactions();
     loadDeletedHistory();
+
+    const handleSync = (e) => {
+      const fresh = e?.detail;
+      if (fresh) {
+        if (Array.isArray(fresh.failedTransactions)) {
+          setFailedList(fresh.failedTransactions);
+        }
+        if (Array.isArray(fresh.deletedFailedTransactions)) {
+          setDeletedHistoryList(fresh.deletedFailedTransactions);
+        }
+      }
+    };
+
+    const handleFailedTxChange = () => {
+      loadFailedTransactions();
+      loadDeletedHistory();
+    };
+
+    window.addEventListener('growthline_postgres_synced', handleSync);
+    window.addEventListener('growthline_failed_tx_updated', handleFailedTxChange);
+
+    return () => {
+      window.removeEventListener('growthline_postgres_synced', handleSync);
+      window.removeEventListener('growthline_failed_tx_updated', handleFailedTxChange);
+    };
   }, [loadFailedTransactions, loadDeletedHistory]);
 
   const filtered = failedList.filter((item) => {
@@ -6745,10 +6692,20 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       }
     } catch (e) {}
 
-    setFailedList((prev) => prev.filter((t) => t.id !== tx.id && t.ref !== tx.ref));
+    setFailedList((prev) => {
+      const updated = prev.filter((t) => t.id !== tx.id && t.ref !== tx.ref);
+      try {
+        localStorage.setItem('growthline_failed_transactions', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
     if (selectedFailTx && (selectedFailTx.id === tx.id || selectedFailTx.ref === tx.ref)) {
       setSelectedFailTx(null);
     }
+
+    try {
+      window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
+    } catch (e) {}
 
     Swal.fire({
       icon: 'success',
@@ -6832,7 +6789,14 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     } catch (e) {}
 
     setFailedList([]);
+    try {
+      localStorage.setItem('growthline_failed_transactions', JSON.stringify([]));
+    } catch (e) {}
     setSelectedFailTx(null);
+
+    try {
+      window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
+    } catch (e) {}
 
     Swal.fire({
       icon: 'success',
@@ -6887,7 +6851,17 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       status: 'Failed ✕',
       date: item.originalDate || item.date || 'Recently Failed',
     };
-    setFailedList((prev) => [restoredItem, ...prev.filter(t => t.id !== restoredItem.id && t.ref !== restoredItem.ref)]);
+    setFailedList((prev) => {
+      const updated = [restoredItem, ...prev.filter(t => t.id !== restoredItem.id && t.ref !== restoredItem.ref)];
+      try {
+        localStorage.setItem('growthline_failed_transactions', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    try {
+      window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
+    } catch (e) {}
 
     Swal.fire({
       icon: 'success',
@@ -6937,6 +6911,10 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       return updated;
     });
 
+    try {
+      window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
+    } catch (e) {}
+
     Swal.fire({
       icon: 'success',
       title: 'Permanently Purged',
@@ -6979,6 +6957,10 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     try {
       localStorage.removeItem('growthline_deleted_failed_transactions');
     } catch (err) {}
+
+    try {
+      window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
+    } catch (e) {}
 
     Swal.fire({
       icon: 'success',

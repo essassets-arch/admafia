@@ -102,27 +102,32 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   const [activeTab, setActiveTab] = useState(getDeskFromUrl);
   const [failedTxCount, setFailedTxCount] = useState(0);
 
+  const updateFailedCount = React.useCallback(async () => {
+    try {
+      const res = await crmApi.getFailedTransactions();
+      if (res && res.ok && Array.isArray(res.failedTransactions)) {
+        setFailedTxCount(res.failedTransactions.length);
+        try {
+          localStorage.setItem('growthline_failed_transactions', JSON.stringify(res.failedTransactions));
+        } catch (e) {}
+        return;
+      }
+    } catch (e) {}
+
+    try {
+      const raw = localStorage.getItem('growthline_failed_transactions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setFailedTxCount(parsed.length);
+        }
+      }
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
-    const updateFailedCount = async () => {
-      try {
-        let count = 0;
-        const res = await crmApi.getFailedTransactions();
-        if (res && res.ok && Array.isArray(res.failedTransactions)) {
-          count = res.failedTransactions.length;
-        }
-        const raw = localStorage.getItem('growthline_wallet_transactions');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            const localFails = parsed.filter(t => String(t.status || '').toLowerCase().includes('fail'));
-            count = Math.max(count, localFails.length);
-          }
-        }
-        setFailedTxCount(count);
-      } catch (e) {}
-    };
     updateFailedCount();
-  }, [activeTab]);
+  }, [updateFailedCount, activeTab]);
 
   const navigateToDesk = (deskKey, targetHash) => {
     setActiveTab(deskKey);
@@ -190,6 +195,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         if (Array.isArray(state.customers)) setCustomersState(state.customers);
         if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
         if (Array.isArray(state.queries)) setQueries(state.queries);
+        if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
       }
     });
 
@@ -199,6 +205,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         if (Array.isArray(state.customers)) setCustomersState(state.customers);
         if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
         if (Array.isArray(state.queries)) setQueries(state.queries);
+        if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
       }
     };
 
@@ -231,6 +238,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
     };
 
     window.addEventListener('growthline_postgres_synced', handlePostgresSynced);
+    window.addEventListener('growthline_failed_tx_updated', updateFailedCount);
     window.addEventListener('growthline_customer_registered', handleNewRegistration);
     window.addEventListener('growthline_active_user_changed', handleActiveUserSync);
     window.addEventListener('growthline_payment_recorded', handleActiveUserSync);
@@ -240,6 +248,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
 
     return () => {
       window.removeEventListener('growthline_postgres_synced', handlePostgresSynced);
+      window.removeEventListener('growthline_failed_tx_updated', updateFailedCount);
       window.removeEventListener('growthline_customer_registered', handleNewRegistration);
       window.removeEventListener('growthline_active_user_changed', handleActiveUserSync);
       window.removeEventListener('growthline_payment_recorded', handleActiveUserSync);

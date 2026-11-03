@@ -708,10 +708,11 @@ export function AddFundsModal({
         modal: {
           ondismiss: function () {
             setIsProcessing(false);
+            const dismissRef = `DISMISS-${Date.now().toString().slice(-6)}`;
             if (onPaymentFailed) {
               onPaymentFailed({
                 id: `tx_fail_${Date.now()}`,
-                ref: `DISMISS-${Date.now().toString().slice(-6)}`,
+                ref: dismissRef,
                 amount: currentAmount,
                 desc: 'Payment checkout dismissed by user',
                 status: 'Failed ✕',
@@ -721,6 +722,19 @@ export function AddFundsModal({
                 date: 'Today, Just now',
               });
             }
+            try {
+              crmApi.recordFailedTransaction({
+                customerId: customer?.id,
+                phone: customer?.phone,
+                username: customer?.username,
+                companyName: customer?.companyName || customer?.name,
+                amount: currentAmount,
+                referenceUtr: dismissRef,
+                description: 'Payment checkout dismissed by user',
+                failureReason: 'Checkout closed by user',
+                paymentMethod: 'Razorpay Secure',
+              }).catch(() => {});
+            } catch (e) {}
           },
         },
       };
@@ -729,10 +743,11 @@ export function AddFundsModal({
       rzp.on('payment.failed', function (resp) {
         setIsProcessing(false);
         const failReason = resp.error?.description || resp.error?.reason || 'Payment failed';
+        const failRef = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
         if (onPaymentFailed) {
           onPaymentFailed({
             id: `tx_fail_${Date.now()}`,
-            ref: resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`,
+            ref: failRef,
             amount: currentAmount,
             desc: `Online recharge failed: ${failReason}`,
             status: 'Failed ✕',
@@ -742,6 +757,19 @@ export function AddFundsModal({
             date: 'Today, Just now',
           });
         }
+        try {
+          crmApi.recordFailedTransaction({
+            customerId: customer?.id,
+            phone: customer?.phone,
+            username: customer?.username,
+            companyName: customer?.companyName || customer?.name,
+            amount: currentAmount,
+            referenceUtr: failRef,
+            description: `Online recharge failed: ${failReason}`,
+            failureReason: failReason,
+            paymentMethod: 'Razorpay Secure',
+          }).catch(() => {});
+        } catch (e) {}
         setSweetAlert({
           type: 'error',
           title: 'Payment Failed',
@@ -2148,10 +2176,11 @@ export function MarketingGrowthPaymentModal({
         modal: {
           ondismiss: function () {
             setIsProcessing(false);
+            const dismissRef = `DISMISS-${Date.now().toString().slice(-6)}`;
             if (onPaymentFailed) {
               onPaymentFailed({
                 id: `tx_fail_${Date.now()}`,
-                ref: `DISMISS-${Date.now().toString().slice(-6)}`,
+                ref: dismissRef,
                 amount: currentAmount,
                 desc: 'Payment checkout dismissed by user',
                 status: 'Failed ✕',
@@ -2161,6 +2190,19 @@ export function MarketingGrowthPaymentModal({
                 date: 'Today, Just now',
               });
             }
+            try {
+              crmApi.recordFailedTransaction({
+                customerId: customer?.id,
+                phone: customer?.phone,
+                username: customer?.username,
+                companyName: customer?.companyName || customer?.name,
+                amount: currentAmount,
+                referenceUtr: dismissRef,
+                description: 'Payment checkout dismissed by user',
+                failureReason: 'Checkout closed by user',
+                paymentMethod: 'Razorpay Secure',
+              }).catch(() => {});
+            } catch (e) {}
           },
         },
       };
@@ -2169,10 +2211,11 @@ export function MarketingGrowthPaymentModal({
       rzp.on('payment.failed', function (resp) {
         setIsProcessing(false);
         const failReason = resp.error?.description || resp.error?.reason || 'Payment failed';
+        const failRef = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
         if (onPaymentFailed) {
           onPaymentFailed({
             id: `tx_fail_${Date.now()}`,
-            ref: resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`,
+            ref: failRef,
             amount: currentAmount,
             desc: `Online recharge failed: ${failReason}`,
             status: 'Failed ✕',
@@ -2182,6 +2225,19 @@ export function MarketingGrowthPaymentModal({
             date: 'Today, Just now',
           });
         }
+        try {
+          crmApi.recordFailedTransaction({
+            customerId: customer?.id,
+            phone: customer?.phone,
+            username: customer?.username,
+            companyName: customer?.companyName || customer?.name,
+            amount: currentAmount,
+            referenceUtr: failRef,
+            description: `Online recharge failed: ${failReason}`,
+            failureReason: failReason,
+            paymentMethod: 'Razorpay Secure',
+          }).catch(() => {});
+        } catch (e) {}
         setSweetAlert({
           type: 'error',
           title: 'Payment Failed',
