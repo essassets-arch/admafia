@@ -915,15 +915,6 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                       >
                         {c.status === 'active' ? 'Suspend' : 'Activate'}
                       </button>
-                      <button
-                        type="button"
-                        className="desk-action-btn"
-                        style={{ color: '#dc2626', borderColor: '#fca5a5', background: '#fff1f2' }}
-                        title="Permanently remove customer and all data"
-                        onClick={() => handleDeleteCustomer(c)}
-                      >
-                        <Trash2 size={13} />
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -1038,14 +1029,6 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button
-                type="button"
-                className="desk-action-btn"
-                style={{ color: '#dc2626', borderColor: '#fca5a5', background: '#fff1f2', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                onClick={() => handleDeleteCustomer(selectedCust)}
-              >
-                <Trash2 size={14} /> Delete Account
-              </button>
               <button
                 type="button"
                 className="sales-btn-secondary"
@@ -4731,17 +4714,6 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
                         >
                           <MessageSquare size={13} color="#059669" />
                         </a>
-
-                        {/* Delete Customer Button */}
-                        <button
-                          type="button"
-                          className="desk-action-btn"
-                          style={{ color: '#dc2626', borderColor: '#fca5a5', background: '#fff1f2' }}
-                          title="Permanently remove customer and all data"
-                          onClick={() => handleDeleteCustomer(c)}
-                        >
-                          <Trash2 size={13} />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -4856,14 +4828,6 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
               >
                 <MessageSquare size={14} /> Open WhatsApp Chat
               </a>
-              <button
-                type="button"
-                className="desk-action-btn"
-                style={{ color: '#dc2626', borderColor: '#fca5a5', background: '#fff1f2', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                onClick={() => handleDeleteCustomer(selectedWalletCust)}
-              >
-                <Trash2 size={14} /> Delete Account
-              </button>
               <button
                 type="button"
                 className="sales-btn-primary"
