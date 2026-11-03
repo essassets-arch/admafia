@@ -1305,44 +1305,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Col 2: Company Operations Desks */}
-            <div className="footer-col">
-              <h4>Operations Desks</h4>
-              <ul className="footer-links">
-                <li>
-                  <a href="/superadmin" onClick={(e) => { e.preventDefault(); navigateTo('/superadmin', 'superadmin-portal'); }}>
-                    <Crown size={14} color="#f59e0b" />
-                    <span>Super Admin Control</span>
-                  </a>
-                </li>
-                <li>
-                  <a href="/marketing" onClick={(e) => { e.preventDefault(); navigateTo('/marketing', 'marketing-portal'); }}>
-                    <Sparkles size={14} color="#38bdf8" />
-                    <span>Marketing Department</span>
-                  </a>
-                </li>
-                <li>
-                  <a href="/graphics" onClick={(e) => { e.preventDefault(); navigateTo('/graphics', 'graphics-portal'); }}>
-                    <Palette size={14} color="#ec4899" />
-                    <span>Graphics Creative Studio</span>
-                  </a>
-                </li>
-                <li>
-                  <a href="/sales" onClick={(e) => { e.preventDefault(); navigateTo('/sales', 'sales-portal'); }}>
-                    <Briefcase size={14} color="#10b981" />
-                    <span>Sales Operations</span>
-                  </a>
-                </li>
-                <li>
-                  <a href="/admin/login" onClick={(e) => { e.preventDefault(); navigateTo('/admin/login', 'admin-login'); }}>
-                    <Shield size={14} color="#a855f7" />
-                    <span>Operations Gateway</span>
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            {/* Col 3: Client Workspace */}
+            {/* Col 2: Client Workspace */}
             <div className="footer-col">
               <h4>Customer Workspace</h4>
               <ul className="footer-links">
