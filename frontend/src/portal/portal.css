@@ -12357,68 +12357,65 @@
    GROWTHLINE CRM - PROPER STYLING SYSTEM FOR CUSTOMER PORTAL (/app/)
    ========================================================================== */
 
-/* 1. Global Layout & Main Viewport */
-.portal-app-root {
-  display: flex !important;
-  height: 100vh !important;
-  max-height: 100vh !important;
-  background: var(--portal-bg, #f8fafc) !important;
-  color: var(--portal-text, #1e293b) !important;
-  font-family: 'Figtree', 'Plus Jakarta Sans', system-ui, sans-serif !important;
-  overflow: hidden !important;
-  width: 100% !important;
-}
-
-.portal-main-area {
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  min-width: 0 !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  background: var(--portal-bg, #f8fafc) !important;
-  height: 100vh !important;
-  max-height: 100vh !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-
-.portal-content-body {
-  flex: 1 !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  margin: 0 !important;
-  padding: 24px 32px 64px !important;
-  box-sizing: border-box !important;
-}
-
-@media (max-width: 768px) {
-  .portal-content-body {
-    padding: 16px 14px 60px !important;
+/* 1. Desktop Layout & Main Viewport (> 860px) */
+@media (min-width: 861px) {
+  .portal-app-root {
+    display: flex !important;
+    flex-direction: row !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    background: var(--portal-bg, #f8fafc) !important;
+    color: var(--portal-text, #1e293b) !important;
+    font-family: 'Figtree', 'Plus Jakarta Sans', system-ui, sans-serif !important;
+    overflow: hidden !important;
+    width: 100% !important;
   }
-}
 
-/* 2. Sidebar Navigation */
-.portal-sidebar {
-  width: 270px !important;
-  background: #ffffff !important;
-  color: #1e293b !important;
-  border-right: 1px solid #e2e8f0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
-  flex-shrink: 0 !important;
-  position: sticky !important;
-  top: 0 !important;
-  height: 100vh !important;
-  max-height: 100vh !important;
-  overflow: hidden !important;
-  z-index: 50 !important;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.02) !important;
-}
+  .portal-main-area {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: var(--portal-bg, #f8fafc) !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
 
-.portal-app-root.collapsed .portal-sidebar {
-  width: 78px !important;
+  .portal-content-body {
+    flex: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 24px 32px 64px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 2. Desktop Sidebar Navigation */
+  .portal-sidebar {
+    width: 270px !important;
+    background: #ffffff !important;
+    color: #1e293b !important;
+    border-right: 1px solid #e2e8f0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    flex-shrink: 0 !important;
+    position: sticky !important;
+    top: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+    z-index: 50 !important;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.02) !important;
+  }
+
+  .portal-app-root.collapsed .portal-sidebar {
+    width: 78px !important;
+  }
 }
 
 .sidebar-top {
@@ -15757,4 +15754,240 @@
 .btn-modal-action-secondary:hover {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+/* ==========================================================================
+   DESKTOP VIEWPORT GUARD (> 860px)
+   ========================================================================== */
+@media (min-width: 861px) {
+  .portal-mobile-top-bar {
+    display: none !important;
+  }
+  .portal-mobile-backdrop {
+    display: none !important;
+  }
+  .btn-mobile-sidebar-close {
+    display: none !important;
+  }
+}
+
+/* ==========================================================================
+   DEFINITIVE MOBILE & TABLET RESPONSIVE OVERRIDE (<= 860px)
+   Fixes horizontal flex clipping and blank white screen on mobile viewports
+   ========================================================================== */
+@media (max-width: 860px) {
+  /* 1. Root Container: Vertical Column Stack */
+  .portal-app-root {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    width: 100% !important;
+    position: relative !important;
+    background: var(--portal-bg, #f8fafc) !important;
+  }
+
+  /* 2. Mobile Top Header Bar */
+  .portal-mobile-top-bar {
+    display: flex !important;
+    width: 100% !important;
+    height: 60px !important;
+    min-height: 60px !important;
+    position: sticky !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 100 !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    padding: 0 14px !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05) !important;
+  }
+
+  /* 3. Off-Canvas Sliding Drawer Sidebar */
+  .portal-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 285px !important;
+    max-width: 85vw !important;
+    height: 100% !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    z-index: 9999 !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    box-shadow: 6px 0 28px rgba(0, 0, 0, 0.25) !important;
+    background: #ffffff !important;
+    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .portal-sidebar.mobile-open,
+  .portal-app-root.mobile-drawer-active .portal-sidebar {
+    transform: translateX(0) !important;
+  }
+
+  /* 4. Backdrop Overlay */
+  .portal-mobile-backdrop {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(15, 23, 42, 0.6) !important;
+    backdrop-filter: blur(4px) !important;
+    z-index: 9990 !important;
+  }
+
+  .btn-sidebar-collapse {
+    display: none !important;
+  }
+
+  .btn-mobile-sidebar-close {
+    display: flex !important;
+  }
+
+  /* 5. Main Area on Mobile (Directly below 60px header) */
+  .portal-main-area {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: calc(100vh - 60px) !important;
+    overflow-y: visible !important;
+    overflow-x: hidden !important;
+    background: var(--portal-bg, #f8fafc) !important;
+  }
+
+  .portal-content-body {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 14px 12px 64px !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  /* 6. Overview and Subpage Adjustments for Mobile */
+  .portal-overview-view,
+  .portal-lead-feed-page,
+  .portal-followups-feed-page,
+  .portal-wallet-exact-page,
+  .portal-profile-view {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .overview-title-block {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .overview-title-block > div:last-child {
+    width: 100% !important;
+    margin-left: 0 !important;
+    justify-content: space-between !important;
+  }
+
+  .header-ad-wallet-card {
+    flex: 1 1 auto !important;
+    max-width: 100% !important;
+  }
+
+  /* Ensure master cards have comfortable mobile padding */
+  .pacing-control-master-card,
+  .overall-performance-master-card,
+  .launch-web-domain-card,
+  .recent-priority-enquiries-panel,
+  .registration-status-banner-card {
+    padding: 16px 14px !important;
+    border-radius: 16px !important;
+  }
+
+  .pacing-master-header-exact {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+  }
+
+  .pacing-master-left-group {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .pacing-status-toggle-cluster {
+    width: 100% !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding-top: 10px !important;
+    border-top: 1px solid #f1f5f9 !important;
+  }
+
+  .today-campaign-bottom-bar-exact {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  .today-budget-actions-right {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  /* Ensure grids stack gracefully on small mobile screens */
+  .metrics-quad-grid,
+  .pacing-metrics-quad,
+  .perf-metric-cards-grid,
+  .wallet-kpi-quad-exact-grid,
+  .engine-three-cards-grid,
+  .pacing-three-cards-grid,
+  .perf-three-stat-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .days-cards-grid,
+  .seven-days-cards-grid,
+  .seven-days-cards-grid-exact {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .days-row-exact-grid {
+    display: flex !important;
+    overflow-x: auto !important;
+    gap: 8px !important;
+    padding-bottom: 8px !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .day-box-exact {
+    flex: 0 0 85px !important;
+    min-width: 85px !important;
+  }
+
+  /* Tables & Lists horizontal scroll wrapper on mobile */
+  .table-responsive,
+  .desk-table-container,
+  .feed-table-container {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
 }
