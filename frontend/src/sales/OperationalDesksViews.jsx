@@ -6080,11 +6080,49 @@ export { default as CustomerGroupsDesk } from './CustomerGroupsDesk';
 /* ==========================================================================
    APPROVED MEMBERS DESK: Customers who completed Payment & Profile KYC
    ========================================================================== */
+export const resolveProperMemberName = (m) => {
+  if (!m) return { displayName: 'Client Member', contactName: 'Client Lead', username: '', initials: 'CM' };
+
+  const isGeneric = (str) =>
+    !str ||
+    str.trim().toLowerCase() === 'registered business' ||
+    str.trim().toLowerCase() === 'corporate workspace' ||
+    str.trim().toLowerCase() === 'workspace' ||
+    str.trim().toLowerCase() === 'user';
+
+  const cleanUsername = (m.username || '').replace(/^@/, '').trim();
+  const rawCompany = (m.companyName || m.name || '').trim();
+  const rawContact = (m.contactPerson || m.contact || '').trim();
+
+  let mainName = !isGeneric(rawCompany) ? rawCompany : '';
+  let contactName = !isGeneric(rawContact) ? rawContact : '';
+
+  if (!mainName && !contactName && cleanUsername) {
+    mainName = cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1);
+    contactName = mainName;
+  } else if (!mainName) {
+    mainName = contactName || (cleanUsername ? cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1) : '');
+  } else if (!contactName) {
+    contactName = cleanUsername || mainName;
+  }
+
+  const avatarSource = cleanUsername || mainName || 'AM';
+  const initials = avatarSource.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'AM';
+
+  return {
+    displayName: mainName || (cleanUsername ? `@${cleanUsername}` : 'Verified Client'),
+    contactName: contactName || (cleanUsername ? `@${cleanUsername}` : 'Authorized Lead'),
+    username: cleanUsername,
+    initials,
+  };
+};
+
 export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDesk }) {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [balanceFilter, setBalanceFilter] = useState('all'); // 'all' | 'healthy' | 'low' | 'zero'
   const [selectedMember, setSelectedMember] = useState(null);
+  const selProper = selectedMember ? resolveProperMemberName(selectedMember) : null;
 
   // Criteria: Member who has completed both Gate 1 Payment and Gate 2 Profile Submission
   const isApproved = (c) => {
@@ -6112,6 +6150,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
     const q = search.trim().toLowerCase();
     const matchSearch =
       !q ||
+      (c.username || '').toLowerCase().includes(q) ||
       (c.companyName || c.name || '').toLowerCase().includes(q) ||
       (c.contactPerson || c.contact || '').toLowerCase().includes(q) ||
       (c.phone || '').includes(q) ||
@@ -6343,6 +6382,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                 const isLow = runway > 0 && runway <= 3;
                 const isLowBalance = bal < pacing || bal <= 0 || runway <= 1;
                 const cleanPhone = (m.phone || '').trim();
+                const proper = resolveProperMemberName(m);
 
                 return (
                   <tr key={m.id || m.phone}>
@@ -6350,11 +6390,23 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                     <td>
                       <div className="appr-client-cell">
                         <div className="appr-client-avatar">
-                          {(m.companyName || m.name || 'AM').slice(0, 2).toUpperCase()}
+                          {proper.initials}
                         </div>
                         <div className="appr-client-info">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
+                            {proper.username && (
+                              <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.80rem' }}>
+                                @{proper.username}
+                              </span>
+                            )}
+                            <span className="desk-pill" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px' }}>
+                              ✓ Approved Member
+                            </span>
+                          </div>
                           <div className="appr-client-name-row">
-                            <span className="appr-client-name">{m.companyName || m.name}</span>
+                            <span className="appr-client-name" style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a' }}>
+                              {proper.displayName}
+                            </span>
                             {isLowBalance && (
                               <span className="desk-pill pill-rose appr-low-pill">
                                 ⚠️ Low Balance
@@ -6362,11 +6414,11 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                             )}
                           </div>
                           <div className="appr-client-lead">
-                            👤 <b>{m.contactPerson || m.contact || 'Authorized Lead'}</b> • +91{' '}
+                            👤 <b>{proper.contactName}</b> • +91{' '}
                             <span className="appr-phone">{cleanPhone}</span>
                           </div>
                           <div className="appr-client-meta">
-                            ✉️ {m.email || 'Registered via Web Portal'} • 📍 {m.city || 'India'}
+                            ✉️ {m.email || 'Registered via Web Portal'} • 📍 {m.city || m.state || 'India'}
                           </div>
                         </div>
                       </div>
@@ -6472,9 +6524,16 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                 <div className="desk-modal-tag" style={{ color: '#059669', marginBottom: 4 }}>
                   ✓ 100% KYC &amp; PAYMENT VERIFIED MEMBER
                 </div>
-                <h3 className="desk-modal-title" style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
-                  {selectedMember.companyName || selectedMember.name}
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    {selProper?.username && (
+                      <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.80rem' }}>
+                        @{selProper.username}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="desk-modal-title" style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+                    {selProper?.displayName || selectedMember.companyName || selectedMember.name}
+                  </h3>
               </div>
               <button type="button" className="desk-close-btn" onClick={() => setSelectedMember(null)}>
                 <X size={18} />
@@ -6484,7 +6543,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 22 }}>
               <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Authorized Contact</div>
-                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{selectedMember.contactPerson || selectedMember.contact}</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{selProper?.contactName || selectedMember.contactPerson || selectedMember.contact}</div>
                 <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>+91 {selectedMember.phone}</div>
               </div>
 
