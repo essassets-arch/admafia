@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Menu, X, ChevronRight, ChevronDown, Laptop, Shield, 
   Crown, Sparkles, Palette, Briefcase, Layers, ArrowRight, CheckCircle2,
-  Mail, Phone, MessageCircle, Clock 
+  Mail, Phone, MessageCircle 
 } from 'lucide-react';
 import MetaAdsCalculator from './components/MetaAdsCalculator';
 import WhatsAppWidget from './components/WhatsAppWidget';
@@ -1433,10 +1433,6 @@ export default function App() {
                     <MessageCircle size={15} color="#22c55e" />
                     <span>WhatsApp Support</span>
                   </a>
-                </li>
-                <li className="footer-contact-sub">
-                  <Clock size={13} color="#94a3b8" />
-                  <span>Mon – Sat: 9:30 AM – 7:00 PM IST</span>
                 </li>
               </ul>
             </div>

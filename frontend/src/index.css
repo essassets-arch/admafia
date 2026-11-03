@@ -1045,16 +1045,6 @@ details p {
   color: #ffb800 !important;
 }
 
-.footer-contact-sub {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.78rem;
-  color: #64748b;
-  margin-top: 4px;
-  padding-left: 2px;
-}
-
 .footer-col h4 {
   color: #f8fafc;
   font-size: 0.92rem;
