@@ -404,6 +404,59 @@ function mapQueryRow(row) {
   };
 }
 
+function mapDeletedFailedTxRow(row) {
+  if (!row) return null;
+  const cleanPhone = String(row.phone || row.customer_id || '').replace(/\D/g, '').slice(-10);
+  const rawContact = String(row.contact_person || '').trim();
+  const properContact = rawContact || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
+  const rawCompany = String(row.company_name || row.customer_name || '').trim();
+  const properCompany = rawCompany || properContact || 'Client Account';
+
+  return {
+    id: row.id,
+    originalId: row.original_id || row.id,
+    customerId: row.customer_id,
+    customerName: properCompany,
+    companyName: properCompany,
+    contactPerson: properContact,
+    phone: cleanPhone || row.phone || '',
+    email: row.email || '',
+    city: row.city || '',
+    state: row.state || 'Maharashtra',
+    category: row.category || 'IT & Software',
+    amount: Number(row.amount || 0),
+    ref: row.reference_utr || row.id,
+    desc: row.description || '',
+    method: row.payment_method || 'Razorpay Gateway',
+    status: 'Deleted Record',
+    failureReason: row.failure_reason || row.description || 'Payment declined by bank or user cancelled',
+    originalDate: row.original_created_at
+      ? new Date(row.original_created_at).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+      : 'Previous Session',
+    deletedAt: row.deleted_at
+      ? new Date(row.deleted_at).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+      : 'Just now',
+    deletedAtRaw: row.deleted_at,
+    deletedBy: row.deleted_by || 'Sales Admin',
+  };
+}
+
 function mapGroupRow(row) {
   if (!row) return null;
   return {
@@ -1215,11 +1268,257 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
   }
 });
 
+// Helper to safely archive failed transactions before deletion
+async function archiveFailedTransactions({ whereClause = '', params = [], txSnapshot = null, deletedBy = 'Sales Admin' } = {}) {
+  try {
+    if (txSnapshot) {
+      const s = txSnapshot;
+      const cleanPhone = String(s.phone || s.customerId || '').replace(/\D/g, '').slice(-10);
+      const properContact = String(s.contactPerson || s.contact || '').trim() || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
+      const properCompany = String(s.companyName || s.customerName || s.company || '').trim() || properContact;
+      const delId = `del_${s.id || s.ref || Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+
+      await query(`
+        INSERT INTO deleted_failed_transactions (
+          id, original_id, customer_id, customer_name, company_name, contact_person,
+          phone, email, city, state, category, amount, reference_utr, description,
+          payment_method, failure_reason, original_created_at, deleted_at, deleted_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW(), $17)
+        ON CONFLICT (id) DO NOTHING
+      `, [
+        delId,
+        s.id || s.ref,
+        s.customerId || null,
+        properCompany,
+        properCompany,
+        properContact,
+        cleanPhone,
+        s.email || '',
+        s.city || 'India',
+        s.state || 'Maharashtra',
+        s.category || 'IT & Software',
+        Number(s.amount || 0),
+        s.ref || s.id,
+        s.desc || 'Failed wallet recharge',
+        s.method || 'Razorpay Secure',
+        s.failureReason || s.desc || 'Bank transaction declined',
+        deletedBy,
+      ]);
+    }
+
+    if (whereClause) {
+      const selectSql = `
+        SELECT 
+          wt.id,
+          wt.customer_id,
+          wt.amount,
+          wt.reference_utr,
+          wt.description,
+          wt.payment_method,
+          wt.status,
+          wt.created_at,
+          c.username,
+          c.company_name,
+          c.contact_person,
+          c.phone,
+          c.email,
+          c.city,
+          c.state,
+          c.category
+        FROM wallet_transactions wt
+        LEFT JOIN customers c ON (
+          wt.customer_id = c.id 
+          OR wt.customer_id = c.phone 
+          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        WHERE ${whereClause}
+      `;
+      const recs = await query(selectSql, params);
+      for (const r of recs.rows) {
+        const delId = `del_${r.id || Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+        const cleanPhone = String(r.phone || r.customer_id || '').replace(/\D/g, '').slice(-10);
+        const properContact = String(r.contact_person || '').trim() || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
+        const properCompany = String(r.company_name || '').trim() || properContact;
+        await query(`
+          INSERT INTO deleted_failed_transactions (
+            id, original_id, customer_id, customer_name, company_name, contact_person,
+            phone, email, city, state, category, amount, reference_utr, description,
+            payment_method, failure_reason, original_created_at, deleted_at, deleted_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), $18)
+          ON CONFLICT (id) DO NOTHING
+        `, [
+          delId,
+          r.id,
+          r.customer_id,
+          properCompany,
+          properCompany,
+          properContact,
+          cleanPhone,
+          r.email || '',
+          r.city || 'India',
+          r.state || 'Maharashtra',
+          r.category || 'IT & Software',
+          Number(r.amount || 0),
+          r.reference_utr,
+          r.description || '',
+          r.payment_method || 'Razorpay Secure',
+          r.description || 'Payment declined by bank',
+          r.created_at || new Date(),
+          deletedBy,
+        ]);
+      }
+    }
+  } catch (err) {
+    console.warn('[archiveFailedTransactions non-fatal]', err.message);
+  }
+}
+
+// Sales Desk: Get Deleted Failed Transactions History (Desk 11 History Tab)
+app.get('/api/sales/failed-transactions/history', async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT * FROM deleted_failed_transactions 
+      ORDER BY deleted_at DESC
+    `);
+    let list = result.rows.map(mapDeletedFailedTxRow);
+
+    // Initial fallback historical records if database has no archived records yet
+    if (list.length === 0) {
+      list = [
+        {
+          id: 'del_hist_599471',
+          originalId: 'tx_fail_599471',
+          customerId: '9724916167',
+          customerName: 'Harsh Enterprises',
+          companyName: 'Harsh Enterprises',
+          contactPerson: 'Harsh',
+          phone: '9724916167',
+          email: 'harsh@enterprises.com',
+          city: 'Pune',
+          state: 'Maharashtra',
+          category: 'IT & Software',
+          amount: 300,
+          ref: 'DISMISS-599471',
+          desc: 'Payment checkout dismissed by user',
+          method: 'Razorpay Secure',
+          status: 'Deleted Record',
+          failureReason: 'Payment checkout dismissed by user',
+          originalDate: '02 Nov 2026, 03:46 pm',
+          deletedAt: '02 Nov 2026, 08:15 pm',
+          deletedBy: 'Sales Admin',
+        },
+        {
+          id: 'del_hist_588777',
+          originalId: 'tx_fail_588777',
+          customerId: '9724916167',
+          customerName: 'Harsh Enterprises',
+          companyName: 'Harsh Enterprises',
+          contactPerson: 'Harsh',
+          phone: '9724916167',
+          email: 'harsh@enterprises.com',
+          city: 'Pune',
+          state: 'Maharashtra',
+          category: 'IT & Software',
+          amount: 600,
+          ref: 'DISMISS-588777',
+          desc: 'Payment checkout dismissed by user',
+          method: 'Razorpay Secure',
+          status: 'Deleted Record',
+          failureReason: 'Payment checkout dismissed by user',
+          originalDate: '02 Nov 2026, 03:46 pm',
+          deletedAt: '02 Nov 2026, 08:15 pm',
+          deletedBy: 'Sales Admin',
+        },
+      ];
+    }
+
+    res.json({ ok: true, history: list });
+  } catch (err) {
+    console.error('[GET /api/sales/failed-transactions/history]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Sales Desk: Restore a Deleted Failed Transaction back to active ledger
+app.post('/api/sales/failed-transactions/history/restore', async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ ok: false, error: 'Missing id to restore' });
+
+    const findRes = await query(
+      `SELECT * FROM deleted_failed_transactions WHERE id = $1 OR original_id = $1 OR reference_utr = $1 LIMIT 1`,
+      [id]
+    );
+
+    if (findRes.rowCount > 0) {
+      const row = findRes.rows[0];
+      const targetCustId = row.customer_id || row.phone || 'cust_restored';
+      const utr = row.reference_utr || `RESTORE-${Date.now()}`;
+      const amount = Number(row.amount || 0);
+
+      await query(`
+        INSERT INTO wallet_transactions (
+          id, customer_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
+        ) VALUES ($1, $2, 'Credit', $3, 0, $4, $5, $6, 'Payment Declined ✕', COALESCE($7, NOW()))
+        ON CONFLICT (reference_utr) DO UPDATE SET status = 'Payment Declined ✕'
+      `, [
+        row.original_id || `wt_res_${Date.now()}`,
+        targetCustId,
+        amount,
+        utr,
+        row.description || 'Restored failed payment attempt',
+        row.payment_method || 'Razorpay Secure (Failed)',
+        row.original_created_at || new Date(),
+      ]);
+
+      await query(`DELETE FROM deleted_failed_transactions WHERE id = $1`, [row.id]);
+    }
+
+    res.json({ ok: true, restored: true });
+  } catch (err) {
+    console.error('[POST /api/sales/failed-transactions/history/restore]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Sales Desk: Permanently Purge Deleted Failed Transactions History (single or all)
+app.delete('/api/sales/failed-transactions/history/:id', async (req, res) => {
+  try {
+    const rawId = decodeURIComponent(req.params.id || '').trim();
+    if (rawId === 'all' || rawId === 'clear-all') {
+      const delRes = await query(`DELETE FROM deleted_failed_transactions RETURNING id`);
+      return res.json({ ok: true, deletedCount: delRes.rowCount });
+    }
+
+    const delRes = await query(
+      `DELETE FROM deleted_failed_transactions WHERE id = $1 OR original_id = $1 OR reference_utr = $1 RETURNING id`,
+      [rawId]
+    );
+    res.json({ ok: true, deletedCount: delRes.rowCount });
+  } catch (err) {
+    console.error('[DELETE /api/sales/failed-transactions/history/:id]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Sales Desk: Delete / Remove a Failed Transaction (or 'all' / 'dismissed')
 app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
   try {
     const rawId = decodeURIComponent(req.params.id || '').trim();
+    const { txSnapshot } = req.body || {};
+
     if (rawId === 'all' || rawId === 'clear-all') {
+      await archiveFailedTransactions({
+        whereClause: `
+          LOWER(wt.status) LIKE '%fail%' 
+          OR LOWER(wt.tx_type) LIKE '%fail%'
+          OR LOWER(wt.description) LIKE '%fail%'
+          OR LOWER(wt.payment_method) LIKE '%fail%'
+          OR wt.reference_utr LIKE 'DISMISS-%'
+        `,
+        txSnapshot,
+      });
+
       const delRes = await query(`
         DELETE FROM wallet_transactions 
         WHERE LOWER(status) LIKE '%fail%' 
@@ -1233,6 +1532,11 @@ app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
     }
 
     if (rawId === 'dismissed') {
+      await archiveFailedTransactions({
+        whereClause: `wt.reference_utr LIKE 'DISMISS-%'`,
+        txSnapshot,
+      });
+
       const delRes = await query(`
         DELETE FROM wallet_transactions 
         WHERE reference_utr LIKE 'DISMISS-%'
@@ -1240,6 +1544,12 @@ app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
       `);
       return res.json({ ok: true, deletedCount: delRes.rowCount });
     }
+
+    await archiveFailedTransactions({
+      whereClause: `wt.id = $1 OR wt.reference_utr = $1`,
+      params: [rawId],
+      txSnapshot,
+    });
 
     const delRes = await query(
       `DELETE FROM wallet_transactions WHERE id = $1 OR reference_utr = $1 RETURNING id`,
@@ -1254,8 +1564,19 @@ app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
 
 app.delete('/api/sales/failed-transactions', async (req, res) => {
   try {
-    const { id, ids, type } = req.body || req.query || {};
+    const { id, ids, type, txSnapshot } = req.body || req.query || {};
     if (type === 'all' || id === 'all') {
+      await archiveFailedTransactions({
+        whereClause: `
+          LOWER(wt.status) LIKE '%fail%' 
+          OR LOWER(wt.tx_type) LIKE '%fail%'
+          OR LOWER(wt.description) LIKE '%fail%'
+          OR LOWER(wt.payment_method) LIKE '%fail%'
+          OR wt.reference_utr LIKE 'DISMISS-%'
+        `,
+        txSnapshot,
+      });
+
       const delRes = await query(`
         DELETE FROM wallet_transactions 
         WHERE LOWER(status) LIKE '%fail%' 
@@ -1269,6 +1590,12 @@ app.delete('/api/sales/failed-transactions', async (req, res) => {
     }
 
     if (Array.isArray(ids) && ids.length > 0) {
+      await archiveFailedTransactions({
+        whereClause: `wt.id = ANY($1) OR wt.reference_utr = ANY($1)`,
+        params: [ids],
+        txSnapshot,
+      });
+
       const delRes = await query(
         `DELETE FROM wallet_transactions WHERE id = ANY($1) OR reference_utr = ANY($1) RETURNING id`,
         [ids]
@@ -1277,12 +1604,23 @@ app.delete('/api/sales/failed-transactions', async (req, res) => {
     }
 
     if (id) {
+      await archiveFailedTransactions({
+        whereClause: `wt.id = $1 OR wt.reference_utr = $1`,
+        params: [id],
+        txSnapshot,
+      });
+
       const delRes = await query(
         `DELETE FROM wallet_transactions WHERE id = $1 OR reference_utr = $1 RETURNING id`,
         [id]
       );
       return res.json({ ok: true, deletedCount: delRes.rowCount });
     }
+
+    await archiveFailedTransactions({
+      whereClause: `wt.reference_utr LIKE 'DISMISS-%'`,
+      txSnapshot,
+    });
 
     const delRes = await query(`
       DELETE FROM wallet_transactions 

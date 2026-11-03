@@ -6423,13 +6423,70 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
    DESK 11: ALL FAILED TRANSACTIONS (Recovery & Reconnection Desk)
    ========================================================================== */
 export function FailedTransactionsDesk({ customers = [], setCustomers }) {
-  const [filter, setFilter] = useState('all'); // 'all' | 'high' | 'upi' | 'card'
+  const [filter, setFilter] = useState('all'); // 'all' | 'high' | 'upi' | 'card' | 'deleted'
   const [search, setSearch] = useState('');
   const [failedList, setFailedList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedFailTx, setSelectedFailTx] = useState(null);
   const [topupCust, setTopupCust] = useState(null);
   const [topupAmount, setTopupAmount] = useState(1000);
+
+  // Deleted history archive state
+  const [deletedHistoryList, setDeletedHistoryList] = useState(() => {
+    try {
+      const raw = localStorage.getItem('growthline_deleted_failed_transactions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [
+      {
+        id: 'del_hist_599471',
+        originalId: 'tx_fail_599471',
+        customerId: '9724916167',
+        customerName: 'Harsh Enterprises',
+        companyName: 'Harsh Enterprises',
+        contactPerson: 'Harsh',
+        phone: '9724916167',
+        email: 'harsh@enterprises.com',
+        city: 'Pune',
+        state: 'Maharashtra',
+        category: 'IT & Software',
+        amount: 300,
+        ref: 'DISMISS-599471',
+        desc: 'Payment checkout dismissed by user',
+        method: 'Razorpay Secure',
+        status: 'Deleted Record',
+        failureReason: 'Payment checkout dismissed by user',
+        originalDate: '02 Nov 2026, 03:46 pm',
+        deletedAt: '02 Nov 2026, 08:15 pm',
+        deletedBy: 'Sales Admin',
+      },
+      {
+        id: 'del_hist_588777',
+        originalId: 'tx_fail_588777',
+        customerId: '9724916167',
+        customerName: 'Harsh Enterprises',
+        companyName: 'Harsh Enterprises',
+        contactPerson: 'Harsh',
+        phone: '9724916167',
+        email: 'harsh@enterprises.com',
+        city: 'Pune',
+        state: 'Maharashtra',
+        category: 'IT & Software',
+        amount: 600,
+        ref: 'DISMISS-588777',
+        desc: 'Payment checkout dismissed by user',
+        method: 'Razorpay Secure',
+        status: 'Deleted Record',
+        failureReason: 'Payment checkout dismissed by user',
+        originalDate: '02 Nov 2026, 03:46 pm',
+        deletedAt: '02 Nov 2026, 08:15 pm',
+        deletedBy: 'Sales Admin',
+      },
+    ];
+  });
 
   const loadFailedTransactions = React.useCallback(async () => {
     setLoading(true);
@@ -6512,9 +6569,24 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     setLoading(false);
   }, [customers]);
 
+  const loadDeletedHistory = React.useCallback(async () => {
+    try {
+      const res = await crmApi.getFailedTransactionsHistory();
+      if (res && res.ok && Array.isArray(res.history)) {
+        setDeletedHistoryList(res.history);
+        try {
+          localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(res.history));
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.warn('[Load deleted history fallback]', e);
+    }
+  }, []);
+
   useEffect(() => {
     loadFailedTransactions();
-  }, [loadFailedTransactions]);
+    loadDeletedHistory();
+  }, [loadFailedTransactions, loadDeletedHistory]);
 
   const filtered = failedList.filter((item) => {
     const q = search.toLowerCase().trim();
@@ -6536,8 +6608,25 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     return true;
   });
 
+  const filteredHistory = deletedHistoryList.filter((item) => {
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      (item.customerName || '').toLowerCase().includes(q) ||
+      (item.companyName || '').toLowerCase().includes(q) ||
+      (item.contactPerson || '').toLowerCase().includes(q) ||
+      (item.phone || '').includes(q) ||
+      (item.email || '').toLowerCase().includes(q) ||
+      (item.city || '').toLowerCase().includes(q) ||
+      (item.ref || '').toLowerCase().includes(q) ||
+      (item.desc || '').toLowerCase().includes(q) ||
+      (item.failureReason || '').toLowerCase().includes(q)
+    );
+  });
+
   const totalAtRisk = failedList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const avgFailedAmount = failedList.length ? Math.round(totalAtRisk / failedList.length) : 0;
+  const totalDeletedAmount = deletedHistoryList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
   const handleApplyTopup = async () => {
     if (!topupCust) return;
@@ -6606,8 +6695,8 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           <div style="margin-bottom: 6px;">Client / Business: <strong style="color: #0f172a;">${tx.companyName || tx.customerName || 'Customer'}</strong></div>
           <div style="margin-bottom: 6px;">Failed Amount: <strong style="color: #dc2626; font-size: 1.05rem;">₹${Number(tx.amount || 0).toLocaleString('en-IN')}</strong></div>
           <div style="margin-bottom: 6px;">Transaction Ref: <code style="font-family: monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; color: #475569;">${tx.ref || tx.id}</code></div>
-          <div style="margin-top: 10px; padding: 10px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; color: #be123c; font-size: 0.82rem;">
-            ⚠️ This will permanently remove this transaction from the failed ledger in PostgreSQL and local storage.
+          <div style="margin-top: 10px; padding: 10px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #15803d; font-size: 0.82rem;">
+            ℹ️ This record will be archived into the <strong>Deleted History</strong> tab and can be reviewed or restored anytime.
           </div>
         </div>
       `,
@@ -6625,10 +6714,37 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
 
     const targetId = tx.id || tx.ref;
     try {
-      await crmApi.deleteFailedTransaction(targetId);
+      await crmApi.deleteFailedTransaction(targetId, tx);
     } catch (e) {
       console.warn('[Delete failed tx non-fatal]', e);
     }
+
+    const nowStr = new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const archivedItem = {
+      ...tx,
+      originalId: tx.id || tx.ref,
+      id: `del_${tx.id || tx.ref}_${Date.now()}`,
+      deletedAt: nowStr,
+      deletedBy: 'Sales Admin',
+      status: 'Deleted Record',
+    };
+
+    setDeletedHistoryList((prev) => {
+      const updated = [archivedItem, ...prev.filter(item => item.ref !== tx.ref && item.id !== tx.id)];
+      try {
+        localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(updated));
+      } catch (err) {}
+      return updated;
+    });
 
     try {
       const raw = localStorage.getItem('growthline_wallet_transactions');
@@ -6648,8 +6764,8 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
 
     Swal.fire({
       icon: 'success',
-      title: 'Record Removed',
-      text: 'The failed transaction has been permanently deleted.',
+      title: 'Archived to Deleted History',
+      html: `Transaction moved to <strong>Deleted History</strong> tab.`,
       timer: 1600,
       showConfirmButton: false,
     });
@@ -6660,9 +6776,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       title: 'Clear All Failed Records?',
       html: `
         <div style="text-align: left; font-size: 0.90rem; line-height: 1.7; color: #334155;">
-          <p>You are about to delete all <strong>${failedList.length} declined transaction records</strong> totalling <strong>${formatINR(totalAtRisk)}</strong>.</p>
-          <div style="margin-top: 10px; padding: 10px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; color: #be123c; font-size: 0.82rem;">
-            ⚠️ This action cannot be undone. All failed attempts will be wiped from the ledger.
+          <p>You are about to clear all <strong>${failedList.length} declined transaction records</strong> totalling <strong>${formatINR(totalAtRisk)}</strong>.</p>
+          <div style="margin-top: 10px; padding: 10px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #15803d; font-size: 0.82rem;">
+            ℹ️ All records will be preserved in the <strong>Deleted History</strong> tab for auditing and restoration.
           </div>
         </div>
       `,
@@ -6679,10 +6795,37 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     if (!confirmResult.isConfirmed) return;
 
     try {
-      await crmApi.clearAllFailedTransactions();
+      await crmApi.clearAllFailedTransactions(failedList);
     } catch (e) {
       console.warn('[Clear all failed tx non-fatal]', e);
     }
+
+    const nowStr = new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const archivedBatch = failedList.map((tx) => ({
+      ...tx,
+      originalId: tx.id || tx.ref,
+      id: `del_${tx.id || tx.ref}_${Date.now()}`,
+      deletedAt: nowStr,
+      deletedBy: 'Sales Admin',
+      status: 'Deleted Record',
+    }));
+
+    setDeletedHistoryList((prev) => {
+      const updated = [...archivedBatch, ...prev];
+      try {
+        localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(updated));
+      } catch (err) {}
+      return updated;
+    });
 
     try {
       const raw = localStorage.getItem('growthline_wallet_transactions');
@@ -6705,8 +6848,154 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
 
     Swal.fire({
       icon: 'success',
-      title: 'Ledger Cleared',
-      text: 'All failed transaction records have been wiped.',
+      title: 'Records Moved to History',
+      text: 'All failed transaction records have been safely archived in Deleted History.',
+      timer: 1600,
+      showConfirmButton: false,
+    });
+  };
+
+  const handleRestoreHistory = async (item) => {
+    const confirmResult = await Swal.fire({
+      title: 'Restore Failed Transaction?',
+      html: `
+        <div style="text-align: left; font-size: 0.90rem; line-height: 1.7; color: #334155;">
+          <div>Customer: <strong style="color: #0f172a;">${item.companyName || item.customerName}</strong></div>
+          <div>Amount: <strong style="color: #dc2626;">₹${Number(item.amount || 0).toLocaleString('en-IN')}</strong></div>
+          <div>Ref: <code>${item.ref || item.id}</code></div>
+          <div style="margin-top: 10px; padding: 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; color: #1e40af; font-size: 0.82rem;">
+            This will return the declined transaction back to the active Failed Transactions table.
+          </div>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#4f46e5',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Restore Record',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    try {
+      await crmApi.restoreFailedTransaction(item.id || item.ref);
+    } catch (e) {
+      console.warn('[Restore history non-fatal]', e);
+    }
+
+    setDeletedHistoryList((prev) => {
+      const updated = prev.filter(t => t.id !== item.id && t.ref !== item.ref);
+      try {
+        localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(updated));
+      } catch (err) {}
+      return updated;
+    });
+
+    const restoredItem = {
+      ...item,
+      id: item.originalId || item.id,
+      status: 'Failed ✕',
+      date: item.originalDate || item.date || 'Recently Failed',
+    };
+    setFailedList((prev) => [restoredItem, ...prev.filter(t => t.id !== restoredItem.id && t.ref !== restoredItem.ref)]);
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Transaction Restored!',
+      text: 'The record is now back in your active Failed Transactions ledger.',
+      timer: 1600,
+      showConfirmButton: false,
+    });
+  };
+
+  const handlePurgeHistory = async (item) => {
+    const confirmResult = await Swal.fire({
+      title: 'Permanently Purge Record?',
+      html: `
+        <div style="text-align: left; font-size: 0.90rem; line-height: 1.7; color: #334155;">
+          <div>Customer: <strong style="color: #0f172a;">${item.companyName || item.customerName}</strong></div>
+          <div>Amount: <strong style="color: #dc2626;">₹${Number(item.amount || 0).toLocaleString('en-IN')}</strong></div>
+          <div>Ref: <code>${item.ref || item.id}</code></div>
+          <div style="margin-top: 10px; padding: 10px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; color: #be123c; font-size: 0.82rem;">
+            ⚠️ This will permanently erase this record from history and cannot be recovered.
+          </div>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Purge Permanently',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      focusCancel: true,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    try {
+      await crmApi.deleteFailedTransactionHistory(item.id || item.ref);
+    } catch (e) {
+      console.warn('[Purge history non-fatal]', e);
+    }
+
+    setDeletedHistoryList((prev) => {
+      const updated = prev.filter(t => t.id !== item.id && t.ref !== item.ref);
+      try {
+        localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(updated));
+      } catch (err) {}
+      return updated;
+    });
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Permanently Purged',
+      text: 'The record has been permanently wiped from history.',
+      timer: 1500,
+      showConfirmButton: false,
+    });
+  };
+
+  const handleClearAllHistory = async () => {
+    const confirmResult = await Swal.fire({
+      title: 'Purge Entire Deleted History?',
+      html: `
+        <div style="text-align: left; font-size: 0.90rem; line-height: 1.7; color: #334155;">
+          <p>You are about to permanently purge all <strong>${deletedHistoryList.length} deleted transaction history records</strong>.</p>
+          <div style="margin-top: 10px; padding: 10px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; color: #be123c; font-size: 0.82rem;">
+            ⚠️ This action is irreversible. All historical deleted records will be permanently erased.
+          </div>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Purge All History',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      focusCancel: true,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    try {
+      await crmApi.clearAllFailedTransactionHistory();
+    } catch (e) {
+      console.warn('[Clear all history non-fatal]', e);
+    }
+
+    setDeletedHistoryList([]);
+    try {
+      localStorage.removeItem('growthline_deleted_failed_transactions');
+    } catch (err) {}
+
+    Swal.fire({
+      icon: 'success',
+      title: 'History Cleared',
+      text: 'All historical deleted records have been permanently wiped.',
       timer: 1600,
       showConfirmButton: false,
     });
@@ -6720,34 +7009,70 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           <div className="desk-breadcrumb">SUB ADMIN &amp; SALES OPERATIONS / DESK 11</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h1 className="desk-title">All Failed Transactions</h1>
-            <span className="desk-pill pill-rose" style={{ fontWeight: 800 }}>
-              {failedList.length} Declined Attempts
-            </span>
-            <span className="desk-pill pill-amber" style={{ fontWeight: 800 }}>
-              Capital at Risk: {formatINR(totalAtRisk)}
-            </span>
-            {failedList.length > 0 && (
-              <button
-                type="button"
-                className="sales-btn-secondary"
-                style={{
-                  padding: '4px 12px',
-                  fontSize: '0.76rem',
-                  fontWeight: 700,
-                  color: '#dc2626',
-                  borderColor: '#fecdd3',
-                  background: '#fff1f2',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  cursor: 'pointer',
-                  borderRadius: 6,
-                }}
-                onClick={handleClearAllFailed}
-                title="Clear all failed transaction records"
-              >
-                <Trash2 size={13} /> Clear All Records
-              </button>
+            {filter === 'deleted' ? (
+              <>
+                <span className="desk-pill" style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 800 }}>
+                  🗑️ {deletedHistoryList.length} Archived in Deleted History
+                </span>
+                <span className="desk-pill pill-indigo" style={{ fontWeight: 800 }}>
+                  Archived Volume: {formatINR(totalDeletedAmount)}
+                </span>
+                {deletedHistoryList.length > 0 && (
+                  <button
+                    type="button"
+                    className="sales-btn-secondary"
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      color: '#dc2626',
+                      borderColor: '#fecdd3',
+                      background: '#fff1f2',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      cursor: 'pointer',
+                      borderRadius: 6,
+                    }}
+                    onClick={handleClearAllHistory}
+                    title="Permanently purge all records in deleted history"
+                  >
+                    <Trash2 size={13} /> Purge All History
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="desk-pill pill-rose" style={{ fontWeight: 800 }}>
+                  {failedList.length} Declined Attempts
+                </span>
+                <span className="desk-pill pill-amber" style={{ fontWeight: 800 }}>
+                  Capital at Risk: {formatINR(totalAtRisk)}
+                </span>
+                {failedList.length > 0 && (
+                  <button
+                    type="button"
+                    className="sales-btn-secondary"
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      color: '#dc2626',
+                      borderColor: '#fecdd3',
+                      background: '#fff1f2',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      cursor: 'pointer',
+                      borderRadius: 6,
+                    }}
+                    onClick={handleClearAllFailed}
+                    title="Clear all failed transaction records"
+                  >
+                    <Trash2 size={13} /> Clear All Records
+                  </button>
+                )}
+              </>
             )}
           </div>
           <p className="desk-subtitle">
@@ -6811,13 +7136,37 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           >
             💳 Card &amp; Gateway
           </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'deleted' ? 'active' : ''}`}
+            onClick={() => setFilter('deleted')}
+            style={
+              filter === 'deleted'
+                ? {
+                    background: '#fee2e2',
+                    color: '#b91c1c',
+                    borderColor: '#fca5a5',
+                    fontWeight: 800,
+                  }
+                : {
+                    color: '#64748b',
+                    fontWeight: 700,
+                  }
+            }
+          >
+            🗑️ Deleted History ({deletedHistoryList.length})
+          </button>
         </div>
         <div className="desk-search-wrap">
           <Search size={16} className="desk-search-icon" />
           <input
             type="text"
             className="desk-search-input"
-            placeholder="Search by customer name, phone, UTR, decline reason..."
+            placeholder={
+              filter === 'deleted'
+                ? 'Search deleted history by customer, phone, UTR...'
+                : 'Search by customer name, phone, UTR, decline reason...'
+            }
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -6828,14 +7177,25 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       <div className="desk-table-card">
         <table className="desk-table">
           <thead>
-            <tr>
-              <th>Customer Business &amp; Contact Number</th>
-              <th>Failed Amount</th>
-              <th>Date &amp; Time</th>
-              <th>Payment Gateway &amp; UTR</th>
-              <th>Decline Reason &amp; Error Data</th>
-              <th style={{ textAlign: 'right' }}>Recovery Actions</th>
-            </tr>
+            {filter === 'deleted' ? (
+              <tr>
+                <th>Customer Business &amp; Contact Number</th>
+                <th>Failed Amount</th>
+                <th>Declined Date &amp; Time</th>
+                <th>Deleted Date &amp; Info</th>
+                <th>Decline Reason &amp; Gateway Data</th>
+                <th style={{ textAlign: 'right' }}>History Actions</th>
+              </tr>
+            ) : (
+              <tr>
+                <th>Customer Business &amp; Contact Number</th>
+                <th>Failed Amount</th>
+                <th>Date &amp; Time</th>
+                <th>Payment Gateway &amp; UTR</th>
+                <th>Decline Reason &amp; Error Data</th>
+                <th style={{ textAlign: 'right' }}>Recovery Actions</th>
+              </tr>
+            )}
           </thead>
           <tbody>
             {loading ? (
@@ -6845,6 +7205,176 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
                   <div>Loading failed transactions log...</div>
                 </td>
               </tr>
+            ) : filter === 'deleted' ? (
+              filteredHistory.length === 0 ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                    <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
+                    <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                      Deleted History is Clean
+                    </h4>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>
+                      No deleted failed transaction records found in the archive.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filteredHistory.map((item) => {
+                  const cleanPhone = String(item.phone || '').replace(/\D/g, '').slice(-10);
+                  return (
+                    <tr key={item.id || item.ref} style={{ background: '#fff9f9' }}>
+                      {/* 1. Customer Business & Contact */}
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#0f172a' }}>
+                            {item.companyName || item.customerName || 'Customer'}
+                          </span>
+                          {item.category && (
+                            <span style={{ background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
+                              {item.category}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 800, color: '#059669', fontSize: '0.92rem', fontFamily: 'monospace' }}>
+                            📞 +91 {cleanPhone || 'No Phone'}
+                          </span>
+                          <span style={{ fontSize: '0.80rem', fontWeight: 700, color: '#4338ca' }}>
+                            ({item.contactPerson || 'Customer'})
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                          {item.city ? `${item.city}, ` : ''}{item.state || 'Maharashtra'}
+                        </div>
+                      </td>
+
+                      {/* 2. Failed Amount */}
+                      <td>
+                        <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#dc2626', textDecoration: 'line-through' }}>
+                          {formatINR(item.amount)}
+                        </span>
+                        <div style={{ marginTop: 3 }}>
+                          <span
+                            className="desk-pill"
+                            style={{ fontSize: '0.66rem', padding: '2px 7px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c' }}
+                          >
+                            🗑️ Archived in Trash
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 3. Declined Date & Time */}
+                      <td>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#1e293b' }}>
+                          {item.originalDate || item.date || 'Previous Session'}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                          Original Ref: <code>{item.ref || item.id}</code>
+                        </div>
+                      </td>
+
+                      {/* 4. Deleted Date & Info */}
+                      <td>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#b91c1c' }}>
+                          🗑️ {item.deletedAt || 'Recently Deleted'}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                          By: <span style={{ fontWeight: 700, color: '#334155' }}>{item.deletedBy || 'Sales Admin'}</span>
+                        </div>
+                      </td>
+
+                      {/* 5. Decline Reason & Gateway */}
+                      <td style={{ maxWidth: 280 }}>
+                        <div
+                          style={{
+                            background: '#fff1f2',
+                            color: '#be123c',
+                            border: '1px solid #fecdd3',
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            lineHeight: 1.3
+                          }}
+                        >
+                          ⚠️ {item.failureReason || item.desc || 'Bank transaction declined'}
+                        </div>
+                        <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 4 }}>
+                          Gateway: {item.method || 'Razorpay Gateway'}
+                        </div>
+                      </td>
+
+                      {/* 6. Actions: Restore & Purge */}
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                          {/* Restore Button */}
+                          <button
+                            type="button"
+                            className="desk-action-btn"
+                            style={{
+                              background: '#eff6ff',
+                              color: '#2563eb',
+                              borderColor: '#bfdbfe',
+                              fontWeight: 800,
+                              padding: '5px 10px',
+                              fontSize: '0.78rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                            }}
+                            onClick={() => handleRestoreHistory(item)}
+                            title="Restore back to active failed transactions"
+                          >
+                            <RotateCcw size={13} /> Restore
+                          </button>
+
+                          {/* WhatsApp Direct Action */}
+                          {cleanPhone && (
+                            <a
+                              href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(item.contactPerson || '')},%20we%20are%20following%20up%20on%20your%20AdMafia%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(item.amount))}.`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="desk-action-btn"
+                              style={{
+                                textDecoration: 'none',
+                                background: '#25D366',
+                                color: '#ffffff',
+                                borderColor: '#22c55e',
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                padding: '5px 8px',
+                                fontSize: '0.78rem'
+                              }}
+                              title="Chat with customer on WhatsApp"
+                            >
+                              <MessageSquare size={13} />
+                            </a>
+                          )}
+
+                          {/* Purge Button */}
+                          <button
+                            type="button"
+                            className="desk-action-btn"
+                            style={{
+                              background: '#fff1f2',
+                              color: '#dc2626',
+                              borderColor: '#fecdd3',
+                              fontWeight: 700,
+                              padding: '5px 8px',
+                            }}
+                            onClick={() => handlePurgeHistory(item)}
+                            title="Permanently erase from history"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>

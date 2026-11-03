@@ -145,6 +145,31 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_wallet_tx_customer_id ON wallet_transactions(customer_id, created_at DESC);
 
+-- Deleted failed transactions audit & recovery history (Sales Desk 11: /sales#failed-transactions)
+CREATE TABLE IF NOT EXISTS deleted_failed_transactions (
+    id                  VARCHAR(64) PRIMARY KEY,
+    original_id         VARCHAR(64),
+    customer_id         VARCHAR(64),
+    customer_name       VARCHAR(180),
+    company_name        VARCHAR(180),
+    contact_person      VARCHAR(140),
+    phone               VARCHAR(30),
+    email               VARCHAR(180),
+    city                VARCHAR(100),
+    state               VARCHAR(100),
+    category            VARCHAR(100),
+    amount              NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    reference_utr       VARCHAR(120),
+    description         TEXT,
+    payment_method      VARCHAR(100),
+    failure_reason      TEXT,
+    original_created_at TIMESTAMPTZ,
+    deleted_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_by          VARCHAR(100) DEFAULT 'Sales Admin'
+);
+
+CREATE INDEX IF NOT EXISTS idx_del_failed_tx_deleted_at ON deleted_failed_transactions(deleted_at DESC);
+
 -- =============================================================================
 -- 5. PAYMENT COLLECTION & TOP-UP LEDGER (Sales Desk 05: /sales#payments)
 -- =============================================================================

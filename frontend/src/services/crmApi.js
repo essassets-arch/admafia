@@ -180,14 +180,46 @@ export const crmApi = {
   },
 
   /**
-   * Delete a specific failed transaction or all failed transactions
+   * Delete a specific failed transaction or all failed transactions (with snapshot archiving)
    */
-  async deleteFailedTransaction(id) {
-    return apiRequest(`/sales/failed-transactions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  async deleteFailedTransaction(id, txSnapshot = null) {
+    return apiRequest(`/sales/failed-transactions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      body: txSnapshot ? JSON.stringify({ txSnapshot }) : undefined,
+    });
   },
 
-  async clearAllFailedTransactions() {
-    return apiRequest('/sales/failed-transactions/all', { method: 'DELETE' });
+  async clearAllFailedTransactions(recordsSnapshot = null) {
+    return apiRequest('/sales/failed-transactions/all', {
+      method: 'DELETE',
+      body: recordsSnapshot ? JSON.stringify({ recordsSnapshot }) : undefined,
+    });
+  },
+
+  /**
+   * Desk 11: Deleted Failed Transactions History APIs
+   */
+  async getFailedTransactionsHistory() {
+    return apiRequest('/sales/failed-transactions/history', { method: 'GET' });
+  },
+
+  async restoreFailedTransaction(id) {
+    return apiRequest('/sales/failed-transactions/history/restore', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  async deleteFailedTransactionHistory(id) {
+    return apiRequest(`/sales/failed-transactions/history/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async clearAllFailedTransactionHistory() {
+    return apiRequest('/sales/failed-transactions/history/all', {
+      method: 'DELETE',
+    });
   },
 
   /**
