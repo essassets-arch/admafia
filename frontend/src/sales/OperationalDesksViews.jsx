@@ -452,6 +452,70 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
     );
   };
 
+  const handleDeleteCustomer = async (cust) => {
+    if (!cust) return;
+    const custId = cust.id || cust.phone || cust.username;
+    const displayName = cust.companyName || cust.name || cust.contact || `@${cust.username}`;
+    const displayPhone = cust.phone || 'N/A';
+    const displayUsername = cust.username || '';
+
+    const confirmResult = await Swal.fire({
+      title: 'Permanently Delete Customer?',
+      html: `
+        <div style="text-align: left; font-size: 0.90rem; line-height: 1.7; color: #334155;">
+          <p style="margin-bottom: 10px; color: #dc2626; font-weight: 700;">
+            ⚠️ This will permanently erase this customer and all their data:
+          </p>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+            <div>Account: <strong style="color: #0f172a;">@${displayUsername}</strong> (${displayName})</div>
+            <div>Phone: <strong style="color: #0f172a;">+91 ${displayPhone}</strong></div>
+            <div>Workspace ID: <code>${cust.id}</code></div>
+          </div>
+          <p style="font-size: 0.82rem; color: #64748b; margin: 0;">
+            Includes: Wallet balances, transaction ledger, active campaigns, leads, invoices, and verification history. This cannot be undone.
+          </p>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Delete All Data',
+      cancelButtonText: 'Cancel',
+      focusCancel: true,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    try {
+      await crmApi.deleteCustomer(custId);
+
+      setCustomers((prev) =>
+        prev.filter((c) => c.id !== cust.id && c.phone !== cust.phone && c.username !== cust.username)
+      );
+
+      if (selectedCust?.id === cust.id || selectedCust?.phone === cust.phone) {
+        setSelectedCust(null);
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Customer Data Erased',
+        text: `Customer @${displayUsername} and all associated records have been permanently removed.`,
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      console.error('Delete customer error:', err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to Delete',
+        text: err.message || 'An error occurred while deleting customer data.',
+        confirmButtonColor: '#4f46e5',
+      });
+    }
+  };
+
   const handleAddCustomer = (e) => {
     e.preventDefault();
     if (!newCust.phone || !newCust.username) return;
@@ -851,6 +915,15 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                       >
                         {c.status === 'active' ? 'Suspend' : 'Activate'}
                       </button>
+                      <button
+                        type="button"
+                        className="desk-action-btn"
+                        style={{ color: '#dc2626', borderColor: '#fca5a5', background: '#fff1f2' }}
+                        title="Permanently remove customer and all data"
+                        onClick={() => handleDeleteCustomer(c)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -965,6 +1038,14 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                className="desk-action-btn"
+                style={{ color: '#dc2626', borderColor: '#fca5a5', background: '#fff1f2', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                onClick={() => handleDeleteCustomer(selectedCust)}
+              >
+                <Trash2 size={14} /> Delete Account
+              </button>
               <button
                 type="button"
                 className="sales-btn-secondary"
@@ -4373,6 +4454,72 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
     setTopupCust(null);
   };
 
+  const handleDeleteCustomer = async (cust) => {
+    if (!cust) return;
+    const custId = cust.id || cust.phone || cust.username;
+    const displayName = cust.companyName || cust.name || cust.contactPerson || cust.contact || `@${cust.username}`;
+    const displayPhone = cust.phone || 'N/A';
+    const displayUsername = cust.username || '';
+
+    const confirmResult = await Swal.fire({
+      title: 'Permanently Delete Customer?',
+      html: `
+        <div style="text-align: left; font-size: 0.90rem; line-height: 1.7; color: #334155;">
+          <p style="margin-bottom: 10px; color: #dc2626; font-weight: 700;">
+            ⚠️ This will permanently erase this customer and all their data:
+          </p>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+            <div>Account: <strong style="color: #0f172a;">@${displayUsername}</strong> (${displayName})</div>
+            <div>Phone: <strong style="color: #0f172a;">+91 ${displayPhone}</strong></div>
+            <div>Workspace ID: <code>${cust.id}</code></div>
+          </div>
+          <p style="font-size: 0.82rem; color: #64748b; margin: 0;">
+            Includes: Wallet balances, transaction ledger, active campaigns, leads, invoices, and verification history. This cannot be undone.
+          </p>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Delete All Data',
+      cancelButtonText: 'Cancel',
+      focusCancel: true,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    try {
+      await crmApi.deleteCustomer(custId);
+
+      if (setCustomers) {
+        setCustomers((prev) =>
+          prev.filter((c) => c.id !== cust.id && c.phone !== cust.phone && c.username !== cust.username)
+        );
+      }
+
+      if (selectedWalletCust?.id === cust.id || selectedWalletCust?.phone === cust.phone) {
+        setSelectedWalletCust(null);
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Customer Data Erased',
+        text: `Customer @${displayUsername} and all associated records have been permanently removed.`,
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      console.error('Delete customer error:', err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to Delete',
+        text: err.message || 'An error occurred while deleting customer data.',
+        confirmButtonColor: '#4f46e5',
+      });
+    }
+  };
+
   return (
     <div className="desk-page-container">
       {/* Header */}
@@ -4584,6 +4731,17 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
                         >
                           <MessageSquare size={13} color="#059669" />
                         </a>
+
+                        {/* Delete Customer Button */}
+                        <button
+                          type="button"
+                          className="desk-action-btn"
+                          style={{ color: '#dc2626', borderColor: '#fca5a5', background: '#fff1f2' }}
+                          title="Permanently remove customer and all data"
+                          onClick={() => handleDeleteCustomer(c)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -4698,6 +4856,14 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
               >
                 <MessageSquare size={14} /> Open WhatsApp Chat
               </a>
+              <button
+                type="button"
+                className="desk-action-btn"
+                style={{ color: '#dc2626', borderColor: '#fca5a5', background: '#fff1f2', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                onClick={() => handleDeleteCustomer(selectedWalletCust)}
+              >
+                <Trash2 size={14} /> Delete Account
+              </button>
               <button
                 type="button"
                 className="sales-btn-primary"

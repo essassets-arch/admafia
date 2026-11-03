@@ -1853,15 +1853,67 @@ app.delete('/api/customers/:identifier', async (req, res) => {
     const rawId = String(req.params.identifier || '').trim();
     const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
     const lookupRes = await query(
-      'SELECT id FROM customers WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($1) LIMIT 1',
+      `SELECT id, username, phone, email, company_name, contact_person
+       FROM customers
+       WHERE id = $1 
+          OR (phone = $2 AND $2 <> '')
+          OR LOWER(username) = LOWER($1)
+          OR id = 'cust_reg_' || $2
+       LIMIT 1`,
       [rawId, cleanPhone]
     );
     if (lookupRes.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
     }
-    const custId = lookupRes.rows[0].id;
-    await query('DELETE FROM customers WHERE id = $1', [custId]);
-    res.json({ ok: true, deletedId: custId });
+    const cust = lookupRes.rows[0];
+    const custId = cust.id;
+    const custPhone = cust.phone;
+
+    await withTransaction(async (txQuery) => {
+      await txQuery(`DELETE FROM marketing_audit_events WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM marketing_campaigns WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM marketing_posts WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM marketing_ideas WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM pending_verifications WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM wallet_transactions WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM payment_records WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM tax_invoices WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM lead_followups WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM lead_assignments WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM leads WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM support_query_messages WHERE query_id IN (SELECT id FROM support_queries WHERE customer_id = $1)`, [custId]);
+      await txQuery(`DELETE FROM support_queries WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM sales_tasks WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM refund_requests WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM topup_requests WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM account_status_history WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM customer_group_memberships WHERE customer_id = $1`, [custId]);
+      await txQuery(`DELETE FROM wallets WHERE customer_id = $1`, [custId]);
+
+      if (custPhone) {
+        const altId = `cust_reg_${custPhone}`;
+        if (altId !== custId) {
+          await txQuery(`DELETE FROM wallets WHERE customer_id = $1`, [altId]);
+          await txQuery(`DELETE FROM customers WHERE id = $1`, [altId]);
+        }
+      }
+
+      await txQuery(`DELETE FROM customers WHERE id = $1`, [custId]);
+
+      try {
+        await txQuery(
+          `INSERT INTO superadmin_audit_logs (id, actor_id, actor_name, actor_role, action_type, target_type, target_id, reason, details)
+           VALUES ($1, 'api_admin', 'Admin API', 'Super Admin', 'CUSTOMER_DELETED', 'customer', $2, 'Customer deleted via admin API', $3)`,
+          [
+            `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            custId,
+            JSON.stringify(cust),
+          ]
+        );
+      } catch (e) {}
+    });
+
+    res.json({ ok: true, deleted: cust, deletedId: custId });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

@@ -40,36 +40,7 @@ export const crmApi = {
    */
   async syncStateFromPostgres() {
     try {
-      const state = await apiRequest('/state');
-
-      // 1. If local browser has any customers not yet in PostgreSQL, push them up once
-      try {
-        const localCustRaw = localStorage.getItem('growthline_registered_customers');
-        if (localCustRaw) {
-          const localCusts = JSON.parse(localCustRaw);
-          if (Array.isArray(localCusts) && localCusts.length > 0) {
-            const dbPhones = new Set((state.customers || []).map((c) => c.phone));
-            for (const lc of localCusts) {
-              if (lc.phone && !dbPhones.has(lc.phone)) {
-                await this.registerCustomer({
-                  username: lc.username,
-                  phone: lc.phone,
-                  email: lc.email,
-                  password: lc.password || 'Password123!',
-                  companyName: lc.companyName || lc.name,
-                  contactPerson: lc.contactPerson || lc.contact,
-                  city: lc.city,
-                  state: lc.state,
-                  category: lc.category,
-                  deposit: lc.balance || lc.walletBalance || 0,
-                });
-              }
-            }
-          }
-        }
-      } catch (e) {}
-
-      // Re-fetch authoritative state from PostgreSQL
+      // Fetch authoritative state directly from PostgreSQL
       const fresh = await apiRequest('/state');
 
       if (Array.isArray(fresh.customers)) {
@@ -156,6 +127,31 @@ export const crmApi = {
       body: JSON.stringify(updates),
     });
     return res.customer;
+  },
+
+  /**
+   * Permanently delete customer from PostgreSQL (/api/customers/:identifier)
+   * Cascades to all wallets, transactions, campaigns, leads, invoices, etc.
+   */
+  async deleteCustomer(idOrPhone) {
+    const res = await apiRequest(`/customers/${encodeURIComponent(idOrPhone)}`, {
+      method: 'DELETE',
+    });
+    try {
+      const raw = localStorage.getItem('growthline_registered_customers');
+      if (raw) {
+        const custs = JSON.parse(raw);
+        const norm = String(idOrPhone).replace(/\D/g, '').slice(-10);
+        const filtered = custs.filter((c) => {
+          const cNorm = String(c.phone || c.id || '').replace(/\D/g, '').slice(-10);
+          return c.id !== idOrPhone && c.username !== idOrPhone && (!norm || cNorm !== norm);
+        });
+        localStorage.setItem('growthline_registered_customers', JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.warn('Could not remove customer from localStorage', e);
+    }
+    return res;
   },
 
   /**
