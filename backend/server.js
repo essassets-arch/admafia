@@ -359,6 +359,51 @@ function mapPaymentRecordRow(row) {
   };
 }
 
+function mapQueryRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    customer_id: row.customer_id,
+    company: row.company_name,
+    companyName: row.company_name,
+    contactName: row.contact_name || '',
+    contactEmail: row.contact_email || '',
+    contactPhone: (row.contact_phone || '').trim(),
+    category: row.category || 'Campaign Pacing',
+    subject: row.subject || 'Customer Support Inquiry',
+    priority: row.priority || 'Normal',
+    assignedAdmin: row.assigned_admin || '',
+    internalNotes: row.internal_notes || '',
+    slaBreached: Boolean(row.sla_breached),
+    hoursOpen: Number(row.hours_open || 0),
+    status: (row.status || 'open').toLowerCase(),
+    createdAt: row.created_at
+      ? new Date(row.created_at).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+      : 'Today',
+    createdAtRaw: row.created_at,
+    resolvedAt: row.resolved_at
+      ? new Date(row.resolved_at).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+      : null,
+  };
+}
+
 function mapGroupRow(row) {
   if (!row) return null;
   return {
@@ -499,7 +544,7 @@ app.get('/api/state', async (req, res) => {
         submittedAtRaw: r.submitted_at,
         submitted_at_raw: r.submitted_at,
       })),
-      queries: qRes.rows,
+      queries: qRes.rows.map(mapQueryRow),
       tasks: tRes.rows,
       groups: grpRes.rows.map(mapGroupRow),
       masterLeads: mLeadsRes.rows.map(mapMasterLeadRow),
@@ -2494,17 +2539,121 @@ app.get('/api/verifications', async (req, res) => {
   }
 });
 
+app.get('/api/queries', async (req, res) => {
+  try {
+    const { customerId } = req.query;
+    let sql = 'SELECT * FROM support_queries';
+    const params = [];
+    if (customerId) {
+      sql += ' WHERE customer_id = $1';
+      params.push(customerId);
+    }
+    sql += ' ORDER BY created_at DESC';
+    const result = await query(sql, params);
+    res.json({ ok: true, queries: result.rows.map(mapQueryRow) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/queries', async (req, res) => {
   try {
-    const { customerId = null, company = 'Client Account', category = 'Campaign Pacing', subject, priority = 'normal' } = req.body || {};
-    const id = `qry_${Date.now()}`;
+    const {
+      customerId = null,
+      company = 'Client Account',
+      companyName,
+      contactName = '',
+      contactEmail = '',
+      contactPhone = '',
+      category = 'Campaign Delivery & Pacing',
+      subject = 'Customer Support Inquiry',
+      priority = 'Normal',
+      internalNotes = '',
+      status = 'open',
+    } = req.body || {};
+
+    const id = `qry_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+    const comp = companyName || company || 'Client Account';
+    const cleanPhone = String(contactPhone).replace(/\D/g, '').slice(-10);
+
     const result = await query(
-      `INSERT INTO support_queries (id, customer_id, company_name, category, subject, priority, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'open') RETURNING *`,
-      [id, customerId, company, category, subject || 'Customer Support Inquiry', priority]
+      `INSERT INTO support_queries (
+        id, customer_id, company_name, contact_name, contact_email, contact_phone,
+        category, subject, priority, internal_notes, status, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+      RETURNING *`,
+      [
+        id,
+        customerId || null,
+        comp,
+        contactName || '',
+        contactEmail || '',
+        cleanPhone || '',
+        category,
+        subject,
+        priority,
+        internalNotes || '',
+        status.toLowerCase(),
+      ]
     );
-    res.status(201).json({ ok: true, query: result.rows[0] });
+
+    res.status(201).json({ ok: true, query: mapQueryRow(result.rows[0]) });
   } catch (err) {
+    console.error('[POST /api/queries]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.patch('/api/queries/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, internalNotes, assignedAdmin } = req.body || {};
+    const updates = [];
+    const params = [id];
+    let idx = 2;
+
+    if (status) {
+      updates.push(`status = $${idx++}`);
+      params.push(status.toLowerCase());
+      if (status.toLowerCase() === 'resolved') {
+        updates.push(`resolved_at = NOW()`);
+      } else {
+        updates.push(`resolved_at = NULL`);
+      }
+    }
+    if (internalNotes !== undefined) {
+      updates.push(`internal_notes = $${idx++}`);
+      params.push(internalNotes);
+    }
+    if (assignedAdmin !== undefined) {
+      updates.push(`assigned_admin = $${idx++}`);
+      params.push(assignedAdmin);
+    }
+
+    if (updates.length === 0) {
+      const existing = await query('SELECT * FROM support_queries WHERE id = $1', [id]);
+      return res.json({ ok: true, query: mapQueryRow(existing.rows[0]) });
+    }
+
+    const sql = `UPDATE support_queries SET ${updates.join(', ')} WHERE id = $1 RETURNING *`;
+    const result = await query(sql, params);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Query not found' });
+    }
+    res.json({ ok: true, query: mapQueryRow(result.rows[0]) });
+  } catch (err) {
+    console.error('[PATCH /api/queries/:id]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete('/api/queries/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query('DELETE FROM support_queries WHERE id = $1 RETURNING id', [id]);
+    res.json({ ok: true, deletedCount: result.rowCount });
+  } catch (err) {
+    console.error('[DELETE /api/queries/:id]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

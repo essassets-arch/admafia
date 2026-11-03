@@ -137,7 +137,16 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   const [customers, setCustomersState] = useState(loadStoredCustomers);
   const [verifications, setVerificationsState] = useState(loadStoredVerifications);
   const [invoices, setInvoices] = useState(INITIAL_INVOICES);
-  const [queries, setQueries] = useState(INITIAL_QUERIES);
+  const [queries, setQueries] = useState(() => {
+    try {
+      const raw = localStorage.getItem('growthline_support_queries');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_QUERIES;
+  });
   const [tasks, setTasks] = useState(INITIAL_TASKS);
   const [newRegAlert, setNewRegAlert] = useState(null);
   const [liveNow, setLiveNow] = useState(() => new Date());
@@ -180,6 +189,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       if (state) {
         if (Array.isArray(state.customers)) setCustomersState(state.customers);
         if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
+        if (Array.isArray(state.queries)) setQueries(state.queries);
       }
     });
 
@@ -188,6 +198,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       if (state) {
         if (Array.isArray(state.customers)) setCustomersState(state.customers);
         if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
+        if (Array.isArray(state.queries)) setQueries(state.queries);
       }
     };
 
@@ -545,6 +556,17 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
           >
             <Headphones size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
             <span>Query &amp; Support</span>
+            {queries.filter((q) => q.status === 'open').length > 0 && (
+              <span
+                className="sales-nav-badge"
+                style={{
+                  background: activeTab === 'queries' ? 'rgba(255,255,255,0.22)' : '#fee2e2',
+                  color: activeTab === 'queries' ? '#ffffff' : '#b91c1c',
+                }}
+              >
+                {queries.filter((q) => q.status === 'open').length}
+              </span>
+            )}
           </button>
 
           {/* 8. Lead Distribution */}
@@ -743,6 +765,8 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
 
           {activeTab === 'queries' && (
             <QuerySupportDesk
+              customers={customers}
+              setCustomers={setCustomers}
               queries={queries}
               setQueries={setQueries}
             />

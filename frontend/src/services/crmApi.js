@@ -90,6 +90,9 @@ export const crmApi = {
       if (Array.isArray(fresh.masterLeads)) {
         localStorage.setItem('growthline_master_leads', JSON.stringify(fresh.masterLeads));
       }
+      if (Array.isArray(fresh.queries)) {
+        localStorage.setItem('growthline_support_queries', JSON.stringify(fresh.queries));
+      }
 
       window.dispatchEvent(new CustomEvent('growthline_postgres_synced', { detail: fresh }));
       return fresh;
@@ -185,6 +188,34 @@ export const crmApi = {
 
   async clearAllFailedTransactions() {
     return apiRequest('/sales/failed-transactions/all', { method: 'DELETE' });
+  },
+
+  /**
+   * Desk 07: Query & Support APIs
+   */
+  async getQueries(params = {}) {
+    const queryStr = new URLSearchParams(params).toString();
+    return apiRequest(`/queries${queryStr ? `?${queryStr}` : ''}`);
+  },
+
+  async createQuery(payload) {
+    return apiRequest('/queries', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateQuery(id, payload) {
+    return apiRequest(`/queries/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteQuery(id) {
+    return apiRequest(`/queries/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
   },
 
   async getRazorpayConfig() {

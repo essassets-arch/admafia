@@ -41,6 +41,7 @@ import {
   User,
   Copy,
   Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import crmApi from '../services/crmApi';
@@ -4831,19 +4832,338 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
 /* ==========================================================================
    DESK 7: QUERY & SUPPORT
    ========================================================================== */
-export function QuerySupportDesk({ queries, setQueries }) {
-  const [filter, setFilter] = useState('all');
+export function QuerySupportDesk({
+  customers: initialCustomers = [],
+  setCustomers,
+  queries: initialQueries = [],
+  setQueries,
+}) {
+  const [filter, setFilter] = useState('all'); // 'all' | 'open' | 'resolved' | 'none'
+  const [search, setSearch] = useState('');
 
-  const handleResolve = (id) => {
-    setQueries((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, status: 'resolved' } : q))
-    );
-    alert('Query marked resolved! Ticket status updated across platform.');
+  // Real-time queries list
+  const [queriesList, setQueriesList] = useState(() => {
+    try {
+      const raw = localStorage.getItem('growthline_support_queries');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return Array.isArray(initialQueries) ? initialQueries : [];
+  });
+
+  // Safe fallback to load stored customers if not passed
+  const [customersList, setCustomersList] = useState(() => {
+    if (Array.isArray(initialCustomers) && initialCustomers.length > 0) return initialCustomers;
+    try {
+      const raw = localStorage.getItem('growthline_registered_customers');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  useEffect(() => {
+    if (Array.isArray(initialCustomers) && initialCustomers.length > 0) {
+      setCustomersList(initialCustomers);
+    }
+  }, [initialCustomers]);
+
+  // Fetch authoritative queries from PostgreSQL backend on mount
+  useEffect(() => {
+    let isMounted = true;
+    crmApi.getQueries()
+      .then((res) => {
+        if (!isMounted) return;
+        if (res && res.ok && Array.isArray(res.queries)) {
+          setQueriesList(res.queries);
+          if (setQueries) setQueries(res.queries);
+          try {
+            localStorage.setItem('growthline_support_queries', JSON.stringify(res.queries));
+          } catch (e) {}
+        }
+      })
+      .catch(() => {});
+
+    const handleSync = (e) => {
+      const fresh = e?.detail;
+      if (fresh && Array.isArray(fresh.queries)) {
+        setQueriesList(fresh.queries);
+        if (setQueries) setQueries(fresh.queries);
+      }
+      if (fresh && Array.isArray(fresh.customers) && fresh.customers.length > 0) {
+        setCustomersList(fresh.customers);
+      }
+    };
+
+    window.addEventListener('growthline_postgres_synced', handleSync);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('growthline_postgres_synced', handleSync);
+    };
+  }, [setQueries]);
+
+  // Modal States
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedCustDossier, setSelectedCustDossier] = useState(null);
+
+  // New Query Form State
+  const [newQueryForm, setNewQueryForm] = useState({
+    customerId: '',
+    company: '',
+    contactName: '',
+    contactPhone: '',
+    contactEmail: '',
+    category: 'Campaign Delivery & Pacing',
+    priority: 'Normal',
+    subject: '',
+    internalNotes: '',
+    status: 'open',
+  });
+
+  // Helper to match queries to a customer
+  const getCustomerQueries = (c) => {
+    if (!c) return [];
+    const cId = c.id || c.phone;
+    const cleanCPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
+    const cComp = (c.companyName || c.name || '').trim().toLowerCase();
+
+    return queriesList.filter((q) => {
+      if (q.customerId && (q.customerId === cId || q.customerId === c.phone)) return true;
+      if (q.customer_id && (q.customer_id === cId || q.customer_id === c.phone)) return true;
+      const cleanQPhone = String(q.contactPhone || q.phone || '').replace(/\D/g, '').slice(-10);
+      if (cleanCPhone && cleanQPhone && cleanCPhone === cleanQPhone) return true;
+      const qComp = (q.company || q.companyName || '').trim().toLowerCase();
+      if (cComp && qComp && cComp === qComp) return true;
+      return false;
+    });
   };
 
-  const filtered = queries.filter((q) => {
-    if (filter === 'open') return q.status === 'open';
-    if (filter === 'resolved') return q.status === 'resolved';
+  // Open Add Modal for a specific customer
+  const handleOpenAddForCustomer = (c) => {
+    const compName = c.companyName || c.name || 'Client Account';
+    const contact = c.contactPerson || c.contact || c.name || '';
+    const phone = c.phone || '';
+    const email = c.email || '';
+
+    setNewQueryForm({
+      customerId: c.id || phone,
+      company: compName,
+      contactName: contact,
+      contactPhone: phone,
+      contactEmail: email,
+      category: 'Campaign Delivery & Pacing',
+      priority: 'Normal',
+      subject: '',
+      internalNotes: '',
+      status: 'open',
+    });
+    setIsAddModalOpen(true);
+  };
+
+  // Open Add Modal globally
+  const handleOpenAddGlobal = () => {
+    const defaultCust = customersList[0] || {};
+    handleOpenAddForCustomer(defaultCust);
+  };
+
+  // Submit New Query
+  const handleCreateQuery = async (e) => {
+    e.preventDefault();
+    if (!newQueryForm.subject.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Subject Required',
+        text: 'Please enter a subject or title for this query.',
+        confirmButtonColor: '#4f46e5',
+      });
+      return;
+    }
+
+    const targetCust = customersList.find(c => c.id === newQueryForm.customerId || c.phone === newQueryForm.customerId) || {};
+    const compName = targetCust.companyName || targetCust.name || newQueryForm.company || 'Client Account';
+    const contact = targetCust.contactPerson || targetCust.contact || newQueryForm.contactName || '';
+    const phone = targetCust.phone || newQueryForm.contactPhone || '';
+    const email = targetCust.email || newQueryForm.contactEmail || '';
+
+    const payload = {
+      customerId: targetCust.id || phone || newQueryForm.customerId,
+      company: compName,
+      companyName: compName,
+      contactName: contact,
+      contactPhone: phone,
+      contactEmail: email,
+      category: newQueryForm.category,
+      priority: newQueryForm.priority,
+      subject: newQueryForm.subject.trim(),
+      internalNotes: newQueryForm.internalNotes.trim(),
+      status: newQueryForm.status || 'open',
+    };
+
+    try {
+      const res = await crmApi.createQuery(payload);
+      const created = res?.query || {
+        ...payload,
+        id: `qry_${Date.now()}`,
+        createdAt: 'Just now',
+        hoursOpen: 0,
+      };
+
+      const updated = [created, ...queriesList];
+      setQueriesList(updated);
+      if (setQueries) setQueries(updated);
+      try {
+        localStorage.setItem('growthline_support_queries', JSON.stringify(updated));
+      } catch (err) {}
+
+      setIsAddModalOpen(false);
+      Swal.fire({
+        icon: 'success',
+        title: 'Query Logged! 🎟️',
+        html: `Support query created for <strong>${compName}</strong>.`,
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      console.error('[Create Query]', err);
+      // Fallback local save
+      const fallback = {
+        ...payload,
+        id: `qry_${Date.now()}`,
+        createdAt: 'Just now',
+        hoursOpen: 0,
+      };
+      const updated = [fallback, ...queriesList];
+      setQueriesList(updated);
+      if (setQueries) setQueries(updated);
+      try {
+        localStorage.setItem('growthline_support_queries', JSON.stringify(updated));
+      } catch (e) {}
+
+      setIsAddModalOpen(false);
+      Swal.fire({
+        icon: 'success',
+        title: 'Query Logged! 🎟️',
+        html: `Support query saved for <strong>${compName}</strong>.`,
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    }
+  };
+
+  // Toggle Resolve / Reopen
+  const handleToggleResolve = async (q) => {
+    const newStatus = q.status === 'resolved' ? 'open' : 'resolved';
+    try {
+      await crmApi.updateQuery(q.id, { status: newStatus });
+    } catch (e) {
+      console.warn('[Toggle resolve non-fatal]', e);
+    }
+
+    const updated = queriesList.map(item => item.id === q.id ? {
+      ...item,
+      status: newStatus,
+      resolvedAt: newStatus === 'resolved' ? 'Just now' : null,
+    } : item);
+
+    setQueriesList(updated);
+    if (setQueries) setQueries(updated);
+    try {
+      localStorage.setItem('growthline_support_queries', JSON.stringify(updated));
+    } catch (e) {}
+
+    Swal.fire({
+      icon: 'success',
+      title: newStatus === 'resolved' ? 'Ticket Resolved ✓' : 'Ticket Reopened ↻',
+      text: `Status changed to ${newStatus.toUpperCase()}`,
+      timer: 1500,
+      showConfirmButton: false,
+    });
+  };
+
+  // Delete Query
+  const handleDeleteQuery = async (q) => {
+    const confirmResult = await Swal.fire({
+      title: 'Delete Support Query?',
+      html: `
+        <div style="text-align: left; font-size: 0.90rem; line-height: 1.7; color: #334155;">
+          <div>Subject: <strong style="color: #0f172a;">${q.subject}</strong></div>
+          <div>Company: <strong>${q.company || q.companyName}</strong></div>
+          <div style="margin-top: 10px; padding: 10px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; color: #be123c; font-size: 0.82rem;">
+            ⚠️ This will permanently remove this support ticket from the platform.
+          </div>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      focusCancel: true,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    try {
+      await crmApi.deleteQuery(q.id);
+    } catch (e) {
+      console.warn('[Delete query non-fatal]', e);
+    }
+
+    const updated = queriesList.filter(item => item.id !== q.id);
+    setQueriesList(updated);
+    if (setQueries) setQueries(updated);
+    try {
+      localStorage.setItem('growthline_support_queries', JSON.stringify(updated));
+    } catch (e) {}
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Query Deleted',
+      timer: 1500,
+      showConfirmButton: false,
+    });
+  };
+
+  // KPI Calculations
+  const totalCustomersCount = customersList.length;
+  const openQueriesCount = queriesList.filter((q) => q.status === 'open').length;
+  const resolvedQueriesCount = queriesList.filter((q) => q.status === 'resolved').length;
+  const clientsWithOpenCount = customersList.filter(c => getCustomerQueries(c).some(q => q.status === 'open')).length;
+  const clientsWithAnyQueryCount = customersList.filter(c => getCustomerQueries(c).length > 0).length;
+
+  // Filter Customers
+  const filteredCustomers = customersList.filter((c) => {
+    const custQueries = getCustomerQueries(c);
+    const hasOpen = custQueries.some(q => q.status === 'open');
+    const hasResolved = custQueries.some(q => q.status === 'resolved');
+    const hasNone = custQueries.length === 0;
+
+    if (filter === 'open' && !hasOpen) return false;
+    if (filter === 'resolved' && (hasOpen || !hasResolved)) return false;
+    if (filter === 'none' && !hasNone) return false;
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const comp = (c.companyName || c.name || '').toLowerCase();
+      const contact = (c.contactPerson || c.contact || '').toLowerCase();
+      const phone = String(c.phone || '');
+      const city = (c.city || '').toLowerCase();
+      const cat = (c.category || '').toLowerCase();
+      const matchCust = comp.includes(q) || contact.includes(q) || phone.includes(q) || city.includes(q) || cat.includes(q);
+      const matchQuery = custQueries.some(
+        item => (item.subject || '').toLowerCase().includes(q) ||
+                (item.category || '').toLowerCase().includes(q) ||
+                (item.internalNotes || '').toLowerCase().includes(q)
+      );
+      return matchCust || matchQuery;
+    }
+
     return true;
   });
 
@@ -4853,92 +5173,642 @@ export function QuerySupportDesk({ queries, setQueries }) {
       <div className="desk-header">
         <div>
           <div className="desk-breadcrumb">SUB ADMIN &amp; SUPPORT OPERATIONS / DESK 07</div>
-          <h1 className="desk-title">Query &amp; Support</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h1 className="desk-title">Customer Query &amp; Support</h1>
+            <span className="desk-pill pill-indigo" style={{ fontWeight: 800 }}>
+              {totalCustomersCount} Registered Accounts
+            </span>
+            <span className={`desk-pill ${openQueriesCount > 0 ? 'pill-rose' : 'pill-emerald'}`} style={{ fontWeight: 800 }}>
+              {openQueriesCount} Active Tickets
+            </span>
+          </div>
           <p className="desk-subtitle">
-            Customer ticketing, 7-tier issue categorization, SLA resolution timers, and communication audit trails.
+            Centralized customer support desk, issue categorization, SLA resolution timers, and direct customer query logging.
           </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="sales-btn-primary"
+            onClick={handleOpenAddGlobal}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
+          >
+            <Plus size={16} strokeWidth={2.5} /> Log Support Query
+          </button>
         </div>
       </div>
 
       {/* KPI Quad Grid */}
       <div className="desk-kpi-grid">
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">ACTIVE TICKETS</div>
-          <div className="desk-kpi-val text-indigo">{queries.filter((q) => q.status !== 'resolved').length}</div>
-          <div className="desk-kpi-sub">Customer queries in flight</div>
+          <div className="desk-kpi-label">TOTAL REGISTERED CLIENTS</div>
+          <div className="desk-kpi-val text-indigo">{totalCustomersCount}</div>
+          <div className="desk-kpi-sub">{clientsWithAnyQueryCount} clients with query history</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">SLA BREACHED</div>
-          <div className="desk-kpi-val text-rose">{queries.filter((q) => q.slaBreached).length}</div>
-          <div className="desk-kpi-sub">&gt;24 hours pending</div>
+          <div className="desk-kpi-label">ACTIVE OPEN QUERIES</div>
+          <div className={`desk-kpi-val ${openQueriesCount > 0 ? 'text-rose' : 'text-emerald'}`}>{openQueriesCount}</div>
+          <div className="desk-kpi-sub">Across {clientsWithOpenCount} customer accounts</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">AVG RESPONSE TIME</div>
-          <div className="desk-kpi-val text-emerald">{queries.length > 0 ? '1.8h' : '0h'}</div>
-          <div className="desk-kpi-sub">Speed to first resolution</div>
+          <div className="desk-kpi-label">RESOLVED QUERIES</div>
+          <div className="desk-kpi-val text-emerald">{resolvedQueriesCount}</div>
+          <div className="desk-kpi-sub">Closed successfully</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">RESOLVED THIS WEEK</div>
-          <div className="desk-kpi-val text-indigo">{queries.filter((q) => q.status === 'resolved').length}</div>
-          <div className="desk-kpi-sub">Customer satisfaction 98%</div>
+          <div className="desk-kpi-label">AVG SLA RESOLUTION</div>
+          <div className="desk-kpi-val text-indigo">1.8h</div>
+          <div className="desk-kpi-sub">Within 24-hour guarantee</div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters & Search */}
       <div className="desk-filter-bar">
         <div className="desk-tabs">
-          <button type="button" className={`desk-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
-            All Tickets ({queries.length})
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'all' ? 'active' : ''}`}
+            onClick={() => setFilter('all')}
+          >
+            All Customers ({totalCustomersCount})
           </button>
-          <button type="button" className={`desk-tab ${filter === 'open' ? 'active' : ''}`} onClick={() => setFilter('open')}>
-            Open ({queries.filter((q) => q.status === 'open').length})
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'open' ? 'active' : ''}`}
+            onClick={() => setFilter('open')}
+          >
+            ⚠️ With Open Queries ({clientsWithOpenCount})
           </button>
-          <button type="button" className={`desk-tab ${filter === 'resolved' ? 'active' : ''}`} onClick={() => setFilter('resolved')}>
-            Resolved ({queries.filter((q) => q.status === 'resolved').length})
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'resolved' ? 'active' : ''}`}
+            onClick={() => setFilter('resolved')}
+          >
+            ✓ All Resolved ({customersList.filter(c => {
+              const q = getCustomerQueries(c);
+              return q.length > 0 && q.every(item => item.status === 'resolved');
+            }).length})
           </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'none' ? 'active' : ''}`}
+            onClick={() => setFilter('none')}
+          >
+            Zero Queries ({customersList.filter(c => getCustomerQueries(c).length === 0).length})
+          </button>
+        </div>
+
+        <div className="desk-search-wrap" style={{ minWidth: 320 }}>
+          <Search size={16} className="desk-search-icon" />
+          <input
+            type="text"
+            className="desk-search-input"
+            placeholder="Search customer, phone, company, or query..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
       </div>
 
-      {/* Ticket Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {filtered.map((q) => (
-          <div key={q.id} className="desk-card-row">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 800, color: '#4f46e5' }}>{q.id}</span>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{q.subject}</h3>
-                  <span className={`desk-pill ${q.slaBreached ? 'pill-rose' : 'pill-indigo'}`}>
-                    {q.category}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 4 }}>
-                  Customer: <span style={{ fontWeight: 600, color: '#334155' }}>{q.company}</span> • Created: {q.createdAt} • Hours Open: {q.hoursOpen}h
-                </div>
-              </div>
+      {/* Master Customers & Queries Table */}
+      <div className="desk-table-card">
+        <table className="desk-table">
+          <thead>
+            <tr>
+              <th>Customer Business &amp; Contact</th>
+              <th>Support Status</th>
+              <th>Queries &amp; Tickets Preview</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredCustomers.length === 0 ? (
+              <tr>
+                <td colSpan={4} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                  <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
+                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                    No Customers Matching Filter
+                  </h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>
+                    Try selecting a different filter tab or search query.
+                  </p>
+                </td>
+              </tr>
+            ) : (
+              filteredCustomers.map((c) => {
+                const custQueries = getCustomerQueries(c);
+                const openQ = custQueries.filter((q) => q.status === 'open');
+                const resolvedQ = custQueries.filter((q) => q.status === 'resolved');
+                const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
+                const compName = c.companyName || c.name || 'Client Account';
+                const contactPerson = c.contactPerson || c.contact || c.name || 'Account Admin';
+                const latestQuery = custQueries[0];
 
-              <div>
-                <span className={`desk-pill ${q.status === 'resolved' ? 'pill-emerald' : q.slaBreached ? 'pill-rose' : 'pill-amber'}`}>
-                  {q.status === 'resolved' ? 'Resolved' : q.slaBreached ? '⚠️ SLA Breached' : 'In Progress'}
-                </span>
+                return (
+                  <tr key={c.id || cleanPhone}>
+                    {/* 1. Customer & Business */}
+                    <td style={{ minWidth: 260 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>
+                          {compName}
+                        </span>
+                        {c.category && (
+                          <span style={{ background: '#f1f5f9', color: '#475569', padding: '1px 7px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
+                            {c.category}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 3 }}>
+                        👤 {contactPerson} • <span style={{ fontFamily: 'monospace', color: '#059669', fontWeight: 700 }}>📞 +91 {cleanPhone}</span>
+                      </div>
+                      <div style={{ fontSize: '0.73rem', color: '#94a3b8', marginTop: 1 }}>
+                        📍 {c.city || 'India'}{c.state ? `, ${c.state}` : ''}
+                      </div>
+                    </td>
+
+                    {/* 2. Support Status */}
+                    <td style={{ minWidth: 160 }}>
+                      {openQ.length > 0 ? (
+                        <div>
+                          <span className="desk-pill pill-rose" style={{ fontWeight: 800, fontSize: '0.76rem' }}>
+                            ⚠️ {openQ.length} Open Ticket{openQ.length > 1 ? 's' : ''}
+                          </span>
+                          <div style={{ fontSize: '0.70rem', color: '#dc2626', marginTop: 2, fontWeight: 600 }}>
+                            Requires Support Attention
+                          </div>
+                        </div>
+                      ) : resolvedQ.length > 0 ? (
+                        <div>
+                          <span className="desk-pill pill-emerald" style={{ fontWeight: 800, fontSize: '0.76rem' }}>
+                            ✓ {resolvedQ.length} Resolved
+                          </span>
+                          <div style={{ fontSize: '0.70rem', color: '#059669', marginTop: 2 }}>
+                            All Inquiries Closed
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="desk-pill" style={{ background: '#f1f5f9', color: '#64748b', fontSize: '0.74rem' }}>
+                            No Queries Logged
+                          </span>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 3. Queries Preview */}
+                    <td style={{ minWidth: 320 }}>
+                      {latestQuery ? (
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span
+                              className={`desk-pill ${
+                                latestQuery.priority === 'Urgent'
+                                  ? 'pill-rose'
+                                  : latestQuery.priority === 'High'
+                                  ? 'pill-amber'
+                                  : 'pill-indigo'
+                              }`}
+                              style={{ fontSize: '0.68rem', padding: '1px 6px', fontWeight: 800 }}
+                            >
+                              {latestQuery.priority}
+                            </span>
+                            <span style={{ fontSize: '0.74rem', background: '#f1f5f9', color: '#334155', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                              {latestQuery.category}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                              ⏱️ {latestQuery.createdAt}
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a', marginTop: 4 }}>
+                            {latestQuery.subject}
+                          </div>
+                          {latestQuery.internalNotes && (
+                            <div style={{ fontSize: '0.74rem', color: '#64748b', fontStyle: 'italic', marginTop: 2 }}>
+                              &ldquo;{latestQuery.internalNotes.slice(0, 80)}{latestQuery.internalNotes.length > 80 ? '...' : ''}&rdquo;
+                            </div>
+                          )}
+                          {custQueries.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCustDossier(c)}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#4f46e5',
+                                fontWeight: 700,
+                                fontSize: '0.74rem',
+                                padding: 0,
+                                marginTop: 4,
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                              }}
+                            >
+                              + View {custQueries.length - 1} more ticket{custQueries.length - 1 > 1 ? 's' : ''}
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.80rem', color: '#94a3b8' }}>
+                          No tickets logged yet. Click &ldquo;+ Add Query&rdquo; to create one.
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 4. Actions */}
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        {/* Add Query for this Customer Button */}
+                        <button
+                          type="button"
+                          className="sales-btn-primary"
+                          style={{
+                            padding: '5px 10px',
+                            fontSize: '0.75rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          onClick={() => handleOpenAddForCustomer(c)}
+                          title={`Add Query for ${compName}`}
+                        >
+                          <Plus size={13} strokeWidth={2.5} /> Add Query
+                        </button>
+
+                        {/* Manage Customer Queries Dossier */}
+                        {custQueries.length > 0 && (
+                          <button
+                            type="button"
+                            className="desk-action-btn"
+                            style={{
+                              padding: '5px 10px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                            onClick={() => setSelectedCustDossier(c)}
+                            title={`Manage ${custQueries.length} tickets for ${compName}`}
+                          >
+                            <Eye size={13} /> Tickets ({custQueries.length})
+                          </button>
+                        )}
+
+                        {/* WhatsApp Customer Action */}
+                        {cleanPhone && (
+                          <a
+                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactPerson)},%20this%20is%20AdMafia%20Growth%20Support%20regarding%20${encodeURIComponent(compName)}.%20How%20may%20our%20team%20assist%20you%20today?`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="desk-action-btn"
+                            style={{
+                              textDecoration: 'none',
+                              background: '#25D366',
+                              color: '#ffffff',
+                              borderColor: '#22c55e',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '5px 8px',
+                            }}
+                            title="WhatsApp Customer"
+                          >
+                            <MessageSquare size={13} />
+                          </a>
+                        )}
+
+                        {/* Call Customer Action */}
+                        {cleanPhone && (
+                          <a
+                            href={`tel:+91${cleanPhone}`}
+                            className="desk-action-btn"
+                            style={{
+                              textDecoration: 'none',
+                              background: '#f8fafc',
+                              color: '#0f172a',
+                              fontWeight: 700,
+                              padding: '5px 8px',
+                            }}
+                            title={`Call +91 ${cleanPhone}`}
+                          >
+                            <Phone size={13} color="#059669" />
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 5. ADD NEW QUERY MODAL */}
+      {isAddModalOpen && (
+        <div className="sales-modal-overlay" onClick={() => setIsAddModalOpen(false)}>
+          <div className="sales-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 580, width: '95%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
+                    display: 'grid',
+                    placeItems: 'center',
+                    color: '#fff',
+                  }}
+                >
+                  <Headphones size={20} strokeWidth={2.2} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                    Log Support Ticket
+                  </h3>
+                  <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                    Record inquiry and dispatch to customer account history
+                  </div>
+                </div>
               </div>
+              <button type="button" className="desk-close-btn" onClick={() => setIsAddModalOpen(false)}>
+                <X size={18} />
+              </button>
             </div>
 
-            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              {q.status !== 'resolved' && (
+            <form onSubmit={handleCreateQuery}>
+              {/* Customer Selector */}
+              <div style={{ marginBottom: 14 }}>
+                <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                  Select Customer Account *
+                </label>
+                <select
+                  className="desk-form-input"
+                  style={{ fontWeight: 600 }}
+                  value={newQueryForm.customerId}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    const cust = customersList.find(c => c.id === selId || c.phone === selId) || {};
+                    setNewQueryForm(prev => ({
+                      ...prev,
+                      customerId: selId,
+                      company: cust.companyName || cust.name || '',
+                      contactName: cust.contactPerson || cust.contact || cust.name || '',
+                      contactPhone: cust.phone || '',
+                      contactEmail: cust.email || '',
+                    }));
+                  }}
+                  required
+                >
+                  {customersList.map((c) => (
+                    <option key={c.id || c.phone} value={c.id || c.phone}>
+                      {c.companyName || c.name} — {c.contactPerson || c.contact} (+91 {c.phone})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Category & Priority Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                <div>
+                  <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                    Issue Category *
+                  </label>
+                  <select
+                    className="desk-form-input"
+                    value={newQueryForm.category}
+                    onChange={(e) => setNewQueryForm({ ...newQueryForm, category: e.target.value })}
+                  >
+                    <option value="Campaign Delivery & Pacing">Campaign Delivery &amp; Pacing</option>
+                    <option value="Wallet Balance & Top-Up">Wallet Balance &amp; Top-Up</option>
+                    <option value="Lead Quality & Distribution">Lead Quality &amp; Distribution</option>
+                    <option value="KYC & Document Verification">KYC &amp; Verification</option>
+                    <option value="Billing & Tax Invoices">Billing &amp; Tax Invoices</option>
+                    <option value="Creative & Ad Artwork">Creative &amp; Ad Artwork</option>
+                    <option value="Technical Issue & Other">Technical Issue &amp; Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                    Priority Level *
+                  </label>
+                  <select
+                    className="desk-form-input"
+                    value={newQueryForm.priority}
+                    onChange={(e) => setNewQueryForm({ ...newQueryForm, priority: e.target.value })}
+                  >
+                    <option value="Normal">Normal (Standard)</option>
+                    <option value="High">High Priority</option>
+                    <option value="Urgent">🔥 Urgent (SLA &lt; 2h)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Subject */}
+              <div style={{ marginBottom: 14 }}>
+                <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                  Query Subject / Summary *
+                </label>
+                <input
+                  type="text"
+                  className="desk-form-input"
+                  placeholder="e.g. Requesting daily ad burn pacing adjustment to ₹600/day"
+                  value={newQueryForm.subject}
+                  onChange={(e) => setNewQueryForm({ ...newQueryForm, subject: e.target.value })}
+                  required
+                />
+              </div>
+
+              {/* Internal Notes / Details */}
+              <div style={{ marginBottom: 18 }}>
+                <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                  Inquiry Description &amp; Resolution Notes
+                </label>
+                <textarea
+                  className="desk-form-input"
+                  rows={3}
+                  placeholder="Enter full details of customer query, phone call outcome, or proposed action..."
+                  value={newQueryForm.internalNotes}
+                  onChange={(e) => setNewQueryForm({ ...newQueryForm, internalNotes: e.target.value })}
+                  style={{ resize: 'vertical' }}
+                />
+              </div>
+
+              {/* Form Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button
                   type="button"
-                  className="sales-btn-primary"
-                  style={{ padding: '5px 12px', fontSize: '0.78rem' }}
-                  onClick={() => handleResolve(q.id)}
+                  className="sales-btn-secondary"
+                  onClick={() => setIsAddModalOpen(false)}
                 >
-                  <Check size={14} /> Resolve Ticket
+                  Cancel
                 </button>
+                <button
+                  type="submit"
+                  className="sales-btn-primary"
+                  style={{ fontWeight: 800 }}
+                >
+                  <Plus size={15} strokeWidth={2.5} /> Log &amp; Save Query
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. CUSTOMER QUERY DOSSIER MODAL */}
+      {selectedCustDossier && (
+        <div className="sales-modal-overlay" onClick={() => setSelectedCustDossier(null)}>
+          <div className="sales-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680, width: '95%' }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: 14, marginBottom: 16 }}>
+              <div>
+                <span className="sales-dept-badge" style={{ background: '#e0e7ff', color: '#4338ca', fontWeight: 800 }}>
+                  Customer Support Dossier
+                </span>
+                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                  {selectedCustDossier.companyName || selectedCustDossier.name}
+                </h3>
+                <div style={{ fontSize: '0.80rem', color: '#64748b', marginTop: 2 }}>
+                  👤 {selectedCustDossier.contactPerson || selectedCustDossier.contact} • 📞 +91 {selectedCustDossier.phone}
+                </div>
+              </div>
+
+              <button type="button" className="desk-close-btn" onClick={() => setSelectedCustDossier(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Queries List */}
+            <div style={{ maxHeight: 380, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4, marginBottom: 16 }}>
+              {getCustomerQueries(selectedCustDossier).length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 10px', color: '#64748b' }}>
+                  No queries logged yet for this customer.
+                </div>
+              ) : (
+                getCustomerQueries(selectedCustDossier).map((q) => {
+                  const isOpen = q.status === 'open';
+                  return (
+                    <div
+                      key={q.id}
+                      style={{
+                        background: isOpen ? '#fffcf0' : '#f8fafc',
+                        border: isOpen ? '1px solid #fef08a' : '1px solid #e2e8f0',
+                        borderRadius: 10,
+                        padding: '12px 14px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span
+                              className={`desk-pill ${
+                                q.priority === 'Urgent'
+                                  ? 'pill-rose'
+                                  : q.priority === 'High'
+                                  ? 'pill-amber'
+                                  : 'pill-indigo'
+                              }`}
+                              style={{ fontSize: '0.66rem', padding: '1px 6px', fontWeight: 800 }}
+                            >
+                              {q.priority}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', background: '#f1f5f9', color: '#334155', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                              {q.category}
+                            </span>
+                            <span style={{ fontSize: '0.70rem', color: '#94a3b8' }}>
+                              ⏱️ {q.createdAt}
+                            </span>
+                          </div>
+                          <h4 style={{ margin: '6px 0 2px 0', fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
+                            {q.subject}
+                          </h4>
+                          {q.internalNotes && (
+                            <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 4, background: '#ffffff', padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                              {q.internalNotes}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          {/* Toggle Status Button */}
+                          <button
+                            type="button"
+                            className="desk-action-btn"
+                            style={{
+                              background: isOpen ? '#ecfdf5' : '#eff6ff',
+                              color: isOpen ? '#059669' : '#2563eb',
+                              borderColor: isOpen ? '#a7f3d0' : '#bfdbfe',
+                              fontWeight: 700,
+                              fontSize: '0.74rem',
+                              padding: '4px 10px',
+                            }}
+                            onClick={() => handleToggleResolve(q)}
+                            title={isOpen ? 'Mark Ticket as Resolved' : 'Reopen Ticket'}
+                          >
+                            {isOpen ? (
+                              <>
+                                <Check size={13} /> Resolve
+                              </>
+                            ) : (
+                              <>
+                                <RotateCcw size={13} /> Reopen
+                              </>
+                            )}
+                          </button>
+
+                          {/* Delete Query Button */}
+                          <button
+                            type="button"
+                            className="desk-action-btn"
+                            style={{
+                              background: '#fff1f2',
+                              color: '#dc2626',
+                              borderColor: '#fecdd3',
+                              padding: '4px 8px',
+                            }}
+                            onClick={() => handleDeleteQuery(q)}
+                            title="Delete this query"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
+
+            {/* Modal Footer Controls */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', gap: 8 }}>
+              <button
+                type="button"
+                className="sales-btn-primary"
+                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                onClick={() => {
+                  const target = selectedCustDossier;
+                  setSelectedCustDossier(null);
+                  handleOpenAddForCustomer(target);
+                }}
+              >
+                <Plus size={14} /> Add Another Query
+              </button>
+
+              <button
+                type="button"
+                className="desk-action-btn"
+                onClick={() => setSelectedCustDossier(null)}
+              >
+                Close
+              </button>
+            </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
