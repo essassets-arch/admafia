@@ -21,42 +21,42 @@ export default function WhatsAppWidget() {
 
   return (
     <div className="wa-widget-container">
-      {/* 1. Interactive Teaser Bubble - Direct WhatsApp Redirect */}
-      {showTooltip && (
-        <a
-          href={WA_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="wa-teaser-bubble"
-          style={{ textDecoration: 'none', color: 'inherit' }}
-        >
-          <button
-            type="button"
-            className="wa-teaser-close"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setShowTooltip(false);
-              setHasInteracted(true);
-            }}
-            aria-label="Close message preview"
-          >
-            <X size={13} />
-          </button>
-          <div className="wa-teaser-content">
-            <div className="wa-teaser-header">
-              <span className="wa-online-dot" />
-              <strong>AdMafia Growth Support</strong>
-              <VerifiedBadge size={14} />
-            </div>
-            <p className="wa-teaser-text">
-              Generate genuine buyer leads with phone numbers from <strong>₹300/day</strong>. Chat with us on WhatsApp! 👋
-            </p>
-          </div>
+          {/* 1. Interactive Teaser Bubble - Direct WhatsApp Redirect */}
+          {showTooltip && (
+            <a
+              href={WA_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="wa-teaser-bubble"
+              style={{ textDecoration: 'none', color: 'inherit' }}
+            >
+              <button
+                type="button"
+                className="wa-teaser-close"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowTooltip(false);
+                  setHasInteracted(true);
+                }}
+                aria-label="Close message preview"
+              >
+                <X size={13} />
+              </button>
+              <div className="wa-teaser-content">
+                <div className="wa-teaser-header">
+                  <span className="wa-online-dot" />
+                  <strong>AdMafia Growth Support</strong>
+                  <VerifiedBadge size={14} />
+                </div>
+                <p className="wa-teaser-text">
+                  Generate genuine buyer leads with phone numbers from <strong>₹300/day</strong>. Chat with us on WhatsApp! 👋
+                </p>
+              </div>
         </a>
       )}
 
-      {/* 2. Floating Bottom-Right WhatsApp Action Button - Direct WhatsApp Redirect */}
+        {/* 2. Floating Bottom-Right WhatsApp Action Button - Direct WhatsApp Redirect */}
       <a
         href={WA_URL}
         target="_blank"
@@ -68,8 +68,8 @@ export default function WhatsAppWidget() {
         <span className="wa-btn-pulse-ring" />
         <span className="wa-badge-dot">1</span>
         <WhatsAppIcon size={32} />
-      </a>
-    </div>
+    </a>
+    </div >
   );
 }
 
