@@ -145,10 +145,22 @@ export const marketingApi = {
       body: JSON.stringify(campaignData),
     }),
 
-  startCampaign: (id, actor = 'Marketing Manager') =>
+  startCampaign: (id, actor = 'Marketing Manager', marketingCode = '') =>
     request(`/campaigns/${id}/start`, {
       method: 'POST',
-      body: JSON.stringify({ actor }),
+      body: JSON.stringify({ actor, marketingCode }),
+    }),
+
+  startCustomerMarketing: (customerId, marketingCode = '', actor = 'Marketing Operations Manager') =>
+    request(`/customers/${customerId}/start-marketing`, {
+      method: 'POST',
+      body: JSON.stringify({ actor, marketingCode }),
+    }),
+
+  updateCustomerMarketingCode: (customerId, code = '') =>
+    request(`/customers/${customerId}/code`, {
+      method: 'PATCH',
+      body: JSON.stringify({ code }),
     }),
 
   stopCampaign: (id, actor = 'Marketing Manager', reason = '') =>

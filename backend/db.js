@@ -422,6 +422,9 @@ export async function initDatabase() {
     ALTER TABLE support_queries DROP CONSTRAINT IF EXISTS support_queries_priority_check;
     ALTER TABLE system_users DROP CONSTRAINT IF EXISTS system_users_role_check;
     ALTER TABLE system_users ADD COLUMN IF NOT EXISTS department VARCHAR(64) DEFAULT 'Super Admin';
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL;
+    ALTER TABLE marketing_campaigns ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL;
+    ALTER TABLE wallets ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL;
 
     INSERT INTO system_users (id, full_name, email, username, phone, password_hash, role, department, permissions, status)
     VALUES

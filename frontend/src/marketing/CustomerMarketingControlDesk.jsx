@@ -33,12 +33,14 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [filterCampaignStatus, setFilterCampaignStatus] = useState('all');
+  const [filterCodeStatus, setFilterCodeStatus] = useState('all'); // 'all', 'filled', 'not_filled'
 
   // Create Campaign Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [campaignName, setCampaignName] = useState('');
+  const [createMarketingCode, setCreateMarketingCode] = useState('');
   const [submitMode, setSubmitMode] = useState('start'); // 'start' or 'draft'
 
   // Pacing & Active Days Schedule Modal State
@@ -93,6 +95,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     const found = customers.find((c) => c.id === custId);
     if (found) {
       setCampaignName(`${found.name} - Meta Inbound Ads`);
+      setCreateMarketingCode(found.marketingCode || '');
     }
   };
 
@@ -100,9 +103,13 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     if (customer) {
       setSelectedCustomerId(customer.id);
       setCampaignName(`${customer.name} - Meta Inbound Ads`);
+      setCreateMarketingCode(customer.marketingCode || '');
     } else if (customers.length > 0) {
       setSelectedCustomerId(customers[0].id);
       setCampaignName(`${customers[0].name} - Meta Inbound Ads`);
+      setCreateMarketingCode(customers[0].marketingCode || '');
+    } else {
+      setCreateMarketingCode('');
     }
     setIsCreateModalOpen(true);
   };
@@ -227,6 +234,29 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     const dailySpend = cust ? (cust.dailyAdSpend || 300) : 300;
 
     const shouldStart = submitMode === 'start';
+    let finalCode = createMarketingCode.trim().toUpperCase();
+
+    if (shouldStart && !finalCode) {
+      const { value: code, isConfirmed } = await Swal.fire({
+        title: 'Enter Marketing Code',
+        text: 'Please enter the varchar campaign / marketing code to start marketing live:',
+        input: 'text',
+        inputPlaceholder: 'e.g. META-ADS-8921, CMP-4401',
+        inputAttributes: {
+          autocapitalize: 'off',
+          autocorrect: 'off',
+          style: 'text-transform: uppercase; font-family: monospace; font-weight: 700;',
+        },
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Start Marketing',
+        inputValidator: (v) => (!v || !v.trim() ? 'Marketing code is required!' : null),
+      });
+      if (!isConfirmed) return;
+      finalCode = (code || '').trim().toUpperCase();
+      setCreateMarketingCode(finalCode);
+    }
+
     setCreating(true);
     try {
       const res = await marketingApi.createCampaign({
@@ -240,7 +270,15 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
         dailyBudget: dailySpend,
         actor: 'Marketing Campaign Manager',
         status: shouldStart ? 'Running' : 'Draft',
+        marketingCode: finalCode,
+        externalCampaignId: finalCode,
       });
+
+      if (finalCode) {
+        try {
+          await marketingApi.updateCustomerMarketingCode(selectedCustomerId, finalCode);
+        } catch (e) {}
+      }
 
       if (res && res.ok) {
         setIsCreateModalOpen(false);
@@ -280,66 +318,153 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
       return;
     }
 
-    const confirm = await Swal.fire({
-      title: `Start Marketing: ${cust.name}?`,
+    const defaultCode = cust.marketingCode || activeCampaign?.marketingCode || activeCampaign?.externalCampaignId || '';
+
+    const { value: enteredCode, isConfirmed } = await Swal.fire({
+      title: `Start Marketing: ${cust.name}`,
       html: `
         <div style="text-align: left; font-size: 0.88rem; color: #334155; line-height: 1.6;">
-          <div>Customer: <strong>${cust.name}</strong></div>
-          <div style="margin-top: 4px;">Service Model: <strong>Per-Day Advertising Service (₹${spend}/day)</strong></div>
+          <div style="margin-bottom: 6px;">Customer: <strong style="color: #0f172a;">${cust.name}</strong></div>
+          <div style="margin-bottom: 6px;">Service Model: <strong>Per-Day Advertising Service (₹${spend}/day)</strong></div>
           ${isAlreadyDeducted ? `
-            <div style="margin-top: 6px; padding: 8px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; color: #1e40af; font-size: 0.82rem;">
+            <div style="margin-top: 6px; margin-bottom: 8px; padding: 8px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; color: #1e40af; font-size: 0.82rem;">
               ✓ <strong>Today's per-day service is already settled.</strong> Resuming campaign without charging wallet again today.
             </div>
           ` : `
-            <div style="margin-top: 4px;">Per-Day Service to Deduct: <strong style="color: #dc2626;">-₹${spend}</strong> (Cut from wallet for today)</div>
-            <div>Current Wallet Balance: <strong>₹${balance.toLocaleString('en-IN')}</strong></div>
-            <div>Balance After Today's Deduction: <strong style="color: #059669;">₹${(balance - spend).toLocaleString('en-IN')}</strong></div>
+            <div style="margin-bottom: 4px;">Per-Day Service to Deduct: <strong style="color: #dc2626;">-₹${spend}</strong> (Cut from wallet for today)</div>
+            <div style="margin-bottom: 4px;">Current Wallet Balance: <strong>₹${balance.toLocaleString('en-IN')}</strong></div>
+            <div style="margin-bottom: 6px;">Balance After Today's Deduction: <strong style="color: #059669;">₹${(balance - spend).toLocaleString('en-IN')}</strong></div>
           `}
-          <div style="margin-top: 10px; padding: 10px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 0.82rem; color: #065f46;">
+          <div style="margin-top: 8px; padding: 10px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 0.82rem; color: #065f46;">
             ✓ Marketing will turn <strong>LIVE (ON)</strong> on customer portal &amp; Meta Ads pipeline.
+          </div>
+          <div style="margin-top: 14px; margin-bottom: 4px; font-weight: 700; color: #0f172a; font-size: 0.86rem;">
+            Enter Marketing / Campaign Code (varchar):
           </div>
         </div>
       `,
+      input: 'text',
+      inputValue: defaultCode,
+      inputPlaceholder: 'Enter varchar code (e.g. META-ADS-8921, CMP-4401)',
+      inputAttributes: {
+        autocapitalize: 'off',
+        autocorrect: 'off',
+        style: 'text-transform: uppercase; font-family: monospace; font-weight: 700; letter-spacing: 0.5px;',
+      },
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#10b981',
+      cancelButtonColor: '#64748b',
       confirmButtonText: isAlreadyDeducted ? 'Yes, Resume Marketing' : `Yes, Deduct ₹${spend} & Start Marketing`,
+      cancelButtonText: 'Cancel',
+      inputValidator: (value) => {
+        if (!value || !value.trim()) {
+          return 'Please enter the marketing / campaign code (varchar) to proceed!';
+        }
+      },
     });
 
-    if (!confirm.isConfirmed) return;
+    if (!isConfirmed) return;
+    const finalCode = (enteredCode || '').trim().toUpperCase();
 
     try {
+      let res;
       if (activeCampaign && activeCampaign.id) {
-        const res = await marketingApi.startCampaign(activeCampaign.id, 'Marketing Operations Manager');
-        if (res && res.ok) {
-          await Swal.fire({
-            icon: 'success',
-            title: 'Marketing Started Live! 🚀',
-            text: res.message || `₹${spend} per-day service active for ${cust.name}!`,
-            confirmButtonColor: '#4f46e5',
-          });
-          fetchData(true);
-        }
+        res = await marketingApi.startCampaign(activeCampaign.id, 'Marketing Operations Manager', finalCode);
       } else {
-        const res = await marketingApi.createCampaign({
-          customerId: cust.id,
-          name: `${cust.name} - Meta Inbound Ads`,
-          dailyBudget: spend,
-          status: 'Running',
-          actor: 'Marketing Operations Manager',
+        res = await marketingApi.startCustomerMarketing(cust.id, finalCode, 'Marketing Operations Manager');
+      }
+
+      if (res && res.ok) {
+        setCustomers((prev) =>
+          prev.map((item) =>
+            item.id === cust.id
+              ? {
+                  ...item,
+                  adCampaignActive: true,
+                  marketingCode: finalCode,
+                  isCodeFilled: true,
+                  availableBalance: res.newBalance !== undefined ? res.newBalance : item.availableBalance,
+                }
+              : item
+          )
+        );
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Marketing Started Live! 🚀',
+          html: `
+            <div style="font-size: 0.90rem; color: #334155;">
+              <div>${res.message || `₹${spend} per-day service active for ${cust.name}!`}</div>
+              <div style="margin-top: 10px; padding: 8px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534; font-size: 0.82rem;">
+                ✓ Code Configured &amp; Saved: <strong>Filled</strong>
+              </div>
+            </div>
+          `,
+          confirmButtonColor: '#4f46e5',
         });
-        if (res && res.ok) {
-          await Swal.fire({
-            icon: 'success',
-            title: 'Marketing Started Live! 🚀',
-            text: `Per-day marketing service active for ${cust.name}!`,
-            confirmButtonColor: '#4f46e5',
-          });
-          fetchData(true);
-        }
+        fetchData(true);
       }
     } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Failed to Start', text: err.message });
+      Swal.fire({ icon: 'error', title: 'Failed to Start Marketing', text: err.message });
+    }
+  };
+
+  // Quick Edit Marketing Code helper (updates code status between Filled / Not Filled without starting)
+  const handleEditMarketingCode = async (cust) => {
+    const currentCode = cust.marketingCode || '';
+    const { value: enteredCode, isConfirmed } = await Swal.fire({
+      title: `Marketing Code: ${cust.name}`,
+      html: `
+        <div style="text-align: left; font-size: 0.86rem; color: #475569; margin-bottom: 10px; line-height: 1.5;">
+          Enter or update the varchar campaign / marketing tracking code for <strong>${cust.name}</strong>:
+          <div style="font-size: 0.78rem; color: #64748b; margin-top: 4px;">
+            Note: The table column will indicate <strong>Filled</strong> or <strong>Not Filled</strong> without exposing the code text.
+          </div>
+        </div>
+      `,
+      input: 'text',
+      inputValue: currentCode,
+      inputPlaceholder: 'e.g. META-ADS-8921, CMP-4401',
+      inputAttributes: {
+        autocapitalize: 'off',
+        autocorrect: 'off',
+        style: 'text-transform: uppercase; font-family: monospace; font-weight: 700; letter-spacing: 0.5px;',
+      },
+      showCancelButton: true,
+      confirmButtonColor: '#4f46e5',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Save Code',
+      cancelButtonText: 'Cancel',
+    });
+
+    if (!isConfirmed) return;
+    const finalCode = (enteredCode || '').trim().toUpperCase();
+
+    try {
+      await marketingApi.updateCustomerMarketingCode(cust.id, finalCode);
+      setCustomers((prev) =>
+        prev.map((item) =>
+          item.id === cust.id
+            ? {
+                ...item,
+                marketingCode: finalCode,
+                isCodeFilled: Boolean(finalCode),
+              }
+            : item
+        )
+      );
+
+      Swal.fire({
+        icon: 'success',
+        title: finalCode ? 'Code Saved! ✓' : 'Code Cleared',
+        text: finalCode ? 'Marketing code status updated to Filled.' : 'Status updated to Not Filled.',
+        timer: 1500,
+        showConfirmButton: false,
+      });
+      fetchData(true);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Failed to update code', text: err.message });
     }
   };
 
@@ -461,7 +586,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           />
         </div>
 
-        <div className="marketing-filter-group">
+        <div className="marketing-filter-group" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             className="marketing-select"
             value={filterCampaignStatus}
@@ -473,6 +598,16 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
             <option value="Stopped">Stopped / Paused</option>
             <option value="None">No Campaign Configured</option>
           </select>
+
+          <select
+            className="marketing-select"
+            value={filterCodeStatus}
+            onChange={(e) => setFilterCodeStatus(e.target.value)}
+          >
+            <option value="all">All Code Statuses</option>
+            <option value="filled">✓ Code Filled</option>
+            <option value="not_filled">✕ Code Not Filled</option>
+          </select>
         </div>
       </div>
 
@@ -482,38 +617,53 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           <table className="marketing-table">
             <thead>
               <tr>
-                <th style={{ width: '22%' }}>Customer / Business</th>
-                <th style={{ width: '13%' }}>Category</th>
-                <th style={{ width: '32%' }}>Marketing Pacing &amp; Schedule</th>
-                <th style={{ width: '15%' }}>Ad Wallet</th>
-                <th style={{ width: '18%' }}>Marketing Actions</th>
+                <th style={{ width: '21%' }}>Customer / Business</th>
+                <th style={{ width: '11%' }}>Category</th>
+                <th style={{ width: '13%', textAlign: 'center' }}>Marketing Code</th>
+                <th style={{ width: '27%' }}>Marketing Pacing &amp; Schedule</th>
+                <th style={{ width: '13%' }}>Ad Wallet</th>
+                <th style={{ width: '15%' }}>Marketing Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
                       <RefreshCw size={18} className="spin" />
                       <span>Loading marketing control dashboard...</span>
                     </div>
                   </td>
                 </tr>
-              ) : customers.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
-                    <Building size={36} style={{ color: '#cbd5e1', marginBottom: '8px' }} />
-                    <h4 style={{ margin: '0 0 6px 0', color: '#0f172a' }}>No customers found</h4>
-                    <p style={{ fontSize: '0.84rem', margin: 0 }}>
-                      No customer records match the current filter criteria.
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                customers.map((c) => {
+              ) : (() => {
+                const displayedCustomers = customers.filter((c) => {
+                  const custCampaigns = campaigns.filter((camp) => camp.customerId === c.id);
+                  const activeCampaign = custCampaigns.find((camp) => camp.status === 'Running') || custCampaigns[0];
+                  const isFilled = Boolean(c.marketingCode || (activeCampaign && (activeCampaign.marketingCode || activeCampaign.externalCampaignId)));
+                  if (filterCodeStatus === 'filled') return isFilled;
+                  if (filterCodeStatus === 'not_filled') return !isFilled;
+                  return true;
+                });
+
+                if (displayedCustomers.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
+                        <Building size={36} style={{ color: '#cbd5e1', marginBottom: '8px' }} />
+                        <h4 style={{ margin: '0 0 6px 0', color: '#0f172a' }}>No customers found</h4>
+                        <p style={{ fontSize: '0.84rem', margin: 0 }}>
+                          No customer records match the current filter criteria.
+                        </p>
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return displayedCustomers.map((c) => {
                   const custCampaigns = campaigns.filter((camp) => camp.customerId === c.id);
                   const activeCampaign = custCampaigns.find((camp) => camp.status === 'Running') || custCampaigns[0];
                   const isLive = Boolean(c.adCampaignActive || (activeCampaign && activeCampaign.status === 'Running'));
+                  const isCodeFilled = Boolean(c.marketingCode || (activeCampaign && (activeCampaign.marketingCode || activeCampaign.externalCampaignId)));
                   const activeDays = c.activeDays && c.activeDays.length > 0 ? c.activeDays : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
                   const isTodayActive = activeDays.includes(todayItem.code);
                   const dailySpend = c.dailyAdSpend || 300;
@@ -550,7 +700,86 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                         <span className="mkt-pill mkt-pill-slate">{c.category}</span>
                       </td>
 
-                      {/* 3. Marketing Pacing & Scheduled Days (Synced with /app/lead#app/dashboard) */}
+                      {/* 3. Marketing Code Column (Shows Filled / Not Filled, NEVER exposes actual code) */}
+                      <td style={{ textAlign: 'center' }}>
+                        {isCodeFilled ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleEditMarketingCode(c)}
+                              title="Code is assigned. Click to view or edit."
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <span
+                                className="mkt-pill mkt-pill-green"
+                                style={{
+                                  fontSize: '0.74rem',
+                                  padding: '4px 10px',
+                                  fontWeight: 800,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  borderRadius: '9999px',
+                                  border: '1px solid #86efac',
+                                  background: '#f0fdf4',
+                                  color: '#15803d',
+                                  boxShadow: '0 1px 2px rgba(22, 163, 74, 0.08)',
+                                }}
+                              >
+                                <Check size={12} strokeWidth={3} style={{ color: '#16a34a' }} />
+                                <span>Filled</span>
+                              </span>
+                            </button>
+                            <span style={{ fontSize: '0.64rem', color: '#94a3b8', fontWeight: 600 }}>
+                              Protected
+                            </span>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleEditMarketingCode(c)}
+                              title="No code assigned yet. Click to enter code."
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <span
+                                className="mkt-pill mkt-pill-rose"
+                                style={{
+                                  fontSize: '0.74rem',
+                                  padding: '4px 10px',
+                                  fontWeight: 800,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  borderRadius: '9999px',
+                                  border: '1px solid #fecdd3',
+                                  background: '#fff1f2',
+                                  color: '#be123c',
+                                  boxShadow: '0 1px 2px rgba(225, 29, 72, 0.06)',
+                                }}
+                              >
+                                <span style={{ fontSize: '0.72rem', lineHeight: 1 }}>✕</span>
+                                <span>Not Filled</span>
+                              </span>
+                            </button>
+                            <span style={{ fontSize: '0.64rem', color: '#cbd5e1', fontWeight: 600 }}>
+                              Required on Start
+                            </span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 4. Marketing Pacing & Scheduled Days (Synced with /app/lead#app/dashboard) */}
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
                           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
@@ -724,8 +953,8 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                       </td>
                     </tr>
                   );
-                })
-              )}
+                });
+              })()}
             </tbody>
           </table>
         </div>
@@ -974,6 +1203,23 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                     onChange={(e) => setCampaignName(e.target.value)}
                     required
                   />
+                </div>
+
+                <div className="mkt-form-group">
+                  <label className="mkt-form-label">
+                    Campaign / Marketing Code (varchar)
+                  </label>
+                  <input
+                    type="text"
+                    className="mkt-form-input"
+                    placeholder="e.g. META-ADS-8921, CMP-4401"
+                    value={createMarketingCode}
+                    onChange={(e) => setCreateMarketingCode(e.target.value.toUpperCase())}
+                    style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.5px' }}
+                  />
+                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '4px' }}>
+                    Tracking varchar code. The table will mark status as <strong>Filled</strong> without exposing the code string.
+                  </div>
                 </div>
               </div>
 

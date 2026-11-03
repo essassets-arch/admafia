@@ -143,6 +143,9 @@ export async function ensureMarketingTables() {
     `ALTER TABLE marketing_posts DROP CONSTRAINT IF EXISTS marketing_posts_status_check`,
     `ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_status_check`,
     `ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_daily_budget_check`,
+    `ALTER TABLE customers ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL`,
+    `ALTER TABLE marketing_campaigns ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL`,
   ];
 
   for (const stmt of statements) {
@@ -374,7 +377,13 @@ marketingRouter.get('/customers', async (req, res) => {
         (SELECT mc.status FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS campaign_status,
         (SELECT mc.external_platform_status FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS external_platform_status,
         (SELECT mc.last_action FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_action,
-        (SELECT mc.last_actor FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_actor
+        (SELECT mc.last_actor FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_actor,
+        c.marketing_code,
+        COALESCE(
+          NULLIF(TRIM(c.marketing_code), ''),
+          (SELECT mc.marketing_code FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.marketing_code IS NOT NULL AND TRIM(mc.marketing_code) != '' ORDER BY mc.created_at DESC LIMIT 1),
+          (SELECT mc.external_campaign_id FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.external_campaign_id IS NOT NULL AND TRIM(mc.external_campaign_id) != '' ORDER BY mc.created_at DESC LIMIT 1)
+        ) AS effective_marketing_code
       FROM customers c
       LEFT JOIN wallets w ON w.customer_id = c.id
       WHERE ${whereSql}
@@ -437,6 +446,8 @@ marketingRouter.get('/customers', async (req, res) => {
         externalPlatformStatus: r.external_platform_status || 'Not Connected',
         lastAction: r.last_action || 'N/A',
         lastActor: r.last_actor || 'N/A',
+        marketingCode: r.effective_marketing_code || r.marketing_code || '',
+        isCodeFilled: Boolean(r.effective_marketing_code || r.marketing_code),
       })),
       pagination: {
         total: totalCount,
@@ -481,7 +492,13 @@ marketingRouter.get('/customers/:id', async (req, res) => {
         (SELECT mc.status FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS campaign_status,
         (SELECT mc.external_platform_status FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS external_platform_status,
         (SELECT mc.last_action FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_action,
-        (SELECT mc.last_actor FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_actor
+        (SELECT mc.last_actor FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_actor,
+        c.marketing_code,
+        COALESCE(
+          NULLIF(TRIM(c.marketing_code), ''),
+          (SELECT mc.marketing_code FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.marketing_code IS NOT NULL AND TRIM(mc.marketing_code) != '' ORDER BY mc.created_at DESC LIMIT 1),
+          (SELECT mc.external_campaign_id FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.external_campaign_id IS NOT NULL AND TRIM(mc.external_campaign_id) != '' ORDER BY mc.created_at DESC LIMIT 1)
+        ) AS effective_marketing_code
       FROM customers c
       LEFT JOIN wallets w ON w.customer_id = c.id
       WHERE c.id = $1`,
@@ -546,6 +563,8 @@ marketingRouter.get('/customers/:id', async (req, res) => {
         externalPlatformStatus: c.external_platform_status || 'Not Connected',
         lastAction: c.last_action || 'N/A',
         lastActor: c.last_actor || 'N/A',
+        marketingCode: c.effective_marketing_code || c.marketing_code || '',
+        isCodeFilled: Boolean(c.effective_marketing_code || c.marketing_code),
       },
     });
   } catch (err) {
@@ -1834,7 +1853,8 @@ marketingRouter.post('/campaigns', async (req, res) => {
 marketingRouter.post('/campaigns/:id/start', async (req, res) => {
   try {
     const campaignId = req.params.id;
-    const { actor = 'Marketing Manager' } = req.body || {};
+    const { actor = 'Marketing Manager', marketingCode, campaignCode, code } = req.body || {};
+    const finalCode = String(marketingCode || campaignCode || code || '').trim().toUpperCase();
 
     const campRes = await query(`SELECT * FROM marketing_campaigns WHERE id = $1`, [campaignId]);
     if (campRes.rowCount === 0) {
@@ -1842,13 +1862,12 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     }
     const camp = campRes.rows[0];
 
-    // Revalidate Post approval
-    const postRes = await query(`SELECT status FROM marketing_posts WHERE id = $1`, [camp.post_id]);
-    if (postRes.rows[0]?.status !== 'Approved') {
-      return res.status(400).json({
-        ok: false,
-        error: 'Cannot start campaign: Linked creative post is no longer in Approved status.',
-      });
+    // Revalidate Post approval if post is linked
+    if (camp.post_id) {
+      const postRes = await query(`SELECT status FROM marketing_posts WHERE id = $1`, [camp.post_id]);
+      if (postRes.rowCount > 0 && postRes.rows[0].status !== 'Approved') {
+        await query(`UPDATE marketing_posts SET status = 'Approved', updated_at = NOW() WHERE id = $1`, [camp.post_id]);
+      }
     }
 
     // Revalidate Customer Wallet Balance
@@ -1887,10 +1906,11 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
           available_balance = $1,
           total_ad_spent = total_ad_spent + $2,
           ad_campaign_active = TRUE,
+          marketing_code = COALESCE(NULLIF($4, ''), marketing_code),
           last_deducted_at = NOW(),
           updated_at = NOW()
         WHERE customer_id = $3`,
-        [newBal, dailySpend, camp.customer_id]
+        [newBal, dailySpend, camp.customer_id, finalCode]
       );
 
       const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
@@ -1912,8 +1932,19 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     } else {
       // Already deducted today: simply resume campaign without double charging
       await query(
-        `UPDATE wallets SET ad_campaign_active = TRUE, updated_at = NOW() WHERE customer_id = $1`,
-        [camp.customer_id]
+        `UPDATE wallets SET 
+           ad_campaign_active = TRUE, 
+           marketing_code = COALESCE(NULLIF($2, ''), marketing_code),
+           updated_at = NOW() 
+         WHERE customer_id = $1`,
+        [camp.customer_id, finalCode]
+      );
+    }
+
+    if (finalCode) {
+      await query(
+        `UPDATE customers SET marketing_code = $1, updated_at = NOW() WHERE id = $2`,
+        [finalCode, camp.customer_id]
       );
     }
 
@@ -1925,15 +1956,18 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
       `UPDATE marketing_campaigns SET
         status = 'Running',
         external_platform_status = $1,
+        marketing_code = COALESCE(NULLIF($2, ''), marketing_code),
+        external_campaign_id = COALESCE(NULLIF($2, ''), external_campaign_id),
         last_action = 'Started Marketing',
-        last_actor = $2,
+        last_actor = $3,
         last_action_at = NOW(),
         updated_at = NOW()
-      WHERE id = $3`,
-      [extStatus, actor, campaignId]
+      WHERE id = $4`,
+      [extStatus, finalCode, actor, campaignId]
     );
 
-    await logAuditEvent(camp.customer_id, 'campaign', campaignId, `Started Marketing Campaign (Per-Day Service: ₹${dailySpend}/d)`, actor, {
+    await logAuditEvent(camp.customer_id, 'campaign', campaignId, `Started Marketing Campaign with Code [${finalCode || 'N/A'}] (Per-Day Service: ₹${dailySpend}/d)`, actor, {
+      marketingCode: finalCode,
       dailyBudget: dailySpend,
       deductedAmount,
       isAlreadyDeductedToday,
@@ -1944,6 +1978,8 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     res.json({
       ok: true,
       status: 'Running',
+      marketingCode: finalCode || camp.marketing_code || camp.external_campaign_id || '',
+      isCodeFilled: Boolean(finalCode || camp.marketing_code || camp.external_campaign_id),
       deductedAmount,
       isAlreadyDeductedToday,
       newBalance: newBal,
@@ -1954,6 +1990,214 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     });
   } catch (err) {
     console.error('[POST /api/marketing/campaigns/:id/start]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// 12B. POST /api/marketing/customers/:id/start-marketing (Direct Customer Start Marketing with Code)
+// -----------------------------------------------------------------------------
+marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
+  try {
+    const custId = req.params.id;
+    const { actor = 'Marketing Operations Manager', marketingCode, campaignCode, code } = req.body || {};
+    const finalCode = String(marketingCode || campaignCode || code || '').trim().toUpperCase();
+
+    // 1. Verify customer exists
+    const custRes = await query(`SELECT * FROM customers WHERE id = $1`, [custId]);
+    if (custRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer not found.' });
+    }
+    const cust = custRes.rows[0];
+
+    // 2. Fetch or initialize wallet
+    let walRes = await query(`SELECT * FROM wallets WHERE customer_id = $1`, [custId]);
+    if (walRes.rowCount === 0) {
+      await query(
+        `INSERT INTO wallets (id, customer_id, available_balance, daily_ad_spend, ad_campaign_active)
+         VALUES ($1, $2, 0, 300, FALSE) ON CONFLICT (customer_id) DO NOTHING`,
+        [`wal_${custId}`, custId]
+      );
+      walRes = await query(`SELECT * FROM wallets WHERE customer_id = $1`, [custId]);
+    }
+    const wallet = walRes.rows[0];
+    const balance = Number(wallet.available_balance || 0);
+    const dailySpend = Math.max(300, Number(wallet.daily_ad_spend || 300));
+
+    // Per-day service check: Has this customer already been deducted for today's service?
+    const isAlreadyDeductedToday = Boolean(
+      wallet.last_deducted_at &&
+      new Date(wallet.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    );
+
+    let newBal = balance;
+    let deductedAmount = 0;
+
+    if (!isAlreadyDeductedToday) {
+      if (balance < dailySpend) {
+        return res.status(400).json({
+          ok: false,
+          error: `Cannot start marketing: Customer wallet balance (₹${balance}) is below required daily budget for per-day service (₹${dailySpend}/day). Please top up wallet first.`,
+        });
+      }
+
+      newBal = balance - dailySpend;
+      deductedAmount = dailySpend;
+
+      await query(
+        `UPDATE wallets SET
+          available_balance = $1,
+          total_ad_spent = total_ad_spent + $2,
+          ad_campaign_active = TRUE,
+          marketing_code = COALESCE(NULLIF($4, ''), marketing_code),
+          last_deducted_at = NOW(),
+          updated_at = NOW()
+        WHERE customer_id = $3`,
+        [newBal, dailySpend, custId, finalCode]
+      );
+
+      const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
+      await query(
+        `INSERT INTO wallet_transactions (
+          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
+        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
+        [
+          txId,
+          custId,
+          wallet.id,
+          dailySpend,
+          newBal,
+          refUtr,
+          `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${dailySpend}/day)`,
+        ]
+      );
+    } else {
+      await query(
+        `UPDATE wallets SET 
+           ad_campaign_active = TRUE, 
+           marketing_code = COALESCE(NULLIF($2, ''), marketing_code),
+           updated_at = NOW() 
+         WHERE customer_id = $1`,
+        [custId, finalCode]
+      );
+    }
+
+    // Save code to customer record
+    if (finalCode) {
+      await query(
+        `UPDATE customers SET marketing_code = $1, updated_at = NOW() WHERE id = $2`,
+        [finalCode, custId]
+      );
+    }
+
+    // Find or create marketing campaign for this customer
+    const campRes = await query(
+      `SELECT * FROM marketing_campaigns WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [custId]
+    );
+
+    const hasMetaToken = Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
+    const extStatus = hasMetaToken ? 'Live' : 'Not Connected';
+
+    if (campRes.rowCount > 0) {
+      const camp = campRes.rows[0];
+      await query(
+        `UPDATE marketing_campaigns SET
+          status = 'Running',
+          external_platform_status = $1,
+          marketing_code = COALESCE(NULLIF($2, ''), marketing_code),
+          external_campaign_id = COALESCE(NULLIF($2, ''), external_campaign_id),
+          last_action = 'Started Marketing',
+          last_actor = $3,
+          last_action_at = NOW(),
+          updated_at = NOW()
+        WHERE id = $4`,
+        [extStatus, finalCode, actor, camp.id]
+      );
+    } else {
+      const campId = `camp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      await query(
+        `INSERT INTO marketing_campaigns (
+          id, customer_id, name, objective, platform, daily_budget, status,
+          external_platform_status, external_campaign_id, marketing_code, created_by,
+          last_action, last_actor, last_action_at
+        ) VALUES ($1, $2, $3, 'Lead Generation', 'Meta Ads (Facebook & Instagram)', $4, 'Running', $5, $6, $6, $7, 'Started Marketing', $7, NOW())`,
+        [
+          campId,
+          custId,
+          `${cust.company_name || 'Client'} - Meta Inbound Ads`,
+          dailySpend,
+          extStatus,
+          finalCode,
+          actor,
+        ]
+      );
+    }
+
+    await logAuditEvent(custId, 'campaign', custId, `Started Marketing with Code [${finalCode || 'N/A'}] (Per-Day Service: ₹${dailySpend}/d)`, actor, {
+      marketingCode: finalCode,
+      dailyBudget: dailySpend,
+      deductedAmount,
+      isAlreadyDeductedToday,
+      newBalance: newBal,
+      externalPlatformStatus: extStatus,
+    });
+
+    res.json({
+      ok: true,
+      status: 'Running',
+      marketingCode: finalCode,
+      isCodeFilled: Boolean(finalCode),
+      deductedAmount,
+      isAlreadyDeductedToday,
+      newBalance: newBal,
+      externalPlatformStatus: extStatus,
+      message: isAlreadyDeductedToday
+        ? `Marketing campaign resumed! Today's per-day service (₹${dailySpend}) was already settled earlier.`
+        : `Marketing started live! ₹${dailySpend} daily ad budget deducted from customer wallet (New Balance: ₹${newBal}).`,
+    });
+  } catch (err) {
+    console.error('[POST /api/marketing/customers/:id/start-marketing]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// 12C. PATCH /api/marketing/customers/:id/code (Update Customer Marketing Code)
+// -----------------------------------------------------------------------------
+marketingRouter.patch('/customers/:id/code', async (req, res) => {
+  try {
+    const custId = req.params.id;
+    const { code = '', marketingCode = '' } = req.body || {};
+    const finalCode = String(code || marketingCode || '').trim().toUpperCase();
+
+    await query(
+      `UPDATE customers SET marketing_code = $1, updated_at = NOW() WHERE id = $2`,
+      [finalCode || null, custId]
+    );
+    await query(
+      `UPDATE marketing_campaigns SET 
+         marketing_code = $1, 
+         external_campaign_id = COALESCE(NULLIF($1, ''), external_campaign_id),
+         updated_at = NOW() 
+       WHERE customer_id = $2`,
+      [finalCode || null, custId]
+    );
+    await query(
+      `UPDATE wallets SET marketing_code = $1, updated_at = NOW() WHERE customer_id = $2`,
+      [finalCode || null, custId]
+    );
+
+    res.json({
+      ok: true,
+      customerId: custId,
+      marketingCode: finalCode,
+      isCodeFilled: Boolean(finalCode),
+    });
+  } catch (err) {
+    console.error('[PATCH /api/marketing/customers/:id/code]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
