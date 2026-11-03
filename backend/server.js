@@ -2503,8 +2503,8 @@ app.post('/api/wallets/failed-transaction', async (req, res) => {
       const newUsername = username || (cleanPhone ? `user_${cleanPhone}` : `client_${Date.now().toString().slice(-4)}`);
       const newComp = companyName || company || 'Client Account';
       const insCust = await query(`
-        INSERT INTO customers (id, username, company_name, contact_person, phone, registered_at)
-        VALUES ($1, $2, $3, $4, $5, NOW())
+        INSERT INTO customers (id, username, company_name, contact_person, phone, password_hash, registered_at)
+        VALUES ($1, $2, $3, $4, $5, 'Client@AutoInit2026', NOW())
         ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone
         RETURNING *
       `, [newCustId, newUsername, newComp, newUsername, cleanPhone || '9999999999']);
