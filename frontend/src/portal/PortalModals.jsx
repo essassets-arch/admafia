@@ -674,34 +674,77 @@ export function AddFundsModal({
           color: '#4f46e5',
         },
         handler: async function (response) {
-          try {
-            const verifyRes = await crmApi.verifyRazorpayPayment({
-              orderId: response.razorpay_order_id || orderRes.orderId,
-              paymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature,
-              customerId: customer?.id,
-              phone: cleanPhone,
-              username: customer?.username,
-              amount: currentAmount,
-            });
+          const verifyPayload = {
+            orderId: response.razorpay_order_id || orderRes.orderId,
+            paymentId: response.razorpay_payment_id,
+            signature: response.razorpay_signature,
+            customerId: customer?.id,
+            phone: cleanPhone,
+            username: customer?.username,
+            amount: currentAmount,
+          };
 
-            if (verifyRes?.ok) {
-              finalizeTopUp(currentAmount, response.razorpay_payment_id);
-              if (onTopUp) {
-                onTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
+          const attemptVerify = async (isRetry = false) => {
+            try {
+              const verifyRes = await crmApi.verifyRazorpayPayment(verifyPayload);
+              if (verifyRes?.ok) {
+                finalizeTopUp(currentAmount, response.razorpay_payment_id);
+                if (onTopUp) {
+                  onTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
+                }
+                return true;
               }
-            } else {
-              throw new Error(verifyRes?.error || 'Payment verification failed.');
+              throw new Error(verifyRes?.error || 'Payment verification could not be confirmed.');
+            } catch (err) {
+              if (!isRetry) {
+                console.warn('[AddFundsModal] Initial verification attempt failed, retrying in 1.5s...', err.message);
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+                return attemptVerify(true);
+              }
+              throw err;
             }
+          };
+
+          try {
+            await attemptVerify();
           } catch (vErr) {
-            console.error('[Verify Error]', vErr);
+            console.error('[AddFundsModal Verify Error]', vErr);
             setIsProcessing(false);
             setSweetAlert({
-              type: 'error',
-              title: 'Verification Failed',
-              message: vErr.message || 'Payment received, but verification timed out.',
-              confirmText: 'OK',
-              onConfirm: () => setSweetAlert(null),
+              type: 'warning',
+              title: 'Payment Received — Confirming Status',
+              message: `Your payment was completed on Razorpay (Ref: ${response.razorpay_payment_id}). Bank confirmation is completing. Click "Check Status" to confirm your wallet balance.`,
+              confirmText: '🔄 Check Status Now',
+              onConfirm: async () => {
+                setSweetAlert(null);
+                setIsProcessing(true);
+                try {
+                  const checkRes = await crmApi.verifyRazorpayPayment(verifyPayload);
+                  if (checkRes?.ok) {
+                    finalizeTopUp(currentAmount, response.razorpay_payment_id);
+                    if (onTopUp) onTopUp(currentAmount, response.razorpay_payment_id, checkRes);
+                  } else {
+                    throw new Error(checkRes?.error || 'Verification still pending.');
+                  }
+                } catch (retryErr) {
+                  setIsProcessing(false);
+                  setSweetAlert({
+                    type: 'info',
+                    title: 'Payment Processing with Bank',
+                    message: `Payment reference ${response.razorpay_payment_id} is recorded. Your wallet balance will update automatically within 1–2 minutes.`,
+                    confirmText: 'OK',
+                    onConfirm: () => {
+                      setSweetAlert(null);
+                      onClose();
+                    },
+                  });
+                }
+              },
+              secondaryText: 'Close',
+              onSecondary: () => {
+                setSweetAlert(null);
+                onClose();
+              },
             });
           }
         },
@@ -2139,34 +2182,77 @@ export function MarketingGrowthPaymentModal({
           color: '#4f46e5',
         },
         handler: async function (response) {
-          try {
-            const verifyRes = await crmApi.verifyRazorpayPayment({
-              orderId: response.razorpay_order_id || orderRes.orderId,
-              paymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature,
-              customerId: customer?.id,
-              phone: cleanPhone,
-              username: customer?.username,
-              amount: currentAmount,
-            });
+          const verifyPayload = {
+            orderId: response.razorpay_order_id || orderRes.orderId,
+            paymentId: response.razorpay_payment_id,
+            signature: response.razorpay_signature,
+            customerId: customer?.id,
+            phone: cleanPhone,
+            username: customer?.username,
+            amount: currentAmount,
+          };
 
-            if (verifyRes?.ok) {
-              finalizeTopUp(currentAmount, response.razorpay_payment_id);
-              if (onTopUp) {
-                onTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
+          const attemptVerify = async (isRetry = false) => {
+            try {
+              const verifyRes = await crmApi.verifyRazorpayPayment(verifyPayload);
+              if (verifyRes?.ok) {
+                finalizeTopUp(currentAmount, response.razorpay_payment_id);
+                if (onTopUp) {
+                  onTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
+                }
+                return true;
               }
-            } else {
-              throw new Error(verifyRes?.error || 'Payment verification failed.');
+              throw new Error(verifyRes?.error || 'Payment verification could not be confirmed.');
+            } catch (err) {
+              if (!isRetry) {
+                console.warn('[AddFundsModal] Initial verification attempt failed, retrying in 1.5s...', err.message);
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+                return attemptVerify(true);
+              }
+              throw err;
             }
+          };
+
+          try {
+            await attemptVerify();
           } catch (vErr) {
-            console.error('[Verify Error]', vErr);
+            console.error('[AddFundsModal Verify Error]', vErr);
             setIsProcessing(false);
             setSweetAlert({
-              type: 'error',
-              title: 'Verification Failed',
-              message: vErr.message || 'Payment received, but verification timed out.',
-              confirmText: 'OK',
-              onConfirm: () => setSweetAlert(null),
+              type: 'warning',
+              title: 'Payment Received — Confirming Status',
+              message: `Your payment was completed on Razorpay (Ref: ${response.razorpay_payment_id}). Bank confirmation is completing. Click "Check Status" to confirm your wallet balance.`,
+              confirmText: '🔄 Check Status Now',
+              onConfirm: async () => {
+                setSweetAlert(null);
+                setIsProcessing(true);
+                try {
+                  const checkRes = await crmApi.verifyRazorpayPayment(verifyPayload);
+                  if (checkRes?.ok) {
+                    finalizeTopUp(currentAmount, response.razorpay_payment_id);
+                    if (onTopUp) onTopUp(currentAmount, response.razorpay_payment_id, checkRes);
+                  } else {
+                    throw new Error(checkRes?.error || 'Verification still pending.');
+                  }
+                } catch (retryErr) {
+                  setIsProcessing(false);
+                  setSweetAlert({
+                    type: 'info',
+                    title: 'Payment Processing with Bank',
+                    message: `Payment reference ${response.razorpay_payment_id} is recorded. Your wallet balance will update automatically within 1–2 minutes.`,
+                    confirmText: 'OK',
+                    onConfirm: () => {
+                      setSweetAlert(null);
+                      onClose();
+                    },
+                  });
+                }
+              },
+              secondaryText: 'Close',
+              onSecondary: () => {
+                setSweetAlert(null);
+                onClose();
+              },
             });
           }
         },

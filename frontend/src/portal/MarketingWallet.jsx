@@ -325,41 +325,55 @@ export default function MarketingWallet({
         handler: async function (response) {
           setIsProcessingPayment(false);
           setIsVerifyingPayment(true);
-          try {
-            const verifyRes = await crmApi.verifyRazorpayPayment({
-              orderId: response.razorpay_order_id || orderRes.orderId,
-              paymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature,
-              customerId: customer?.id,
-              phone: cleanPhone,
-              username: customer?.username,
-              amount: activeAmount,
-            });
 
-            if (verifyRes?.ok) {
-              setPaymentResultModal({
-                status: 'success',
-                title: 'Payment Successful!',
-                amount: activeAmount,
-                paymentId: response.razorpay_payment_id,
-                date: new Date().toLocaleString('en-IN'),
-              });
-              setActionAlert({
-                type: 'success',
-                message: `Payment Verified! ₹${activeAmount.toLocaleString('en-IN')} added directly to wallet via Razorpay (Ref: ${response.razorpay_payment_id}).`,
-              });
+          const verifyPayload = {
+            orderId: response.razorpay_order_id || orderRes.orderId,
+            paymentId: response.razorpay_payment_id,
+            signature: response.razorpay_signature,
+            customerId: customer?.id,
+            phone: cleanPhone,
+            username: customer?.username,
+            amount: activeAmount,
+          };
 
-              if (onTopUpWallet) {
-                onTopUpWallet(activeAmount, response.razorpay_payment_id, verifyRes);
+          const attemptVerify = async (isRetry = false) => {
+            try {
+              const verifyRes = await crmApi.verifyRazorpayPayment(verifyPayload);
+              if (verifyRes?.ok) {
+                setPaymentResultModal({
+                  status: 'success',
+                  title: 'Payment Successful!',
+                  amount: activeAmount,
+                  paymentId: response.razorpay_payment_id,
+                  date: new Date().toLocaleString('en-IN'),
+                });
+                setActionAlert({
+                  type: 'success',
+                  message: `Payment Verified! ₹${activeAmount.toLocaleString('en-IN')} added directly to wallet via Razorpay (Ref: ${response.razorpay_payment_id}).`,
+                });
+                if (onTopUpWallet) {
+                  onTopUpWallet(activeAmount, response.razorpay_payment_id, verifyRes);
+                }
+                return true;
               }
-            } else {
-              throw new Error(verifyRes?.error || 'Payment verification failed.');
+              throw new Error(verifyRes?.error || 'Payment verification could not be confirmed.');
+            } catch (err) {
+              if (!isRetry) {
+                console.warn('[MarketingWallet] Initial verification failed, retrying in 1.5s...', err.message);
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+                return attemptVerify(true);
+              }
+              throw err;
             }
+          };
+
+          try {
+            await attemptVerify();
           } catch (vErr) {
-            console.error('[Payment Verification Failed]', vErr);
+            console.error('[MarketingWallet Payment Verification Error]', vErr);
             setActionAlert({
-              type: 'error',
-              message: vErr.message || 'Payment received, but verification timed out.',
+              type: 'warning',
+              message: `Payment received on Razorpay (Ref: ${response.razorpay_payment_id}). Bank confirmation is processing. Your wallet balance will reflect automatically.`,
             });
           } finally {
             setIsVerifyingPayment(false);

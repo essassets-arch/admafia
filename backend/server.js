@@ -35,8 +35,9 @@ app.use(express.json({
   },
 }));
 
-const razorpayKeyId = process.env.RAZORPAY_KEY_ID || 'rzp_live_TuUlRUHnVlWd5i';
-const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || 'ItZeWawXWwTt98Dx60n47Sza';
+const razorpayKeyId = (process.env.RAZORPAY_KEY_ID || 'rzp_live_TuUlRUHnVlWd5i').trim();
+const razorpayKeySecret = (process.env.RAZORPAY_KEY_SECRET || 'ItZeWawXWwTt98Dx60n47Sza').trim();
+const razorpayWebhookSecret = (process.env.RAZORPAY_WEBHOOK_SECRET || razorpayKeySecret).trim();
 const walletCreditToken = randomBytes(32).toString('hex');
 
 function getRazorpayConfigInfo() {
@@ -1920,7 +1921,8 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       body: JSON.stringify({
         amount: amount * 100,
         currency: 'INR',
-        receipt: `admafia_${Date.now()}`,
+        receipt: `admafia_${Date.now()}_${randomBytes(3).toString('hex')}`,
+        payment_capture: 1,
         notes: {
           customer_id: String(cust.id),
           customer_phone: cleanPhone || String(cust.phone || ''),
@@ -2082,11 +2084,20 @@ export async function creditCustomerWallet({
 
     if (custRes.rowCount === 0) {
       const fallbackId = customerId || `cust_${cleanPhone || Date.now()}`;
+      const secureRandomPass = `Client@${randomBytes(8).toString('hex')}!`;
       await txQuery(
-        `INSERT INTO customers (id, phone, username, contact_person, company_name, email, status, payment_status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'active', 'paid')
-         ON CONFLICT (id) DO NOTHING`,
-        [fallbackId, cleanPhone || '9999999999', username || cleanPhone || fallbackId, `Client ${cleanPhone || fallbackId}`, `Business ${cleanPhone || fallbackId}`, `${cleanPhone || fallbackId}@client.admafia.marketing`]
+        `INSERT INTO customers (id, phone, username, contact_person, company_name, email, password_hash, status, payment_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', 'paid')
+         ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone, payment_status = 'paid'`,
+        [
+          fallbackId,
+          cleanPhone || '9999999999',
+          username || cleanPhone || fallbackId,
+          `Client ${cleanPhone || fallbackId}`,
+          `Business ${cleanPhone || fallbackId}`,
+          `${cleanPhone || fallbackId}@client.admafia.marketing`,
+          secureRandomPass,
+        ]
       );
       custRes = await txQuery(`SELECT * FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`, [fallbackId, cleanPhone]);
     }
@@ -2158,14 +2169,14 @@ export async function creditCustomerWallet({
     );
 
     // 6. Insert payment_records for Sales Desk (/sales#payments)
-    const payId = `pay_${Date.now()}`;
-    const receiptNo = `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+    const payId = `pay_${Date.now()}_${randomBytes(3).toString('hex')}`;
+    const receiptNo = `RCP-${new Date().getFullYear()}-${Date.now()}-${randomBytes(3).toString('hex').toUpperCase()}`;
     const payInsert = await txQuery(
       `INSERT INTO payment_records (
         id, receipt_number, customer_id, company_name, contact_person, phone, city,
         tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, notes
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'topup', $8, 0, $8, $9, $10, 'paid', $11)
-      ON CONFLICT DO NOTHING
+      ON CONFLICT (receipt_number) DO UPDATE SET total_amount = EXCLUDED.total_amount
       RETURNING *`,
       [
         payId,
@@ -2183,8 +2194,8 @@ export async function creditCustomerWallet({
     );
 
     // 7. Insert tax invoice with SAC code breakdown
-    const invId = `inv_${Date.now()}`;
-    const invoiceNo = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+    const invId = `inv_${Date.now()}_${randomBytes(3).toString('hex')}`;
+    const invoiceNo = `INV-${new Date().getFullYear()}-${Date.now()}-${randomBytes(3).toString('hex').toUpperCase()}`;
     const baseAmt = Math.round(cleanAmount / 1.18);
     const cgstAmt = Math.round((cleanAmount - baseAmt) / 2);
     const sgstAmt = cleanAmount - baseAmt - cgstAmt;
@@ -2194,7 +2205,7 @@ export async function creditCustomerWallet({
         id, invoice_no, customer_id, payment_record_id, particulars, sac_code,
         base_amount, cgst_amount, sgst_amount, total_amount, payment_mode, status
       ) VALUES ($1, $2, $3, $4, $5, '998311', $6, $7, $8, $9, $10, 'Paid')
-      ON CONFLICT DO NOTHING
+      ON CONFLICT (invoice_no) DO UPDATE SET total_amount = EXCLUDED.total_amount
       RETURNING *`,
       [
         invId,
@@ -2372,34 +2383,101 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
   try {
     if (!razorpayKeySecret) return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
     const { orderId, paymentId, signature, customerId, phone, username, amount } = req.body || {};
-    if (!orderId || !paymentId || !signature) return res.status(400).json({ ok: false, error: 'Missing Razorpay payment verification details.' });
+    if (!orderId || !paymentId || !signature) {
+      return res.status(400).json({ ok: false, error: 'Missing Razorpay payment verification details.' });
+    }
+
+    // 1. Constant-time cryptographic signature verification
     const expected = createHmac('sha256', razorpayKeySecret).update(`${orderId}|${paymentId}`).digest();
     let received;
-    try { received = Buffer.from(signature, 'hex'); } catch { received = Buffer.alloc(0); }
+    try {
+      received = Buffer.from(String(signature).trim(), 'hex');
+    } catch {
+      received = Buffer.alloc(0);
+    }
     if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+      console.error('[Razorpay Verify] Signature mismatch for order:', orderId, 'payment:', paymentId);
       return res.status(400).json({ ok: false, error: 'Razorpay payment signature is invalid.' });
     }
+
+    // 2. Fetch authoritative payment status directly from Razorpay API
     const paymentResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
       headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
     });
-    const payment = await paymentResponse.json();
-    if (!paymentResponse.ok || payment.order_id !== orderId || payment.status !== 'captured' || payment.amount !== Number(amount) * 100) {
-      return res.status(400).json({ ok: false, error: 'Payment is not captured for this amount.' });
+    let payment = await paymentResponse.json();
+
+    if (!paymentResponse.ok || !payment.id) {
+      console.error('[Razorpay Verify] Could not retrieve payment from Razorpay:', payment);
+      return res.status(400).json({ ok: false, error: 'Could not verify payment with Razorpay gateway.' });
     }
+
+    if (payment.order_id !== orderId) {
+      console.error(`[Razorpay Verify] Order mismatch. Expected ${orderId}, got ${payment.order_id}`);
+      return res.status(400).json({ ok: false, error: 'Payment order ID mismatch.' });
+    }
+
+    // 3. Auto-Capture: If payment is authorized but not captured, safely capture it on Razorpay before crediting wallet
+    if (payment.status === 'authorized') {
+      console.log(`[Razorpay Verify] Payment ${paymentId} is authorized. Auto-capturing ₹${payment.amount / 100}...`);
+      try {
+        const captureResp = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}/capture`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: payment.amount,
+            currency: payment.currency || 'INR',
+          }),
+        });
+        const captureData = await captureResp.json();
+        if (captureResp.ok && captureData.status === 'captured') {
+          console.log(`[Razorpay Verify] Payment ${paymentId} captured successfully.`);
+          payment = captureData;
+        } else {
+          console.error('[Razorpay Verify] Auto-capture failed:', captureData);
+          return res.status(400).json({
+            ok: false,
+            error: captureData.error?.description || 'Payment was authorized but could not be captured by Razorpay.',
+          });
+        }
+      } catch (capErr) {
+        console.error('[Razorpay Verify] Error during auto-capture:', capErr);
+        return res.status(500).json({ ok: false, error: 'Failed to capture authorized payment with Razorpay.' });
+      }
+    }
+
+    // 4. Confirm payment is strictly captured
+    if (payment.status !== 'captured') {
+      console.error(`[Razorpay Verify] Payment ${paymentId} status is '${payment.status}' (not captured).`);
+      return res.status(400).json({
+        ok: false,
+        error: `Payment status is ${payment.status}. Payment must be captured before crediting wallet.`,
+      });
+    }
+
+    const cleanAmount = Number(payment.amount || 0) / 100;
+    if (cleanAmount < 300) {
+      return res.status(400).json({ ok: false, error: 'Payment amount is below minimum ₹300.' });
+    }
+
     const cleanPhone = String(phone || customerId || payment.contact || '').replace(/\D/g, '').slice(-10);
     const targetCustId = customerId || payment.notes?.customer_id || `cust_${cleanPhone || Date.now()}`;
 
+    // 5. Credit wallet via atomic idempotent PostgreSQL transaction
     const result = await creditCustomerWallet({
       customerId: targetCustId,
       phone: cleanPhone,
       username: username || payment.notes?.customer_username,
-      amount: Number(amount),
+      amount: cleanAmount,
       referenceUtr: paymentId,
       paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
-      description: `AdMafia wallet top-up (₹${Number(amount).toLocaleString('en-IN')})`,
+      description: `AdMafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
     });
     return res.status(200).json(result);
   } catch (err) {
+    console.error('[Razorpay Verify Handler Error]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -2407,7 +2485,7 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
 app.post('/api/payments/razorpay/webhook', async (req, res) => {
   try {
     const signature = req.headers['x-razorpay-signature'];
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || razorpayKeySecret;
+    const secret = razorpayWebhookSecret;
     if (!signature || !secret) {
       return res.status(400).json({ ok: false, error: 'Missing webhook signature or secret.' });
     }
@@ -2417,7 +2495,7 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
     const digest = shasum.digest('hex');
     let valid = false;
     try {
-      valid = timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
+      valid = timingSafeEqual(Buffer.from(digest), Buffer.from(String(signature).trim()));
     } catch {
       valid = false;
     }
@@ -2426,20 +2504,64 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
     }
 
     const event = req.body?.event;
-    if (event === 'payment.captured') {
-      const payment = req.body?.payload?.payment?.entity;
-      const paymentId = payment?.id;
-      const amount = Number(payment?.amount || 0) / 100;
-      const customerId = payment?.notes?.customer_id;
+    console.log(`[Razorpay Webhook] Received verified event: ${event}`);
 
-      if (customerId && amount >= 300) {
+    // Support payment.captured AND payment.authorized AND order.paid
+    if (event === 'payment.captured' || event === 'payment.authorized') {
+      let payment = req.body?.payload?.payment?.entity;
+      const paymentId = payment?.id;
+      let amount = Number(payment?.amount || 0) / 100;
+      const customerId = payment?.notes?.customer_id;
+      const cleanPhone = String(payment?.contact || payment?.notes?.customer_phone || '').replace(/\D/g, '').slice(-10);
+
+      // If authorized, auto-capture it first before crediting wallet
+      if (payment?.status === 'authorized') {
+        try {
+          const capResp = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}/capture`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ amount: payment.amount, currency: payment.currency || 'INR' }),
+          });
+          if (capResp.ok) {
+            payment = await capResp.json();
+            amount = Number(payment.amount || 0) / 100;
+          }
+        } catch (capErr) {
+          console.error('[Razorpay Webhook] Auto-capture failed in webhook:', capErr);
+        }
+      }
+
+      if (payment?.status === 'captured' && (customerId || cleanPhone) && amount >= 300) {
         await creditCustomerWallet({
           customerId,
+          phone: cleanPhone,
+          username: payment?.notes?.customer_username,
           amount,
           referenceUtr: paymentId,
           paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
           description: `AdMafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
         }).catch((e) => console.error('[Razorpay Webhook Top-Up]', e));
+      }
+    } else if (event === 'order.paid') {
+      const order = req.body?.payload?.order?.entity;
+      const customerId = order?.notes?.customer_id;
+      const cleanPhone = String(order?.notes?.customer_phone || '').replace(/\D/g, '').slice(-10);
+      const amount = Number(order?.amount_paid || order?.amount || 0) / 100;
+      const orderId = order?.id;
+
+      if ((customerId || cleanPhone) && amount >= 300 && orderId) {
+        await creditCustomerWallet({
+          customerId,
+          phone: cleanPhone,
+          username: order?.notes?.customer_username,
+          amount,
+          referenceUtr: orderId,
+          paymentMethod: 'Razorpay Online Order',
+          description: `AdMafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
+        }).catch((e) => console.error('[Razorpay Webhook Order Paid]', e));
       }
     } else if (event === 'payment.failed') {
       const payment = req.body?.payload?.payment?.entity;
@@ -2457,6 +2579,15 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
             failAmount,
             payment.id,
             `Online recharge failed: ${payment.error_description || payment.error_reason || 'Payment declined'}`,
+          ]
+        ).catch(() => {});
+      }
+    }
+    res.json({ ok: true, status: 'processed' });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
           ]
         ).catch(() => {});
       }
