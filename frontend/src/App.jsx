@@ -912,109 +912,37 @@ export default function App() {
                 </a>
               </div>
 
-              <div className="mobile-drawer-divider" />
-
-              <div className="mobile-drawer-section-title">All Departments &amp; Pages</div>
-              <div className="mobile-drawer-depts-grid">
-                {platformPages.map((page, idx) => {
-                  const Icon = page.icon;
-                  return (
+              {currentUser && (
+                <>
+                  <div className="mobile-drawer-divider" />
+                  <div className="mobile-drawer-actions">
                     <button
-                      key={idx}
                       type="button"
-                      className="mobile-drawer-dept-card"
-                      onClick={() => navigateTo(page.path, page.view)}
+                      className="mobile-drawer-action-card"
+                      style={{ borderColor: '#fecaca', background: '#fff5f5' }}
+                      onClick={() => {
+                        try {
+                          localStorage.removeItem('growthline_active_user');
+                          sessionStorage.clear();
+                          window.history.pushState({}, '', '/');
+                        } catch (e) {}
+                        setCurrentUser(null);
+                        window.location.hash = '';
+                        setCurrentView('landing');
+                        setMobileMenuOpen(false);
+                      }}
                     >
-                      <div className={`mobile-dept-icon ${page.badgeClass}`}>
-                        <Icon size={16} />
+                      <div className="mobile-drawer-action-icon" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                        <X size={18} />
                       </div>
-                      <div className="mobile-dept-info">
-                        <div className="mobile-dept-title">{page.title}</div>
-                        <div className="mobile-dept-badge">{page.badge}</div>
+                      <div>
+                        <div className="mobile-drawer-action-title" style={{ color: '#b91c1c' }}>Sign Out</div>
+                        <div className="mobile-drawer-action-sub">Disconnect active customer session</div>
                       </div>
                     </button>
-                  );
-                })}
-              </div>
-
-              <div className="mobile-drawer-divider" />
-
-              <div className="mobile-drawer-actions">
-                <button
-                  type="button"
-                  className="mobile-drawer-action-card"
-                  onClick={() => {
-                    if (currentUser) {
-                      try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch (e) {}
-                      window.location.hash = '#app/dashboard';
-                      setCurrentView('portal');
-                    } else {
-                      try { window.history.pushState({}, '', '/#login'); } catch (e) {}
-                      window.location.hash = '#login';
-                      setCurrentView('login');
-                    }
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  <div className="mobile-drawer-action-icon gold">
-                    <Laptop size={18} />
                   </div>
-                  <div>
-                    <div className="mobile-drawer-action-title">
-                      {currentUser ? 'Client Dashboard' : 'Customer Business Portal'}
-                    </div>
-                    <div className="mobile-drawer-action-sub">
-                      {currentUser ? 'Open your active client CRM dashboard →' : 'Login to your active client dashboard'}
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  className="mobile-drawer-action-card"
-                  onClick={() => {
-                    try { window.history.pushState({}, '', '/admin/login'); } catch (e) {}
-                    window.location.hash = '#admin/login';
-                    setCurrentView('admin-login');
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  <div className="mobile-drawer-action-icon indigo">
-                    <Shield size={18} />
-                  </div>
-                  <div>
-                    <div className="mobile-drawer-action-title">Department Operations Gateway</div>
-                    <div className="mobile-drawer-action-sub">Super Admin, Marketing, Graphics &amp; Sales</div>
-                  </div>
-                </button>
-
-                {currentUser && (
-                  <button
-                    type="button"
-                    className="mobile-drawer-action-card"
-                    style={{ borderColor: '#fecaca', background: '#fff5f5' }}
-                    onClick={() => {
-                      try {
-                        localStorage.removeItem('growthline_active_user');
-                        sessionStorage.clear();
-                        window.history.pushState({}, '', '/');
-                      } catch (e) {}
-                      setCurrentUser(null);
-                      window.location.hash = '';
-                      setCurrentView('landing');
-                      setMobileMenuOpen(false);
-                    }}
-                  >
-                    <div className="mobile-drawer-action-icon" style={{ background: '#fee2e2', color: '#b91c1c' }}>
-                      <X size={18} />
-                    </div>
-                    <div>
-                      <div className="mobile-drawer-action-title" style={{ color: '#b91c1c' }}>Sign Out</div>
-                      <div className="mobile-drawer-action-sub">Disconnect active customer session</div>
-                    </div>
-                  </button>
-                )}
-              </div>
+                </>
+              )}
             </div>
           </div>
         )}
