@@ -4452,14 +4452,13 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
               <th>Available Balance</th>
               <th>Daily Burn</th>
               <th>Runway</th>
-              <th>Delivery Status</th>
               <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
                   <Building2 size={32} color="#94a3b8" style={{ margin: '0 auto 8px' }} />
                   <div style={{ fontWeight: 700, color: '#334155' }}>No client wallets matching search or filter criteria</div>
                 </td>
@@ -4546,18 +4545,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
                       </span>
                     </td>
 
-                    {/* 6. Placement Delivery Status */}
-                    <td>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 800, color: !isLow ? '#059669' : '#e11d48' }}>
-                        {isDepleted
-                          ? '🔴 Delivery Paused (Zero Balance)'
-                          : isLow
-                          ? '⚠️ Low Balance (Recharge Req.)'
-                          : '🟢 Active Lead Ingestion'}
-                      </span>
-                    </td>
-
-                    {/* 7. Interactive Action Buttons */}
+                    {/* 6. Interactive Action Buttons */}
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                         {/* Details Modal Button */}
