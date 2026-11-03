@@ -1258,3 +1258,4 @@ export default function MasterTransactionLogsDesk({
     </div>
   );
 }
+
