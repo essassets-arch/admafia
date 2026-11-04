@@ -504,6 +504,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         const allList = rawAll ? JSON.parse(rawAll) : [];
         const syncedAll = allList.map((item) => (item.id === leadId ? { ...item, ...updates } : item));
         localStorage.setItem('growthline_all_leads', JSON.stringify(syncedAll));
+        window.dispatchEvent(new CustomEvent('growthline_lead_updated', { detail: { leadId, updates } }));
+        window.dispatchEvent(new Event('storage'));
       } catch (e) {}
       return updated;
     });

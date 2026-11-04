@@ -1781,15 +1781,36 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
     }
   }, [propsCustomers]);
 
-  useEffect(() => {
+  const fetchAuthoritativeDeskData = () => {
     crmApi
       .syncStateFromPostgres()
       .then((state) => {
         if (Array.isArray(state?.customers) && state.customers.length > 0) {
           setDeskCustomers(state.customers);
         }
+        if (Array.isArray(state?.leads) && state.leads.length > 0) {
+          const cleaned = state.leads.map((item) => {
+            const rawDigits = (item.phone || item.name || '').replace(/\D/g, '').slice(-10);
+            return {
+              ...item,
+              phone: rawDigits || item.phone,
+              name: rawDigits ? `+91 ${rawDigits}` : item.name,
+              read: Boolean(item.read || item.is_read || item.status === 'read'),
+              is_read: Boolean(item.read || item.is_read || item.status === 'read'),
+              unmasked: true,
+            };
+          });
+          setLeads(cleaned);
+        }
       })
       .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchAuthoritativeDeskData();
+    // Auto-poll every 6 seconds so status of "Marked as Read" synchronizes in real time
+    const pollTimer = setInterval(fetchAuthoritativeDeskData, 6000);
+    return () => clearInterval(pollTimer);
   }, []);
 
   const handlePhoneChange = (e) => {
@@ -1938,6 +1959,14 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         setLeads((prev) => [newLead, ...prev.filter((l) => l.id !== newLead.id)]);
       }
     };
+    const handleLeadUpdated = (e) => {
+      const { leadId, updates } = e?.detail || {};
+      if (leadId && updates) {
+        setLeads((prev) =>
+          prev.map((l) => (l.id === leadId ? { ...l, ...updates } : l))
+        );
+      }
+    };
     const handleStorage = (e) => {
       if (e.key === 'growthline_all_leads' && e.newValue) {
         try {
@@ -1947,9 +1976,11 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
       }
     };
     window.addEventListener('growthline_lead_added', handleLeadAdded);
+    window.addEventListener('growthline_lead_updated', handleLeadUpdated);
     window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('growthline_lead_added', handleLeadAdded);
+      window.removeEventListener('growthline_lead_updated', handleLeadUpdated);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
@@ -1957,17 +1988,55 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
 
+  // Authoritative helper to determine if a lead has been marked as read by the client
+  const isLeadRead = (l) => Boolean(l.read || l.is_read || l.status === 'read');
+  const readCount = leads.filter(isLeadRead).length;
+  const unreadCount = leads.filter((l) => !isLeadRead(l)).length;
+
+  // Toggle read status directly from sales desk and synchronize with PostgreSQL
+  const handleToggleLeadRead = async (lead) => {
+    const currentlyRead = isLeadRead(lead);
+    const nextRead = !currentlyRead;
+    const nextStatus = nextRead
+      ? (lead.status === 'new' ? 'read' : lead.status)
+      : (lead.status === 'read' ? 'new' : lead.status);
+
+    const updates = { read: nextRead, is_read: nextRead, status: nextStatus };
+
+    setLeads((prev) =>
+      prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l))
+    );
+
+    try {
+      await crmApi.updateLead(lead.id, updates);
+      const raw = localStorage.getItem('growthline_all_leads');
+      if (raw) {
+        const list = JSON.parse(raw);
+        const updated = list.map((l) => (l.id === lead.id ? { ...l, ...updates } : l));
+        localStorage.setItem('growthline_all_leads', JSON.stringify(updated));
+      }
+      window.dispatchEvent(new CustomEvent('growthline_lead_updated', { detail: { leadId: lead.id, updates } }));
+      window.dispatchEvent(new Event('storage'));
+    } catch (err) {
+      console.warn('Failed to update lead read status:', err);
+    }
+  };
+
   const filtered = leads.filter((l) => {
     const q = search.toLowerCase();
     const matchSearch =
       (l.name || '').toLowerCase().includes(q) ||
       (l.company || '').toLowerCase().includes(q) ||
+      (l.assignedCompany || '').toLowerCase().includes(q) ||
+      (l.customerCompanyName || '').toLowerCase().includes(q) ||
       (l.city || '').toLowerCase().includes(q) ||
       (l.phone || '').includes(search);
     if (!matchSearch) return false;
     if (filter === 'urgent') return l.priority === 'Urgent';
     if (filter === 'new') return l.status === 'new';
     if (filter === 'qualified') return l.status === 'qualified';
+    if (filter === 'read') return isLeadRead(l);
+    if (filter === 'unread') return !isLeadRead(l);
     return true;
   });
 
@@ -2091,16 +2160,14 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
           <div className="desk-kpi-sub">Real-time buyer inquiries</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">URGENT ATTENTION</div>
-          <div className="desk-kpi-val text-rose">{leads.filter((l) => l.priority === 'Urgent').length}</div>
-          <div className="desk-kpi-sub">Speed SLA &lt; 5 mins</div>
+          <div className="desk-kpi-label">READ BY CLIENT</div>
+          <div className="desk-kpi-val text-emerald">{readCount}</div>
+          <div className="desk-kpi-sub">Acknowledged in Lead Hub</div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">QUALIFIED RATE</div>
-          <div className="desk-kpi-val text-emerald">
-            {leads.length > 0 ? `${Math.round((leads.filter((l) => l.status === 'qualified' || l.isHot).length / leads.length) * 100)}%` : '0%'}
-          </div>
-          <div className="desk-kpi-sub">High-intent BANT verified</div>
+          <div className="desk-kpi-label">UNREAD BY CLIENT</div>
+          <div className="desk-kpi-val text-amber">{unreadCount}</div>
+          <div className="desk-kpi-sub">Awaiting client response</div>
         </div>
         <div className="desk-kpi-card">
           <div className="desk-kpi-label">AVG SPEED TO LEAD</div>
@@ -2114,6 +2181,30 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         <div className="desk-tabs">
           <button type="button" className={`desk-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
             All Leads ({leads.length})
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'read' ? 'active' : ''}`}
+            onClick={() => setFilter('read')}
+            style={
+              filter === 'read'
+                ? { background: '#059669', borderColor: '#059669', color: '#ffffff', fontWeight: 800 }
+                : { color: '#059669', borderColor: '#a7f3d0', fontWeight: 700 }
+            }
+          >
+            ✓ Read by Client ({readCount})
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'unread' ? 'active' : ''}`}
+            onClick={() => setFilter('unread')}
+            style={
+              filter === 'unread'
+                ? { background: '#d97706', borderColor: '#d97706', color: '#ffffff', fontWeight: 800 }
+                : { color: '#d97706', borderColor: '#fde68a', fontWeight: 700 }
+            }
+          >
+            ⏳ Unread ({unreadCount})
           </button>
           <button type="button" className={`desk-tab ${filter === 'urgent' ? 'active' : ''}`} onClick={() => setFilter('urgent')}>
             Urgent SLA ({leads.filter((l) => l.priority === 'Urgent').length})
@@ -2144,6 +2235,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
           const cleanPhone = rawDigits.length === 10 ? `+91 ${rawDigits}` : (lead.phone || lead.name);
           const callDigits = rawDigits.length === 10 ? `+91${rawDigits}` : (lead.phone || '');
           const targetComp = lead.company || lead.assignedCompany || lead.customerCompanyName || 'Client Account';
+          const isRead = isLeadRead(lead);
 
           return (
             <div
@@ -2162,7 +2254,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
               }}
             >
-              {/* Left Column: Number & Company Name where sent ONLY */}
+              {/* Left Column: Number, Company Name where sent, and Client Read Status */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
                 {/* Phone Number Display */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2212,6 +2304,51 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                     </span>
                   </div>
                 </div>
+
+                {/* Client Read Status Badge: Marked as Read vs Unread */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 18, borderLeft: '1px solid #e2e8f0' }}>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Client Read Status
+                    </span>
+                    {isRead ? (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: '0.88rem',
+                        fontWeight: 800,
+                        color: '#047857',
+                        background: '#ecfdf5',
+                        border: '1.5px solid #a7f3d0',
+                        padding: '4px 12px',
+                        borderRadius: 9999,
+                        marginTop: 2,
+                        boxShadow: '0 1px 3px rgba(16, 185, 129, 0.12)'
+                      }}>
+                        <CheckCircle2 size={15} strokeWidth={2.6} style={{ color: '#059669' }} />
+                        <span>Marked as Read ✓</span>
+                      </span>
+                    ) : (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: '0.88rem',
+                        fontWeight: 800,
+                        color: '#b45309',
+                        background: '#fffbeb',
+                        border: '1.5px solid #fde68a',
+                        padding: '4px 12px',
+                        borderRadius: 9999,
+                        marginTop: 2
+                      }}>
+                        <Clock size={15} strokeWidth={2.4} style={{ color: '#d97706' }} />
+                        <span>Unread by Client</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Right Column: Actions */}
@@ -2232,6 +2369,38 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 >
                   <MessageSquare size={14} /> WhatsApp
                 </a>
+
+                {/* Direct Mark Read / Mark Unread toggle action */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleLeadRead(lead)}
+                  className="desk-action-btn"
+                  style={{
+                    background: isRead ? '#f8fafc' : '#f0fdf4',
+                    borderColor: isRead ? '#cbd5e1' : '#86efac',
+                    color: isRead ? '#475569' : '#15803d',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                  title={isRead ? 'Click to Mark as Unread' : 'Click to Mark as Read'}
+                >
+                  {isRead ? (
+                    <>
+                      <RotateCcw size={13} strokeWidth={2.4} />
+                      <span>Mark Unread</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} strokeWidth={3} />
+                      <span>Mark as Read</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           );

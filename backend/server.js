@@ -3652,18 +3652,25 @@ app.patch('/api/leads/:id', async (req, res) => {
   try {
     const leadId = req.params.id;
     const { status, read, is_read, notes } = req.body || {};
-    const existing = await query('SELECT * FROM leads WHERE id = $1', [leadId]);
+    let existing = await query('SELECT * FROM leads WHERE id = $1', [leadId]);
+    if (existing.rowCount === 0) {
+      const cleanDigits = String(leadId).replace(/\D/g, '').slice(-10);
+      if (cleanDigits.length === 10) {
+        existing = await query('SELECT * FROM leads WHERE buyer_phone = $1 ORDER BY created_at DESC LIMIT 1', [cleanDigits]);
+      }
+    }
     if (existing.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Lead not found' });
     }
     const row = existing.rows[0];
+    const targetLeadId = row.id;
     const nextStatus = status !== undefined ? status : row.status;
     const nextRead = read !== undefined ? Boolean(read) : is_read !== undefined ? Boolean(is_read) : Boolean(row.is_read);
     const nextNotes = notes !== undefined ? notes : row.notes;
 
     const updated = await query(
       `UPDATE leads SET status = $1, is_read = $2, notes = $3, updated_at = NOW() WHERE id = $4 RETURNING *`,
-      [nextStatus, nextRead, nextNotes, leadId]
+      [nextStatus, nextRead, nextNotes, targetLeadId]
     );
 
     // Sync corresponding lead_assignments record if distributed
@@ -3682,7 +3689,7 @@ app.patch('/api/leads/:id', async (req, res) => {
              response_interest = COALESCE($4, response_interest),
              responded_at = NOW()
          WHERE customer_lead_id = $5 OR (master_lead_id = $6 AND customer_id = $7)`,
-        [nextStatus, nextRead, nextNotes, interest, leadId, row.master_lead_id || '', row.customer_id || '']
+        [nextStatus, nextRead, nextNotes, interest, targetLeadId, row.master_lead_id || '', row.customer_id || '']
       );
     } catch (assignErr) {
       console.warn('[lead_assignments sync warning]', assignErr.message);
