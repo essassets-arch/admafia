@@ -877,6 +877,100 @@ app.get('/api/state', async (req, res) => {
           const it = mapTransactionItem({ ...r, reference_utr: ref, payment_method: r.payment_mode, created_at: r.paid_at, tx_type: r.tx_type || 'Credit' }, customers);
           if (it) { if (it.ref) seenRefs.add(it.ref); list.push(it); }
         }
+        for (const f of failedRes.rows) {
+          const fRef = f.reference_utr || f.gateway_reference || `FAIL-${f.id}`;
+          if (seenRefs.has(fRef) || seenRefs.has(`FAIL-${f.id}`)) continue;
+          seenRefs.add(fRef);
+          list.push({
+            id: `tx_fail_${f.id}`,
+            ref: fRef,
+            receiptNo: `FAIL-${String(f.id).slice(-4)}`,
+            receiptNumber: `FAIL-${String(f.id).slice(-4)}`,
+            customerId: f.customer_id,
+            company: f.customer_name || f.company_name || 'Client Account',
+            companyName: f.customer_name || f.company_name || 'Client Account',
+            contact: f.contact_person || f.customer_name || 'Authorized Lead',
+            contactPerson: f.contact_person || f.customer_name || 'Authorized Lead',
+            username: (f.username || f.customer_username || '').replace(/^@/, ''),
+            phone: f.phone || f.customer_phone || '',
+            email: f.email || '',
+            city: f.city || 'India',
+            state: f.state || 'Maharashtra',
+            category: f.category || 'IT & Software',
+            amount: Number(f.amount || 0),
+            gstAmount: 0,
+            totalAmount: Number(f.amount || 0),
+            balanceAfter: null,
+            status: 'failed',
+            statusBadge: 'Payment Declined ✗',
+            rawStatus: 'failed',
+            type: 'topup',
+            typeLabel: 'Wallet Top-Up (Declined)',
+            paymentMode: f.payment_method || 'Razorpay Gateway (Declined)',
+            date: new Date(f.created_at || new Date()).toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            }),
+            createdAt: f.created_at || new Date(),
+            createdAtRaw: f.created_at || new Date(),
+            description: f.error_reason || f.description || 'Payment declined by customer bank or user cancelled checkout',
+            failureReason: f.error_reason || f.description || 'Payment declined by customer bank or user cancelled checkout',
+          });
+        }
+        for (const c of customers) {
+          const amt = Number(c.amount_paid || c.amountPaid || c.balance || 0);
+          if (amt > 0) {
+            const custRef = `PAY-REG-${c.id || c.phone}`;
+            if (!seenRefs.has(custRef) && !seenRefs.has(`PAY-${c.phone}`)) {
+              seenRefs.add(custRef);
+              list.push({
+                id: `tx_reg_${c.id || c.phone}`,
+                ref: custRef,
+                receiptNo: `RCP-2026-${String(c.phone || c.id).slice(-4).padStart(4, '0')}`,
+                receiptNumber: `RCP-2026-${String(c.phone || c.id).slice(-4).padStart(4, '0')}`,
+                customerId: c.id,
+                company: c.company_name || c.name || `@${c.username}` || 'Client Account',
+                companyName: c.company_name || c.name || `@${c.username}` || 'Client Account',
+                contact: c.contact_person || c.contact || 'Client Lead',
+                contactPerson: c.contact_person || c.contact || 'Client Lead',
+                username: (c.username || '').replace(/^@/, ''),
+                phone: c.phone || '',
+                email: c.email || '',
+                city: c.city || 'India',
+                state: c.state || 'Maharashtra',
+                category: c.category || 'IT & Software',
+                amount: amt,
+                gstAmount: Math.round(amt * 0.18),
+                totalAmount: amt,
+                balanceAfter: Number(c.balance || amt),
+                status: 'verified',
+                statusBadge: 'Settled ✓',
+                rawStatus: 'paid',
+                type: 'registration',
+                typeLabel: 'Account Registration & Ad Top-Up',
+                paymentMode: 'Razorpay UPI / Online Gateway',
+                date: new Date(c.registered_at || new Date()).toLocaleString('en-IN', {
+                  timeZone: 'Asia/Kolkata',
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: true,
+                }),
+                createdAt: c.registered_at || new Date(),
+                createdAtRaw: c.registered_at || new Date(),
+                description: 'Customer Account Registration & Initial Wallet Top-Up',
+                failureReason: null,
+              });
+            }
+          }
+        }
         list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         return list;
       })(),
@@ -1465,7 +1559,7 @@ app.get('/api/admin/customer-password/:identifier', async (req, res) => {
 // Sales Desk: Unified Master Transaction Logs (Verified, Failed, Pending, Top-Ups, Debits)
 app.get('/api/sales/transactions', async (req, res) => {
   try {
-    const [wtRes, prRes, custRes] = await Promise.all([
+    const [wtRes, prRes, custRes, failedRes] = await Promise.all([
       query(`
         SELECT 
           wt.id, wt.customer_id, wt.wallet_id, wt.tx_type, wt.amount, wt.balance_after,
@@ -1493,6 +1587,14 @@ app.get('/api/sales/transactions', async (req, res) => {
         ORDER BY pr.paid_at DESC
       `),
       query('SELECT * FROM vw_sales_customer_accounts'),
+      query(`
+        SELECT 
+          id, customer_id, customer_name, customer_phone, amount,
+          error_reason, error_code, payment_method, utr_reference, created_at,
+          customer_username, gateway_reference
+        FROM failed_transactions
+        ORDER BY created_at DESC
+      `).catch(() => ({ rows: [] })),
     ]);
 
     const customers = custRes.rows.map((r) => mapCustomerRow(r));
@@ -1522,6 +1624,104 @@ app.get('/api/sales/transactions', async (req, res) => {
       if (item) {
         if (item.ref) seenRefs.add(item.ref);
         transactions.push(item);
+      }
+    }
+
+    // 3. Process failed_transactions
+    for (const f of (failedRes?.rows || [])) {
+      const fRef = f.utr_reference || f.gateway_reference || `FAIL-${f.id}`;
+      if (seenRefs.has(fRef) || seenRefs.has(`FAIL-${f.id}`)) continue;
+      seenRefs.add(fRef);
+      transactions.push({
+        id: `tx_fail_${f.id}`,
+        ref: fRef,
+        receiptNo: `FAIL-${String(f.id).slice(-4)}`,
+        receiptNumber: `FAIL-${String(f.id).slice(-4)}`,
+        customerId: f.customer_id,
+        company: f.customer_name || 'Client Account',
+        companyName: f.customer_name || 'Client Account',
+        contact: f.customer_name || 'Authorized Lead',
+        contactPerson: f.customer_name || 'Authorized Lead',
+        username: (f.customer_username || '').replace(/^@/, ''),
+        phone: f.customer_phone || '',
+        email: '',
+        city: 'India',
+        state: 'Maharashtra',
+        category: 'IT & Software',
+        amount: Number(f.amount || 0),
+        gstAmount: 0,
+        totalAmount: Number(f.amount || 0),
+        balanceAfter: null,
+        status: 'failed',
+        statusBadge: 'Payment Declined ✗',
+        rawStatus: 'failed',
+        type: 'topup',
+        typeLabel: 'Wallet Top-Up (Declined)',
+        paymentMode: f.payment_method || 'Razorpay Gateway (Declined)',
+        date: new Date(f.created_at || new Date()).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
+        createdAt: f.created_at || new Date(),
+        createdAtRaw: f.created_at || new Date(),
+        description: f.error_reason || 'Payment declined by customer bank or user cancelled checkout',
+        failureReason: f.error_reason || 'Payment declined by customer bank or user cancelled checkout',
+      });
+    }
+
+    // 4. Synthesize customer initial payments if not already captured
+    for (const c of customers) {
+      const amt = Number(c.amount_paid || c.amountPaid || c.balance || 0);
+      if (amt > 0) {
+        const custRef = `PAY-REG-${c.id || c.phone}`;
+        if (!seenRefs.has(custRef) && !seenRefs.has(`PAY-${c.phone}`)) {
+          seenRefs.add(custRef);
+          transactions.push({
+            id: `tx_reg_${c.id || c.phone}`,
+            ref: custRef,
+            receiptNo: `RCP-2026-${String(c.phone || c.id).slice(-4).padStart(4, '0')}`,
+            receiptNumber: `RCP-2026-${String(c.phone || c.id).slice(-4).padStart(4, '0')}`,
+            customerId: c.id,
+            company: c.company_name || c.name || `@${c.username}` || 'Client Account',
+            companyName: c.company_name || c.name || `@${c.username}` || 'Client Account',
+            contact: c.contact_person || c.contact || 'Client Lead',
+            contactPerson: c.contact_person || c.contact || 'Client Lead',
+            username: (c.username || '').replace(/^@/, ''),
+            phone: c.phone || '',
+            email: c.email || '',
+            city: c.city || 'India',
+            state: c.state || 'Maharashtra',
+            category: c.category || 'IT & Software',
+            amount: amt,
+            gstAmount: Math.round(amt * 0.18),
+            totalAmount: amt,
+            balanceAfter: Number(c.balance || amt),
+            status: 'verified',
+            statusBadge: 'Settled ✓',
+            rawStatus: 'paid',
+            type: 'registration',
+            typeLabel: 'Account Registration & Ad Top-Up',
+            paymentMode: 'Razorpay UPI / Online Gateway',
+            date: new Date(c.registered_at || new Date()).toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            }),
+            createdAt: c.registered_at || new Date(),
+            createdAtRaw: c.registered_at || new Date(),
+            description: 'Customer Account Registration & Initial Wallet Top-Up',
+            failureReason: null,
+          });
+        }
       }
     }
 

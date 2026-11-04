@@ -939,6 +939,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
               customers={customers}
               setCustomers={setCustomers}
               allTransactions={allTransactions}
+              invoices={invoices}
               onRefresh={() => {
                 crmApi.syncStateFromPostgres().then((state) => {
                   if (state && Array.isArray(state.allTransactions)) {
