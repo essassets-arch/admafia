@@ -4387,8 +4387,6 @@ export function PaymentCollectionDesk({
 export function WalletsBalancesDesk({ customers, setCustomers }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [topupCust, setTopupCust] = useState(null);
-  const [topupAmount, setTopupAmount] = useState(4500);
   const [selectedWalletCust, setSelectedWalletCust] = useState(null);
 
   const filtered = customers.filter((c) => {
@@ -4435,123 +4433,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
   }).length;
   const pausedCount = customers.filter((c) => (c.balance ?? c.walletBalance ?? 0) <= 0).length;
 
-  const handleApplyTopup = async () => {
-    if (!topupCust) return;
-    const rechargeNum = Number(topupAmount) || 0;
-    if (rechargeNum <= 0) {
-      alert('Please enter a valid top-up amount.');
-      return;
-    }
 
-    const currentBal = topupCust.balance ?? topupCust.walletBalance ?? 0;
-    const pacing = topupCust.dailyPacing || topupCust.dailyAdSpend || 300;
-    const addedDays = Math.floor(rechargeNum / pacing);
-    const newBal = currentBal + rechargeNum;
-    const currentPaid = topupCust.amountPaid || topupCust.totalLifetimePaid || 0;
-    const newPaid = currentPaid + rechargeNum;
-    const newRunway = Math.max(0, (topupCust.runwayDays || 0) + addedDays);
-
-    const updatedCustomer = {
-      ...topupCust,
-      balance: newBal,
-      walletBalance: newBal,
-      amountPaid: newPaid,
-      totalLifetimePaid: newPaid,
-      runwayDays: newRunway,
-      paymentStatus: 'paid',
-      payment_status: 'paid',
-      status: 'active',
-    };
-
-    // Update in-memory state
-    setCustomers((prev) =>
-      prev.map((c) => (c.id === topupCust.id ? updatedCustomer : c))
-    );
-    if (selectedWalletCust?.id === topupCust.id) {
-      setSelectedWalletCust(updatedCustomer);
-    }
-
-    // Persist to PostgreSQL backend database
-    try {
-      crmApi.patchCustomer(topupCust.id, {
-        balance: newBal,
-        walletBalance: newBal,
-        amountPaid: newPaid,
-        totalLifetimePaid: newPaid,
-        runwayDays: newRunway,
-        paymentStatus: 'paid',
-        payment_status: 'paid',
-        status: 'active',
-      }).catch((err) => console.warn('[Top-up patch API non-fatal]', err));
-    } catch (e) {}
-
-    // Record top-up in Desk 05 Payment Records Ledger & isolated customer wallet
-    try {
-      const utrRef = `UTR-TOPUP-${Date.now().toString().slice(-6)}`;
-      const companyTitle = topupCust.companyName || topupCust.name || 'Corporate Workspace';
-      const contactTitle = topupCust.contactPerson || topupCust.contact || topupCust.username || 'Account Admin';
-
-      const topupRecord = {
-        id: `pay_top_${Date.now()}`,
-        customerId: topupCust.id,
-        receiptNumber: `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-        company: companyTitle,
-        contact: contactTitle,
-        phone: topupCust.phone,
-        city: topupCust.city || 'India',
-        type: 'topup',
-        typeLabel: 'Wallet Top-Up',
-        amount: rechargeNum,
-        gstAmount: Math.round(rechargeNum * 0.18),
-        total: rechargeNum,
-        paymentMode: 'Bank Transfer (IMPS/NEFT)',
-        utr: utrRef,
-        date: getLiveNowFormatted(),
-        status: 'paid',
-        runwayAdded: addedDays,
-        notes: `Wallet Credit by Sub-Admin`,
-      };
-      const raw = localStorage.getItem('growthline_payment_records');
-      const list = raw ? JSON.parse(raw) : [];
-      localStorage.setItem('growthline_payment_records', JSON.stringify([topupRecord, ...list]));
-
-      // Also append to growthline_wallet_transactions for this specific customer
-      const rawTx = localStorage.getItem('growthline_wallet_transactions');
-      const txList = rawTx ? JSON.parse(rawTx) : [];
-      const newTx = {
-        id: `tx_${Date.now()}`,
-        customerId: topupCust.id,
-        customerPhone: topupCust.phone,
-        customerUsername: topupCust.username,
-        company: companyTitle,
-        date: getLiveNowFormatted(),
-        ref: utrRef,
-        desc: `Sub-Admin Wallet Top-Up Credit (₹${rechargeNum.toLocaleString('en-IN')})`,
-        type: 'Credit',
-        amount: rechargeNum,
-        balance: newBal,
-        method: 'Sub-Admin Credit (IMPS/NEFT)',
-        status: 'Verified ✓',
-      };
-      localStorage.setItem('growthline_wallet_transactions', JSON.stringify([newTx, ...txList]));
-
-      // If this customer is currently logged in, sync their active session balance too
-      const rawActive = localStorage.getItem('growthline_active_user');
-      if (rawActive) {
-        const activeUser = JSON.parse(rawActive);
-        if (activeUser && (activeUser.id === topupCust.id || activeUser.phone === topupCust.phone)) {
-          const syncedActive = { ...activeUser, balance: newBal, walletBalance: newBal, paymentStatus: 'paid', payment_status: 'paid' };
-          localStorage.setItem('growthline_active_user', JSON.stringify(syncedActive));
-          window.dispatchEvent(new CustomEvent('growthline_active_user_changed', { detail: syncedActive }));
-        }
-      }
-
-      window.dispatchEvent(new CustomEvent('growthline_payment_recorded', { detail: topupRecord }));
-    } catch (e) {}
-
-    alert(`Successfully credited ₹${rechargeNum.toLocaleString('en-IN')} to ${topupCust.companyName || topupCust.name}! New Balance: ₹${newBal.toLocaleString('en-IN')}`);
-    setTopupCust(null);
-  };
 
   const handleDeleteCustomer = async (cust) => {
     if (!cust) return;
@@ -4631,7 +4513,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
             <span className="desk-pill pill-emerald" style={{ fontWeight: 800 }}>Platform Funds: {formatINR(totalPlatformBalance)}</span>
           </div>
           <p className="desk-subtitle">
-            Centralized client advertising ledger, daily ₹300 auto-cut deduction monitoring, runway health alerts, and instant top-ups.
+            Centralized client advertising ledger, daily ₹300 auto-cut deduction monitoring, and runway health alerts.
           </p>
         </div>
       </div>
@@ -4806,20 +4688,6 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
                           <Eye size={13} /> Details
                         </button>
 
-                        {/* Top-Up Quick Action Button */}
-                        <button
-                          type="button"
-                          className="sales-btn-primary"
-                          style={{ padding: '5px 12px', fontSize: '0.78rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          onClick={() => {
-                            setTopupCust(c);
-                            setTopupAmount(4500);
-                          }}
-                          title="Instant Wallet Top-Up Credit"
-                        >
-                          <Plus size={13} /> Top-Up
-                        </button>
-
                         {/* Direct WhatsApp Chat Action */}
                         <a
                           href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(contactPerson)},%20your%20current%20AdMafia%20wallet%20balance%20is%20${encodeURIComponent(formatINR(bal))}%20(${runway}%20days%20runway).`}
@@ -4950,121 +4818,8 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
               >
                 <MessageSquare size={14} /> Open WhatsApp Chat
               </a>
-              <button
-                type="button"
-                className="sales-btn-primary"
-                onClick={() => {
-                  setTopupCust(selectedWalletCust);
-                  setTopupAmount(4500);
-                  setSelectedWalletCust(null);
-                }}
-                style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-              >
-                <Plus size={14} /> Top-Up Wallet
-              </button>
               <button type="button" className="desk-action-btn" onClick={() => setSelectedWalletCust(null)}>
                 Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Top-Up Modal */}
-      {topupCust && (
-        <div className="sales-modal-overlay" onClick={() => setTopupCust(null)}>
-          <div className="sales-modal-card" style={{ maxWidth: 520, width: '95%' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div>
-                <span className="sales-dept-badge">Instant Ad Spend Recharge</span>
-                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.3rem', fontWeight: 800 }}>Top-Up Client Wallet</h3>
-              </div>
-              <button type="button" className="desk-close-btn" onClick={() => setTopupCust(null)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f8fafc' }}>
-              {(() => {
-                const tIdentity = resolveCustomerIdentity(topupCust, customers);
-                return (
-                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
-                    {tIdentity.displayName}
-                  </div>
-                );
-              })()}
-              <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>
-                Contact: <strong style={{ color: '#0f172a' }}>{topupCust.contactPerson || topupCust.contact || topupCust.username}</strong> • Phone: <strong style={{ color: '#059669' }}>+91 {topupCust.phone}</strong>
-              </div>
-              <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 4 }}>
-                Current Balance: <strong style={{ color: (topupCust.balance || 0) > 0 ? '#059669' : '#e11d48' }}>{formatINR(topupCust.balance ?? topupCust.walletBalance ?? 0)}</strong> ({topupCust.runwayDays || 0} Days Runway @ ₹{topupCust.dailyPacing || 300}/d)
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <label className="desk-form-label" style={{ fontWeight: 800, fontSize: '0.84rem' }}>Select Recharge Preset</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 6 }}>
-                {[600, 1500, 2100, 4500, 9000, 18000].map((amt) => (
-                  <button
-                    key={amt}
-                    type="button"
-                    className={`desk-preset-btn ${topupAmount === amt ? 'active' : ''}`}
-                    onClick={() => setTopupAmount(amt)}
-                  >
-                    <div style={{ fontWeight: 800 }}>₹{amt.toLocaleString('en-IN')}</div>
-                    <div style={{ fontSize: '0.68rem', color: '#64748b' }}>+{Math.floor(amt / (topupCust.dailyPacing || 300))} Days</div>
-                  </button>
-                ))}
-              </div>
-
-              {/* Custom Top-Up Amount Input */}
-              <div style={{ marginTop: 12 }}>
-                <label className="desk-form-label" style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 700 }}>
-                  Or Enter Custom Amount (₹)
-                </label>
-                <input
-                  type="number"
-                  min="100"
-                  step="100"
-                  value={topupAmount}
-                  onChange={(e) => setTopupAmount(Math.max(0, Number(e.target.value) || 0))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: '1.5px solid #cbd5e1',
-                    fontSize: '0.94rem',
-                    fontWeight: 700,
-                    marginTop: 4,
-                    outline: 'none'
-                  }}
-                  placeholder="e.g. 10000"
-                />
-              </div>
-            </div>
-
-            <div className="desk-modal-box" style={{ marginBottom: 16, background: '#f0fdf4', borderColor: '#bbf7d0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700 }}>Total Wallet Credit</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#15803d' }}>+{formatINR(topupAmount)}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700 }}>Runway Added</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#15803d' }}>+{Math.floor(topupAmount / (topupCust.dailyPacing || 300))} Days</div>
-                </div>
-              </div>
-              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #bbf7d0', fontSize: '0.78rem', color: '#166534' }}>
-                New Balance After Recharge: <strong>{formatINR((topupCust.balance ?? topupCust.walletBalance ?? 0) + Number(topupAmount || 0))}</strong>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button type="button" className="sales-btn-secondary" onClick={() => setTopupCust(null)}>
-                Cancel
-              </button>
-              <button type="button" className="sales-btn-primary" onClick={handleApplyTopup} style={{ fontWeight: 800 }}>
-                Apply Credit Instantly
               </button>
             </div>
           </div>
