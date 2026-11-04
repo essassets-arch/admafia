@@ -482,13 +482,7 @@ export default function AllDesksOverviewDashboard({
           </div>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
-            gap: 14,
-          }}
-        >
+        <div className="sales-desks-hub-grid">
           {DESKS.map((d) => {
             const Icon = d.icon;
             return (
@@ -582,13 +576,7 @@ export default function AllDesksOverviewDashboard({
       </div>
 
       {/* 4. MAIN OPERATIONAL INTELLIGENCE GRID (Clean Side-by-Side Command Sections) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
-          gap: 20,
-        }}
-      >
+      <div className="sales-intelligence-grid">
         {/* Left Column: Live Inbound Leads & Customer Intake */}
         <div
           style={{

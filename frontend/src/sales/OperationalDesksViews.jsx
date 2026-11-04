@@ -3868,7 +3868,7 @@ export function PaymentCollectionDesk({
           </button>
         </div>
 
-        <div className="desk-search-wrap" style={{ minWidth: 320 }}>
+        <div className="desk-search-wrap">
           <Search size={16} className="desk-search-icon" />
           <input
             type="text"
@@ -5259,7 +5259,7 @@ export function QuerySupportDesk({
           </button>
         </div>
 
-        <div className="desk-search-wrap" style={{ minWidth: 320 }}>
+        <div className="desk-search-wrap">
           <Search size={16} className="desk-search-icon" />
           <input
             type="text"

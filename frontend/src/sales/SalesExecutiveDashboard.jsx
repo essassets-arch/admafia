@@ -19,6 +19,8 @@ import {
   UserCheck,
   AlertCircle,
   Receipt,
+  Menu,
+  X,
 } from 'lucide-react';
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import {
@@ -153,6 +155,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   };
 
   const [activeTab, setActiveTab] = useState(getDeskFromUrl);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [failedTxCount, setFailedTxCount] = useState(0);
 
   const updateFailedCount = React.useCallback(async () => {
@@ -184,6 +187,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
 
   const navigateToDesk = (deskKey, targetHash) => {
     setActiveTab(deskKey);
+    setIsMobileDrawerOpen(false);
     try {
       if (window.location.hash !== targetHash) {
         window.location.hash = targetHash;
@@ -309,6 +313,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
     const handleHashOrPopState = () => {
       const desk = getDeskFromUrl();
       setActiveTab(desk);
+      setIsMobileDrawerOpen(false);
     };
 
     window.addEventListener('growthline_postgres_synced', handlePostgresSynced);
@@ -419,47 +424,104 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         </div>
       )}
 
+      {/* MOBILE RESPONSIVE TOP BAR (Visible on mobile/tablet viewports) */}
+      <header className="sales-mobile-top-bar">
+        <button
+          type="button"
+          className="sales-btn-hamburger"
+          onClick={() => setIsMobileDrawerOpen(true)}
+          aria-label="Open Navigation Menu"
+        >
+          <Menu size={22} />
+        </button>
+        <div className="sales-mobile-brand">
+          <img
+            src="/AdMafia-Logo.png"
+            alt="AdMafia"
+            style={{
+              height: 32,
+              width: 'auto',
+              objectFit: 'contain',
+              borderRadius: 6,
+              background: '#ffffff',
+              padding: '2px 4px',
+              border: '1px solid #e2e8f0',
+            }}
+          />
+          <div className="sales-mobile-brand-text">
+            <span>Ad<b>Mafia</b></span>
+            <span className="sales-ops-mini-badge">OPS</span>
+          </div>
+        </div>
+        <div className="sales-mobile-active-desk">
+          <span className="desk-pill pill-indigo" style={{ fontSize: '0.70rem', fontWeight: 800, textTransform: 'uppercase' }}>
+            {activeTab.replace('_', ' ')}
+          </span>
+        </div>
+      </header>
+
+      {/* Mobile Drawer Backdrop */}
+      {isMobileDrawerOpen && (
+        <div
+          className="sales-mobile-backdrop"
+          onClick={() => setIsMobileDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* 1. STICKY SIDEBAR NAVIGATION WITH 9 OPERATIONAL DESKS */}
-      <aside className="sales-sidebar">
+      <aside className={`sales-sidebar ${isMobileDrawerOpen ? 'mobile-open' : ''}`}>
         <div className="sales-sidebar-top">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img
-              src="/AdMafia-Logo.png"
-              alt="AdMafia Marketing"
-              style={{
-                height: 42,
-                width: 'auto',
-                objectFit: 'contain',
-                borderRadius: 8,
-                background: '#ffffff',
-                padding: '3px 6px',
-                border: '1px solid #e2e8f0',
-              }}
-            />
-            <div>
-              <div
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <img
+                src="/AdMafia-Logo.png"
+                alt="AdMafia Marketing"
                 style={{
-                  fontFamily: "'Bricolage Grotesque', system-ui",
-                  fontWeight: 800,
-                  fontSize: '1.1rem',
-                  color: '#0f172a',
-                  lineHeight: 1.1,
+                  height: 42,
+                  width: 'auto',
+                  objectFit: 'contain',
+                  borderRadius: 8,
+                  background: '#ffffff',
+                  padding: '3px 6px',
+                  border: '1px solid #e2e8f0',
                 }}
-              >
-                Ad<b>Mafia</b>
-              </div>
-              <div
-                style={{
-                  fontSize: '0.66rem',
-                  fontWeight: 800,
-                  color: '#4f46e5',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                Operations &amp; Support Hub
+              />
+              <div>
+                <div
+                  style={{
+                    fontFamily: "'Bricolage Grotesque', system-ui",
+                    fontWeight: 800,
+                    fontSize: '1.1rem',
+                    color: '#0f172a',
+                    lineHeight: 1.1,
+                  }}
+                >
+                  Ad<b>Mafia</b>
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.66rem',
+                    fontWeight: 800,
+                    color: '#4f46e5',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  Operations &amp; Support Hub
+                </div>
               </div>
             </div>
+
+            {/* Mobile Drawer Close Button */}
+            <button
+              type="button"
+              className="sales-mobile-drawer-close"
+              onClick={() => setIsMobileDrawerOpen(false)}
+              aria-label="Close Navigation Menu"
+            >
+              <X size={20} />
+            </button>
           </div>
         </div>
 

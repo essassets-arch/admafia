@@ -534,7 +534,7 @@ export default function MasterTransactionLogsDesk({
         </div>
 
         {/* Real-time Search Input */}
-        <div className="desk-search-wrap" style={{ minWidth: 340, flex: 1 }}>
+        <div className="desk-search-wrap" style={{ flex: 1 }}>
           <Search size={16} className="desk-search-icon" />
           <input
             type="text"
