@@ -507,14 +507,14 @@ export default function LeadHubOverview({
           </div>
         </div>
 
-        {/* 3 Metric Cards Grid (Daily Burn Rate, Active Schedule, Current Wallet) */}
+        {/* 3 Metric Cards Grid (Daily Ad Budget, Active Schedule, Current Wallet) */}
         <div className="pacing-three-cards-grid">
-          {/* Card 1: DAILY BURN RATE */}
+          {/* Card 1: DAILY AD BUDGET */}
           <div className="pacing-metric-card-exact">
             <div className="pacing-card-top-row">
               <div className="pacing-card-label-with-icon">
                 <span className="pacing-icon-dollar">$</span>
-                <span className="pacing-card-exact-label">DAILY BURN RATE</span>
+                <span className="pacing-card-exact-label">DAILY AD BUDGET</span>
               </div>
               <button
                 type="button"

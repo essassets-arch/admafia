@@ -1157,7 +1157,7 @@ export function SetDailyLimitModal({
         html: `
           <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 16px; margin: 12px 0; font-family: inherit;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Daily Burn Rate:</span>
+              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Daily Ad Budget:</span>
               <strong style="color:#4f46e5; font-size:1.1rem; font-weight:800;">₹${finalAmount.toLocaleString('en-IN')} / active day</strong>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
@@ -2869,3 +2869,4 @@ export function BusinessProfileModal({
     </div>
   );
 }
+    
