@@ -15772,11 +15772,39 @@
 }
 
 /* ==========================================================================
-   DEFINITIVE MOBILE & TABLET RESPONSIVE OVERRIDE (<= 860px)
-   Fixes horizontal flex clipping and blank white screen on mobile viewports
+   TABLET RESPONSIVE TUNING (861px to 1024px)
+   ========================================================================== */
+@media (min-width: 861px) and (max-width: 1024px) {
+  .portal-content-body {
+    padding: 20px 18px 48px !important;
+  }
+  .wallet-kpi-quad-exact-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 14px !important;
+  }
+  .topup-split-grid-layout {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+  }
+  .topup-presets-3x2-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .seven-days-cards-grid-exact {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 10px !important;
+  }
+  .profile-overview-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+}
+
+/* ==========================================================================
+   DEFINITIVE MOBILE & COMPACT TABLET RESPONSIVE SYSTEM (<= 860px)
+   Guarantees 100% full responsiveness across 320px, 375px, 390px, 430px, 768px
    ========================================================================== */
 @media (max-width: 860px) {
-  /* 1. Root Container: Vertical Column Stack */
+  /* 1. Root Application Shell */
   .portal-app-root {
     display: flex !important;
     flex-direction: column !important;
@@ -15788,9 +15816,10 @@
     width: 100% !important;
     position: relative !important;
     background: var(--portal-bg, #f8fafc) !important;
+    -webkit-text-size-adjust: 100% !important;
   }
 
-  /* 2. Mobile Top Header Bar */
+  /* 2. Mobile Sticky Header Bar */
   .portal-mobile-top-bar {
     display: flex !important;
     width: 100% !important;
@@ -15810,23 +15839,70 @@
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05) !important;
   }
 
-  /* 3. Off-Canvas Sliding Drawer Sidebar */
+  .btn-mobile-hamburger {
+    background: transparent !important;
+    border: none !important;
+    color: #0f172a !important;
+    padding: 8px !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 40px !important;
+    min-width: 40px !important;
+  }
+
+  .btn-mobile-hamburger:hover,
+  .btn-mobile-hamburger:active {
+    background: #f1f5f9 !important;
+  }
+
+  .mobile-brand-title {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    cursor: pointer !important;
+  }
+
+  .mobile-brand-title img {
+    height: 32px !important;
+    width: auto !important;
+  }
+
+  .mobile-wallet-pill {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    background: #eff6ff !important;
+    border: 1px solid #dbeafe !important;
+    color: #1e40af !important;
+    font-size: 0.82rem !important;
+    font-weight: 800 !important;
+    padding: 6px 12px !important;
+    border-radius: 999px !important;
+    cursor: pointer !important;
+    min-height: 36px !important;
+  }
+
+  /* 3. Off-Canvas Sliding Navigation Drawer */
   .portal-sidebar {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     bottom: 0 !important;
-    width: 285px !important;
-    max-width: 85vw !important;
+    width: 290px !important;
+    max-width: 86vw !important;
     height: 100% !important;
     height: 100vh !important;
     max-height: 100vh !important;
     z-index: 9999 !important;
     transform: translateX(-100%) !important;
     transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    box-shadow: 6px 0 28px rgba(0, 0, 0, 0.25) !important;
+    box-shadow: 6px 0 32px rgba(0, 0, 0, 0.28) !important;
     background: #ffffff !important;
     overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
     display: flex !important;
     flex-direction: column !important;
   }
@@ -15836,25 +15912,68 @@
     transform: translateX(0) !important;
   }
 
-  /* 4. Backdrop Overlay */
-  .portal-mobile-backdrop {
-    display: block !important;
-    position: fixed !important;
-    inset: 0 !important;
-    background: rgba(15, 23, 42, 0.6) !important;
-    backdrop-filter: blur(4px) !important;
-    z-index: 9990 !important;
-  }
-
   .btn-sidebar-collapse {
     display: none !important;
   }
 
   .btn-mobile-sidebar-close {
     display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: transparent !important;
+    border: none !important;
+    color: #64748b !important;
+    padding: 8px !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    min-height: 40px !important;
+    min-width: 40px !important;
   }
 
-  /* 5. Main Area on Mobile (Directly below 60px header) */
+  .btn-mobile-sidebar-close:hover,
+  .btn-mobile-sidebar-close:active {
+    color: #0f172a !important;
+    background: #f1f5f9 !important;
+  }
+
+  .portal-nav-menu {
+    flex: 1 1 auto !important;
+    padding: 16px 12px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    gap: 6px !important;
+  }
+
+  .nav-item-btn {
+    min-height: 44px !important;
+    padding: 12px 14px !important;
+    font-size: 0.94rem !important;
+  }
+
+  .sidebar-footer-actions {
+    padding: 14px 12px !important;
+    border-top: 1px solid #e2e8f0 !important;
+    gap: 8px !important;
+    background: #f8fafc !important;
+  }
+
+  .sidebar-bottom-btn {
+    min-height: 42px !important;
+    padding: 10px 12px !important;
+  }
+
+  /* 4. Backdrop Overlay */
+  .portal-mobile-backdrop {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(15, 23, 42, 0.65) !important;
+    backdrop-filter: blur(4px) !important;
+    z-index: 9990 !important;
+    animation: modalFadeIn 0.2s ease-out !important;
+  }
+
+  /* 5. Main Scrollable Container */
   .portal-main-area {
     flex: 1 1 auto !important;
     display: flex !important;
@@ -15879,7 +15998,6 @@
     overflow-x: hidden !important;
   }
 
-  /* 6. Overview and Subpage Adjustments for Mobile */
   .portal-overview-view,
   .portal-lead-feed-page,
   .portal-followups-feed-page,
@@ -15893,101 +16011,1063 @@
     padding-right: 0 !important;
   }
 
-  .overview-title-block {
+  /* =========================================================================
+     PAGE 1: DASHBOARD OVERVIEW RESPONSIVENESS
+     ========================================================================= */
+  .overview-top-breadcrumb-bar {
     flex-direction: column !important;
     align-items: flex-start !important;
-    gap: 12px !important;
+    gap: 8px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .breadcrumb-line {
+    font-size: 0.82rem !important;
+  }
+
+  .live-pipeline-active-badge {
+    font-size: 0.76rem !important;
+    padding: 3px 8px !important;
+  }
+
+  .overview-title-block {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .overview-title-row {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 10px !important;
+  }
+
+  .overview-title-row h1 {
+    font-size: 1.45rem !important;
+    margin: 0 !important;
+    letter-spacing: -0.02em !important;
+  }
+
+  .live-status-pill-badge {
+    font-size: 0.76rem !important;
+    padding: 4px 10px !important;
+  }
+
+  .overview-desc-lead {
+    font-size: 0.86rem !important;
+    line-height: 1.5 !important;
+    margin: 6px 0 0 !important;
   }
 
   .overview-title-block > div:last-child {
     width: 100% !important;
     margin-left: 0 !important;
-    justify-content: space-between !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
   }
 
   .header-ad-wallet-card {
-    flex: 1 1 auto !important;
+    width: 100% !important;
     max-width: 100% !important;
+    box-sizing: border-box !important;
+    justify-content: space-between !important;
+    padding: 10px 14px !important;
   }
 
-  /* Ensure master cards have comfortable mobile padding */
-  .pacing-control-master-card,
-  .overall-performance-master-card,
-  .launch-web-domain-card,
-  .recent-priority-enquiries-panel,
-  .registration-status-banner-card {
+  .btn-complete-reg-action {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    justify-content: center !important;
+    padding: 10px 14px !important;
+    font-size: 0.86rem !important;
+  }
+
+  /* Pacing Control Master Card */
+  .pacing-control-master-card {
     padding: 16px 14px !important;
-    border-radius: 16px !important;
+    border-radius: 18px !important;
+    margin-bottom: 18px !important;
   }
 
   .pacing-master-header-exact {
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 14px !important;
+    gap: 12px !important;
+    margin-bottom: 16px !important;
   }
 
   .pacing-master-left-group {
-    min-width: 0 !important;
     width: 100% !important;
+    min-width: 0 !important;
   }
 
   .pacing-status-toggle-cluster {
     width: 100% !important;
+    display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
     padding-top: 10px !important;
     border-top: 1px solid #f1f5f9 !important;
   }
 
-  .today-campaign-bottom-bar-exact {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 12px !important;
+  .pacing-three-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
   }
 
-  .today-budget-actions-right {
+  .pacing-stat-box-exact {
+    padding: 14px 14px !important;
+    border-radius: 14px !important;
+  }
+
+  .pacing-stat-val-exact {
+    font-size: 1.45rem !important;
+  }
+
+  /* 7-Day Marketing Schedule Engine */
+  .select-marketing-days-engine {
+    margin-top: 16px !important;
+    padding-top: 16px !important;
+    border-top: 1px solid #f1f5f9 !important;
+  }
+
+  .engine-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .engine-title-with-icon {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .engine-title-text {
+    font-size: 0.82rem !important;
+  }
+
+  .engine-booked-highlight-pill {
+    margin-left: 0 !important;
+    margin-top: 4px !important;
+  }
+
+  .engine-preset-buttons-row {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+
+  .btn-preset-chip {
+    flex: 1 1 auto !important;
+    min-height: 36px !important;
+    padding: 6px 10px !important;
+    font-size: 0.78rem !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  .engine-week-calendar-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .week-nav-left-group {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
     width: 100% !important;
     justify-content: space-between !important;
   }
 
-  /* Ensure grids stack gracefully on small mobile screens */
-  .metrics-quad-grid,
-  .pacing-metrics-quad,
-  .perf-metric-cards-grid,
-  .wallet-kpi-quad-exact-grid,
-  .engine-three-cards-grid,
-  .pacing-three-cards-grid,
+  .btn-week-step-nav {
+    min-height: 36px !important;
+    padding: 6px 12px !important;
+    font-size: 0.8rem !important;
+  }
+
+  .week-range-indicator-badge {
+    flex: 1 1 100% !important;
+    justify-content: center !important;
+    order: 3 !important;
+    padding: 6px 10px !important;
+  }
+
+  /* 7 Days Cards: Smooth Horizontal Touch-Scroll Rail */
+  .seven-days-cards-grid-exact {
+    display: flex !important;
+    overflow-x: auto !important;
+    gap: 8px !important;
+    padding: 4px 2px 10px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+  }
+
+  .seven-day-card-exact {
+    flex: 0 0 112px !important;
+    min-width: 112px !important;
+    box-sizing: border-box !important;
+    padding: 14px 6px 10px !important;
+    border-radius: 12px !important;
+  }
+
+  .day-code-title {
+    font-size: 0.86rem !important;
+  }
+
+  .day-calendar-date {
+    font-size: 0.84rem !important;
+  }
+
+  .day-sub-label {
+    font-size: 0.68rem !important;
+  }
+
+  .day-price-badge {
+    font-size: 0.78rem !important;
+    padding: 3px 6px !important;
+  }
+
+  /* Today's Campaign Bottom Bar */
+  .today-campaign-bottom-bar-exact {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    margin-top: 14px !important;
+  }
+
+  .today-budget-info-left {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .today-budget-actions-right {
+    width: 100% !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .btn-set-amount-purple-pill,
+  .btn-today-edit-budget {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 40px !important;
+  }
+
+  /* Overall Performance Master Card */
+  .overall-performance-master-card {
+    padding: 16px 14px !important;
+    border-radius: 18px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .perf-master-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .perf-master-header h2 {
+    font-size: 1.25rem !important;
+  }
+
+  .btn-language-change-link {
+    align-self: flex-start !important;
+    font-size: 0.82rem !important;
+  }
+
   .perf-three-stat-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .perf-box-card {
+    padding: 14px 14px !important;
+    border-radius: 14px !important;
+  }
+
+  /* Promotional Banner */
+  .portal-overview-view a[href*="emperorsmartsolutions"] {
+    margin-bottom: 18px !important;
+    border-radius: 14px !important;
+  }
+
+  .portal-overview-view a[href*="emperorsmartsolutions"] img {
+    max-height: 160px !important;
+    object-fit: cover !important;
+  }
+
+  /* Recent High-Priority Enquiries */
+  .recent-priority-enquiries-panel {
+    padding: 16px 14px !important;
+    border-radius: 18px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .priority-panel-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .priority-panel-header h2 {
+    font-size: 1.22rem !important;
+    margin-right: 6px !important;
+  }
+
+  .btn-all-leads-arrow {
+    width: 100% !important;
+    justify-content: center !important;
+    text-align: center !important;
+    min-height: 38px !important;
+  }
+
+  .leads-verified-footer-container {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    text-align: center !important;
+    padding-top: 14px !important;
+  }
+
+  .btn-open-dedicated-hub-pill {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 40px !important;
+  }
+
+  /* =========================================================================
+     PAGE 2 & 3: LEAD PIPELINE & FOLLOW-UPS QUEUE RESPONSIVENESS
+     ========================================================================= */
+  .lead-pipeline-header-cluster {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .lead-header-title-row {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .lead-header-title-row h1 {
+    font-size: 1.45rem !important;
+    margin: 0 !important;
+  }
+
+  .lead-header-desc {
+    font-size: 0.84rem !important;
+    line-height: 1.45 !important;
+    margin: 6px 0 0 !important;
+  }
+
+  .lead-header-actions-right {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .list-controls-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .list-search-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .list-search-input {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    height: 42px !important;
+    font-size: 0.92rem !important;
+  }
+
+  .list-date-tabs {
+    width: 100% !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    padding-bottom: 6px !important;
+    -webkit-overflow-scrolling: touch !important;
+    gap: 8px !important;
+    scrollbar-width: none !important;
+  }
+
+  .list-date-tabs::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .list-tab-pill {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    font-size: 0.82rem !important;
+    padding: 7px 14px !important;
+    min-height: 36px !important;
+  }
+
+  /* CARD TRANSFORMATION: Convert wide tables into modern cards on mobile */
+  .proper-list-view-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .list-view-table-header {
+    display: none !important;
+  }
+
+  .list-view-items-stack {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+
+  .proper-list-row {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+    padding: 16px 14px !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .proper-list-row.is-unread-row {
+    border-left: 4px solid #3b82f6 !important;
+    background: #fbfdff !important;
+  }
+
+  .proper-list-row.is-followup-row {
+    border-left: 4px solid #be185d !important;
+  }
+
+  .proper-list-row .col-phone {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+
+  .phone-icon-circle {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 10px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .phone-strong {
+    font-size: 1.08rem !important;
+    font-weight: 800 !important;
+    color: #0f172a !important;
+  }
+
+  .proper-list-row .col-status {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .proper-step-badge {
+    font-size: 0.78rem !important;
+    padding: 4px 10px !important;
+  }
+
+  .proper-list-row .col-time {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    font-size: 0.8rem !important;
+    color: #64748b !important;
+  }
+
+  .proper-list-row .col-actions {
+    width: 100% !important;
+    padding-top: 10px !important;
+    border-top: 1px solid #f1f5f9 !important;
+    display: flex !important;
+  }
+
+  .list-actions-group {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)) !important;
+    gap: 6px !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  .btn-list-action {
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 0 8px !important;
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    justify-content: center !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Empty state */
+  .proper-list-empty-state {
+    padding: 36px 16px !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+  }
+
+  .proper-list-empty-state h3 {
+    font-size: 1.15rem !important;
+  }
+
+  .proper-list-empty-state p {
+    font-size: 0.86rem !important;
+  }
+
+  /* =========================================================================
+     PAGE 4: GROWTH WALLET & CREDITS RESPONSIVENESS
+     ========================================================================= */
+  .wallet-top-breadcrumb-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .wallet-header-actions-group {
+    width: 100% !important;
+  }
+
+  .btn-statement-exact {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 38px !important;
+  }
+
+  .wallet-title-block {
+    margin-bottom: 16px !important;
+  }
+
+  .wallet-title-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .wallet-title-row h1 {
+    font-size: 1.38rem !important;
+    margin: 0 !important;
+  }
+
+  .wallet-status-pill-badge {
+    font-size: 0.78rem !important;
+    padding: 4px 10px !important;
+  }
+
+  .wallet-desc-lead {
+    font-size: 0.86rem !important;
+    line-height: 1.5 !important;
+    margin: 6px 0 0 !important;
+  }
+
+  /* 4 KPI Cards */
+  .wallet-kpi-quad-exact-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .redesigned-wallet-hub .wallet-exact-kpi-card,
+  .wallet-exact-kpi-card {
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+  }
+
+  .kpi-card-label {
+    font-size: 0.76rem !important;
+  }
+
+  .kpi-card-value {
+    font-size: 1.35rem !important;
+  }
+
+  .kpi-card-subline {
+    font-size: 0.74rem !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+
+  /* Low Balance Warning Banner */
+  .wallet-low-balance-exact-alert {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 16px 14px !important;
+    border-radius: 16px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .alert-text-group {
+    gap: 10px !important;
+  }
+
+  .alert-text-group h3 {
+    font-size: 1rem !important;
+  }
+
+  .alert-text-group p {
+    font-size: 0.84rem !important;
+  }
+
+  .btn-recharge-wallet-exact {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+  }
+
+  /* Instant Wallet Top-Up */
+  .instant-wallet-topup-card {
+    padding: 18px 14px !important;
+    border-radius: 18px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .topup-card-header h2 {
+    font-size: 1.2rem !important;
+  }
+
+  .topup-card-desc {
+    font-size: 0.84rem !important;
+  }
+
+  .topup-split-grid-layout {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+
+  .topup-presets-3x2-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .topup-preset-card-exact {
+    padding: 12px 8px !important;
+    border-radius: 12px !important;
+  }
+
+  .preset-card-val-exact {
+    font-size: 1.15rem !important;
+  }
+
+  .preset-card-runtime-exact {
+    font-size: 0.68rem !important;
+  }
+
+  .custom-amount-input-row-exact {
+    width: 100% !important;
+  }
+
+  .custom-input-box-exact {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .custom-field-exact {
+    font-size: 1.05rem !important;
+    height: 44px !important;
+  }
+
+  .razorpay-gateway-box-exact {
+    padding: 12px 14px !important;
+    border-radius: 12px !important;
+  }
+
+  .gateway-box-sub {
+    font-size: 0.72rem !important;
+  }
+
+  .btn-pay-green-exact {
+    width: 100% !important;
+    height: 48px !important;
+    font-size: 1.02rem !important;
+    justify-content: center !important;
+    border-radius: 12px !important;
+  }
+
+  /* Day-Wise Ad Spend Engine */
+  .daywise-adspend-engine-card {
+    padding: 18px 14px !important;
+    border-radius: 18px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .engine-title-strip {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .engine-title-h2 {
+    font-size: 1.18rem !important;
+  }
+
+  .engine-autocut-badge {
+    font-size: 0.76rem !important;
+  }
+
+  .engine-card-desc {
+    font-size: 0.84rem !important;
+  }
+
+  .engine-three-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .engine-mini-box {
+    padding: 14px 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .engine-action-bar-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding-top: 14px !important;
+  }
+
+  .btn-deduct-spend-exact,
+  .btn-resume-campaign-exact {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+  }
+
+  .engine-realtime-note {
+    text-align: center !important;
+    font-size: 0.76rem !important;
+  }
+
+  /* Transaction History Ledger */
+  .wallet-ledger-history-card {
+    padding: 18px 14px !important;
+    border-radius: 18px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .ledger-history-header h2 {
+    font-size: 1.18rem !important;
+  }
+
+  .ledger-history-desc {
+    font-size: 0.84rem !important;
+  }
+
+  .ledger-tabs-row {
+    display: flex !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    padding-bottom: 8px !important;
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+    scrollbar-width: none !important;
+  }
+
+  .ledger-tabs-row::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .ledger-tab-btn {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    font-size: 0.8rem !important;
+    padding: 7px 12px !important;
+    min-height: 36px !important;
+  }
+
+  .wallet-table-responsive-wrapper {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: 12px !important;
+  }
+
+  .wallet-exact-table {
+    min-width: 720px !important;
+  }
+
+  /* =========================================================================
+     PAGE 5: MY PROFILE & ACCOUNT KYC RESPONSIVENESS
+     ========================================================================= */
+  .profile-header-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 16px 14px !important;
+    border-radius: 18px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .profile-header-card h2 {
+    font-size: 1.35rem !important;
+  }
+
+  .profile-sub {
+    font-size: 0.84rem !important;
+  }
+
+  .btn-jump-edit {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 40px !important;
+  }
+
+  .profile-overview-dashboard {
+    padding: 16px 14px !important;
+    border-radius: 18px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .profile-overview-top {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding-bottom: 14px !important;
+  }
+
+  .profile-overview-title-block h3 {
+    font-size: 1.25rem !important;
+  }
+
+  .profile-badges-strip {
+    gap: 6px !important;
+  }
+
+  .profile-badges-strip span {
+    font-size: 0.74rem !important;
+  }
+
+  .profile-overview-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .profile-info-card-box {
+    padding: 14px 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .profile-info-card-header h4 {
+    font-size: 0.92rem !important;
+  }
+
+  .profile-kv-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+    font-size: 0.84rem !important;
+  }
+
+  .profile-kv-val {
+    text-align: left !important;
+    word-break: break-all !important;
+  }
+
+  .profile-form-section {
+    padding: 18px 14px !important;
+    border-radius: 18px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .section-title-wrap h3 {
+    font-size: 1.15rem !important;
+  }
+
+  .form-fields-grid-2 {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
   }
 
-  .days-cards-grid,
-  .seven-days-cards-grid,
-  .seven-days-cards-grid-exact {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
+  .form-fields-grid-2 > div[style*="span 2"] {
+    grid-column: span 1 !important;
   }
 
-  .days-row-exact-grid {
-    display: flex !important;
-    overflow-x: auto !important;
-    gap: 8px !important;
-    padding-bottom: 8px !important;
-    -webkit-overflow-scrolling: touch !important;
-  }
-
-  .day-box-exact {
-    flex: 0 0 85px !important;
-    min-width: 85px !important;
-  }
-
-  /* Tables & Lists horizontal scroll wrapper on mobile */
-  .table-responsive,
-  .desk-table-container,
-  .feed-table-container {
+  .clean-input,
+  .clean-select {
     width: 100% !important;
-    overflow-x: auto !important;
+    box-sizing: border-box !important;
+    height: 44px !important;
+    font-size: 16px !important; /* Prevents auto-zoom on iOS */
+    padding: 10px 12px !important;
+  }
+
+  .profile-submit-footer {
+    width: 100% !important;
+    margin-top: 14px !important;
+    margin-bottom: 40px !important;
+  }
+
+  .btn-profile-submit-save {
+    width: 100% !important;
+    height: 48px !important;
+    font-size: 1rem !important;
+    justify-content: center !important;
+    border-radius: 12px !important;
+  }
+
+  /* =========================================================================
+     PAGE 6: ALL MODALS & DIALOGS RESPONSIVENESS
+     ========================================================================= */
+  .portal-modal-backdrop {
+    padding: 10px !important;
+    z-index: 100000 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .portal-modal-box,
+  .payment-complete-modal-card,
+  .business-profile-modal-card.business-profile-modal-large,
+  .business-profile-modal-card {
+    max-width: 95vw !important;
+    width: 100% !important;
+    max-height: 88vh !important;
+    overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
+    box-sizing: border-box !important;
+    padding: 20px 16px !important;
+    border-radius: 18px !important;
+  }
+
+  .modal-header h3 {
+    font-size: 1.15rem !important;
+  }
+
+  .biz-grid-2col,
+  .biz-grid-3col {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .biz-steps-mini-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+
+  .biz-mini-step-divider {
+    display: none !important;
+  }
+
+  .biz-modal-actions-bar {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .biz-actions-btn-group,
+  .btn-biz-complete-submit {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 44px !important;
   }
 }
+
+/* ==========================================================================
+   EXTRA SMALL MOBILE VIEWPORTS (<= 480px)
+   iPhone SE, Galaxy A-series, small Android smartphones (320px - 430px)
+   ========================================================================== */
+@media (max-width: 480px) {
+  .portal-content-body {
+    padding: 10px 8px 56px !important;
+  }
+
+  .portal-mobile-top-bar {
+    padding: 0 10px !important;
+  }
+
+  .portal-logo-text {
+    font-size: 0.95rem !important;
+  }
+
+  .mobile-wallet-pill {
+    padding: 4px 9px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .overview-title-row h1,
+  .lead-header-title-row h1,
+  .profile-header-card h2,
+  .wallet-title-row h1 {
+    font-size: 1.28rem !important;
+  }
+
+  .pacing-control-master-card,
+  .overall-performance-master-card,
+  .recent-priority-enquiries-panel,
+  .instant-wallet-topup-card,
+  .daywise-adspend-engine-card,
+  .wallet-ledger-history-card,
+  .profile-header-card,
+  .profile-overview-dashboard,
+  .profile-form-section,
+  .portal-modal-box {
+    padding: 14px 10px !important;
+    border-radius: 14px !important;
+  }
+
+  .wallet-kpi-quad-exact-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .topup-presets-3x2-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .list-actions-group {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .btn-list-action {
+    height: 36px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .seven-day-card-exact {
+    flex: 0 0 100px !important;
+    min-width: 100px !important;
+    padding: 10px 4px 8px !important;
+  }
+}
+

@@ -1565,7 +1565,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           <button
             type="button"
             className="nav-item-btn"
-            onClick={() => setIsLangOpen(true)}
+            onClick={() => {
+              setIsLangOpen(true);
+              setIsMobileDrawerOpen(false);
+            }}
             title="Language: English (EN / HI / GU / MR / TA / TE / KN / BN)"
           >
             <span className="nav-icon">
@@ -1584,7 +1587,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           <button
             type="button"
             className="nav-item-btn"
-            onClick={() => setIsHelpOpen(true)}
+            onClick={() => {
+              setIsHelpOpen(true);
+              setIsMobileDrawerOpen(false);
+            }}
             title="Help & Support Desk"
           >
             <span className="nav-icon">
@@ -1602,7 +1608,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           {onBackToWebsite && (
             <button
               type="button"
-              onClick={onBackToWebsite}
+              onClick={() => {
+                setIsMobileDrawerOpen(false);
+                onBackToWebsite();
+              }}
               className="sidebar-bottom-btn"
               title="Return to Public Website (/website)"
             >
@@ -1618,7 +1627,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
 
           <button
             type="button"
-            onClick={onSignOut}
+            onClick={() => {
+              setIsMobileDrawerOpen(false);
+              onSignOut && onSignOut();
+            }}
             className="sidebar-bottom-btn logout"
             title="Sign Out"
           >
