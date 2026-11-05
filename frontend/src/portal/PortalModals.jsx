@@ -2869,4 +2869,3 @@ export function BusinessProfileModal({
     </div>
   );
 }
-    
