@@ -18,7 +18,7 @@ import { query, withTransaction } from '../db.js';
 export const superadminRouter = express.Router();
 
 // Helper to log administrative audit events
-async function logSuperAdminAudit({
+export async function logSuperAdminAudit({
   actorId = 'superadmin',
   actorName = 'Super Admin',
   actorRole = 'Super Admin',

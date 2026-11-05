@@ -9,7 +9,7 @@ import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
 import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
-import { superadminRouter } from './routes/superadmin.js';
+import { superadminRouter, logSuperAdminAudit } from './routes/superadmin.js';
 
 // Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
 process.on('uncaughtException', (err) => {
@@ -1180,7 +1180,9 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    if (password && expectedPasswordHash && expectedPasswordHash !== password) {
+    const cleanInputPassword = String(password || '').trim();
+    const cleanStoredPassword = String(expectedPasswordHash || '').trim();
+    if (cleanInputPassword && cleanStoredPassword && cleanStoredPassword !== cleanInputPassword) {
       return res.status(401).json({ ok: false, error: 'Incorrect password for this account.' });
     }
 
@@ -1552,6 +1554,192 @@ app.get('/api/admin/customer-password/:identifier', async (req, res) => {
       password: cust.password_hash || 'Password123!',
     });
   } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Sales Desk: Direct Client Wallet Top-Up (Assisted by Sales Executive)
+app.post('/api/sales/wallet/topup', async (req, res) => {
+  try {
+    const {
+      customerId,
+      phone,
+      amount,
+      referenceUtr,
+      paymentMethod = 'Instant UPI / GPay Transfer',
+      salesPersonName = 'Sales Executive',
+      salesPersonId = 'sales',
+      notes = '',
+    } = req.body || {};
+
+    const creditAmount = parseFloat(amount);
+    const cleanUtr = String(referenceUtr || '').trim();
+
+    if (!customerId && !phone) {
+      return res.status(400).json({ ok: false, error: 'Customer ID or phone number is required.' });
+    }
+    if (!creditAmount || creditAmount < 300) {
+      return res.status(400).json({ ok: false, error: 'Minimum wallet credit amount is ₹300.' });
+    }
+    if (!cleanUtr) {
+      return res.status(400).json({ ok: false, error: 'Transaction UTR reference number is required.' });
+    }
+
+    // 1. Check for duplicate UTR in wallet_transactions to prevent double crediting
+    const dupCheck = await query(`SELECT id FROM wallet_transactions WHERE reference_utr = $1`, [cleanUtr]);
+    if (dupCheck.rowCount > 0) {
+      return res.status(409).json({
+        ok: false,
+        error: `Duplicate Reference: Payment UTR "${cleanUtr}" has already been credited in the ledger.`,
+      });
+    }
+
+    // 2. Resolve customer
+    const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
+    const custRes = await query(
+      `SELECT id, company_name, contact_person, phone, email
+       FROM customers
+       WHERE id = $1 OR phone = $2
+       LIMIT 1`,
+      [customerId || '', cleanPhone]
+    );
+
+    if (custRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Customer account not found for wallet top-up.' });
+    }
+    const customer = custRes.rows[0];
+    const targetCustId = customer.id;
+
+    let recordedNewBalance = 0;
+    let recordedOldBalance = 0;
+    let walletId = null;
+
+    await withTransaction(async (tx) => {
+      // 3. Upsert wallet balance atomically
+      const walRes = await tx(
+        `INSERT INTO wallets (
+          id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active
+        ) VALUES ($1, $2, $3, 300.00, $3, FALSE)
+        ON CONFLICT (customer_id) DO UPDATE SET
+          available_balance = wallets.available_balance + EXCLUDED.available_balance,
+          total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
+          updated_at = NOW()
+        RETURNING *`,
+        [`wal_${Date.now()}`, targetCustId, creditAmount]
+      );
+
+      walletId = walRes.rows[0]?.id;
+      recordedNewBalance = Number(walRes.rows[0]?.available_balance || creditAmount);
+      recordedOldBalance = Number((recordedNewBalance - creditAmount).toFixed(2));
+
+      // 4. Update customer status
+      await tx(
+        `UPDATE customers
+         SET payment_status = 'paid',
+             updated_at = NOW()
+         WHERE id = $1`,
+        [targetCustId]
+      );
+
+      // 5. Insert into wallet_transactions
+      const txId = `tx_sales_${Date.now()}_${randomBytes(3).toString('hex')}`;
+      const salesLabel = salesPersonName ? `${salesPersonName} (Sales Team)` : 'Sales Desk';
+      const txDesc = `Ad Wallet Top-Up by Sales (${salesLabel})${notes ? ` - ${notes.trim()}` : ''}`;
+      const cleanMethod = `Sales Deposit (${paymentMethod})`;
+
+      await tx(
+        `INSERT INTO wallet_transactions (
+          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
+        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓', NOW())`,
+        [
+          txId,
+          targetCustId,
+          walletId,
+          creditAmount,
+          recordedNewBalance,
+          cleanUtr,
+          txDesc,
+          cleanMethod,
+        ]
+      );
+
+      // 6. Insert into topup_requests for Super Admin Top-ups Queue & Verified History
+      const topupId = `tp_sales_${Date.now()}_${randomBytes(3).toString('hex')}`;
+      await tx(
+        `INSERT INTO topup_requests (
+          id, customer_id, wallet_id, amount, payment_method, reference_utr, notes, status, processed_by, processed_at, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'Approved', $8, NOW(), NOW(), NOW())
+        ON CONFLICT (reference_utr) DO NOTHING`,
+        [
+          topupId,
+          targetCustId,
+          walletId,
+          creditAmount,
+          cleanMethod,
+          cleanUtr,
+          notes ? `Sales Top-Up: ${notes.trim()}` : `Manual Top-Up credited via Sales Desk by ${salesLabel}`,
+          salesLabel,
+        ]
+      );
+
+      // 7. Insert payment_records for billing / tax receipts
+      const receiptNo = `REC_${Date.now()}_${randomBytes(2).toString('hex').toUpperCase()}`;
+      await tx(
+        `INSERT INTO payment_records (
+          id, receipt_number, customer_id, company_name, contact_person, phone, tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, paid_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'topup', $7, 0.00, $7, $8, $9, 'paid', NOW())`,
+        [
+          `pay_${Date.now()}_${randomBytes(3).toString('hex')}`,
+          receiptNo,
+          targetCustId,
+          customer.company_name,
+          customer.contact_person,
+          customer.phone,
+          creditAmount,
+          cleanMethod,
+          cleanUtr,
+        ]
+      );
+    });
+
+    // 8. Log audit trail for Super Admin
+    await logSuperAdminAudit({
+      actorId: salesPersonId || 'sales',
+      actorName: `${salesPersonName || 'Sales Executive'} (Sales Team)`,
+      actorRole: 'Sales',
+      actionType: 'SALES_WALLET_TOPUP',
+      targetType: 'wallet',
+      targetId: targetCustId,
+      reason: notes || 'Offline / Direct payment credited by sales person',
+      details: {
+        customerName: customer.company_name,
+        customerPhone: customer.phone,
+        amount: creditAmount,
+        previousBalance: recordedOldBalance,
+        newBalance: recordedNewBalance,
+        referenceUtr: cleanUtr,
+        paymentMethod,
+        salesPersonName,
+      },
+    });
+
+    // 9. Fetch updated customer row from view
+    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [targetCustId]);
+    const updatedCustomer = viewRes.rowCount > 0 ? mapCustomerRow(viewRes.rows[0]) : null;
+
+    res.json({
+      ok: true,
+      customerId: targetCustId,
+      companyName: customer.company_name,
+      amount: creditAmount,
+      previousBalance: recordedOldBalance,
+      newBalance: recordedNewBalance,
+      referenceUtr: cleanUtr,
+      customer: updatedCustomer,
+      message: `₹${creditAmount.toLocaleString('en-IN')} successfully credited to ${customer.company_name}'s wallet by ${salesPersonName}.`,
+    });
+  } catch (err) {
+    console.error('[POST /api/sales/wallet/topup]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

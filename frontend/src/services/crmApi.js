@@ -168,6 +168,16 @@ export const crmApi = {
   },
 
   /**
+   * Sales Desk Manual Wallet Top-Up (/api/sales/wallet/topup)
+   */
+  async salesTopUpWallet(payload) {
+    return apiRequest('/sales/wallet/topup', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
    * Record a failed transaction in the customer's wallet ledger
    */
   async recordFailedTransaction(payload) {

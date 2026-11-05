@@ -46,6 +46,7 @@ import {
 import Swal from 'sweetalert2';
 import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
+import SalesAddMoneyModal from './SalesAddMoneyModal';
 
 const formatINR = (val) =>
   new Intl.NumberFormat('en-IN', {
@@ -245,6 +246,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedCust, setSelectedCust] = useState(null);
+  const [addMoneyCust, setAddMoneyCust] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -1002,6 +1004,15 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                       </button>
                       <button
                         type="button"
+                        className="desk-action-btn"
+                        style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontWeight: 700 }}
+                        onClick={() => setAddMoneyCust(c)}
+                        title="Add Money / Credit Client Wallet"
+                      >
+                        <CreditCard size={13} color="#059669" /> + Add Money
+                      </button>
+                      <button
+                        type="button"
                         className={`desk-action-btn ${c.status === 'active' ? 'btn-warn' : 'btn-success'}`}
                         onClick={() => handleToggleStatus(c.id)}
                       >
@@ -1421,6 +1432,24 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
             </form>
           </div>
         </div>
+      )}
+      {/* Sales Assisted Add Money Modal */}
+      {addMoneyCust && (
+        <SalesAddMoneyModal
+          customer={addMoneyCust}
+          onClose={() => setAddMoneyCust(null)}
+          onSuccess={(updatedCust) => {
+            if (setCustomers && updatedCust) {
+              setCustomers((prev) =>
+                prev.map((item) =>
+                  (item.id === updatedCust.id || item.phone === updatedCust.phone)
+                    ? { ...item, ...updatedCust }
+                    : item
+                )
+              );
+            }
+          }}
+        />
       )}
     </div>
   );
@@ -4557,6 +4586,7 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedWalletCust, setSelectedWalletCust] = useState(null);
+  const [addMoneyCust, setAddMoneyCust] = useState(null);
 
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase().trim();
@@ -4846,6 +4876,17 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
                     {/* 6. Interactive Action Buttons */}
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        {/* Sales Assisted Add Money Button */}
+                        <button
+                          type="button"
+                          className="desk-action-btn"
+                          style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontWeight: 700 }}
+                          onClick={() => setAddMoneyCust(c)}
+                          title="Add Money / Credit Client Wallet"
+                        >
+                          <CreditCard size={13} color="#059669" /> + Add Money
+                        </button>
+
                         {/* Details Modal Button */}
                         <button
                           type="button"
@@ -4993,6 +5034,28 @@ export function WalletsBalancesDesk({ customers, setCustomers }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Sales Assisted Add Money Modal */}
+      {addMoneyCust && (
+        <SalesAddMoneyModal
+          customer={addMoneyCust}
+          onClose={() => setAddMoneyCust(null)}
+          onSuccess={(updatedCust) => {
+            if (setCustomers && updatedCust) {
+              setCustomers((prev) =>
+                prev.map((item) =>
+                  (item.id === updatedCust.id || item.phone === updatedCust.phone)
+                    ? { ...item, ...updatedCust }
+                    : item
+                )
+              );
+            }
+            if (selectedWalletCust && (selectedWalletCust.id === updatedCust?.id || selectedWalletCust.phone === updatedCust?.phone)) {
+              setSelectedWalletCust((prev) => ({ ...prev, ...updatedCust }));
+            }
+          }}
+        />
       )}
     </div>
   );
