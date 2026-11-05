@@ -903,12 +903,18 @@
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
-  overflow: hidden;
+  overflow-x: auto !important;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  width: 100%;
+  max-width: 100%;
+  position: relative;
 }
 
 .desk-table {
   width: 100%;
+  min-width: 1100px;
   border-collapse: collapse;
   text-align: left;
   font-size: 0.86rem;
@@ -923,16 +929,45 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
 }
 
 .desk-table td {
   padding: 14px 18px;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .desk-table tr:hover td {
   background: #fafafa;
+}
+
+/* Custom Smooth Horizontal Scrollbar for Table Sliding on Small Screens & Laptops */
+.desk-table-card::-webkit-scrollbar,
+.appr-table-card::-webkit-scrollbar,
+.tx-table-card::-webkit-scrollbar {
+  height: 8px;
+}
+
+.desk-table-card::-webkit-scrollbar-track,
+.appr-table-card::-webkit-scrollbar-track,
+.tx-table-card::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.desk-table-card::-webkit-scrollbar-thumb,
+.appr-table-card::-webkit-scrollbar-thumb,
+.tx-table-card::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.desk-table-card::-webkit-scrollbar-thumb:hover,
+.appr-table-card::-webkit-scrollbar-thumb:hover,
+.tx-table-card::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 /* Desk Pills & Badges */
@@ -1865,12 +1900,18 @@
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
-  overflow: hidden;
+  overflow-x: auto !important;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+  width: 100%;
+  max-width: 100%;
+  position: relative;
 }
 
 .appr-table-card table {
   width: 100%;
+  min-width: 1080px;
   border-collapse: collapse;
   text-align: left;
 }
@@ -1884,12 +1925,14 @@
   letter-spacing: 0.05em;
   color: #64748b;
   border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
 }
 
 .appr-table-card td {
   padding: 16px 20px;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .appr-table-card tr:last-child td {
@@ -2474,11 +2517,11 @@
   }
 
   .desk-table {
-    min-width: 680px !important;
+    min-width: 1080px !important;
   }
 
   .appr-table-card table {
-    min-width: 760px !important;
+    min-width: 1080px !important;
   }
 
   /* Filter Bars & Search Input */
