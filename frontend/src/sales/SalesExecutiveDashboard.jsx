@@ -19,10 +19,12 @@ import {
   UserCheck,
   AlertCircle,
   Receipt,
+  Scale,
   Menu,
   X,
 } from 'lucide-react';
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
+import BalanceLogsDesk from './BalanceLogsDesk';
 import {
   INITIAL_CUSTOMERS,
   INITIAL_REGISTERED_CUSTOMERS,
@@ -138,6 +140,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
     try {
       const h = (window.location.hash || '').toLowerCase();
       const p = (window.location.pathname || '').toLowerCase();
+      if (h.includes('balance') || p.includes('balance')) return 'balance_logs';
       if (h.includes('transaction') || p.includes('transaction') || h.includes('log') || p.includes('log')) return 'transactions';
       if (h.includes('approved') || h.includes('member')) return 'approved';
       if (h.includes('verification') || p.includes('verification')) return 'pending_verification';
@@ -157,6 +160,28 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   const [activeTab, setActiveTab] = useState(getDeskFromUrl);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [failedTxCount, setFailedTxCount] = useState(0);
+  const [balanceLogsCount, setBalanceLogsCount] = useState(() => {
+    try {
+      const raw = localStorage.getItem('growthline_balance_logs');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.length;
+      }
+    } catch (_) {}
+    return 0;
+  });
+
+  const updateBalanceLogsCount = React.useCallback(async () => {
+    try {
+      const res = await crmApi.getBalanceLogs();
+      if (res && res.ok && Array.isArray(res.logs)) {
+        setBalanceLogsCount(res.logs.length);
+        try {
+          localStorage.setItem('growthline_balance_logs', JSON.stringify(res.logs));
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }, []);
 
   const updateFailedCount = React.useCallback(async () => {
     try {
@@ -183,7 +208,8 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
 
   useEffect(() => {
     updateFailedCount();
-  }, [updateFailedCount, activeTab]);
+    updateBalanceLogsCount();
+  }, [updateFailedCount, updateBalanceLogsCount, activeTab]);
 
   const navigateToDesk = (deskKey, targetHash) => {
     setActiveTab(deskKey);
@@ -681,6 +707,32 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             </span>
           </button>
 
+          {/* Customer Balance Audit Logs */}
+          <button
+            type="button"
+            className={`sales-nav-btn ${activeTab === 'balance_logs' ? 'active' : ''}`}
+            onClick={() => navigateToDesk('balance_logs', '#balance-logs')}
+            style={{
+              fontWeight: activeTab === 'balance_logs' ? 800 : 600,
+            }}
+          >
+            <Scale size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+            <span>Balance Logs</span>
+            <span
+              className="sales-nav-badge"
+              style={{
+                background: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
+                color: activeTab === 'balance_logs' ? '#ffffff' : '#047857',
+                borderColor: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                fontWeight: 800,
+              }}
+            >
+              {balanceLogsCount || 'Live'}
+            </span>
+          </button>
+
           {/* Failed Transactions Recovery Desk */}
           <button
             type="button"
@@ -935,6 +987,14 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             <WalletsBalancesDesk
               customers={customers}
               setCustomers={setCustomers}
+            />
+          )}
+
+          {activeTab === 'balance_logs' && (
+            <BalanceLogsDesk
+              customers={customers}
+              setCustomers={setCustomers}
+              onBalanceLogsCountChange={setBalanceLogsCount}
             />
           )}
 

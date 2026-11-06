@@ -809,14 +809,24 @@ export default function AllDesksOverviewDashboard({
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => navigateToDesk('wallets', '#wallets')}
-                className="sales-btn-secondary"
-                style={{ fontSize: '0.76rem', padding: '5px 12px' }}
-              >
-                Open Wallets ({customers.length}) →
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => navigateToDesk('balance_logs', '#balance-logs')}
+                  className="sales-btn-secondary"
+                  style={{ fontSize: '0.76rem', padding: '5px 12px' }}
+                >
+                  Balance Logs →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateToDesk('wallets', '#wallets')}
+                  className="sales-btn-secondary"
+                  style={{ fontSize: '0.76rem', padding: '5px 12px' }}
+                >
+                  Open Wallets ({customers.length}) →
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

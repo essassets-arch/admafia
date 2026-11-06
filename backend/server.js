@@ -1872,6 +1872,282 @@ app.get('/api/sales/transactions', async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// Sales Desk: Customer Balance Audit Logs (Tracks Previous Balance, Transaction Amount, New Balance, and Full History)
+app.get('/api/sales/balance-logs', async (req, res) => {
+  try {
+    const { customerId, phone, type } = req.query;
+
+    const [wtRes, prRes, custRes, walletsRes] = await Promise.all([
+      query(`
+        SELECT 
+          wt.id,
+          wt.customer_id,
+          wt.wallet_id,
+          wt.tx_type,
+          wt.amount,
+          wt.balance_after,
+          wt.reference_utr,
+          wt.description,
+          wt.payment_method,
+          wt.status,
+          wt.created_at,
+          c.username,
+          c.company_name,
+          c.contact_person,
+          c.phone,
+          c.email,
+          c.city,
+          c.state,
+          c.category,
+          w.available_balance AS current_wallet_balance,
+          w.daily_ad_spend,
+          w.total_lifetime_paid
+        FROM wallet_transactions wt
+        LEFT JOIN customers c ON (
+          wt.customer_id = c.id 
+          OR wt.customer_id = c.phone 
+          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        LEFT JOIN wallets w ON (
+          wt.customer_id = w.customer_id 
+          OR c.id = w.customer_id
+        )
+        WHERE (
+          LOWER(wt.status) NOT LIKE '%fail%' 
+          AND LOWER(wt.status) NOT LIKE '%declin%'
+          AND LOWER(wt.status) NOT LIKE '%cancel%'
+          AND LOWER(wt.status) NOT LIKE '%dismiss%'
+          AND LOWER(wt.status) NOT LIKE '%reject%'
+        )
+        ORDER BY wt.created_at DESC
+      `),
+      query(`
+        SELECT 
+          pr.*,
+          c.username, c.company_name AS cust_company, c.contact_person AS cust_contact,
+          c.phone AS cust_phone, c.email AS cust_email, c.city AS cust_city, c.state AS cust_state, c.category AS cust_category
+        FROM payment_records pr
+        LEFT JOIN customers c ON (
+          pr.customer_id = c.id 
+          OR pr.phone = c.phone 
+          OR c.phone = RIGHT(REGEXP_REPLACE(pr.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        WHERE LOWER(pr.status) = 'paid' OR LOWER(pr.status) = 'settled' OR LOWER(pr.status) = 'verified'
+        ORDER BY pr.paid_at DESC
+      `),
+      query('SELECT * FROM vw_sales_customer_accounts'),
+      query('SELECT * FROM wallets'),
+    ]);
+
+    const customers = custRes.rows.map((r) => mapCustomerRow(r));
+    const testUtrs = new Set(['aaggg', 'aa', 'pay_tvcjrvjjkphawp', 'pay_tvcfjhw56ixevu']);
+    const testReceipts = new Set(['REC_1793882500916_D467', 'REC_1793881526162_E051', 'RCP-2026-5814', 'RCP-2026-9969']);
+
+    const logs = [];
+    const seenRefs = new Set();
+    const seenIds = new Set();
+
+    let totalCredits = 0;
+    let totalDebits = 0;
+    let totalCreditCount = 0;
+    let totalDebitCount = 0;
+
+    // 1. Process wallet_transactions (primary double-entry balance log)
+    for (const row of wtRes.rows) {
+      const ref = String(row.reference_utr || '').trim();
+      const id = String(row.id || '').trim();
+
+      if (testUtrs.has(ref) || testReceipts.has(ref) || testUtrs.has(ref.toLowerCase())) continue;
+      if (id.startsWith('tx_reg_') || ref.startsWith('PAY-REG-')) continue;
+
+      const matchedCust = customers.find(
+        (c) =>
+          c.id === row.customer_id ||
+          (c.phone && row.phone && c.phone.slice(-10) === String(row.phone).slice(-10))
+      );
+
+      const cleanPhone = String(row.phone || matchedCust?.phone || '').replace(/\D/g, '').slice(-10);
+      const rawUser = (row.username || matchedCust?.username || '').replace(/^@/, '').trim();
+      const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : null;
+      const rawCompany = (row.company_name || matchedCust?.companyName || matchedCust?.name || '').trim();
+      const rawContact = (row.contact_person || matchedCust?.contactPerson || matchedCust?.contact || '').trim();
+
+      const properCompany = rawCompany && rawCompany.toLowerCase() !== 'corporate workspace'
+        ? rawCompany
+        : (capUser || (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account'));
+      const properContact = rawContact && rawContact.toLowerCase() !== 'corporate workspace'
+        ? rawContact
+        : (capUser || properCompany);
+
+      const rawType = String(row.tx_type || '').toLowerCase();
+      const rawDesc = String(row.description || '').toLowerCase();
+      const isDebit = rawType.includes('debit') || rawDesc.includes('auto-debit') || rawDesc.includes('burn');
+
+      const amount = Number(row.amount || 0);
+      const balanceAfter = row.balance_after != null ? Number(row.balance_after) : (isDebit ? 0 : amount);
+      const balanceBefore = isDebit ? balanceAfter + amount : Math.max(0, balanceAfter - amount);
+
+      if (isDebit) {
+        totalDebits += amount;
+        totalDebitCount++;
+      } else {
+        totalCredits += amount;
+        totalCreditCount++;
+      }
+
+      // Filter by customer if requested in query
+      if (customerId && row.customer_id !== customerId && matchedCust?.id !== customerId) continue;
+      if (phone && cleanPhone !== String(phone).replace(/\D/g, '').slice(-10)) continue;
+      if (type === 'credit' && isDebit) continue;
+      if (type === 'debit' && !isDebit) continue;
+
+      if (ref) seenRefs.add(ref);
+      if (id) seenIds.add(id);
+
+      const formattedDate = new Date(row.created_at).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+      logs.push({
+        id: row.id,
+        ref: row.reference_utr || row.id,
+        receiptNumber: row.reference_utr || row.id,
+        customerId: row.customer_id,
+        customerName: properCompany,
+        companyName: properCompany,
+        contactPerson: properContact,
+        username: rawUser,
+        phone: cleanPhone,
+        email: row.email || matchedCust?.email || '',
+        city: row.city || matchedCust?.city || 'India',
+        state: row.state || matchedCust?.state || 'Maharashtra',
+        category: row.category || matchedCust?.category || 'IT & Software',
+        txType: isDebit ? 'debit' : 'credit',
+        typeLabel: isDebit ? 'Daily Ad Spend Auto-Debit' : 'Ad Wallet Top-Up',
+        amount,
+        balanceBefore,
+        balanceAfter,
+        balanceChangeFormatted: isDebit ? `-₹${amount.toLocaleString('en-IN')}` : `+₹${amount.toLocaleString('en-IN')}`,
+        currentWalletBalance: row.current_wallet_balance != null ? Number(row.current_wallet_balance) : (matchedCust?.balance || 0),
+        description: row.description || (isDebit ? 'Daily Ad Spend Pacing' : 'Wallet Top-Up'),
+        paymentMethod: row.payment_method || (isDebit ? 'Daily Auto-Debit' : 'Razorpay Secure'),
+        status: 'Settled ✓',
+        createdAt: row.created_at,
+        date: formattedDate,
+      });
+    }
+
+    // 2. Include any verified payment_records not yet captured in wallet_transactions
+    for (const pr of prRes.rows) {
+      const ref = String(pr.utr_reference || pr.receipt_number || pr.id || '').trim();
+      if (!ref || seenRefs.has(ref) || seenIds.has(pr.id)) continue;
+      if (testUtrs.has(ref) || testReceipts.has(ref) || testUtrs.has(ref.toLowerCase())) continue;
+
+      const matchedCust = customers.find(
+        (c) =>
+          c.id === pr.customer_id ||
+          (c.phone && pr.phone && c.phone.slice(-10) === String(pr.phone).slice(-10))
+      );
+
+      const cleanPhone = String(pr.phone || pr.cust_phone || matchedCust?.phone || '').replace(/\D/g, '').slice(-10);
+      const rawUser = (pr.username || matchedCust?.username || '').replace(/^@/, '').trim();
+      const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : null;
+      const rawCompany = (pr.company_name || pr.cust_company || matchedCust?.companyName || matchedCust?.name || '').trim();
+      const rawContact = (pr.contact_person || pr.cust_contact || matchedCust?.contactPerson || matchedCust?.contact || '').trim();
+
+      const properCompany = rawCompany && rawCompany.toLowerCase() !== 'corporate workspace'
+        ? rawCompany
+        : (capUser || (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account'));
+      const properContact = rawContact && rawContact.toLowerCase() !== 'corporate workspace'
+        ? rawContact
+        : (capUser || properCompany);
+
+      const amount = Number(pr.amount || 0);
+      const balanceBefore = 0;
+      const balanceAfter = amount;
+
+      totalCredits += amount;
+      totalCreditCount++;
+
+      if (customerId && pr.customer_id !== customerId && matchedCust?.id !== customerId) continue;
+      if (phone && cleanPhone !== String(phone).replace(/\D/g, '').slice(-10)) continue;
+      if (type === 'debit') continue;
+
+      seenRefs.add(ref);
+      seenIds.add(pr.id);
+
+      const formattedDate = new Date(pr.paid_at || pr.created_at || new Date()).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+      logs.push({
+        id: pr.id,
+        ref: ref,
+        receiptNumber: pr.receipt_number || ref,
+        customerId: pr.customer_id,
+        customerName: properCompany,
+        companyName: properCompany,
+        contactPerson: properContact,
+        username: rawUser,
+        phone: cleanPhone,
+        email: pr.email || pr.cust_email || matchedCust?.email || '',
+        city: pr.city || pr.cust_city || matchedCust?.city || 'India',
+        state: pr.state || pr.cust_state || matchedCust?.state || 'Maharashtra',
+        category: pr.category || pr.cust_category || matchedCust?.category || 'IT & Software',
+        txType: 'credit',
+        typeLabel: pr.type_label || 'Ad Wallet Top-Up',
+        amount,
+        balanceBefore,
+        balanceAfter,
+        balanceChangeFormatted: `+₹${amount.toLocaleString('en-IN')}`,
+        currentWalletBalance: matchedCust?.balance || amount,
+        description: pr.notes || 'Verified Customer Payment Settlement',
+        paymentMethod: pr.payment_mode || 'Razorpay UPI (Live)',
+        status: 'Settled ✓',
+        createdAt: pr.paid_at || pr.created_at || new Date(),
+        date: formattedDate,
+      });
+    }
+
+    // Sort newest logs first
+    logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const totalCirculatingBalance = walletsRes.rows.reduce(
+      (sum, w) => sum + Math.max(0, Number(w.available_balance || 0)),
+      0
+    );
+
+    res.json({
+      ok: true,
+      logs,
+      stats: {
+        totalLogs: logs.length,
+        totalCirculatingBalance,
+        totalCredits,
+        totalDebits,
+        totalCreditCount,
+        totalDebitCount,
+        activeWalletsCount: walletsRes.rows.filter((w) => Number(w.available_balance || 0) > 0).length,
+      },
+    });
+  } catch (err) {
+    console.error('[GET /api/sales/balance-logs]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 // Sales Desk: Retrieve All Failed Transactions Across All Customers with Contact Numbers & Reason
 app.get('/api/sales/failed-transactions', async (req, res) => {
   try {
