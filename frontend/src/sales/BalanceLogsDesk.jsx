@@ -43,6 +43,8 @@ export default function BalanceLogsDesk({
   onBalanceLogsCountChange,
 }) {
   const [logs, setLogs] = useState([]);
+  const [customerLogs, setCustomerLogs] = useState([]);
+  const [viewMode, setViewMode] = useState('customers'); // 'customers' (1 row per customer) | 'all' (all ledger activities)
   const [stats, setStats] = useState({
     totalLogs: 0,
     totalAmountAdded: 0,
@@ -68,23 +70,29 @@ export default function BalanceLogsDesk({
       }
       const res = await crmApi.getBalanceLogs(params);
 
-      if (res && res.ok && Array.isArray(res.logs)) {
-        setLogs(res.logs);
+      if (res && res.ok) {
+        if (Array.isArray(res.logs)) {
+          setLogs(res.logs);
+        }
+        if (Array.isArray(res.customerLogs)) {
+          setCustomerLogs(res.customerLogs);
+        }
         if (res.stats) {
           setStats(res.stats);
         }
         if (onBalanceLogsCountChange) {
-          onBalanceLogsCountChange(res.logs.length);
+          onBalanceLogsCountChange(res.customerLogs ? res.customerLogs.length : res.logs?.length || 0);
         }
         try {
-          localStorage.setItem('growthline_balance_logs', JSON.stringify(res.logs));
+          if (Array.isArray(res.logs)) localStorage.setItem('growthline_balance_logs', JSON.stringify(res.logs));
+          if (Array.isArray(res.customerLogs)) localStorage.setItem('growthline_customer_balance_logs', JSON.stringify(res.customerLogs));
         } catch (_) {}
 
         if (showToast) {
           Swal.fire({
             icon: 'success',
             title: 'Balance Logs Synchronized',
-            text: `Successfully synced ${res.logs.length} live customer balance audit records.`,
+            text: `Successfully synced ${res.customerLogs?.length || res.logs.length} live customer balance audit records.`,
             timer: 2000,
             showConfirmButton: false,
           });
@@ -97,6 +105,11 @@ export default function BalanceLogsDesk({
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed) && parsed.length > 0) setLogs(parsed);
+        }
+        const rawCust = localStorage.getItem('growthline_customer_balance_logs');
+        if (rawCust) {
+          const parsedCust = JSON.parse(rawCust);
+          if (Array.isArray(parsedCust) && parsedCust.length > 0) setCustomerLogs(parsedCust);
         }
       } catch (_) {}
     } finally {
@@ -129,11 +142,74 @@ export default function BalanceLogsDesk({
     });
   };
 
+  // 1 row per customer dataset (Guarantees every customer appears once, no duplicates)
+  const deduplicatedCustomerLogs = useMemo(() => {
+    const custMap = new Map();
+
+    // 1. Seed from registered customer accounts
+    customers.forEach((c) => {
+      const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
+      const name = c.companyName || c.name || c.username || 'Customer';
+      custMap.set(c.id, {
+        id: `cust_${c.id}`,
+        customerId: c.id,
+        user: name,
+        customerName: name,
+        companyName: name,
+        contactPerson: c.contactPerson || c.contact || name,
+        phone: cleanPhone,
+        userInitial: (name || 'U').charAt(0).toUpperCase(),
+        previousBalance: 0,
+        changedAmount: 0,
+        newBalance: Number(c.balance || 0),
+        balanceBefore: 0,
+        balanceAfter: Number(c.balance || 0),
+        txType: 'credit',
+        reason: Number(c.balance || 0) > 0 ? `Current Wallet Balance (₹${Number(c.balance || 0)})` : 'Wallet Active (₹0.00)',
+        date: c.createdAt || new Date().toISOString(),
+      });
+    });
+
+    // 2. Overlay with backend customerLogs if available
+    customerLogs.forEach((clog) => {
+      const key = clog.customerId || customers.find((c) => c.phone && clog.phone && String(c.phone).slice(-10) === String(clog.phone).slice(-10))?.id;
+      if (key && custMap.has(key)) {
+        custMap.set(key, { ...custMap.get(key), ...clog });
+      } else if (key) {
+        custMap.set(key, clog);
+      }
+    });
+
+    // 3. Overlay with each customer's newest log from logs
+    const seenInLogs = new Set();
+    logs.forEach((log) => {
+      const key = log.customerId || customers.find((c) => c.phone && log.phone && String(c.phone).slice(-10) === String(log.phone).slice(-10))?.id;
+      if (!key) return;
+      if (!seenInLogs.has(key)) {
+        seenInLogs.add(key);
+        const existing = custMap.get(key);
+        custMap.set(key, {
+          ...(existing || {}),
+          ...log,
+          user: existing?.user || log.user,
+          phone: existing?.phone || log.phone,
+        });
+      }
+    });
+
+    const list = Array.from(custMap.values());
+    list.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+    return list;
+  }, [customerLogs, logs, customers]);
+
+  // Active dataset depending on viewMode
+  const displayDataset = viewMode === 'customers' ? deduplicatedCustomerLogs : logs;
+
   // Filtered dataset
   const filteredLogs = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    return logs.filter((log) => {
+    return displayDataset.filter((log) => {
       // Exclude synthetic initial account opening entries requested to be removed
       const rLower = String(log.reason || log.description || '').toLowerCase();
       if (
@@ -157,42 +233,45 @@ export default function BalanceLogsDesk({
         const matchUser = (log.user || log.customerName || log.companyName || '').toLowerCase().includes(q);
         const matchPhone = (log.phone || '').includes(q);
         const matchReason = (log.reason || log.description || '').toLowerCase().includes(q);
-        const matchUpdatedBy = (log.updatedBy || '').toLowerCase().includes(q);
         const matchRef = (log.ref || '').toLowerCase().includes(q);
 
-        if (!matchUser && !matchPhone && !matchReason && !matchUpdatedBy && !matchRef) {
+        if (!matchUser && !matchPhone && !matchReason && !matchRef) {
           return false;
         }
       }
 
       return true;
     });
-  }, [logs, selectedCustomerId, search, customers]);
+  }, [displayDataset, selectedCustomerId, search, customers]);
 
   // Total Amount Added & Total Amount Removed (computed from valid real logs)
   const totalAmountAdded = useMemo(() => {
-    if (filteredLogs.length > 0) {
+    if (selectedCustomerId !== 'all' || search) {
       return filteredLogs
         .filter((l) => l.txType === 'credit')
         .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
     }
-    if (selectedCustomerId === 'all' && !search && stats && stats.totalAmountAdded) {
+    if (stats && stats.totalAmountAdded) {
       return stats.totalAmountAdded;
     }
-    return 0;
-  }, [filteredLogs, selectedCustomerId, search, stats]);
+    return logs
+      .filter((l) => l.txType === 'credit')
+      .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
+  }, [filteredLogs, selectedCustomerId, search, stats, logs]);
 
   const totalAmountRemoved = useMemo(() => {
-    if (filteredLogs.length > 0) {
+    if (selectedCustomerId !== 'all' || search) {
       return filteredLogs
         .filter((l) => l.txType === 'debit')
         .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
     }
-    if (selectedCustomerId === 'all' && !search && stats && stats.totalAmountRemoved) {
+    if (stats && stats.totalAmountRemoved) {
       return stats.totalAmountRemoved;
     }
-    return 0;
-  }, [filteredLogs, selectedCustomerId, search, stats]);
+    return logs
+      .filter((l) => l.txType === 'debit')
+      .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
+  }, [filteredLogs, selectedCustomerId, search, stats, logs]);
 
   // Export CSV
   const handleExportCSV = () => {
@@ -286,7 +365,7 @@ export default function BalanceLogsDesk({
                 borderRadius: 9999,
               }}
             >
-              {logs.length} Total Logs
+              {viewMode === 'customers' ? `${deduplicatedCustomerLogs.length} Customer Accounts` : `${logs.length} Total Logs`}
             </span>
           </div>
         </div>
@@ -469,8 +548,49 @@ export default function BalanceLogsDesk({
           </select>
         </div>
 
-        <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
-          Showing <b>{filteredLogs.length}</b> customer balance records
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', background: '#f1f5f9', padding: 3, borderRadius: 8 }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('customers')}
+              style={{
+                border: 'none',
+                background: viewMode === 'customers' ? '#ffffff' : 'transparent',
+                color: viewMode === 'customers' ? '#0f172a' : '#64748b',
+                fontWeight: viewMode === 'customers' ? 800 : 600,
+                padding: '5px 12px',
+                borderRadius: 6,
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                boxShadow: viewMode === 'customers' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              👥 1 Customer Per Row ({deduplicatedCustomerLogs.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('all')}
+              style={{
+                border: 'none',
+                background: viewMode === 'all' ? '#ffffff' : 'transparent',
+                color: viewMode === 'all' ? '#0f172a' : '#64748b',
+                fontWeight: viewMode === 'all' ? 800 : 600,
+                padding: '5px 12px',
+                borderRadius: 6,
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                boxShadow: viewMode === 'all' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              📜 All Ledger Entries ({logs.length})
+            </button>
+          </div>
+
+          <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+            Showing <b>{filteredLogs.length}</b> {viewMode === 'customers' ? 'customer balance accounts' : 'audit records'}
+          </div>
         </div>
       </div>
 

@@ -2153,6 +2153,69 @@ app.get('/api/sales/balance-logs', async (req, res) => {
     // Sort newest logs first
     logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+    // 3. Build deduplicated 1-row-per-customer balance audit list (Ensures every customer appears once, no duplicates)
+    const customerLogsMap = new Map();
+    const seenCustIds = new Set();
+
+    // First, populate from all registered customer accounts
+    for (const c of customers) {
+      const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
+      const name = c.companyName || c.name || c.username || 'Client Account';
+      const wallet = walletsRes.rows.find((w) => w.customer_id === c.id || (w.phone && String(w.phone).slice(-10) === cleanPhone));
+      const currBal = wallet ? Number(wallet.available_balance || 0) : Number(c.balance || 0);
+
+      customerLogsMap.set(c.id, {
+        id: `cust_bal_${c.id}`,
+        customerId: c.id,
+        user: name,
+        customerName: name,
+        companyName: name,
+        contactPerson: c.contactPerson || c.contact || name,
+        userInitial: (name || 'U').charAt(0).toUpperCase(),
+        username: c.username || '',
+        phone: cleanPhone,
+        email: c.email || '',
+        city: c.city || 'India',
+        state: c.state || 'Maharashtra',
+        category: c.category || 'IT & Software',
+        txType: 'credit',
+        amount: 0,
+        previousBalance: Number(currBal.toFixed(2)),
+        changedAmount: 0,
+        newBalance: Number(currBal.toFixed(2)),
+        balanceBefore: Number(currBal.toFixed(2)),
+        balanceAfter: Number(currBal.toFixed(2)),
+        currentWalletBalance: Number(currBal.toFixed(2)),
+        reason: currBal > 0 ? `Current Wallet Balance (₹${currBal})` : 'Wallet Active (₹0.00)',
+        description: currBal > 0 ? `Current Wallet Balance (₹${currBal})` : 'Wallet Active (₹0.00)',
+        updatedBy: 'Super Admin',
+        paymentMethod: 'Wallet Account',
+        status: 'Active ✓',
+        createdAt: c.createdAt || new Date().toISOString(),
+        date: c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-US') : new Date().toLocaleDateString('en-US'),
+      });
+    }
+
+    // Overlay with each customer's most recent transaction (so each customer has 1 row with their latest balance change)
+    for (const log of logs) {
+      const key = log.customerId || customers.find((c) => c.phone && log.phone && String(c.phone).slice(-10) === String(log.phone).slice(-10))?.id;
+      if (!key) continue;
+
+      if (!seenCustIds.has(key)) {
+        seenCustIds.add(key);
+        const base = customerLogsMap.get(key);
+        customerLogsMap.set(key, {
+          ...(base || {}),
+          ...log,
+          user: base?.user || log.user,
+          phone: base?.phone || log.phone,
+        });
+      }
+    }
+
+    const customerLogs = Array.from(customerLogsMap.values());
+    customerLogs.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+
     const totalCirculatingBalance = walletsRes.rows.reduce(
       (sum, w) => sum + Math.max(0, Number(w.available_balance || 0)),
       0
@@ -2161,8 +2224,10 @@ app.get('/api/sales/balance-logs', async (req, res) => {
     res.json({
       ok: true,
       logs,
+      customerLogs,
       stats: {
         totalLogs: logs.length,
+        totalCustomers: customerLogs.length,
         totalCirculatingBalance,
         totalCredits: Number(totalCredits.toFixed(2)),
         totalDebits: Number(totalDebits.toFixed(2)),

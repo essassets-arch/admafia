@@ -174,10 +174,12 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   const updateBalanceLogsCount = React.useCallback(async () => {
     try {
       const res = await crmApi.getBalanceLogs();
-      if (res && res.ok && Array.isArray(res.logs)) {
-        setBalanceLogsCount(res.logs.length);
+      if (res && res.ok) {
+        const count = res.customerLogs ? res.customerLogs.length : (Array.isArray(res.logs) ? res.logs.length : 0);
+        setBalanceLogsCount(count);
         try {
-          localStorage.setItem('growthline_balance_logs', JSON.stringify(res.logs));
+          if (Array.isArray(res.logs)) localStorage.setItem('growthline_balance_logs', JSON.stringify(res.logs));
+          if (Array.isArray(res.customerLogs)) localStorage.setItem('growthline_customer_balance_logs', JSON.stringify(res.customerLogs));
         } catch (_) { }
       }
     } catch (_) { }
