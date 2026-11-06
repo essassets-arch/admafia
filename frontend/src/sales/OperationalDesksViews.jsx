@@ -2373,110 +2373,134 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 
       {/* Dedicated Customer Profile & Delivery Intelligence KPI Card (Shown when specific customer is selected) */}
       {selectedCustomerObj && (
-        <div style={{
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%)',
-          borderRadius: 14,
-          padding: '20px 24px',
-          marginBottom: 18,
-          color: '#ffffff',
-          border: '1px solid #312e81',
-          boxShadow: '0 10px 25px rgba(15, 23, 42, 0.35)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+        <div className="desk-customer-kpi-banner">
+          <div className="desk-customer-kpi-header">
             {/* Customer Details */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{
-                width: 52,
-                height: 52,
-                borderRadius: 14,
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                color: '#ffffff',
-                display: 'grid',
-                placeItems: 'center',
-                fontSize: '1.4rem',
-                fontWeight: 900,
-                boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
-                border: '2px solid rgba(255, 255, 255, 0.2)'
-              }}>
-                {(selectedCustomerObj.companyName || selectedCustomerObj.name || 'C').charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#ffffff', letterSpacing: '-0.01em' }}>
-                    {selectedCustomerObj.companyName || selectedCustomerObj.name}
-                  </h2>
-                  <span style={{
-                    background: '#065f46',
-                    color: '#34d399',
-                    fontSize: '0.72rem',
-                    fontWeight: 800,
-                    padding: '3px 8px',
-                    borderRadius: 6,
-                    border: '1px solid #059669',
-                    textTransform: 'uppercase'
+            {(() => {
+              const custTitle = selectedCustomerObj.companyName || selectedCustomerObj.name || 'Client Account';
+              const rawUser = String(selectedCustomerObj.username || '').trim().replace(/^@/, '');
+              const rawEmail = String(selectedCustomerObj.email || '').trim();
+              const isEmailHandle = rawUser.toLowerCase() === rawEmail.toLowerCase() || rawUser.includes('@');
+              const cleanPhone = String(selectedCustomerObj.phone || '').replace(/\D/g, '').slice(-10);
+              const initialLetter = custTitle.charAt(0).toUpperCase();
+
+              return (
+                <div className="desk-customer-kpi-info">
+                  <div style={{
+                    width: 48,
+                    height: 48,
+                    minWidth: 48,
+                    borderRadius: 12,
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                    color: '#ffffff',
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontSize: '1.35rem',
+                    fontWeight: 900,
+                    boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                    border: '2px solid rgba(255, 255, 255, 0.2)',
+                    flexShrink: 0
                   }}>
-                    Active Customer
-                  </span>
-                  {selectedCustomerObj.category && (
-                    <span style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      color: '#cbd5e1',
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      padding: '3px 8px',
-                      borderRadius: 6
+                    {initialLetter}
+                  </div>
+                  <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <h2 style={{
+                        margin: 0,
+                        fontSize: '1.25rem',
+                        fontWeight: 800,
+                        color: '#ffffff',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere',
+                        lineHeight: 1.3
+                      }}>
+                        {custTitle}
+                      </h2>
+                      <span style={{
+                        background: '#065f46',
+                        color: '#34d399',
+                        fontSize: '0.7rem',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        border: '1px solid #059669',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        Active Customer
+                      </span>
+                      {selectedCustomerObj.category && (
+                        <span style={{
+                          background: 'rgba(255,255,255,0.1)',
+                          color: '#cbd5e1',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {selectedCustomerObj.category}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Subline Details with zero email duplication */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      marginTop: 6,
+                      flexWrap: 'wrap',
+                      fontSize: '0.82rem',
+                      color: '#cbd5e1'
                     }}>
-                      {selectedCustomerObj.category}
-                    </span>
-                  )}
+                      {cleanPhone && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          <Phone size={13} color="#a5b4fc" /> +91 {cleanPhone}
+                        </span>
+                      )}
+                      {rawUser && !isEmailHandle && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#a5b4fc', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          <User size={13} /> @{rawUser}
+                        </span>
+                      )}
+                      {rawEmail && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#94a3b8', wordBreak: 'break-all' }}>
+                          <Mail size={13} /> {rawEmail}
+                        </span>
+                      )}
+                      {selectedCustomerObj.city && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                          <MapPin size={13} /> {selectedCustomerObj.city}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 4, flexWrap: 'wrap', fontSize: '0.85rem', color: '#cbd5e1' }}>
-                  {selectedCustomerObj.phone && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'monospace', fontWeight: 700 }}>
-                      <Phone size={13} color="#a5b4fc" /> +91 {String(selectedCustomerObj.phone).replace(/\D/g, '').slice(-10)}
-                    </span>
-                  )}
-                  {selectedCustomerObj.username && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#a5b4fc', fontWeight: 700 }}>
-                      <User size={13} /> @{String(selectedCustomerObj.username).replace(/^@/, '')}
-                    </span>
-                  )}
-                  {selectedCustomerObj.email && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#94a3b8' }}>
-                      <Mail size={13} /> {selectedCustomerObj.email}
-                    </span>
-                  )}
-                  {selectedCustomerObj.city && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#94a3b8' }}>
-                      <MapPin size={13} /> {selectedCustomerObj.city}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Quick Actions */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div className="desk-customer-kpi-actions">
               {selectedCustomerObj.phone && (
                 <a
-                  href={`https://wa.me/91${String(selectedCustomerObj.phone).replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedCustomerObj.companyName || selectedCustomerObj.name)},%20this%20is%20AdMafia%20GrowthLine%20Desk%20regarding%20your%20campaign%20leads.`}
+                  href={`https://wa.me/91${String(selectedCustomerObj.phone).replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedCustomerObj.companyName || selectedCustomerObj.name || 'Client')},%20this%20is%20AdMafia%20GrowthLine%20Desk%20regarding%20your%20campaign%20leads.`}
                   target="_blank"
                   rel="noreferrer"
                   style={{
                     background: '#25D366',
                     color: '#ffffff',
                     fontWeight: 800,
-                    fontSize: '0.84rem',
+                    fontSize: '0.82rem',
                     padding: '8px 16px',
                     borderRadius: 8,
                     textDecoration: 'none',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 6,
-                    boxShadow: '0 4px 10px rgba(37, 211, 102, 0.25)'
+                    boxShadow: '0 4px 10px rgba(37, 211, 102, 0.25)',
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   <MessageSquare size={14} /> WhatsApp Customer
@@ -2491,14 +2515,15 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                   color: '#ffffff',
                   border: '1px solid rgba(255, 255, 255, 0.25)',
                   fontWeight: 800,
-                  fontSize: '0.84rem',
+                  fontSize: '0.82rem',
                   padding: '8px 16px',
                   borderRadius: 8,
                   textDecoration: 'none',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
-                  backdropFilter: 'blur(4px)'
+                  backdropFilter: 'blur(4px)',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 <span>Open Customer CRM</span>
@@ -2508,8 +2533,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 type="button"
                 onClick={() => setSelectedCustomerId('all')}
                 style={{
-                  background: 'transparent',
-                  color: '#94a3b8',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  color: '#cbd5e1',
                   border: '1px solid rgba(255, 255, 255, 0.15)',
                   fontWeight: 700,
                   fontSize: '0.82rem',
@@ -2518,7 +2543,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 5
+                  gap: 5,
+                  whiteSpace: 'nowrap'
                 }}
               >
                 <X size={14} /> Show All Customers
@@ -2526,53 +2552,86 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             </div>
           </div>
 
-          {/* Metric Strip inside Customer Card */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-            gap: 12,
-            background: 'rgba(0, 0, 0, 0.25)',
-            borderRadius: 10,
-            padding: '12px 16px',
-            border: '1px solid rgba(255, 255, 255, 0.08)'
-          }}>
-            <div>
-              <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Customer Wallet Balance
+          {/* Metric Tiles Grid - Fully Responsive */}
+          <div className="desk-customer-kpi-metrics-grid">
+            {/* Tile 1: Customer Wallet Balance */}
+            <div className="desk-customer-kpi-metric-tile">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Customer Wallet Balance
+                </span>
+                <Wallet size={15} color="#34d399" />
               </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: Number(selectedCustomerObj.balance || selectedCustomerObj.wallet_balance || 0) > 0 ? '#34d399' : '#f87171', marginTop: 2 }}>
+              <div style={{
+                fontSize: '1.35rem',
+                fontWeight: 900,
+                color: (Number(selectedCustomerObj.balance || selectedCustomerObj.wallet_balance || 0) > 0 ? '#34d399' : '#f87171'),
+                marginTop: 2
+              }}>
                 ₹{Number(selectedCustomerObj.balance || selectedCustomerObj.wallet_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Total Leads Delivered
-              </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#ffffff', marginTop: 2 }}>
-                {totalLeadsCount} Leads
+              <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 600 }}>
+                {Number(selectedCustomerObj.balance || selectedCustomerObj.wallet_balance || 0) > 0 ? '✓ Daily Ad Spend Funded' : '⚠ Recharge Needed'}
               </div>
             </div>
-            <div>
-              <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Read by Client
+
+            {/* Tile 2: Total Leads Delivered */}
+            <div className="desk-customer-kpi-metric-tile">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Total Leads Delivered
+                </span>
+                <Users size={15} color="#818cf8" />
               </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#34d399', marginTop: 2 }}>
-                {readCount} <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#a7f3d0' }}>({readRatePct}%)</span>
+              <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#ffffff', marginTop: 2 }}>
+                {totalLeadsCount} <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#cbd5e1' }}>Leads</span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 600 }}>
+                Routed to Customer CRM
               </div>
             </div>
-            <div>
-              <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Unread / Pending SLA
+
+            {/* Tile 3: Read by Client */}
+            <div className="desk-customer-kpi-metric-tile">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Read by Client
+                </span>
+                <CheckCircle2 size={15} color="#34d399" />
               </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: unreadCount > 0 ? '#fbbf24' : '#94a3b8', marginTop: 2 }}>
-                {unreadCount} Leads
+              <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#34d399', marginTop: 2 }}>
+                {readCount} <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#a7f3d0' }}>({readRatePct}%)</span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 600 }}>
+                Acknowledged in Lead Hub
+              </div>
+            </div>
+
+            {/* Tile 4: Unread / Pending SLA */}
+            <div className="desk-customer-kpi-metric-tile">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Unread / Pending SLA
+                </span>
+                <Clock size={15} color="#fbbf24" />
+              </div>
+              <div style={{
+                fontSize: '1.35rem',
+                fontWeight: 900,
+                color: unreadCount > 0 ? '#fbbf24' : '#94a3b8',
+                marginTop: 2
+              }}>
+                {unreadCount} <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#cbd5e1' }}>Leads</span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 600 }}>
+                {unreadCount > 0 ? 'Awaiting Client Action' : 'All Leads Read ✓'}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Customer Selector & Search Toolbar */}
+      {/* Customer Selector & Search Toolbar (Responsive) */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -2587,10 +2646,10 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
       }}>
         {/* Customer-Wise Drop Down Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: '1 1 320px', minWidth: 260 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <Building2 size={18} style={{ color: '#4f46e5' }} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b', letterSpacing: '0.02em' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
               Customer Account:
             </span>
           </div>
@@ -2605,7 +2664,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
               background: selectedCustomerId !== 'all' ? '#eef2ff' : '#f8fafc',
               border: selectedCustomerId !== 'all' ? '1.5px solid #6366f1' : '1px solid #cbd5e1',
               borderRadius: 10,
-              minWidth: 280,
+              minWidth: 220,
               maxWidth: '100%',
               cursor: 'pointer',
               boxShadow: selectedCustomerId !== 'all' ? '0 0 0 3px rgba(99, 102, 241, 0.15)' : 'none',
@@ -2635,7 +2694,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5
+                gap: 5,
+                whiteSpace: 'nowrap'
               }}
             >
               <X size={14} /> Clear Customer Filter
@@ -2644,7 +2704,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         </div>
 
         {/* Search input */}
-        <div className="desk-search-wrap" style={{ margin: 0, minWidth: 260 }}>
+        <div className="desk-search-wrap" style={{ margin: 0, minWidth: 220, flex: '1 1 220px' }}>
           <Search size={16} className="desk-search-icon" />
           <input
             type="text"
@@ -2652,6 +2712,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             placeholder="Search leads, phone, company..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            style={{ width: '100%' }}
           />
         </div>
       </div>
@@ -2775,9 +2836,9 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 }}
               >
                 {/* Left Columns: Buyer Phone Number, Customer Name/Details, and Client Read Status */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', flex: '1 1 auto', minWidth: 0 }}>
                   {/* Inbound Buyer Phone Number */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                     <div style={{
                       width: 40,
                       height: 40,
@@ -2802,10 +2863,19 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                   </div>
 
                   {/* Customer / Client Account Details Prominently Displayed */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 18, borderLeft: '1px solid #e2e8f0' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingLeft: 16,
+                    borderLeft: '1px solid #e2e8f0',
+                    flex: '1 1 240px',
+                    minWidth: 0
+                  }}>
                     <div style={{
                       width: 38,
                       height: 38,
+                      minWidth: 38,
                       borderRadius: 10,
                       background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
                       color: '#1d4ed8',
@@ -2814,11 +2884,12 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                       justifyContent: 'center',
                       fontWeight: 900,
                       fontSize: '1rem',
-                      border: '1px solid #bfdbfe'
+                      border: '1px solid #bfdbfe',
+                      flexShrink: 0
                     }}>
                       {initialChar}
                     </div>
-                    <div>
+                    <div style={{ minWidth: 0, flex: '1 1 auto' }}>
                       <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         Customer / Client Account
                       </span>
@@ -2827,7 +2898,9 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                           fontSize: '1.02rem',
                           fontWeight: 800,
                           color: '#1e3a8a',
-                          letterSpacing: '-0.01em'
+                          letterSpacing: '-0.01em',
+                          wordBreak: 'break-word',
+                          overflowWrap: 'anywhere'
                         }}>
                           🏢 {customerName}
                         </span>
@@ -2840,7 +2913,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                             border: '1px solid #a7f3d0',
                             padding: '2px 8px',
                             borderRadius: 6,
-                            fontFamily: 'monospace'
+                            fontFamily: 'monospace',
+                            whiteSpace: 'nowrap'
                           }}>
                             📞 +91 {customerPhoneDigits}
                           </span>
@@ -2853,7 +2927,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                             background: '#eef2ff',
                             border: '1px solid #c7d2fe',
                             padding: '2px 8px',
-                            borderRadius: 6
+                            borderRadius: 6,
+                            whiteSpace: 'nowrap'
                           }}>
                             {customerUser}
                           </span>
@@ -2863,7 +2938,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                   </div>
 
                   {/* Client Read Status Badge: Marked as Read vs Unread */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 18, borderLeft: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 16, borderLeft: '1px solid #e2e8f0', flexShrink: 0 }}>
                     <div>
                       <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         Client Read Status
@@ -2881,7 +2956,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                           padding: '4px 12px',
                           borderRadius: 9999,
                           marginTop: 2,
-                          boxShadow: '0 1px 3px rgba(16, 185, 129, 0.12)'
+                          boxShadow: '0 1px 3px rgba(16, 185, 129, 0.12)',
+                          whiteSpace: 'nowrap'
                         }}>
                           <CheckCircle2 size={15} strokeWidth={2.6} style={{ color: '#059669' }} />
                           <span>Marked as Read ✓</span>
@@ -2898,7 +2974,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                           border: '1.5px solid #fde68a',
                           padding: '4px 12px',
                           borderRadius: 9999,
-                          marginTop: 2
+                          marginTop: 2,
+                          whiteSpace: 'nowrap'
                         }}>
                           <Clock size={15} strokeWidth={2.4} style={{ color: '#d97706' }} />
                           <span>Unread by Client</span>
@@ -2909,11 +2986,11 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 </div>
 
                 {/* Right Column: Actions */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
                   <a
                     href={`tel:${callDigits}`}
                     className="desk-action-btn"
-                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600 }}
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap' }}
                   >
                     <Phone size={14} /> Direct Call Buyer
                   </a>
@@ -2922,7 +2999,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                     target="_blank"
                     rel="noreferrer"
                     className="desk-action-btn"
-                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600 }}
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap' }}
                   >
                     <MessageSquare size={14} /> WhatsApp Buyer
                   </a>
@@ -2944,7 +3021,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                         fontWeight: 700,
                         background: '#f0fdf4',
                         borderColor: '#86efac',
-                        color: '#15803d'
+                        color: '#15803d',
+                        whiteSpace: 'nowrap'
                       }}
                       title={`Send WhatsApp message with buyer details to ${customerName} (+91 ${customerPhoneDigits})`}
                     >
@@ -2967,7 +3045,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                       padding: '8px 14px',
                       fontSize: '0.82rem',
                       fontWeight: 700,
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
                     }}
                     title={isRead ? 'Click to Mark as Unread' : 'Click to Mark as Read'}
                   >
