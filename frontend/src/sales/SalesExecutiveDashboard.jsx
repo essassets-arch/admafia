@@ -942,6 +942,15 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             <FailedTransactionsDesk
               customers={customers}
               setCustomers={setCustomers}
+              allTransactions={allTransactions}
+              onRefresh={() => {
+                crmApi.getFailedTransactions().then((res) => {
+                  if (res && res.ok && Array.isArray(res.failedTransactions)) {
+                    setFailedTxCount(res.failedTransactions.length);
+                  }
+                });
+                crmApi.syncStateFromPostgres();
+              }}
             />
           )}
 

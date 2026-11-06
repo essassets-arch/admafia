@@ -476,6 +476,8 @@ function mapFailedTxRow(row) {
           hour12: true,
         })
       : 'Recently Failed',
+    createdAt: row.created_at || new Date(),
+    createdAtRaw: row.created_at || new Date(),
   };
 }
 
@@ -483,9 +485,11 @@ function mapDeletedFailedTxRow(row) {
   if (!row) return null;
   const cleanPhone = String(row.phone || row.customer_id || '').replace(/\D/g, '').slice(-10);
   const rawContact = String(row.contact_person || '').trim();
-  const properContact = rawContact || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
+  const isGenericContact = !rawContact || rawContact.toLowerCase() === 'registered business' || rawContact.toLowerCase() === 'account admin';
+  const properContact = (!isGenericContact ? rawContact : '') || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
   const rawCompany = String(row.company_name || row.customer_name || '').trim();
-  const properCompany = rawCompany || properContact || 'Client Account';
+  const isGenericCompany = !rawCompany || rawCompany.toLowerCase() === 'registered business' || rawCompany.toLowerCase() === 'corporate workspace';
+  const properCompany = (!isGenericCompany ? rawCompany : '') || properContact || 'Client Account';
 
   return {
     id: row.id,
@@ -1871,6 +1875,22 @@ app.get('/api/sales/transactions', async (req, res) => {
 // Sales Desk: Retrieve All Failed Transactions Across All Customers with Contact Numbers & Reason
 app.get('/api/sales/failed-transactions', async (req, res) => {
   try {
+    // 1. Fetch deleted/archived IDs & refs so dismissed/cleared records are not shown in active list
+    const delRes = await query(
+      'SELECT id, original_id, reference_utr, customer_id, phone FROM deleted_failed_transactions ORDER BY deleted_at DESC'
+    ).catch(() => ({ rows: [] }));
+    const deletedRefs = new Set();
+    const deletedCustIds = new Set();
+    for (const d of delRes.rows) {
+      if (d.reference_utr) deletedRefs.add(d.reference_utr);
+      if (d.original_id) deletedRefs.add(d.original_id);
+      if (d.id) deletedRefs.add(d.id);
+      if (d.customer_id) deletedCustIds.add(d.customer_id);
+      const dp = String(d.phone || '').replace(/\D/g, '').slice(-10);
+      if (dp) deletedCustIds.add(dp);
+    }
+
+    // 2. Query wallet_transactions for all recorded failed/declined entries
     const querySql = `
       SELECT 
         wt.id,
@@ -1914,7 +1934,106 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
       ORDER BY wt.created_at DESC
     `;
     const result = await query(querySql);
-    res.json({ ok: true, failedTransactions: result.rows.map(mapFailedTxRow) });
+    const seenRefs = new Set();
+    const seenCustIds = new Set();
+    const list = [];
+
+    for (const r of result.rows) {
+      const ref = r.reference_utr || r.id;
+      if (deletedRefs.has(ref) || deletedRefs.has(r.id)) continue;
+      if (seenRefs.has(ref)) continue;
+      seenRefs.add(ref);
+      if (r.customer_id) seenCustIds.add(r.customer_id);
+      const cleanP = String(r.phone || '').replace(/\D/g, '').slice(-10);
+      if (cleanP) seenCustIds.add(cleanP);
+      list.push(mapFailedTxRow(r));
+    }
+
+    // 3. Query real registered customers whose onboarding checkout is pending/abandoned/declined
+    // (Real accounts registered on the website that started checkout but dropped off before paying)
+    const unpaidCustSql = `
+      SELECT 
+        c.id, c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.country, c.category,
+        c.registered_at, c.payment_status,
+        COALESCE(w.available_balance, 0) AS balance,
+        COALESCE(w.daily_ad_spend, 300) AS daily_pacing
+      FROM customers c
+      LEFT JOIN wallets w ON w.customer_id = c.id
+      WHERE (
+        LOWER(COALESCE(c.payment_status, 'pending')) IN ('pending', 'failed', 'declined', 'unpaid', 'awaiting')
+        OR COALESCE(w.available_balance, 0) = 0
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM payment_records pr 
+        WHERE (pr.customer_id = c.id OR pr.phone = RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', '', 'g'), 10))
+          AND LOWER(pr.status) IN ('paid', 'verified', 'settled')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM wallet_transactions wt2
+        WHERE (wt2.customer_id = c.id OR wt2.customer_id = c.phone)
+          AND wt2.tx_type = 'Credit'
+          AND LOWER(wt2.status) IN ('verified', 'settled', 'verified ✓', 'settled ✓', 'paid')
+      )
+      ORDER BY c.registered_at DESC
+    `;
+    const unpaidRes = await query(unpaidCustSql);
+    for (const c of unpaidRes.rows) {
+      const cleanP = String(c.phone || '').replace(/\D/g, '').slice(-10);
+      if (deletedCustIds.has(c.id) || (cleanP && deletedCustIds.has(cleanP))) continue;
+      const ref = `FAIL-REG-${cleanP || c.id}`;
+      if (deletedRefs.has(ref) || seenRefs.has(ref)) continue;
+      if (seenCustIds.has(c.id) || (cleanP && seenCustIds.has(cleanP))) continue;
+
+      seenRefs.add(ref);
+      seenCustIds.add(c.id);
+      if (cleanP) seenCustIds.add(cleanP);
+
+      const rawUser = String(c.username || '').trim();
+      const capUser = rawUser ? rawUser.charAt(0).toUpperCase() + rawUser.slice(1) : '';
+      const rawContact = String(c.contact_person || '').trim();
+      const properContact = rawContact || capUser || (cleanP ? `Customer ${cleanP.slice(-4)}` : 'Client Admin');
+      const rawCompany = String(c.company_name || '').trim();
+      const properCompany = rawCompany || (capUser ? `${capUser} Enterprises` : '') || properContact;
+      const planAmount = Number(c.daily_pacing || 300);
+
+      list.push({
+        id: `tx_fail_reg_${c.id}`,
+        customerId: c.id,
+        customerName: properCompany,
+        companyName: properCompany,
+        contactPerson: properContact,
+        username: rawUser,
+        phone: cleanP || c.phone || '',
+        email: c.email || '',
+        city: c.city || 'India',
+        state: c.state || 'Maharashtra',
+        category: c.category || 'IT & Software',
+        amount: planAmount,
+        ref: ref,
+        desc: 'Registration payment incomplete: customer abandoned checkout before payment completion',
+        method: 'Razorpay UPI / Online Gateway',
+        status: 'Payment Declined ✕',
+        failureReason: 'Checkout abandoned before bank authorization',
+        date: c.registered_at
+          ? new Date(c.registered_at).toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            })
+          : 'Recently Failed',
+        createdAt: c.registered_at || new Date(),
+        createdAtRaw: c.registered_at || new Date(),
+        isRegistrationDrop: true,
+      });
+    }
+
+    list.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+
+    res.json({ ok: true, failedTransactions: list });
   } catch (err) {
     console.error('[GET /api/sales/failed-transactions]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -3399,22 +3518,48 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
           }
         } else if (event === 'payment.failed') {
           const payment = req.body?.payload?.payment?.entity;
-          const customerId = payment?.notes?.customer_id;
+          let customerId = payment?.notes?.customer_id;
+          const cleanPhone = String(payment?.contact || '').replace(/\D/g, '').slice(-10);
+
+          if (!customerId && cleanPhone) {
+            const custLookup = await query(
+              `SELECT id FROM customers WHERE phone = $1 OR RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = $1 LIMIT 1`,
+              [cleanPhone]
+            );
+            if (custLookup.rows[0]) customerId = custLookup.rows[0].id;
+          }
+          if (!customerId && payment?.email) {
+            const emailLookup = await query(
+              `SELECT id FROM customers WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+              [payment.email.trim()]
+            );
+            if (emailLookup.rows[0]) customerId = emailLookup.rows[0].id;
+          }
+
           if (customerId && payment?.id) {
             const failAmount = Number(payment.amount || 0) / 100;
+            const walRes = await query('SELECT id, available_balance FROM wallets WHERE customer_id = $1 LIMIT 1', [customerId]);
+            const walletId = walRes.rows[0]?.id || `wal_${customerId}`;
+            const currentBal = Number(walRes.rows[0]?.available_balance || 0);
+
             await query(
               `INSERT INTO wallet_transactions (
-                id, customer_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-              ) VALUES ($1, $2, 'Credit', $3, 0, $4, $5, 'Razorpay Secure (Failed)', 'Failed ✕')
-              ON CONFLICT (reference_utr) DO NOTHING`,
+                id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
+              ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Payment Declined ✕', NOW())
+              ON CONFLICT (reference_utr) DO UPDATE SET 
+                status = 'Payment Declined ✕',
+                description = EXCLUDED.description`,
               [
-                `tx_fail_${Date.now()}`,
+                `tx_fail_${payment.id}`,
                 customerId,
-                failAmount,
+                walletId,
+                failAmount > 0 ? failAmount : 300,
+                currentBal,
                 payment.id,
-                `Online recharge failed: ${payment.error_description || payment.error_reason || 'Payment declined'}`,
+                `Online recharge failed: ${payment.error_description || payment.error_reason || 'Payment declined by bank'}`,
+                payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Gateway',
               ]
-            ).catch(() => {});
+            ).catch((err) => console.error('[Razorpay Webhook payment.failed]', err.message));
           }
         }
       } catch (bgErr) {

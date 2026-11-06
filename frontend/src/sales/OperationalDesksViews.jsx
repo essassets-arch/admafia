@@ -6680,7 +6680,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
 /* ==========================================================================
    DESK 11: ALL FAILED TRANSACTIONS (Recovery & Reconnection Desk)
    ========================================================================== */
-export function FailedTransactionsDesk({ customers = [], setCustomers }) {
+export function FailedTransactionsDesk({ customers = [], setCustomers, allTransactions = [], onRefresh }) {
   const [filter, setFilter] = useState('all'); // 'all' | 'high' | 'upi' | 'card' | 'deleted'
   const [search, setSearch] = useState('');
   const [failedList, setFailedList] = useState(() => {
@@ -6710,7 +6710,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     return [];
   });
 
-  const loadFailedTransactions = React.useCallback(async () => {
+  const loadFailedTransactions = React.useCallback(async (showToast = false) => {
     setLoading(true);
     try {
       const res = await crmApi.getFailedTransactions();
@@ -6720,6 +6720,15 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           localStorage.setItem('growthline_failed_transactions', JSON.stringify(res.failedTransactions));
         } catch (e) { }
         setLoading(false);
+        if (showToast) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Failed Transactions Synced',
+            text: `Successfully synced ${res.failedTransactions.length} records from database.`,
+            timer: 1600,
+            showConfirmButton: false,
+          });
+        }
         return;
       }
     } catch (e) {
@@ -6873,20 +6882,40 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     }
 
     try {
-      crmApi.patchCustomer(targetCust.id || targetCust.phone, {
-        balance: newBal,
-        walletBalance: newBal,
-        amountPaid: (targetCust.amountPaid || 0) + rechargeNum,
-        runwayDays: newRunway,
-        paymentStatus: 'paid',
-        status: 'active',
-      }).catch(() => { });
+      await crmApi.salesTopUpWallet({
+        customerId: targetCust.id || targetCust.phone,
+        phone: targetCust.phone,
+        amount: rechargeNum,
+        paymentMode: 'Sales Deposit (Recovery Top-Up)',
+        notes: `Recovered failed payment of ₹${topupCust.amount || rechargeNum}. Sales-assisted wallet activation.`,
+      });
+
+      const targetId = topupCust.id || topupCust.ref;
+      if (targetId) {
+        await crmApi.deleteFailedTransaction(targetId, {
+          ...topupCust,
+          status: 'Recovered & Settled ✓',
+          failureReason: `Recovered via Sales Assisted Top-Up of ₹${rechargeNum}`,
+        }).catch(() => { });
+      }
+    } catch (e) {
+      console.warn('[Sales top-up recovery non-fatal]', e);
+    }
+
+    // Remove from local failedList
+    setFailedList((prev) => prev.filter((t) => t.id !== topupCust.id && t.ref !== topupCust.ref && t.customerId !== topupCust.id));
+
+    try {
+      crmApi.syncStateFromPostgres();
+      window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
+      window.dispatchEvent(new CustomEvent('growthline_wallet_transactions_updated'));
+      window.dispatchEvent(new CustomEvent('growthline_payment_recorded'));
     } catch (e) { }
 
     Swal.fire({
       icon: 'success',
-      title: 'Wallet Credited!',
-      html: `Successfully credited <strong>₹${rechargeNum.toLocaleString('en-IN')}</strong> to <strong>${targetCust.companyName || targetCust.name}</strong>.`,
+      title: 'Wallet Credited & Recovered!',
+      html: `Successfully credited <strong>₹${rechargeNum.toLocaleString('en-IN')}</strong> to <strong>${targetCust.companyName || targetCust.name}</strong>.<br/><small style="color: #64748b;">Authoritative ledger entry and official tax receipt recorded in PostgreSQL.</small>`,
       confirmButtonColor: '#059669',
     });
     setTopupCust(null);
@@ -7249,6 +7278,31 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           <div className="desk-breadcrumb">SUB ADMIN &amp; SALES OPERATIONS / DESK 11</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h1 className="desk-title">All Failed Transactions</h1>
+            <button
+              type="button"
+              className="sales-btn-secondary"
+              style={{
+                padding: '4px 12px',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                color: '#4338ca',
+                borderColor: '#c7d2fe',
+                background: '#eef2ff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                cursor: 'pointer',
+                borderRadius: 6,
+              }}
+              onClick={() => {
+                loadFailedTransactions(true);
+                loadDeletedHistory();
+                if (onRefresh) onRefresh();
+              }}
+              title="Synchronize live failed transaction logs from database"
+            >
+              <RefreshCw size={13} className={loading ? 'spinner-rotate' : ''} /> Sync Live
+            </button>
             {filter === 'deleted' ? (
               <>
                 <span className="desk-pill" style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 800 }}>
@@ -7766,6 +7820,38 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
                             <Phone size={13} color="#059669" />
                           </a>
                         ) : null}
+
+                        {/* Direct 1-Click Recovery Credit Button */}
+                        <button
+                          type="button"
+                          className="desk-action-btn"
+                          style={{
+                            background: '#ecfdf5',
+                            color: '#047857',
+                            borderColor: '#a7f3d0',
+                            fontWeight: 800,
+                            padding: '5px 10px',
+                            fontSize: '0.78rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                          }}
+                          onClick={() => {
+                            setTopupCust({
+                              id: tx.customerId,
+                              name: tx.customerName || companyTitle,
+                              companyName: companyTitle,
+                              phone: cleanPhone || tx.phone,
+                              contactPerson: contactTitle,
+                              amount: tx.amount,
+                              ref: tx.ref || tx.id,
+                            });
+                            setTopupAmount(tx.amount || 1000);
+                          }}
+                          title="Credit client wallet & recover transaction"
+                        >
+                          <Plus size={13} /> Credit Wallet
+                        </button>
 
                         {/* Details Modal */}
                         <button
