@@ -6,15 +6,12 @@ import {
   Download,
   Copy,
   Check,
-  Plus,
-  Clock,
   Building2,
   History,
   X,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import crmApi from '../services/crmApi';
-import SalesAddMoneyModal from './SalesAddMoneyModal';
 
 const formatScreenshotCurrency = (val) => {
   const num = Math.abs(Number(val || 0));
@@ -135,6 +132,16 @@ export default function BalanceLogsDesk({
     const q = search.trim().toLowerCase();
 
     return logs.filter((log) => {
+      // Exclude synthetic initial account opening entries requested to be removed
+      const rLower = String(log.reason || log.description || '').toLowerCase();
+      if (
+        rLower.includes('initial account opening') ||
+        rLower.includes('prepaid ad account created') ||
+        String(log.id || '').startsWith('init_')
+      ) {
+        return false;
+      }
+
       // 1. Specific customer selector
       if (selectedCustomerId !== 'all') {
         const custMatches =
@@ -160,20 +167,18 @@ export default function BalanceLogsDesk({
     });
   }, [logs, selectedCustomerId, search, customers]);
 
-  // Total Amount Added & Total Amount Removed
+  // Total Amount Added & Total Amount Removed (computed from valid real logs)
   const totalAmountAdded = useMemo(() => {
-    if (stats.totalAmountAdded != null && stats.totalAmountAdded > 0) return stats.totalAmountAdded;
-    return logs
+    return filteredLogs
       .filter((l) => l.txType === 'credit')
       .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
-  }, [stats.totalAmountAdded, logs]);
+  }, [filteredLogs]);
 
   const totalAmountRemoved = useMemo(() => {
-    if (stats.totalAmountRemoved != null && stats.totalAmountRemoved > 0) return stats.totalAmountRemoved;
-    return logs
+    return filteredLogs
       .filter((l) => l.txType === 'debit')
       .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
-  }, [stats.totalAmountRemoved, logs]);
+  }, [filteredLogs]);
 
   // Export CSV
   const handleExportCSV = () => {
@@ -795,31 +800,9 @@ export default function BalanceLogsDesk({
               >
                 Close Statement
               </button>
-              <button
-                type="button"
-                className="sales-btn-primary"
-                onClick={() => {
-                  setAddMoneyCust(selectedCustomerForStatement.customer);
-                  setSelectedCustomerForStatement(null);
-                }}
-              >
-                <Plus size={14} /> Add Money to Wallet
-              </button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* 6. Add Money Modal */}
-      {addMoneyCust && (
-        <SalesAddMoneyModal
-          customer={addMoneyCust}
-          onClose={() => setAddMoneyCust(null)}
-          onSuccess={() => {
-            fetchLogs(true);
-            setAddMoneyCust(null);
-          }}
-        />
       )}
     </div>
   );

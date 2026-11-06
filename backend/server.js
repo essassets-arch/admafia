@@ -1961,6 +1961,16 @@ app.get('/api/sales/balance-logs', async (req, res) => {
       if (testUtrs.has(ref) || testReceipts.has(ref) || testUtrs.has(ref.toLowerCase())) continue;
       if (id.startsWith('tx_reg_') || ref.startsWith('PAY-REG-')) continue;
 
+      // Filter out synthetic/initial opening entries requested by user to be removed
+      const rawDescLower = (row.description || '').toLowerCase();
+      if (
+        id.startsWith('tx_init_') ||
+        rawDescLower.includes('initial account opening') ||
+        rawDescLower.includes('prepaid ad account created')
+      ) {
+        continue;
+      }
+
       const matchedCust = customers.find(
         (c) =>
           c.id === row.customer_id ||
@@ -2134,65 +2144,6 @@ app.get('/api/sales/balance-logs', async (req, res) => {
         createdAt: pr.paid_at || pr.created_at || new Date(),
         date: formattedDate,
       });
-    }
-
-    // 3. Ensure ALL registered customers appear in balance logs (account opening entry if not yet active)
-    const seenCustIds = new Set(logs.map((l) => l.customerId));
-    for (const c of customers) {
-      if (!c.id) continue;
-      const cleanP = String(c.phone || '').replace(/\D/g, '').slice(-10);
-      if (cleanP === '7383198428' || cleanP === '8200792130') continue; // Purged test entries
-
-      if (!seenCustIds.has(c.id)) {
-        const bal = Math.max(0, Number(c.balance || c.walletBalance || 0));
-        const formattedDate = new Date(c.registeredAt || c.createdAt || new Date()).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        });
-
-        const compName = c.companyName || c.name || c.contactPerson || 'Client Member';
-
-        logs.push({
-          id: `init_${c.id}`,
-          ref: `INIT-${(c.phone || c.id).slice(-6)}`,
-          receiptNumber: `INIT-${(c.phone || c.id).slice(-6)}`,
-          customerId: c.id,
-          customerName: compName,
-          companyName: compName,
-          contactPerson: c.contactPerson || c.contact || compName,
-          user: compName,
-          userInitial: (compName || 'U').charAt(0).toUpperCase(),
-          username: c.username || '',
-          phone: c.phone || '',
-          email: c.email || '',
-          city: c.city || 'India',
-          state: c.state || 'Maharashtra',
-          category: c.category || 'IT & Software',
-          txType: 'credit',
-          typeLabel: 'Account Opening Deposit',
-          amount: bal,
-          previousBalance: 0,
-          changedAmount: Number(bal.toFixed(2)),
-          newBalance: Number(bal.toFixed(2)),
-          balanceBefore: 0,
-          balanceAfter: Number(bal.toFixed(2)),
-          balanceChangeFormatted: `+₹${bal.toFixed(2)}`,
-          currentWalletBalance: bal,
-          reason: bal > 0 ? 'Initial Account Opening Ad Wallet Deposit' : 'Prepaid Ad Account Created (Pending Recharge)',
-          description: bal > 0 ? 'Initial Account Opening Ad Wallet Deposit' : 'Prepaid Ad Account Created (Pending Recharge)',
-          updatedBy: 'Super Admin',
-          paymentMethod: 'Super Admin',
-          status: 'Settled ✓',
-          createdAt: c.registeredAt || c.createdAt || new Date(),
-          date: formattedDate,
-        });
-        seenCustIds.add(c.id);
-      }
     }
 
     // Sort newest logs first
