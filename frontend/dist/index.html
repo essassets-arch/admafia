@@ -5,21 +5,33 @@
 
 
 
-  <!-- Meta Pixel Code -->
+  <!-- Meta Pixel Code (Safely skipped on internal CRM/Sales desks to prevent client ad-blocker errors) -->
   <script>
-    !function (f, b, e, v, n, t, s) {
-      if (f.fbq) return; n = f.fbq = function () {
-        n.callMethod ?
-          n.callMethod.apply(n, arguments) : n.queue.push(arguments)
-      };
-      if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
-      n.queue = []; t = b.createElement(e); t.async = !0;
-      t.src = v; s = b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t, s)
-    }(window, document, 'script',
-      'https://connect.facebook.net/en_US/fbevents.js');
-    fbq('init', '1124252446675289');
-    fbq('track', 'PageView');
+    try {
+      var _loc = window.location;
+      var _path = (_loc.pathname || '').toLowerCase();
+      var _hash = (_loc.hash || '').toLowerCase();
+      var _isInternalDesk = _path.includes('/sales') || _path.includes('/superadmin') || _path.includes('/portal') || _hash.includes('#sales') || _hash.includes('#balance') || _hash.includes('#transactions');
+
+      if (!_isInternalDesk) {
+        !function (f, b, e, v, n, t, s) {
+          if (f.fbq) return; n = f.fbq = function () {
+            n.callMethod ?
+              n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+          };
+          if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+          n.queue = []; t = b.createElement(e); t.async = !0;
+          t.src = v;
+          t.onerror = function () { /* Silently ignore client ad-blocker drops */ };
+          s = b.getElementsByTagName(e)[0];
+          s.parentNode.insertBefore(t, s)
+        }(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+        if (window.fbq) {
+          fbq('init', '1124252446675289');
+          fbq('track', 'PageView');
+        }
+      }
+    } catch (_) {}
   </script>
   <!-- End Meta Pixel Code -->
 
