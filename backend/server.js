@@ -2023,6 +2023,8 @@ app.get('/api/sales/balance-logs', async (req, res) => {
         customerName: properCompany,
         companyName: properCompany,
         contactPerson: properContact,
+        user: properCompany,
+        userInitial: (properCompany || 'U').charAt(0).toUpperCase(),
         username: rawUser,
         phone: cleanPhone,
         email: row.email || matchedCust?.email || '',
@@ -2032,11 +2034,16 @@ app.get('/api/sales/balance-logs', async (req, res) => {
         txType: isDebit ? 'debit' : 'credit',
         typeLabel: isDebit ? 'Daily Ad Spend Auto-Debit' : 'Ad Wallet Top-Up',
         amount,
-        balanceBefore,
-        balanceAfter,
-        balanceChangeFormatted: isDebit ? `-₹${amount.toLocaleString('en-IN')}` : `+₹${amount.toLocaleString('en-IN')}`,
+        previousBalance: Number(balanceBefore.toFixed(2)),
+        changedAmount: Number(amount.toFixed(2)),
+        newBalance: Number(balanceAfter.toFixed(2)),
+        balanceBefore: Number(balanceBefore.toFixed(2)),
+        balanceAfter: Number(balanceAfter.toFixed(2)),
+        balanceChangeFormatted: isDebit ? `-₹${amount.toFixed(2)}` : `+₹${amount.toFixed(2)}`,
         currentWalletBalance: row.current_wallet_balance != null ? Number(row.current_wallet_balance) : (matchedCust?.balance || 0),
+        reason: row.description || (isDebit ? 'Ad Spend Daily Pacing' : 'Wallet Top-Up'),
         description: row.description || (isDebit ? 'Daily Ad Spend Pacing' : 'Wallet Top-Up'),
+        updatedBy: 'Super Admin',
         paymentMethod: row.payment_method || (isDebit ? 'Daily Auto-Debit' : 'Razorpay Secure'),
         status: 'Settled ✓',
         createdAt: row.created_at,
@@ -2101,6 +2108,8 @@ app.get('/api/sales/balance-logs', async (req, res) => {
         customerName: properCompany,
         companyName: properCompany,
         contactPerson: properContact,
+        user: properCompany,
+        userInitial: (properCompany || 'U').charAt(0).toUpperCase(),
         username: rawUser,
         phone: cleanPhone,
         email: pr.email || pr.cust_email || matchedCust?.email || '',
@@ -2110,16 +2119,80 @@ app.get('/api/sales/balance-logs', async (req, res) => {
         txType: 'credit',
         typeLabel: pr.type_label || 'Ad Wallet Top-Up',
         amount,
-        balanceBefore,
-        balanceAfter,
-        balanceChangeFormatted: `+₹${amount.toLocaleString('en-IN')}`,
+        previousBalance: Number(balanceBefore.toFixed(2)),
+        changedAmount: Number(amount.toFixed(2)),
+        newBalance: Number(balanceAfter.toFixed(2)),
+        balanceBefore: Number(balanceBefore.toFixed(2)),
+        balanceAfter: Number(balanceAfter.toFixed(2)),
+        balanceChangeFormatted: `+₹${amount.toFixed(2)}`,
         currentWalletBalance: matchedCust?.balance || amount,
+        reason: pr.notes || 'Verified Customer Payment Settlement',
         description: pr.notes || 'Verified Customer Payment Settlement',
+        updatedBy: 'Super Admin',
         paymentMethod: pr.payment_mode || 'Razorpay UPI (Live)',
         status: 'Settled ✓',
         createdAt: pr.paid_at || pr.created_at || new Date(),
         date: formattedDate,
       });
+    }
+
+    // 3. Ensure ALL registered customers appear in balance logs (account opening entry if not yet active)
+    const seenCustIds = new Set(logs.map((l) => l.customerId));
+    for (const c of customers) {
+      if (!c.id) continue;
+      const cleanP = String(c.phone || '').replace(/\D/g, '').slice(-10);
+      if (cleanP === '7383198428' || cleanP === '8200792130') continue; // Purged test entries
+
+      if (!seenCustIds.has(c.id)) {
+        const bal = Math.max(0, Number(c.balance || c.walletBalance || 0));
+        const formattedDate = new Date(c.registeredAt || c.createdAt || new Date()).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+
+        const compName = c.companyName || c.name || c.contactPerson || 'Client Member';
+
+        logs.push({
+          id: `init_${c.id}`,
+          ref: `INIT-${(c.phone || c.id).slice(-6)}`,
+          receiptNumber: `INIT-${(c.phone || c.id).slice(-6)}`,
+          customerId: c.id,
+          customerName: compName,
+          companyName: compName,
+          contactPerson: c.contactPerson || c.contact || compName,
+          user: compName,
+          userInitial: (compName || 'U').charAt(0).toUpperCase(),
+          username: c.username || '',
+          phone: c.phone || '',
+          email: c.email || '',
+          city: c.city || 'India',
+          state: c.state || 'Maharashtra',
+          category: c.category || 'IT & Software',
+          txType: 'credit',
+          typeLabel: 'Account Opening Deposit',
+          amount: bal,
+          previousBalance: 0,
+          changedAmount: Number(bal.toFixed(2)),
+          newBalance: Number(bal.toFixed(2)),
+          balanceBefore: 0,
+          balanceAfter: Number(bal.toFixed(2)),
+          balanceChangeFormatted: `+₹${bal.toFixed(2)}`,
+          currentWalletBalance: bal,
+          reason: bal > 0 ? 'Initial Account Opening Ad Wallet Deposit' : 'Prepaid Ad Account Created (Pending Recharge)',
+          description: bal > 0 ? 'Initial Account Opening Ad Wallet Deposit' : 'Prepaid Ad Account Created (Pending Recharge)',
+          updatedBy: 'Super Admin',
+          paymentMethod: 'Super Admin',
+          status: 'Settled ✓',
+          createdAt: c.registeredAt || c.createdAt || new Date(),
+          date: formattedDate,
+        });
+        seenCustIds.add(c.id);
+      }
     }
 
     // Sort newest logs first
@@ -2136,8 +2209,10 @@ app.get('/api/sales/balance-logs', async (req, res) => {
       stats: {
         totalLogs: logs.length,
         totalCirculatingBalance,
-        totalCredits,
-        totalDebits,
+        totalCredits: Number(totalCredits.toFixed(2)),
+        totalDebits: Number(totalDebits.toFixed(2)),
+        totalAmountAdded: Number(totalCredits.toFixed(2)),
+        totalAmountRemoved: Number(totalDebits.toFixed(2)),
         totalCreditCount,
         totalDebitCount,
         activeWalletsCount: walletsRes.rows.filter((w) => Number(w.available_balance || 0) > 0).length,
