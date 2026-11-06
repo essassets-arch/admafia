@@ -3352,65 +3352,6 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                   >
                     <MessageSquare size={14} /> WhatsApp Buyer
                   </a>
-
-                  {/* Quick Forward Lead to Customer Action */}
-                  {customerPhoneDigits && (
-                    <a
-                      href={`https://wa.me/91${customerPhoneDigits}?text=Hello%20${encodeURIComponent(customerName)},%20here%20is%20a%20new%20inbound%20buyer%20enquiry%20received%20for%20your%20business:%0A%0A%F0%9F%93%9E%20Buyer%20Phone:%20+91%20${rawDigits}%0A%E2%9C%85%20Verified%20via%20AdMafia%20GrowthLine.`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="desk-action-btn"
-                      style={{
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '8px 14px',
-                        fontSize: '0.82rem',
-                        fontWeight: 700,
-                        background: '#f0fdf4',
-                        borderColor: '#86efac',
-                        color: '#15803d',
-                        whiteSpace: 'nowrap'
-                      }}
-                      title={`Send WhatsApp message with buyer details to ${customerName} (+91 ${customerPhoneDigits})`}
-                    >
-                      <Send size={13} /> Forward to Client
-                    </a>
-                  )}
-
-                  {/* Direct Mark Read / Mark Unread toggle action */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleLeadRead(lead)}
-                    className="desk-action-btn"
-                    style={{
-                      background: isRead ? '#f8fafc' : '#ecfdf5',
-                      borderColor: isRead ? '#cbd5e1' : '#a7f3d0',
-                      color: isRead ? '#475569' : '#047857',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '8px 14px',
-                      fontSize: '0.82rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap'
-                    }}
-                    title={isRead ? 'Click to Mark as Unread' : 'Click to Mark as Read'}
-                  >
-                    {isRead ? (
-                      <>
-                        <RotateCcw size={13} strokeWidth={2.4} />
-                        <span>Mark Unread</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check size={14} strokeWidth={3} />
-                        <span>Mark as Read</span>
-                      </>
-                    )}
-                  </button>
                 </div>
               </div>
             );
