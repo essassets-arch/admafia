@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Users,
   ShieldCheck,
@@ -26,6 +26,7 @@ import {
   AlertCircle,
   Building,
   Building2,
+  ChevronDown,
   ChevronRight,
   Filter,
   FileText,
@@ -2018,6 +2019,32 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
   const [filter, setFilter] = useState('all');
   const [selectedCustomerId, setSelectedCustomerId] = useState('all');
 
+  // Smart Searchable Customer Dropdown State
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const customerDropdownRef = useRef(null);
+  const customerSearchInputRef = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target)) {
+        setIsCustomerDropdownOpen(false);
+      }
+    };
+    if (isCustomerDropdownOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      setTimeout(() => {
+        if (customerSearchInputRef.current) {
+          customerSearchInputRef.current.focus();
+        }
+      }, 50);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isCustomerDropdownOpen]);
+
   // Customer matching helper to link leads to authoritative registered customers
   const matchLeadToCustomer = (lead, cust) => {
     if (!lead || !cust) return false;
@@ -2126,6 +2153,31 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 
     return options.sort((a, b) => b.leadCount - a.leadCount);
   }, [deskCustomers, leads]);
+
+  // Live smart-filtered customer options based on search query
+  const filteredCustomerOptions = useMemo(() => {
+    const q = customerSearchQuery.toLowerCase().trim();
+    if (!q) return customerFilterOptions;
+
+    return customerFilterOptions.filter((opt) => {
+      const c = opt.customer || {};
+      const name = String(c.companyName || c.name || opt.displayName || '').toLowerCase();
+      const contact = String(c.contactPerson || c.contact || '').toLowerCase();
+      const phone = String(c.phone || opt.phone || '').replace(/\D/g, '');
+      const user = String(c.username || '').toLowerCase();
+      const email = String(c.email || '').toLowerCase();
+      const cat = String(c.category || '').toLowerCase();
+
+      return (
+        name.includes(q) ||
+        contact.includes(q) ||
+        phone.includes(q) ||
+        user.includes(q) ||
+        email.includes(q) ||
+        cat.includes(q)
+      );
+    });
+  }, [customerFilterOptions, customerSearchQuery]);
 
   // Active customer object (if a single customer is selected)
   const selectedCustomerObj = useMemo(() => {
@@ -2645,40 +2697,337 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         border: '1px solid #e2e8f0',
         boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
       }}>
-        {/* Customer-Wise Drop Down Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: '1 1 320px', minWidth: 260 }}>
+        {/* Customer-Wise Smart Search Dropdown Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: '1 1 340px', minWidth: 260 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <Building2 size={18} style={{ color: '#4f46e5' }} />
             <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
               Customer Account:
             </span>
           </div>
-          <select
-            value={selectedCustomerId}
-            onChange={(e) => setSelectedCustomerId(e.target.value)}
-            style={{
-              padding: '9px 14px',
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              color: selectedCustomerId !== 'all' ? '#1e1b4b' : '#0f172a',
-              background: selectedCustomerId !== 'all' ? '#eef2ff' : '#f8fafc',
-              border: selectedCustomerId !== 'all' ? '1.5px solid #6366f1' : '1px solid #cbd5e1',
-              borderRadius: 10,
-              minWidth: 220,
-              maxWidth: '100%',
-              cursor: 'pointer',
-              boxShadow: selectedCustomerId !== 'all' ? '0 0 0 3px rgba(99, 102, 241, 0.15)' : 'none',
-              outline: 'none',
-              flex: '1 1 auto'
-            }}
-          >
-            <option value="all">🏢 All Customers ({leads.length} total leads • {customerFilterOptions.length} accounts)</option>
-            {customerFilterOptions.map((opt) => (
-              <option key={opt.key} value={opt.key}>
-                🏢 {opt.displayName} ({opt.leadCount} {opt.leadCount === 1 ? 'lead' : 'leads'})
-              </option>
-            ))}
-          </select>
+
+          <div ref={customerDropdownRef} style={{ position: 'relative', flex: '1 1 240px', minWidth: 220 }}>
+            {/* Interactive Smart Search Trigger Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsCustomerDropdownOpen((prev) => !prev);
+                setCustomerSearchQuery('');
+              }}
+              style={{
+                width: '100%',
+                padding: '9px 14px',
+                fontSize: '0.88rem',
+                fontWeight: 700,
+                color: selectedCustomerId !== 'all' ? '#1e1b4b' : '#0f172a',
+                background: selectedCustomerId !== 'all' ? '#eef2ff' : '#ffffff',
+                border: selectedCustomerId !== 'all' ? '1.5px solid #6366f1' : '1px solid #cbd5e1',
+                borderRadius: 10,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                boxShadow: selectedCustomerId !== 'all' ? '0 0 0 3px rgba(99, 102, 241, 0.15)' : 'none',
+                outline: 'none',
+                textAlign: 'left'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+                <span style={{ fontSize: '0.95rem' }}>🏢</span>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontWeight: selectedCustomerId !== 'all' ? 800 : 700
+                }}>
+                  {selectedCustomerObj
+                    ? `${selectedCustomerObj.companyName || selectedCustomerObj.name} (${customerLeads.length} leads)`
+                    : `All Customers (${leads.length} total leads • ${customerFilterOptions.length} accounts)`}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                {selectedCustomerId !== 'all' && (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedCustomerId('all');
+                    }}
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: 6,
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      color: '#4f46e5',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center'
+                    }}
+                    title="Reset to All Customers"
+                  >
+                    ✕
+                  </span>
+                )}
+                <ChevronDown size={16} style={{ color: '#64748b', transform: isCustomerDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              </div>
+            </button>
+
+            {/* Smart Search Dropdown Popup Menu */}
+            {isCustomerDropdownOpen && (
+              <div style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                left: 0,
+                width: '100%',
+                minWidth: 320,
+                maxWidth: 460,
+                background: '#ffffff',
+                borderRadius: 12,
+                border: '1px solid #cbd5e1',
+                boxShadow: '0 12px 30px rgba(15, 23, 42, 0.18)',
+                zIndex: 100,
+                padding: 8,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                animation: 'modal-pop-in 0.15s ease'
+              }}>
+                {/* Smart Search Input Header */}
+                <div style={{
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#f8fafc',
+                  borderRadius: 8,
+                  border: '1.5px solid #cbd5e1',
+                  padding: '2px 10px'
+                }}>
+                  <Search size={15} style={{ color: '#6366f1', flexShrink: 0, marginRight: 6 }} />
+                  <input
+                    ref={customerSearchInputRef}
+                    type="text"
+                    placeholder="Smart search by name, phone, email..."
+                    value={customerSearchQuery}
+                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      padding: '8px 4px',
+                      fontSize: '0.86rem',
+                      fontWeight: 600,
+                      width: '100%',
+                      outline: 'none',
+                      color: '#0f172a'
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setIsCustomerDropdownOpen(false);
+                      } else if (e.key === 'Enter' && filteredCustomerOptions.length > 0) {
+                        const first = filteredCustomerOptions[0];
+                        setSelectedCustomerId(first.key);
+                        setIsCustomerDropdownOpen(false);
+                      }
+                    }}
+                  />
+                  {customerSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomerSearchQuery('')}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        padding: '2px 4px',
+                        fontSize: '0.85rem'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Options List */}
+                <div style={{ maxHeight: 290, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3, paddingRight: 2 }}>
+                  {/* Option: All Customers */}
+                  <div
+                    onClick={() => {
+                      setSelectedCustomerId('all');
+                      setIsCustomerDropdownOpen(false);
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: selectedCustomerId === 'all' ? '#eff6ff' : 'transparent',
+                      border: selectedCustomerId === 'all' ? '1px solid #bfdbfe' : '1px solid transparent',
+                      transition: 'background 0.15s'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedCustomerId !== 'all') e.currentTarget.style.background = '#f8fafc';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedCustomerId !== 'all') e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                      <div style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 7,
+                        background: '#e0e7ff',
+                        color: '#4338ca',
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontSize: '0.85rem',
+                        fontWeight: 800
+                      }}>
+                        🏢
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e3a8a' }}>
+                          All Registered Customers
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                          {customerFilterOptions.length} active business accounts
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        fontSize: '0.76rem',
+                        fontWeight: 800,
+                        color: '#4338ca',
+                        background: '#e0e7ff',
+                        padding: '2px 8px',
+                        borderRadius: 6
+                      }}>
+                        {leads.length} leads
+                      </span>
+                      {selectedCustomerId === 'all' && <Check size={15} style={{ color: '#2563eb' }} strokeWidth={2.8} />}
+                    </div>
+                  </div>
+
+                  <div style={{ height: 1, background: '#e2e8f0', margin: '3px 0' }} />
+
+                  {/* Filtered Customer Options */}
+                  {filteredCustomerOptions.length === 0 ? (
+                    <div style={{ padding: '16px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.84rem' }}>
+                      No customers found matching "<strong>{customerSearchQuery}</strong>"
+                    </div>
+                  ) : (
+                    filteredCustomerOptions.map((opt) => {
+                      const cust = opt.customer || {};
+                      const isSelected = String(selectedCustomerId) === String(opt.key);
+                      const initial = (opt.companyName || 'C').charAt(0).toUpperCase();
+                      const phoneDigits = String(cust.phone || opt.phone || '').replace(/\D/g, '').slice(-10);
+
+                      return (
+                        <div
+                          key={opt.key}
+                          onClick={() => {
+                            setSelectedCustomerId(opt.key);
+                            setIsCustomerDropdownOpen(false);
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                            background: isSelected ? '#eff6ff' : 'transparent',
+                            border: isSelected ? '1px solid #bfdbfe' : '1px solid transparent',
+                            transition: 'background 0.15s'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = '#f8fafc';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                            <div style={{
+                              width: 30,
+                              height: 30,
+                              minWidth: 30,
+                              borderRadius: 8,
+                              background: isSelected ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' : '#f1f5f9',
+                              color: isSelected ? '#ffffff' : '#334155',
+                              display: 'grid',
+                              placeItems: 'center',
+                              fontSize: '0.85rem',
+                              fontWeight: 800
+                            }}>
+                              {initial}
+                            </div>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{
+                                fontSize: '0.86rem',
+                                fontWeight: 800,
+                                color: isSelected ? '#1e3a8a' : '#0f172a',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {opt.displayName}
+                              </div>
+                              <div style={{
+                                fontSize: '0.73rem',
+                                color: '#64748b',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                flexWrap: 'wrap',
+                                marginTop: 1
+                              }}>
+                                {phoneDigits && (
+                                  <span style={{ fontFamily: 'monospace' }}>
+                                    +91 {phoneDigits}
+                                  </span>
+                                )}
+                                {cust.category && (
+                                  <span>• {cust.category}</span>
+                                )}
+                                {cust.balance != null && (
+                                  <span style={{ color: Number(cust.balance) > 0 ? '#059669' : '#94a3b8', fontWeight: 700 }}>
+                                    • Bal: ₹{Number(cust.balance).toLocaleString('en-IN')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                            <span style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 800,
+                              color: opt.leadCount > 0 ? '#059669' : '#94a3b8',
+                              background: opt.leadCount > 0 ? '#ecfdf5' : '#f1f5f9',
+                              border: opt.leadCount > 0 ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {opt.leadCount} {opt.leadCount === 1 ? 'lead' : 'leads'}
+                            </span>
+                            {isSelected && <Check size={15} style={{ color: '#2563eb' }} strokeWidth={2.8} />}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {selectedCustomerId !== 'all' && (
             <button
               type="button"
