@@ -98,13 +98,36 @@ export default function SuperAdminTopupsDesk() {
         status: 'all',
         limit: 100,
       });
-      if (res && res.ok) {
-        setCustomers(res.accounts || []);
+      if (res && res.ok && Array.isArray(res.accounts) && res.accounts.length > 0) {
+        setCustomers(res.accounts);
+        return;
       }
     } catch (err) {
-      console.error('Failed to load customers for top-up desk:', err);
+      console.warn('Superadmin accounts API call failed, falling back to state sync:', err);
     } finally {
       setCustomersLoading(false);
+    }
+
+    // Resilient fallback: load registered accounts from authoritative syncState
+    try {
+      const stateRes = await crmApi.syncStateFromPostgres();
+      if (stateRes && Array.isArray(stateRes.customers) && stateRes.customers.length > 0) {
+        const mapped = stateRes.customers.map((c) => ({
+          id: c.id,
+          company_name: c.companyName || c.name || c.username || 'Client Account',
+          contact_person: c.contactPerson || c.contact || c.name || 'Owner',
+          phone: c.phone,
+          email: c.email || '',
+          category: c.category || 'IT & Software',
+          city: c.city || 'India',
+          available_balance: Number(c.balance || 0),
+          daily_ad_spend: 300,
+          ad_campaign_active: false,
+        }));
+        setCustomers(mapped);
+      }
+    } catch (e) {
+      console.warn('Fallback customer fetch failed:', e);
     }
   }, []);
 
@@ -143,13 +166,14 @@ export default function SuperAdminTopupsDesk() {
   // Open Top-Up Modal for specific customer
   const handleOpenTopupForCustomer = (cust) => {
     const defaultUtr = `TOP_${Date.now().toString().slice(-6)}_${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    const custName = cust.company_name || cust.companyName || cust.name || 'Customer';
     setSelectedCustomer(cust);
     setManualForm({
       customerId: cust.id,
       amount: '3000',
       referenceUtr: defaultUtr,
       paymentMethod: 'Bank NEFT / RTGS Transfer',
-      description: `Authorized wallet top-up for ${cust.company_name || 'Customer'}`,
+      description: `Authorized wallet top-up for ${custName}`,
     });
     setShowManualModal(true);
   };
@@ -158,13 +182,14 @@ export default function SuperAdminTopupsDesk() {
   const handleOpenGenericTopup = () => {
     const defaultUtr = `TOP_${Date.now().toString().slice(-6)}_${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
     const firstCust = customers[0] || null;
+    const custName = firstCust ? (firstCust.company_name || firstCust.companyName || firstCust.name) : null;
     setSelectedCustomer(firstCust);
     setManualForm({
       customerId: firstCust?.id || '',
       amount: '3000',
       referenceUtr: defaultUtr,
       paymentMethod: 'Bank NEFT / RTGS Transfer',
-      description: firstCust ? `Authorized wallet top-up for ${firstCust.company_name}` : 'Super Admin Authorized Deposit',
+      description: custName ? `Authorized wallet top-up for ${custName}` : 'Super Admin Authorized Deposit',
     });
     setShowManualModal(true);
   };
@@ -172,11 +197,12 @@ export default function SuperAdminTopupsDesk() {
   // On customer selector change inside modal
   const handleSelectCustomerChange = (custId) => {
     const match = customers.find((c) => c.id === custId) || null;
+    const custName = match ? (match.company_name || match.companyName || match.name) : null;
     setSelectedCustomer(match);
     setManualForm((prev) => ({
       ...prev,
       customerId: custId,
-      description: match ? `Authorized wallet top-up for ${match.company_name}` : prev.description,
+      description: custName ? `Authorized wallet top-up for ${custName}` : prev.description,
     }));
   };
 
@@ -223,6 +249,12 @@ export default function SuperAdminTopupsDesk() {
         });
         fetchTopups();
         fetchCustomers();
+
+        try {
+          window.dispatchEvent(new CustomEvent('growthline_wallet_transactions_updated'));
+          window.dispatchEvent(new CustomEvent('growthline_payment_recorded'));
+          window.dispatchEvent(new CustomEvent('growthline_postgres_synced'));
+        } catch (_) {}
       }
     } catch (err) {
       Swal.fire({ icon: 'error', title: 'Top-Up Approval Failed', text: err.message });
@@ -278,7 +310,7 @@ export default function SuperAdminTopupsDesk() {
     }
 
     const targetCustomer = selectedCustomer || customers.find((c) => c.id === manualForm.customerId);
-    const targetName = targetCustomer ? targetCustomer.company_name : manualForm.customerId;
+    const targetName = targetCustomer ? (targetCustomer.company_name || targetCustomer.companyName || targetCustomer.name) : manualForm.customerId;
 
     const confirm = await Swal.fire({
       title: 'Confirm Wallet Top-Up?',
@@ -355,6 +387,12 @@ export default function SuperAdminTopupsDesk() {
 
         fetchTopups();
         fetchCustomers();
+
+        try {
+          window.dispatchEvent(new CustomEvent('growthline_wallet_transactions_updated'));
+          window.dispatchEvent(new CustomEvent('growthline_payment_recorded'));
+          window.dispatchEvent(new CustomEvent('growthline_postgres_synced'));
+        } catch (_) {}
       }
     } catch (err) {
       Swal.fire({ icon: 'error', title: 'Top-Up Failed', text: err.message });
@@ -367,12 +405,17 @@ export default function SuperAdminTopupsDesk() {
   const filteredCustomers = customers.filter((c) => {
     if (!customerSearch.trim()) return true;
     const q = customerSearch.toLowerCase();
+    const cName = (c.company_name || c.companyName || c.name || '').toLowerCase();
+    const cContact = (c.contact_person || c.contactPerson || '').toLowerCase();
+    const cPhone = c.phone || '';
+    const cEmail = (c.email || '').toLowerCase();
+    const cId = (c.id || '').toLowerCase();
     return (
-      (c.company_name && c.company_name.toLowerCase().includes(q)) ||
-      (c.contact_person && c.contact_person.toLowerCase().includes(q)) ||
-      (c.phone && c.phone.includes(q)) ||
-      (c.email && c.email.toLowerCase().includes(q)) ||
-      (c.id && c.id.toLowerCase().includes(q))
+      cName.includes(q) ||
+      cContact.includes(q) ||
+      cPhone.includes(q) ||
+      cEmail.includes(q) ||
+      cId.includes(q)
     );
   });
 
@@ -490,7 +533,9 @@ export default function SuperAdminTopupsDesk() {
                     </tr>
                   ) : (
                     filteredCustomers.map((c) => {
-                      const bal = Number(c.available_balance || 0);
+                      const cName = c.company_name || c.companyName || c.name || 'Client Business';
+                      const cContact = c.contact_person || c.contactPerson || c.name || 'Owner';
+                      const bal = Number(c.available_balance ?? c.balance ?? 0);
                       const dailyRate = Number(c.daily_ad_spend || 300);
                       const runwayDays = dailyRate > 0 ? Math.floor(bal / dailyRate) : 0;
 
@@ -498,10 +543,10 @@ export default function SuperAdminTopupsDesk() {
                         <tr key={c.id}>
                           <td>
                             <strong style={{ color: '#0f172a', fontSize: '0.92rem' }}>
-                              {c.company_name}
+                              {cName}
                             </strong>
                             <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
-                              Contact: {c.contact_person}
+                              Contact: {cContact}
                             </div>
                             <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontFamily: 'monospace' }}>
                               ID: {c.id}
@@ -547,7 +592,7 @@ export default function SuperAdminTopupsDesk() {
 
                           <td>
                             <strong style={{ color: '#1e293b' }}>
-                              ₹{Number(c.total_lifetime_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              ₹{Number(c.total_lifetime_paid ?? c.lifetimePaid ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </strong>
                           </td>
 
@@ -868,11 +913,15 @@ export default function SuperAdminTopupsDesk() {
                     required
                   >
                     <option value="">-- Choose Registered Business to Credit --</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.company_name} (+91 {c.phone}) — Bal: ₹{Number(c.available_balance || 0).toLocaleString('en-IN')}
-                      </option>
-                    ))}
+                    {customers.map((c) => {
+                      const cName = c.company_name || c.companyName || c.name || 'Client Account';
+                      const cBal = Number(c.available_balance ?? c.balance ?? 0);
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {cName} (+91 {c.phone}) — Bal: ₹{cBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -891,23 +940,23 @@ export default function SuperAdminTopupsDesk() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ color: '#64748b' }}>Account:</span>
-                      <strong style={{ color: '#0f172a' }}>{selectedCustomer.company_name}</strong>
+                      <strong style={{ color: '#0f172a' }}>{selectedCustomer.company_name || selectedCustomer.companyName || selectedCustomer.name}</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ color: '#64748b' }}>Contact &amp; Mobile:</span>
-                      <span>{selectedCustomer.contact_person} (+91 {selectedCustomer.phone})</span>
+                      <span>{selectedCustomer.contact_person || selectedCustomer.contactPerson || selectedCustomer.name} (+91 {selectedCustomer.phone})</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 4, borderTop: '1px dashed #cbd5e1' }}>
                       <span style={{ color: '#64748b' }}>Current Available Balance:</span>
                       <strong style={{ color: '#059669', fontSize: '0.96rem' }}>
-                        ₹{Number(selectedCustomer.available_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        ₹{Number(selectedCustomer.available_balance ?? selectedCustomer.balance ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </strong>
                     </div>
                     {manualForm.amount && parseFloat(manualForm.amount) > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, color: '#2563eb', fontWeight: 700 }}>
                         <span>New Balance After Top-Up:</span>
                         <span>
-                          ₹{(Number(selectedCustomer.available_balance || 0) + parseFloat(manualForm.amount)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          ₹{(Number(selectedCustomer.available_balance ?? selectedCustomer.balance ?? 0) + parseFloat(manualForm.amount)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           {' '}(+{Math.floor(parseFloat(manualForm.amount) / 300)} Days Runway)
                         </span>
                       </div>

@@ -462,7 +462,7 @@ superadminRouter.get('/finance/accounts', async (req, res) => {
        FROM customers c
        LEFT JOIN wallets w ON w.customer_id = c.id
        ${whereClause}
-       ORDER BY w.available_balance DESC NULLS LAST, c.created_at DESC
+       ORDER BY w.available_balance DESC NULLS LAST, c.registered_at DESC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limitNum, offset]
     );
@@ -1612,13 +1612,23 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
         [customerId]
       );
 
-      if (walletRes.rowCount === 0) {
-        throw new Error('Customer wallet record not found.');
+      let wallet = walletRes.rows[0];
+      if (!wallet) {
+        // Auto-create customer wallet record if not present
+        const newWalletId = `wal_${customerId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        const ins = await tx(
+          `INSERT INTO wallets (id, customer_id, available_balance, total_lifetime_paid, total_ad_spent, daily_ad_spend, ad_campaign_active, created_at, updated_at)
+           VALUES ($1, $2, 0.00, 0.00, 0.00, 300.00, FALSE, NOW(), NOW())
+           ON CONFLICT (customer_id) DO UPDATE SET updated_at = NOW()
+           RETURNING id, available_balance, total_lifetime_paid`,
+          [newWalletId, customerId]
+        );
+        wallet = ins.rows[0];
       }
 
-      const currentBalance = Number(walletRes.rows[0].available_balance);
+      const currentBalance = Number(wallet.available_balance || 0);
       const newBalance = Number((currentBalance + creditAmount).toFixed(2));
-      const newLifetime = Number((Number(walletRes.rows[0].total_lifetime_paid) + creditAmount).toFixed(2));
+      const newLifetime = Number((Number(wallet.total_lifetime_paid || 0) + creditAmount).toFixed(2));
       recordedOldBalance = currentBalance;
       recordedNewBalance = newBalance;
 
@@ -1650,7 +1660,7 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
         [
           txId,
           customerId,
-          walletRes.rows[0].id,
+          wallet.id,
           creditAmount,
           newBalance,
           cleanUtr,
@@ -1794,8 +1804,10 @@ superadminRouter.get('/accounts', async (req, res) => {
     const listRes = await query(
       `SELECT
         c.id, c.company_name, c.contact_person, c.phone, c.email, c.category, c.city,
-        c.status, c.registered_at, c.created_at,
-        w.available_balance, w.daily_ad_spend, w.ad_campaign_active,
+        c.status, c.registered_at, COALESCE(c.registered_at, NOW()) AS created_at,
+        COALESCE(w.available_balance, 0)::NUMERIC(12,2) AS available_balance,
+        COALESCE(w.daily_ad_spend, 300.00)::NUMERIC(10,2) AS daily_ad_spend,
+        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
         (SELECT COUNT(*)::INT FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = 'Running') AS running_campaigns,
         (SELECT COUNT(*)::INT FROM leads l WHERE l.customer_id = c.id) AS total_leads
        FROM customers c
