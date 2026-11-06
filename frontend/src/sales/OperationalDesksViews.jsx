@@ -3647,6 +3647,64 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
    ========================================================================== */
 export const INITIAL_PAYMENT_RECORDS = [];
 
+export const isTestingPaymentRecord = (r) => {
+  if (!r) return false;
+  const id = String(r.id || '').toLowerCase();
+  const receipt = String(r.receiptNumber || r.receiptNo || r.receipt_number || r.invoiceNumber || r.invoice_number || '').toUpperCase();
+  const utr = String(r.utr || r.utr_reference || '').toLowerCase();
+  const phone = String(r.phone || '').replace(/\D/g, '');
+  const company = String(r.company || r.companyName || r.name || '').trim().toLowerCase();
+  const contact = String(r.contact || r.contactPerson || '').trim().toLowerCase();
+
+  // Test receipts identified by user:
+  // REC_1793882500916_D467, REC_1793881526162_E051, RCP-2026-5814, RCP-2026-9969
+  if (
+    receipt === 'REC_1793882500916_D467' ||
+    receipt === 'REC_1793881526162_E051' ||
+    receipt === 'RCP-2026-5814' ||
+    receipt === 'RCP-2026-9969'
+  ) {
+    return true;
+  }
+
+  // Test UTRs: 'aaggg', 'aa', 'pay_tvcjrvjjkphawp', 'pay_tvcfjhw56ixevu'
+  if (
+    utr === 'aaggg' ||
+    utr === 'aa' ||
+    utr === 'pay_tvcjrvjjkphawp' ||
+    utr === 'pay_tvcfjhw56ixevu'
+  ) {
+    return true;
+  }
+
+  // Test payment IDs:
+  if (
+    id === 'pay_1793882500916_18d1ec' ||
+    id === 'pay_1793881526162_89c397' ||
+    id === 'pay_1793600155814' ||
+    id === 'pay_1793600029969'
+  ) {
+    return true;
+  }
+
+  // Synthetic customer registration rows previously generated: id starts with 'pay_reg_'
+  if (id.startsWith('pay_reg_')) {
+    return true;
+  }
+
+  // Test accounts matching user's specific test entries:
+  // Abc (+91 7383198428)
+  if (phone.endsWith('7383198428') && (company === 'abc' || contact === 'abc' || utr === 'aa' || utr === 'aaggg')) {
+    return true;
+  }
+  // Priyank (+91 8200792130) with test entries
+  if (phone.endsWith('8200792130') && (receipt.startsWith('RCP-2026-5814') || receipt.startsWith('RCP-2026-9969') || utr.startsWith('pay_tvc'))) {
+    return true;
+  }
+
+  return false;
+};
+
 export const formatPaymentRecord = (r) => {
   if (!r) return r;
   const receiptVal =
@@ -3677,6 +3735,7 @@ export function PaymentCollectionDesk({
   const [activeReceipt, setActiveReceipt] = useState(null);
   const [activeInv, setActiveInv] = useState(null);
   const [utrInput, setUtrInput] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Add Payment / Top-Up Modal State
   const [isAddPaymentModalOpen, setIsAddPaymentModalOpen] = useState(false);
@@ -3690,139 +3749,177 @@ export function PaymentCollectionDesk({
     notes: 'Customer Marketing Ad Wallet Top-Up',
   });
 
-  // Persistent Payment & Top-Up Ledger State
+  // Persistent Payment & Top-Up Ledger State (sanitized from test entries)
   const [records, setRecords] = useState(() => {
     try {
       const raw = localStorage.getItem('growthline_payment_records');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(formatPaymentRecord);
+          const clean = parsed.map(formatPaymentRecord).filter((r) => !isTestingPaymentRecord(r));
+          localStorage.setItem('growthline_payment_records', JSON.stringify(clean));
+          return clean;
         }
       }
     } catch (e) { }
     return INITIAL_PAYMENT_RECORDS;
   });
 
-  // Fetch authoritative payments from backend on mount (/api/payments)
-  useEffect(() => {
-    let isMounted = true;
-    fetch('/api/payments')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isMounted) return;
-        if (data && data.ok && Array.isArray(data.payments) && data.payments.length > 0) {
-          const formatted = data.payments.map(formatPaymentRecord);
-          setRecords((prev) => {
-            const merged = [...formatted];
-            prev.forEach((p) => {
-              if (!merged.some((m) => m.id === p.id)) {
-                merged.push(formatPaymentRecord(p));
-              }
-            });
-            try {
-              localStorage.setItem('growthline_payment_records', JSON.stringify(merged));
-            } catch (e) { }
-            return merged;
+  // Fetch authoritative payments from backend (/api/payments)
+  const fetchPayments = async (showToast = false) => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch('/api/payments?t=' + Date.now());
+      const data = await res.json();
+      if (data && data.ok && Array.isArray(data.payments)) {
+        const clean = data.payments
+          .map(formatPaymentRecord)
+          .filter((r) => !isTestingPaymentRecord(r));
+        setRecords(clean);
+        try {
+          localStorage.setItem('growthline_payment_records', JSON.stringify(clean));
+        } catch (e) { }
+        if (showToast) {
+          Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'success',
+            title: `Synced ${clean.length} live payment records`,
+            showConfirmButton: false,
+            timer: 2000,
           });
         }
-      })
-      .catch(() => { });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Auto-sync real newly registered accounts from Desk 1
-  useEffect(() => {
-    if (!customers || customers.length === 0) return;
-    setRecords((prev) => {
-      let updated = [...prev];
-      let hasChange = false;
-
-      customers.forEach((c) => {
-        if (c.amountPaid || c.paymentStatus === 'paid') {
-          const exists = updated.some(
-            (r) =>
-              (r.phone && r.phone === c.phone) ||
-              (r.company && (r.company === c.companyName || r.company === c.name))
-          );
-          if (!exists) {
-            hasChange = true;
-            const amt = c.amountPaid || c.balance || 1200;
-            const newRec = formatPaymentRecord({
-              id: `pay_reg_${c.id || Date.now()}`,
-              receiptNumber: `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-              company: c.companyName || c.name,
-              contact: c.contactPerson || c.contact || 'Account Admin',
-              phone: c.phone || '9980820319',
-              city: c.city || 'India',
-              type: 'registration',
-              typeLabel: 'Registration Package',
-              amount: amt,
-              gstAmount: Math.round(amt * 0.18),
-              total: amt,
-              paymentMode: 'Razorpay UPI (Live)',
-              utr: `rzp_live_${(c.phone || '').slice(-6)}`,
-              date: c.registeredAt || getLiveNowFormatted(),
-              status: 'paid',
-              runwayAdded: c.runwayDays || Math.floor(amt / 300),
-              notes: 'Self-Registered Customer Intake (#register)',
-            });
-            updated.unshift(newRec);
-          }
-        }
-      });
-
-      if (hasChange) {
-        try {
-          localStorage.setItem('growthline_payment_records', JSON.stringify(updated));
-        } catch (e) { }
-        return updated;
       }
-      return prev;
-    });
-  }, [customers]);
+    } catch (err) {
+      console.warn('Failed to fetch payments:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPayments(false);
+  }, []);
 
   // Listen to cross-desk storage / event updates
   useEffect(() => {
     const handleNewPayment = (e) => {
       const rec = e?.detail;
-      if (rec) {
+      if (rec && !isTestingPaymentRecord(rec)) {
         const formatted = formatPaymentRecord(rec);
         setRecords((prev) => [formatted, ...prev.filter((r) => r.id !== formatted.id)]);
       }
     };
+    const handlePaymentDeleted = (e) => {
+      const delId = e?.detail?.id;
+      const delReceipt = e?.detail?.receiptNumber;
+      if (delId || delReceipt) {
+        setRecords((prev) => prev.filter((r) => r.id !== delId && r.receiptNumber !== delReceipt));
+      }
+    };
     const handlePostgresSynced = (e) => {
       const state = e?.detail;
-      if (state && Array.isArray(state.payments) && state.payments.length > 0) {
-        setRecords(state.payments.map(formatPaymentRecord));
+      if (state && Array.isArray(state.payments)) {
+        const clean = state.payments.map(formatPaymentRecord).filter((r) => !isTestingPaymentRecord(r));
+        setRecords(clean);
+        try {
+          localStorage.setItem('growthline_payment_records', JSON.stringify(clean));
+        } catch (err) { }
       }
     };
     const handleStorage = (e) => {
       if (e.key === 'growthline_payment_records' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) setRecords(parsed.map(formatPaymentRecord));
+          if (Array.isArray(parsed)) {
+            setRecords(parsed.map(formatPaymentRecord).filter((r) => !isTestingPaymentRecord(r)));
+          }
         } catch (err) { }
       }
     };
 
     window.addEventListener('growthline_payment_recorded', handleNewPayment);
+    window.addEventListener('growthline_payment_deleted', handlePaymentDeleted);
     window.addEventListener('growthline_postgres_synced', handlePostgresSynced);
     window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('growthline_payment_recorded', handleNewPayment);
+      window.removeEventListener('growthline_payment_deleted', handlePaymentDeleted);
       window.removeEventListener('growthline_postgres_synced', handlePostgresSynced);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
   const saveRecords = (newList) => {
-    setRecords(newList);
+    const clean = newList.filter((r) => !isTestingPaymentRecord(r));
+    setRecords(clean);
     try {
-      localStorage.setItem('growthline_payment_records', JSON.stringify(newList));
+      localStorage.setItem('growthline_payment_records', JSON.stringify(clean));
     } catch (e) { }
+  };
+
+  // Delete payment record from backend and local state
+  const handleDeletePayment = async (r) => {
+    const receiptLabel = r.receiptNumber || r.receiptNo || r.receipt_number || r.id;
+    const confirm = await Swal.fire({
+      title: 'Delete Payment Record?',
+      html: `Are you sure you want to delete payment <b>${receiptLabel}</b> (₹${Number(r.amount || 0).toLocaleString('en-IN')})?<br/><br/><span style="font-size:0.85rem;color:#ef4444;">This will remove the payment entry from the ledger and adjust associated customer balances.</span>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: 'Cancel',
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      const targetId = r.id || r.receiptNumber;
+      const res = await crmApi.deletePayment(targetId);
+      if (res && res.ok) {
+        setRecords((prev) => {
+          const next = prev.filter((p) => p.id !== r.id && p.receiptNumber !== r.receiptNumber);
+          try {
+            localStorage.setItem('growthline_payment_records', JSON.stringify(next));
+          } catch (e) { }
+          return next;
+        });
+
+        window.dispatchEvent(
+          new CustomEvent('growthline_payment_deleted', {
+            detail: { id: r.id, receiptNumber: r.receiptNumber },
+          })
+        );
+
+        Swal.fire({
+          icon: 'success',
+          title: 'Payment Deleted',
+          text: `Payment ${receiptLabel} removed successfully.`,
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      } else {
+        throw new Error(res?.error || 'Failed to delete payment');
+      }
+    } catch (err) {
+      console.error('Delete payment error:', err);
+      // Remove locally even if network fails or row was already gone
+      setRecords((prev) => {
+        const next = prev.filter((p) => p.id !== r.id && p.receiptNumber !== r.receiptNumber);
+        try {
+          localStorage.setItem('growthline_payment_records', JSON.stringify(next));
+        } catch (e) { }
+        return next;
+      });
+      Swal.fire({
+        icon: 'info',
+        title: 'Removed from View',
+        text: `Record ${receiptLabel} removed from current view.`,
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    }
   };
 
   // Open Add Modal with default pre-selection
@@ -4004,6 +4101,26 @@ export function PaymentCollectionDesk({
             Master ledger recording which customers completed registration payments, invoice settlements, and marketing wallet top-ups.
           </p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            className="sales-btn-secondary"
+            onClick={() => fetchPayments(true)}
+            disabled={isRefreshing}
+            style={{
+              padding: '6px 14px',
+              fontSize: '0.82rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: isRefreshing ? 'wait' : 'pointer',
+            }}
+            title="Refresh payments from live server"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            {isRefreshing ? 'Syncing...' : '↻ Sync Live'}
+          </button>
+        </div>
       </div>
 
       {/* 2. KPI Quad Grid */}
@@ -4173,34 +4290,53 @@ export function PaymentCollectionDesk({
                     </td>
 
                     <td style={{ textAlign: 'right' }}>
-                      {isPaid ? (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                        {isPaid ? (
+                          <button
+                            type="button"
+                            className="sales-btn-secondary"
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: '0.74rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                            }}
+                            onClick={() => setActiveReceipt(r)}
+                          >
+                            <FileText size={13} /> View Receipt
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="sales-btn-primary"
+                            style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                            onClick={() => {
+                              setActiveInv(r);
+                              setUtrInput(`UTR-HDFC-${Math.floor(100000 + Math.random() * 900000)}`);
+                            }}
+                          >
+                            Reconcile UTR
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="sales-btn-secondary"
                           style={{
-                            padding: '4px 10px',
+                            padding: '4px 8px',
                             fontSize: '0.74rem',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: 5,
+                            color: '#ef4444',
+                            borderColor: '#fecaca',
+                            background: '#fef2f2',
                           }}
-                          onClick={() => setActiveReceipt(r)}
+                          onClick={() => handleDeletePayment(r)}
+                          title="Delete payment entry"
                         >
-                          <FileText size={13} /> View Receipt
+                          <Trash2 size={13} />
                         </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="sales-btn-primary"
-                          style={{ padding: '4px 10px', fontSize: '0.75rem' }}
-                          onClick={() => {
-                            setActiveInv(r);
-                            setUtrInput(`UTR-HDFC-${Math.floor(100000 + Math.random() * 900000)}`);
-                          }}
-                        >
-                          Reconcile UTR
-                        </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );

@@ -195,6 +195,15 @@ export const crmApi = {
   },
 
   /**
+   * Delete a specific payment record by receipt number, UTR, or ID
+   */
+  async deletePayment(id) {
+    return apiRequest(`/payments/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
    * Retrieve all failed transactions across all customers for Sales desk
    */
   async getFailedTransactions() {

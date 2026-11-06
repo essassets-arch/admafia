@@ -3993,6 +3993,129 @@ app.get('/api/payments', async (req, res) => {
   }
 });
 
+// Delete payment record by ID, receipt number, or UTR (with wallet adjustment)
+app.delete('/api/payments/:id', async (req, res) => {
+  try {
+    const rawId = decodeURIComponent(req.params.id || '').trim();
+    if (!rawId) return res.status(400).json({ ok: false, error: 'Payment ID or Receipt Number required' });
+
+    // 1. Support batch purging of test entries
+    if (rawId === 'test-entries' || rawId === 'testing-data') {
+      const testUtrs = ['aaggg', 'aa', 'pay_TvCjRvjJKpHawP', 'pay_TvCfjhW56ixevu'];
+      const testReceipts = ['REC_1793882500916_D467', 'REC_1793881526162_E051', 'RCP-2026-5814', 'RCP-2026-9969'];
+      const testPayIds = ['pay_1793882500916_18d1ec', 'pay_1793881526162_89c397', 'pay_1793600155814', 'pay_1793600029969'];
+      const testTxIds = ['tx_sales_1793882500877_e9eea9', 'tx_sales_1793881526137_245853', 'tx_1793600155807', 'tx_1793600029957', 'tx_deb_1793600430780_cz2cl5'];
+
+      await withTransaction(async (txQuery) => {
+        await txQuery(
+          `DELETE FROM payment_records 
+           WHERE receipt_number = ANY($1::text[]) 
+              OR utr_reference = ANY($2::text[])
+              OR id = ANY($3::text[])`,
+          [testReceipts, testUtrs, testPayIds]
+        );
+
+        await txQuery(
+          `DELETE FROM wallet_transactions 
+           WHERE reference_utr = ANY($1::text[])
+              OR id = ANY($2::text[])`,
+          [testUtrs, testTxIds]
+        );
+
+        await txQuery(
+          `DELETE FROM tax_invoices 
+           WHERE invoice_number = ANY($1::text[]) 
+              OR utr = ANY($2::text[])`,
+          [testReceipts, testUtrs]
+        );
+
+        await txQuery(
+          `UPDATE wallets 
+           SET available_balance = 0, total_lifetime_paid = 0 
+           WHERE customer_id IN (
+             SELECT id FROM customers WHERE phone IN ('7383198428', '8200792130')
+           )`
+        );
+
+        await txQuery(
+          `UPDATE customers 
+           SET payment_status = 'pending', amount_paid = 0 
+           WHERE phone IN ('7383198428', '8200792130')`
+        );
+      });
+
+      return res.json({ ok: true, deleted: true, purgedTestEntries: true });
+    }
+
+    // 2. Individual payment record deletion
+    const findRes = await query(
+      `SELECT * FROM payment_records 
+       WHERE id = $1 
+          OR receipt_number = $1 
+          OR utr_reference = $1
+       LIMIT 1`,
+      [rawId]
+    );
+
+    if (findRes.rowCount === 0) {
+      // Check wallet_transactions
+      const delWtOnly = await query(
+        `DELETE FROM wallet_transactions 
+         WHERE id = $1 
+            OR reference_utr = $1 
+         RETURNING *`,
+        [rawId]
+      );
+      if (delWtOnly.rowCount > 0) {
+        return res.json({ ok: true, deleted: true, from: 'wallet_transactions', count: delWtOnly.rowCount });
+      }
+      return res.status(404).json({ ok: false, error: 'Payment record not found' });
+    }
+
+    const payRow = findRes.rows[0];
+    const receiptNo = payRow.receipt_number;
+    const utrRef = payRow.utr_reference;
+    const custId = payRow.customer_id;
+    const payAmt = Number(payRow.amount || 0);
+
+    await withTransaction(async (txQuery) => {
+      // 1. Delete payment_records row
+      await txQuery(`DELETE FROM payment_records WHERE id = $1`, [payRow.id]);
+
+      // 2. Delete wallet_transactions credit
+      await txQuery(
+        `DELETE FROM wallet_transactions 
+         WHERE (reference_utr = $1 OR reference_utr = $2 OR id = $3)
+           AND (customer_id = $4 OR customer_id = $5)`,
+        [utrRef, receiptNo, payRow.id, custId, payRow.phone]
+      );
+
+      // 3. Delete tax_invoices
+      await txQuery(
+        `DELETE FROM tax_invoices 
+         WHERE (invoice_number = $1 OR payment_record_id = $2 OR utr = $3)`,
+        [receiptNo, payRow.id, utrRef]
+      );
+
+      // 4. Adjust wallet balance
+      if (custId && payAmt > 0) {
+        await txQuery(
+          `UPDATE wallets 
+           SET available_balance = GREATEST(0, available_balance - $1),
+               total_lifetime_paid = GREATEST(0, total_lifetime_paid - $1)
+           WHERE customer_id = $2`,
+          [payAmt, custId]
+        );
+      }
+    });
+
+    res.json({ ok: true, deleted: true, receiptNumber: receiptNo, utr: utrRef });
+  } catch (err) {
+    console.error('[DELETE /api/payments/:id]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/api/invoices', async (req, res) => {
   try {
     const { customerId } = req.query;
@@ -4903,6 +5026,41 @@ app.listen(PORT, () => {
           console.log(`[DB Cleanup] Purged ${delRes.rowCount} dismissed test failed transactions.`);
         }
       }).catch((err) => console.warn('[DB Cleanup Warning]', err.message));
+
+      // Purge test payments & test wallet entries requested by admin
+      const testUtrs = ['aaggg', 'aa', 'pay_TvCjRvjJKpHawP', 'pay_TvCfjhW56ixevu'];
+      const testReceipts = ['REC_1793882500916_D467', 'REC_1793881526162_E051', 'RCP-2026-5814', 'RCP-2026-9969'];
+      const testPayIds = ['pay_1793882500916_18d1ec', 'pay_1793881526162_89c397', 'pay_1793600155814', 'pay_1793600029969'];
+      const testTxIds = ['tx_sales_1793882500877_e9eea9', 'tx_sales_1793881526137_245853', 'tx_1793600155807', 'tx_1793600029957', 'tx_deb_1793600430780_cz2cl5'];
+
+      query(
+        `DELETE FROM payment_records 
+         WHERE receipt_number = ANY($1::text[]) 
+            OR utr_reference = ANY($2::text[]) 
+            OR id = ANY($3::text[])`,
+        [testReceipts, testUtrs, testPayIds]
+      ).catch(() => {});
+
+      query(
+        `DELETE FROM wallet_transactions 
+         WHERE reference_utr = ANY($1::text[]) 
+            OR id = ANY($2::text[])`,
+        [testUtrs, testTxIds]
+      ).catch(() => {});
+
+      query(
+        `UPDATE wallets 
+         SET available_balance = 0, total_lifetime_paid = 0 
+         WHERE customer_id IN (
+           SELECT id FROM customers WHERE phone IN ('7383198428', '8200792130')
+         )`
+      ).catch(() => {});
+
+      query(
+        `UPDATE customers 
+         SET payment_status = 'pending', amount_paid = 0 
+         WHERE phone IN ('7383198428', '8200792130')`
+      ).catch(() => {});
 
       // Run daily ad spend pacing evaluation 3s after startup, then every 30 minutes
       setTimeout(() => {

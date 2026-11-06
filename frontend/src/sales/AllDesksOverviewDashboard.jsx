@@ -89,6 +89,13 @@ export default function AllDesksOverviewDashboard({
       const newPay = e?.detail;
       if (newPay) setPaymentRecords((prev) => [newPay, ...prev.filter((p) => p.id !== newPay.id)]);
     };
+    const handlePaymentDeleted = (e) => {
+      const delId = e?.detail?.id;
+      const delReceipt = e?.detail?.receiptNumber;
+      if (delId || delReceipt) {
+        setPaymentRecords((prev) => prev.filter((p) => p.id !== delId && p.receiptNumber !== delReceipt));
+      }
+    };
     const handleCustomerSync = () => {
       try {
         const rawPay = localStorage.getItem('growthline_payment_records');
@@ -99,12 +106,14 @@ export default function AllDesksOverviewDashboard({
     };
     window.addEventListener('growthline_lead_added', handleLeadAdded);
     window.addEventListener('growthline_payment_recorded', handlePaymentAdded);
+    window.addEventListener('growthline_payment_deleted', handlePaymentDeleted);
     window.addEventListener('growthline_customer_registered', handleCustomerSync);
     window.addEventListener('growthline_active_user_changed', handleCustomerSync);
     window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('growthline_lead_added', handleLeadAdded);
       window.removeEventListener('growthline_payment_recorded', handlePaymentAdded);
+      window.removeEventListener('growthline_payment_deleted', handlePaymentDeleted);
       window.removeEventListener('growthline_customer_registered', handleCustomerSync);
       window.removeEventListener('growthline_active_user_changed', handleCustomerSync);
       window.removeEventListener('storage', handleStorage);
