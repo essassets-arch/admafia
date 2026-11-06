@@ -153,7 +153,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       if (h.includes('quer') || h.includes('support') || p.includes('quer') || p.includes('support')) return 'queries';
       if (h.includes('customer') || h.includes('registration')) return 'customers';
       if (h.includes('overview') || h.includes('dashboard') || h === '#overview' || h === '#dashboard' || h === '#sales' || h === '' || h === '#') return 'overview';
-    } catch (e) {}
+    } catch (e) { }
     return 'overview';
   };
 
@@ -167,7 +167,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed.length;
       }
-    } catch (_) {}
+    } catch (_) { }
     return 0;
   });
 
@@ -178,9 +178,9 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         setBalanceLogsCount(res.logs.length);
         try {
           localStorage.setItem('growthline_balance_logs', JSON.stringify(res.logs));
-        } catch (_) {}
+        } catch (_) { }
       }
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   const updateFailedCount = React.useCallback(async () => {
@@ -190,10 +190,10 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         setFailedTxCount(res.failedTransactions.length);
         try {
           localStorage.setItem('growthline_failed_transactions', JSON.stringify(res.failedTransactions));
-        } catch (e) {}
+        } catch (e) { }
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       const raw = localStorage.getItem('growthline_failed_transactions');
@@ -203,860 +203,860 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
           setFailedTxCount(parsed.length);
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   useEffect(() => {
     updateFailedCount();
-    updateBalanceLogsCount();
-  }, [updateFailedCount, updateBalanceLogsCount, activeTab]);
+  updateBalanceLogsCount();
+}, [updateFailedCount, updateBalanceLogsCount, activeTab]);
 
-  const navigateToDesk = (deskKey, targetHash) => {
-    setActiveTab(deskKey);
+const navigateToDesk = (deskKey, targetHash) => {
+  setActiveTab(deskKey);
+  setIsMobileDrawerOpen(false);
+  try {
+    if (window.location.hash !== targetHash) {
+      window.location.hash = targetHash;
+    }
+  } catch (e) { }
+};
+
+// Shared Authoritative State across Desks (synced with #register)
+const [customers, setCustomersState] = useState(loadStoredCustomers);
+const [verifications, setVerificationsState] = useState(loadStoredVerifications);
+const [invoices, setInvoices] = useState(INITIAL_INVOICES);
+const [allTransactions, setAllTransactions] = useState(() => {
+  try {
+    const raw = localStorage.getItem('growthline_all_transactions');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
+      }
+    }
+  } catch (e) { }
+  return [];
+});
+const [queries, setQueries] = useState(() => {
+  try {
+    const raw = localStorage.getItem('growthline_support_queries');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) { }
+  return INITIAL_QUERIES;
+});
+const [tasks, setTasks] = useState(INITIAL_TASKS);
+const [newRegAlert, setNewRegAlert] = useState(null);
+const [liveNow, setLiveNow] = useState(() => new Date());
+
+// Real-time 1-second clock updater
+useEffect(() => {
+  const timer = setInterval(() => setLiveNow(new Date()), 1000);
+  return () => clearInterval(timer);
+}, []);
+
+// Wrapper to save customers persistently
+const setCustomers = useCallback((updater) => {
+  setCustomersState((prev) => {
+    const rawNext = typeof updater === 'function' ? updater(prev) : updater;
+    const next = Array.isArray(rawNext) ? rawNext.map(sanitizeCustomer) : rawNext;
+    try {
+      localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(next));
+    } catch (e) {
+      console.error('Storage error', e);
+    }
+    return next;
+  });
+}, []);
+
+// Wrapper to save verifications persistently
+const setVerifications = useCallback((updater) => {
+  setVerificationsState((prev) => {
+    const next = typeof updater === 'function' ? updater(prev) : updater;
+    try {
+      localStorage.setItem(STORAGE_VERIFICATIONS, JSON.stringify(next));
+    } catch (e) {
+      console.error('Storage error', e);
+    }
+    return next;
+  });
+}, []);
+
+// Real-time synchronization when a customer registers at http://localhost:5173/#register or in PostgreSQL
+useEffect(() => {
+  crmApi.syncStateFromPostgres().then((state) => {
+    if (state) {
+      if (Array.isArray(state.customers)) {
+        const sanitized = state.customers.map(sanitizeCustomer);
+        setCustomersState(sanitized);
+        try { localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(sanitized)); } catch (_) { }
+      }
+      if (Array.isArray(state.verifications)) {
+        const sanitizedV = state.verifications.map(sanitizeVerification);
+        setVerificationsState(sanitizedV);
+        try { localStorage.setItem(STORAGE_VERIFICATIONS, JSON.stringify(sanitizedV)); } catch (_) { }
+      }
+      if (Array.isArray(state.payments)) setInvoices(state.payments);
+      if (Array.isArray(state.queries)) setQueries(state.queries);
+      if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
+      if (Array.isArray(state.allTransactions)) {
+        const clean = state.allTransactions.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
+        setAllTransactions(clean);
+        try { localStorage.setItem('growthline_all_transactions', JSON.stringify(clean)); } catch (_) { }
+      }
+    }
+  });
+
+  const handlePostgresSynced = (e) => {
+    const state = e?.detail;
+    if (state) {
+      if (Array.isArray(state.customers)) setCustomersState(state.customers);
+      if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
+      if (Array.isArray(state.payments)) setInvoices(state.payments);
+      if (Array.isArray(state.queries)) setQueries(state.queries);
+      if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
+      if (Array.isArray(state.allTransactions)) {
+        const clean = state.allTransactions.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
+        setAllTransactions(clean);
+      }
+    }
+  };
+
+  const handleNewRegistration = (e) => {
+    const newCust = e?.detail;
+    setCustomersState(loadStoredCustomers());
+    setVerificationsState(loadStoredVerifications());
+
+    if (newCust) {
+      setNewRegAlert(`🎉 New Customer Registered: "${newCust.name}" (+91 ${newCust.phone})! Added to Customer Registrations desk.`);
+      setTimeout(() => setNewRegAlert(null), 6000);
+    }
+  };
+
+  const handleStorageChange = (e) => {
+    if (e.key === STORAGE_CUSTOMERS || e.key === STORAGE_VERIFICATIONS) {
+      setCustomersState(loadStoredCustomers());
+      setVerificationsState(loadStoredVerifications());
+    }
+  };
+
+  const handleActiveUserSync = () => {
+    setCustomersState(loadStoredCustomers());
+    setVerificationsState(loadStoredVerifications());
+  };
+
+  const handleHashOrPopState = () => {
+    const desk = getDeskFromUrl();
+    setActiveTab(desk);
     setIsMobileDrawerOpen(false);
-    try {
-      if (window.location.hash !== targetHash) {
-        window.location.hash = targetHash;
-      }
-    } catch (e) {}
   };
 
-  // Shared Authoritative State across Desks (synced with #register)
-  const [customers, setCustomersState] = useState(loadStoredCustomers);
-  const [verifications, setVerificationsState] = useState(loadStoredVerifications);
-  const [invoices, setInvoices] = useState(INITIAL_INVOICES);
-  const [allTransactions, setAllTransactions] = useState(() => {
-    try {
-      const raw = localStorage.getItem('growthline_all_transactions');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
-        }
-      }
-    } catch (e) {}
-    return [];
-  });
-  const [queries, setQueries] = useState(() => {
-    try {
-      const raw = localStorage.getItem('growthline_support_queries');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {}
-    return INITIAL_QUERIES;
-  });
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
-  const [newRegAlert, setNewRegAlert] = useState(null);
-  const [liveNow, setLiveNow] = useState(() => new Date());
+  window.addEventListener('growthline_postgres_synced', handlePostgresSynced);
+  window.addEventListener('growthline_failed_tx_updated', updateFailedCount);
+  window.addEventListener('growthline_customer_registered', handleNewRegistration);
+  window.addEventListener('growthline_active_user_changed', handleActiveUserSync);
+  window.addEventListener('growthline_payment_recorded', handleActiveUserSync);
+  window.addEventListener('storage', handleStorageChange);
+  window.addEventListener('hashchange', handleHashOrPopState);
+  window.addEventListener('popstate', handleHashOrPopState);
 
-  // Real-time 1-second clock updater
-  useEffect(() => {
-    const timer = setInterval(() => setLiveNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Wrapper to save customers persistently
-  const setCustomers = useCallback((updater) => {
-    setCustomersState((prev) => {
-      const rawNext = typeof updater === 'function' ? updater(prev) : updater;
-      const next = Array.isArray(rawNext) ? rawNext.map(sanitizeCustomer) : rawNext;
-      try {
-        localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(next));
-      } catch (e) {
-        console.error('Storage error', e);
-      }
-      return next;
-    });
-  }, []);
-
-  // Wrapper to save verifications persistently
-  const setVerifications = useCallback((updater) => {
-    setVerificationsState((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      try {
-        localStorage.setItem(STORAGE_VERIFICATIONS, JSON.stringify(next));
-      } catch (e) {
-        console.error('Storage error', e);
-      }
-      return next;
-    });
-  }, []);
-
-  // Real-time synchronization when a customer registers at http://localhost:5173/#register or in PostgreSQL
-  useEffect(() => {
-    crmApi.syncStateFromPostgres().then((state) => {
-      if (state) {
-        if (Array.isArray(state.customers)) {
-          const sanitized = state.customers.map(sanitizeCustomer);
-          setCustomersState(sanitized);
-          try { localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(sanitized)); } catch (_) {}
-        }
-        if (Array.isArray(state.verifications)) {
-          const sanitizedV = state.verifications.map(sanitizeVerification);
-          setVerificationsState(sanitizedV);
-          try { localStorage.setItem(STORAGE_VERIFICATIONS, JSON.stringify(sanitizedV)); } catch (_) {}
-        }
-        if (Array.isArray(state.payments)) setInvoices(state.payments);
-        if (Array.isArray(state.queries)) setQueries(state.queries);
-        if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
-        if (Array.isArray(state.allTransactions)) {
-          const clean = state.allTransactions.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
-          setAllTransactions(clean);
-          try { localStorage.setItem('growthline_all_transactions', JSON.stringify(clean)); } catch (_) {}
-        }
-      }
-    });
-
-    const handlePostgresSynced = (e) => {
-      const state = e?.detail;
-      if (state) {
-        if (Array.isArray(state.customers)) setCustomersState(state.customers);
-        if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
-        if (Array.isArray(state.payments)) setInvoices(state.payments);
-        if (Array.isArray(state.queries)) setQueries(state.queries);
-        if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
-        if (Array.isArray(state.allTransactions)) {
-          const clean = state.allTransactions.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
-          setAllTransactions(clean);
-        }
-      }
-    };
-
-    const handleNewRegistration = (e) => {
-      const newCust = e?.detail;
-      setCustomersState(loadStoredCustomers());
-      setVerificationsState(loadStoredVerifications());
-
-      if (newCust) {
-        setNewRegAlert(`🎉 New Customer Registered: "${newCust.name}" (+91 ${newCust.phone})! Added to Customer Registrations desk.`);
-        setTimeout(() => setNewRegAlert(null), 6000);
-      }
-    };
-
-    const handleStorageChange = (e) => {
-      if (e.key === STORAGE_CUSTOMERS || e.key === STORAGE_VERIFICATIONS) {
-        setCustomersState(loadStoredCustomers());
-        setVerificationsState(loadStoredVerifications());
-      }
-    };
-
-    const handleActiveUserSync = () => {
-      setCustomersState(loadStoredCustomers());
-      setVerificationsState(loadStoredVerifications());
-    };
-
-    const handleHashOrPopState = () => {
-      const desk = getDeskFromUrl();
-      setActiveTab(desk);
-      setIsMobileDrawerOpen(false);
-    };
-
-    window.addEventListener('growthline_postgres_synced', handlePostgresSynced);
-    window.addEventListener('growthline_failed_tx_updated', updateFailedCount);
-    window.addEventListener('growthline_customer_registered', handleNewRegistration);
-    window.addEventListener('growthline_active_user_changed', handleActiveUserSync);
-    window.addEventListener('growthline_payment_recorded', handleActiveUserSync);
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('hashchange', handleHashOrPopState);
-    window.addEventListener('popstate', handleHashOrPopState);
-
-    return () => {
-      window.removeEventListener('growthline_postgres_synced', handlePostgresSynced);
-      window.removeEventListener('growthline_failed_tx_updated', updateFailedCount);
-      window.removeEventListener('growthline_customer_registered', handleNewRegistration);
-      window.removeEventListener('growthline_active_user_changed', handleActiveUserSync);
-      window.removeEventListener('growthline_payment_recorded', handleActiveUserSync);
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('hashchange', handleHashOrPopState);
-      window.removeEventListener('popstate', handleHashOrPopState);
-    };
-  }, []);
-
-  // Dynamic Badge Calculations
-  const pendingVerificationBadge = verifications.length;
-  const approvedMembersList = customers.filter((c) => {
-    const isPaymentDone =
-      c.paymentStatus === 'paid' ||
-      c.payment_status === 'paid' ||
-      Number(c.amountPaid || 0) > 0 ||
-      Number(c.balance || c.walletBalance || 0) > 0;
-    const isProfileDone =
-      c.profileStatus === 'complete' ||
-      c.profile_status === 'complete' ||
-      Number(c.kycPercent || c.kyc_percent || 0) >= 100;
-    return (isPaymentDone && isProfileDone) || c.verified === true;
-  });
-  const approvedMembersBadge = approvedMembersList.length;
-  const lowWalletsCount = customers.filter(
-    (c) => (c.balance || 0) < 1000 || (c.runwayDays || 0) <= 2
-  ).length;
-  const walletsBadge = lowWalletsCount;
-  const todayTasksCount = tasks.filter(
-    (t) => t.dueStatus === 'today' && t.status !== 'completed'
-  ).length;
-  const todayTasksBadge = todayTasksCount;
-
-  // Cross-Desk Handlers: When payment approved in Desk 2, credit wallet
-  const handleVerificationApprove = (approvedItem) => {
-    setCustomers((prev) =>
-      prev.map((c) => {
-        if (c.id === approvedItem.customerId) {
-          const newBal = (c.balance || 0) + (approvedItem.amount || 0);
-          return {
-            ...c,
-            status: 'active',
-            balance: newBal,
-            runwayDays: Math.floor(newBal / 300),
-            verified: true,
-          };
-        }
-        return c;
-      })
-    );
+  return () => {
+    window.removeEventListener('growthline_postgres_synced', handlePostgresSynced);
+    window.removeEventListener('growthline_failed_tx_updated', updateFailedCount);
+    window.removeEventListener('growthline_customer_registered', handleNewRegistration);
+    window.removeEventListener('growthline_active_user_changed', handleActiveUserSync);
+    window.removeEventListener('growthline_payment_recorded', handleActiveUserSync);
+    window.removeEventListener('storage', handleStorageChange);
+    window.removeEventListener('hashchange', handleHashOrPopState);
+    window.removeEventListener('popstate', handleHashOrPopState);
   };
+}, []);
 
-  return (
-    <div className="sales-app-root">
-      {/* Real-time Registration Notification Toast */}
-      {newRegAlert && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 16,
-            right: 24,
-            zIndex: 9999,
-            background: '#0f172a',
-            color: '#ffffff',
-            padding: '12px 20px',
-            borderRadius: 12,
-            boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            border: '1px solid #334155',
-            animation: 'modal-pop-in 0.2s ease',
-          }}
-        >
-          <Sparkles size={18} color="#f59e0b" />
-          <span>{newRegAlert}</span>
-          <button
-            type="button"
-            onClick={() => setNewRegAlert(null)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              fontWeight: 800,
-              fontSize: '1rem',
-              marginLeft: 8,
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
+// Dynamic Badge Calculations
+const pendingVerificationBadge = verifications.length;
+const approvedMembersList = customers.filter((c) => {
+  const isPaymentDone =
+    c.paymentStatus === 'paid' ||
+    c.payment_status === 'paid' ||
+    Number(c.amountPaid || 0) > 0 ||
+    Number(c.balance || c.walletBalance || 0) > 0;
+  const isProfileDone =
+    c.profileStatus === 'complete' ||
+    c.profile_status === 'complete' ||
+    Number(c.kycPercent || c.kyc_percent || 0) >= 100;
+  return (isPaymentDone && isProfileDone) || c.verified === true;
+});
+const approvedMembersBadge = approvedMembersList.length;
+const lowWalletsCount = customers.filter(
+  (c) => (c.balance || 0) < 1000 || (c.runwayDays || 0) <= 2
+).length;
+const walletsBadge = lowWalletsCount;
+const todayTasksCount = tasks.filter(
+  (t) => t.dueStatus === 'today' && t.status !== 'completed'
+).length;
+const todayTasksBadge = todayTasksCount;
 
-      {/* MOBILE RESPONSIVE TOP BAR (Visible on mobile/tablet viewports) */}
-      <header className="sales-mobile-top-bar">
+// Cross-Desk Handlers: When payment approved in Desk 2, credit wallet
+const handleVerificationApprove = (approvedItem) => {
+  setCustomers((prev) =>
+    prev.map((c) => {
+      if (c.id === approvedItem.customerId) {
+        const newBal = (c.balance || 0) + (approvedItem.amount || 0);
+        return {
+          ...c,
+          status: 'active',
+          balance: newBal,
+          runwayDays: Math.floor(newBal / 300),
+          verified: true,
+        };
+      }
+      return c;
+    })
+  );
+};
+
+return (
+  <div className="sales-app-root">
+    {/* Real-time Registration Notification Toast */}
+    {newRegAlert && (
+      <div
+        style={{
+          position: 'fixed',
+          top: 16,
+          right: 24,
+          zIndex: 9999,
+          background: '#0f172a',
+          color: '#ffffff',
+          padding: '12px 20px',
+          borderRadius: 12,
+          boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          fontSize: '0.86rem',
+          fontWeight: 700,
+          border: '1px solid #334155',
+          animation: 'modal-pop-in 0.2s ease',
+        }}
+      >
+        <Sparkles size={18} color="#f59e0b" />
+        <span>{newRegAlert}</span>
         <button
           type="button"
-          className="sales-btn-hamburger"
-          onClick={() => setIsMobileDrawerOpen(true)}
-          aria-label="Open Navigation Menu"
+          onClick={() => setNewRegAlert(null)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#94a3b8',
+            cursor: 'pointer',
+            fontWeight: 800,
+            fontSize: '1rem',
+            marginLeft: 8,
+          }}
         >
-          <Menu size={22} />
+          ✕
         </button>
-        <div className="sales-mobile-brand">
-          <img
-            src="/AdMafia-Logo.png"
-            alt="AdMafia"
-            style={{
-              height: 32,
-              width: 'auto',
-              objectFit: 'contain',
-              borderRadius: 6,
-              background: '#ffffff',
-              padding: '2px 4px',
-              border: '1px solid #e2e8f0',
-            }}
-          />
-          <div className="sales-mobile-brand-text">
-            <span>Ad<b>Mafia</b></span>
-            <span className="sales-ops-mini-badge">OPS</span>
-          </div>
-        </div>
-        <div className="sales-mobile-active-desk">
-          <span className="desk-pill pill-indigo" style={{ fontSize: '0.70rem', fontWeight: 800, textTransform: 'uppercase' }}>
-            {activeTab.replace('_', ' ')}
-          </span>
-        </div>
-      </header>
+      </div>
+    )}
 
-      {/* Mobile Drawer Backdrop */}
-      {isMobileDrawerOpen && (
-        <div
-          className="sales-mobile-backdrop"
-          onClick={() => setIsMobileDrawerOpen(false)}
-          aria-hidden="true"
+    {/* MOBILE RESPONSIVE TOP BAR (Visible on mobile/tablet viewports) */}
+    <header className="sales-mobile-top-bar">
+      <button
+        type="button"
+        className="sales-btn-hamburger"
+        onClick={() => setIsMobileDrawerOpen(true)}
+        aria-label="Open Navigation Menu"
+      >
+        <Menu size={22} />
+      </button>
+      <div className="sales-mobile-brand">
+        <img
+          src="/AdMafia-Logo.png"
+          alt="AdMafia"
+          style={{
+            height: 32,
+            width: 'auto',
+            objectFit: 'contain',
+            borderRadius: 6,
+            background: '#ffffff',
+            padding: '2px 4px',
+            border: '1px solid #e2e8f0',
+          }}
         />
-      )}
-
-      {/* 1. STICKY SIDEBAR NAVIGATION WITH 9 OPERATIONAL DESKS */}
-      <aside className={`sales-sidebar ${isMobileDrawerOpen ? 'mobile-open' : ''}`}>
-        <div className="sales-sidebar-top">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <img
-                src="/AdMafia-Logo.png"
-                alt="AdMafia Marketing"
-                style={{
-                  height: 42,
-                  width: 'auto',
-                  objectFit: 'contain',
-                  borderRadius: 8,
-                  background: '#ffffff',
-                  padding: '3px 6px',
-                  border: '1px solid #e2e8f0',
-                }}
-              />
-              <div>
-                <div
-                  style={{
-                    fontFamily: "'Bricolage Grotesque', system-ui",
-                    fontWeight: 800,
-                    fontSize: '1.1rem',
-                    color: '#0f172a',
-                    lineHeight: 1.1,
-                  }}
-                >
-                  Ad<b>Mafia</b>
-                </div>
-                <div
-                  style={{
-                    fontSize: '0.66rem',
-                    fontWeight: 800,
-                    color: '#4f46e5',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  Operations &amp; Support Hub
-                </div>
-              </div>
-            </div>
-
-            {/* Mobile Drawer Close Button */}
-            <button
-              type="button"
-              className="sales-mobile-drawer-close"
-              onClick={() => setIsMobileDrawerOpen(false)}
-              aria-label="Close Navigation Menu"
-            >
-              <X size={20} />
-            </button>
-          </div>
+        <div className="sales-mobile-brand-text">
+          <span>Ad<b>Mafia</b></span>
+          <span className="sales-ops-mini-badge">OPS</span>
         </div>
+      </div>
+      <div className="sales-mobile-active-desk">
+        <span className="desk-pill pill-indigo" style={{ fontSize: '0.70rem', fontWeight: 800, textTransform: 'uppercase' }}>
+          {activeTab.replace('_', ' ')}
+        </span>
+      </div>
+    </header>
 
-        {/* Sidebar Nav Items: The 9 Desks */}
-        <nav className="sales-sidebar-menu">
-          <div className="sales-nav-group-title">SUB ADMIN &amp; SUPPORT DESKS</div>
+    {/* Mobile Drawer Backdrop */}
+    {isMobileDrawerOpen && (
+      <div
+        className="sales-mobile-backdrop"
+        onClick={() => setIsMobileDrawerOpen(false)}
+        aria-hidden="true"
+      />
+    )}
 
-          {/* 0. Unified 1-Page Dashboard Overview */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('overview', '#dashboard')}
-            style={{
-              fontWeight: activeTab === 'overview' ? 800 : 600,
-            }}
-          >
-            <LayoutDashboard size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Dashboard Overview</span>
-            <span
-              className="sales-nav-badge"
+    {/* 1. STICKY SIDEBAR NAVIGATION WITH 9 OPERATIONAL DESKS */}
+    <aside className={`sales-sidebar ${isMobileDrawerOpen ? 'mobile-open' : ''}`}>
+      <div className="sales-sidebar-top">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img
+              src="/AdMafia-Logo.png"
+              alt="AdMafia Marketing"
               style={{
-                background: activeTab === 'overview' ? 'rgba(255,255,255,0.22)' : '#eff6ff',
-                color: activeTab === 'overview' ? '#ffffff' : '#1d4ed8',
-                borderColor: activeTab === 'overview' ? 'rgba(255,255,255,0.3)' : '#bfdbfe',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                fontWeight: 800,
-                fontSize: '0.68rem',
-                padding: '2px 8px',
+                height: 42,
                 width: 'auto',
-                minWidth: 'unset',
+                objectFit: 'contain',
+                borderRadius: 8,
+                background: '#ffffff',
+                padding: '3px 6px',
+                border: '1px solid #e2e8f0',
               }}
-            >
-              All 9 Desks
-            </span>
-          </button>
-
-          <div style={{ height: 1, background: '#f1f5f9', margin: '6px 8px 8px 8px' }} />
-
-          {/* 1. Customer Registrations */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'customers' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('customers', '#customers')}
-          >
-            <Users size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Customer Registrations</span>
-          </button>
-
-          {/* 2. Verification Audit */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'pending_verification' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('pending_verification', '#verification')}
-          >
-            <ShieldCheck size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Verification Audit</span>
-            <span
-              className="sales-nav-badge"
-              style={{
-                background: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
-                color: activeTab === 'pending_verification' ? '#ffffff' : '#059669',
-                borderColor: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                fontWeight: 800,
-              }}
-            >
-              {pendingVerificationBadge}
-            </span>
-          </button>
-
-          {/* 2B. Approved Members (Payment & Profile KYC Complete) */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'approved' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('approved', '#approved')}
-          >
-            <UserCheck size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Approved Members</span>
-            <span
-              className="sales-nav-badge"
-              style={{
-                background: activeTab === 'approved' ? 'rgba(255,255,255,0.22)' : '#f0fdf4',
-                color: activeTab === 'approved' ? '#ffffff' : '#15803d',
-                borderColor: activeTab === 'approved' ? 'rgba(255,255,255,0.3)' : '#bbf7d0',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                fontWeight: 800,
-              }}
-            >
-              {approvedMembersBadge}
-            </span>
-          </button>
-
-          {/* 3. Lead Management */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'leads' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('leads', '#leads')}
-          >
-            <Layers size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Lead Management</span>
-          </button>
-
-          {/* 4. Profile Completion */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'profiles' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('profiles', '#profiles')}
-          >
-            <FileCheck2 size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Profile Completion</span>
-          </button>
-
-          {/* 5. Payment Collection */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'payments' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('payments', '#payments')}
-          >
-            <CreditCard size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Payment Collection</span>
-          </button>
-
-          {/* 6. Wallets & Balances (Badge: 33) */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'wallets' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('wallets', '#wallets')}
-          >
-            <Wallet size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Wallets &amp; Balances</span>
-            <span
-              className="sales-nav-badge"
-              style={{
-                background: activeTab === 'wallets' ? 'rgba(255,255,255,0.22)' : '#eef2ff',
-                color: activeTab === 'wallets' ? '#ffffff' : '#4338ca',
-                borderColor: activeTab === 'wallets' ? 'rgba(255,255,255,0.3)' : '#c7d2fe',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                fontWeight: 800,
-              }}
-            >
-              {walletsBadge}
-            </span>
-          </button>
-
-          {/* Customer Balance Audit Logs */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'balance_logs' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('balance_logs', '#balance-logs')}
-            style={{
-              fontWeight: activeTab === 'balance_logs' ? 800 : 600,
-            }}
-          >
-            <Scale size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Balance Logs</span>
-            <span
-              className="sales-nav-badge"
-              style={{
-                background: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
-                color: activeTab === 'balance_logs' ? '#ffffff' : '#047857',
-                borderColor: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                fontWeight: 800,
-              }}
-            >
-              {balanceLogsCount || 'Live'}
-            </span>
-          </button>
-
-          {/* Failed Transactions Recovery Desk */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'failed_transactions' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('failed_transactions', '#failed-transactions')}
-          >
-            <AlertCircle size={18} strokeWidth={2.2} color={activeTab === 'failed_transactions' ? '#ffffff' : '#ef4444'} style={{ flexShrink: 0 }} />
-            <span>Failed Transactions</span>
-            <span
-              className="sales-nav-badge"
-              style={{
-                background: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.25)' : '#fee2e2',
-                color: activeTab === 'failed_transactions' ? '#ffffff' : '#b91c1c',
-                borderColor: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.3)' : '#fca5a5',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                fontWeight: 800,
-              }}
-            >
-              {failedTxCount}
-            </span>
-          </button>
-
-          {/* Master Transaction Logs Desk (All Verified, Failed, Pending Ledger) */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'transactions' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('transactions', '#transactions')}
-            style={{
-              fontWeight: activeTab === 'transactions' ? 800 : 600,
-            }}
-          >
-            <Receipt size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Transaction Logs</span>
-            <span
-              className="sales-nav-badge"
-              style={{
-                background: activeTab === 'transactions' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
-                color: activeTab === 'transactions' ? '#ffffff' : '#047857',
-                borderColor: activeTab === 'transactions' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                fontWeight: 800,
-              }}
-            >
-              {allTransactions.length || (invoices.length + failedTxCount)}
-            </span>
-          </button>
-
-          {/* 7. Query & Support */}
-          <button
-            type="button"
-            className={`sales-nav-btn ${activeTab === 'queries' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('queries', '#queries')}
-          >
-            <Headphones size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Query &amp; Support</span>
-            {queries.filter((q) => q.status === 'open').length > 0 && (
-              <span
-                className="sales-nav-badge"
+            />
+            <div>
+              <div
                 style={{
-                  background: activeTab === 'queries' ? 'rgba(255,255,255,0.22)' : '#fee2e2',
-                  color: activeTab === 'queries' ? '#ffffff' : '#b91c1c',
+                  fontFamily: "'Bricolage Grotesque', system-ui",
+                  fontWeight: 800,
+                  fontSize: '1.1rem',
+                  color: '#0f172a',
+                  lineHeight: 1.1,
                 }}
               >
-                {queries.filter((q) => q.status === 'open').length}
-              </span>
-            )}
-          </button>
+                Ad<b>Mafia</b>
+              </div>
+              <div
+                style={{
+                  fontSize: '0.66rem',
+                  fontWeight: 800,
+                  color: '#4f46e5',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Operations &amp; Support Hub
+              </div>
+            </div>
+          </div>
 
-          {/* 8. Lead Distribution */}
+          {/* Mobile Drawer Close Button */}
           <button
             type="button"
-            className={`sales-nav-btn ${activeTab === 'groups' ? 'active' : ''}`}
-            onClick={() => navigateToDesk('groups', '#groups')}
+            className="sales-mobile-drawer-close"
+            onClick={() => setIsMobileDrawerOpen(false)}
+            aria-label="Close Navigation Menu"
           >
-            <FolderTree size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
-            <span>Lead Distribution</span>
+            <X size={20} />
           </button>
-        </nav>
-
-        {/* Sidebar Footer */}
-        <div className="sales-sidebar-footer">
-          <div className="sales-rep-card">
-            <div className="sales-rep-avatar">{(activeUser.fullName || 'SE').slice(0, 2).toUpperCase()}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="sales-rep-name">{activeUser.fullName || 'Sales Executive'}</div>
-              <div className="sales-rep-role">{activeUser.role || 'Sales Operations'}</div>
-            </div>
-            <button
-              type="button"
-              className="sales-logout-icon"
-              title="Sign Out"
-              onClick={onSignOut}
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
         </div>
-      </aside>
+      </div>
 
-      {/* 2. MAIN OPERATIONS VIEWPORT (100% Full Width) */}
-      <main className="sales-main-viewport">
-        {/* Top Operational Bar */}
-        <header className="sales-topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span className="sales-status-badge">
-              <span className="sales-pulse-dot" />
-              Active Operations Desk
+      {/* Sidebar Nav Items: The 9 Desks */}
+      <nav className="sales-sidebar-menu">
+        <div className="sales-nav-group-title">SUB ADMIN &amp; SUPPORT DESKS</div>
+
+        {/* 0. Unified 1-Page Dashboard Overview */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'overview' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('overview', '#dashboard')}
+          style={{
+            fontWeight: activeTab === 'overview' ? 800 : 600,
+          }}
+        >
+          <LayoutDashboard size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Dashboard Overview</span>
+          <span
+            className="sales-nav-badge"
+            style={{
+              background: activeTab === 'overview' ? 'rgba(255,255,255,0.22)' : '#eff6ff',
+              color: activeTab === 'overview' ? '#ffffff' : '#1d4ed8',
+              borderColor: activeTab === 'overview' ? 'rgba(255,255,255,0.3)' : '#bfdbfe',
+              borderWidth: 1,
+              borderStyle: 'solid',
+              fontWeight: 800,
+              fontSize: '0.68rem',
+              padding: '2px 8px',
+              width: 'auto',
+              minWidth: 'unset',
+            }}
+          >
+            All 9 Desks
+          </span>
+        </button>
+
+        <div style={{ height: 1, background: '#f1f5f9', margin: '6px 8px 8px 8px' }} />
+
+        {/* 1. Customer Registrations */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'customers' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('customers', '#customers')}
+        >
+          <Users size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Customer Registrations</span>
+        </button>
+
+        {/* 2. Verification Audit */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'pending_verification' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('pending_verification', '#verification')}
+        >
+          <ShieldCheck size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Verification Audit</span>
+          <span
+            className="sales-nav-badge"
+            style={{
+              background: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
+              color: activeTab === 'pending_verification' ? '#ffffff' : '#059669',
+              borderColor: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
+              borderWidth: 1,
+              borderStyle: 'solid',
+              fontWeight: 800,
+            }}
+          >
+            {pendingVerificationBadge}
+          </span>
+        </button>
+
+        {/* 2B. Approved Members (Payment & Profile KYC Complete) */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'approved' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('approved', '#approved')}
+        >
+          <UserCheck size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Approved Members</span>
+          <span
+            className="sales-nav-badge"
+            style={{
+              background: activeTab === 'approved' ? 'rgba(255,255,255,0.22)' : '#f0fdf4',
+              color: activeTab === 'approved' ? '#ffffff' : '#15803d',
+              borderColor: activeTab === 'approved' ? 'rgba(255,255,255,0.3)' : '#bbf7d0',
+              borderWidth: 1,
+              borderStyle: 'solid',
+              fontWeight: 800,
+            }}
+          >
+            {approvedMembersBadge}
+          </span>
+        </button>
+
+        {/* 3. Lead Management */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'leads' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('leads', '#leads')}
+        >
+          <Layers size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Lead Management</span>
+        </button>
+
+        {/* 4. Profile Completion */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'profiles' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('profiles', '#profiles')}
+        >
+          <FileCheck2 size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Profile Completion</span>
+        </button>
+
+        {/* 5. Payment Collection */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'payments' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('payments', '#payments')}
+        >
+          <CreditCard size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Payment Collection</span>
+        </button>
+
+        {/* 6. Wallets & Balances (Badge: 33) */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'wallets' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('wallets', '#wallets')}
+        >
+          <Wallet size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Wallets &amp; Balances</span>
+          <span
+            className="sales-nav-badge"
+            style={{
+              background: activeTab === 'wallets' ? 'rgba(255,255,255,0.22)' : '#eef2ff',
+              color: activeTab === 'wallets' ? '#ffffff' : '#4338ca',
+              borderColor: activeTab === 'wallets' ? 'rgba(255,255,255,0.3)' : '#c7d2fe',
+              borderWidth: 1,
+              borderStyle: 'solid',
+              fontWeight: 800,
+            }}
+          >
+            {walletsBadge}
+          </span>
+        </button>
+
+        {/* Customer Balance Audit Logs */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'balance_logs' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('balance_logs', '#balance-logs')}
+          style={{
+            fontWeight: activeTab === 'balance_logs' ? 800 : 600,
+          }}
+        >
+          <Scale size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Balance Logs</span>
+          <span
+            className="sales-nav-badge"
+            style={{
+              background: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
+              color: activeTab === 'balance_logs' ? '#ffffff' : '#047857',
+              borderColor: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
+              borderWidth: 1,
+              borderStyle: 'solid',
+              fontWeight: 800,
+            }}
+          >
+            {balanceLogsCount || 'Live'}
+          </span>
+        </button>
+
+        {/* Failed Transactions Recovery Desk */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'failed_transactions' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('failed_transactions', '#failed-transactions')}
+        >
+          <AlertCircle size={18} strokeWidth={2.2} color={activeTab === 'failed_transactions' ? '#ffffff' : '#ef4444'} style={{ flexShrink: 0 }} />
+          <span>Failed Transactions</span>
+          <span
+            className="sales-nav-badge"
+            style={{
+              background: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.25)' : '#fee2e2',
+              color: activeTab === 'failed_transactions' ? '#ffffff' : '#b91c1c',
+              borderColor: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.3)' : '#fca5a5',
+              borderWidth: 1,
+              borderStyle: 'solid',
+              fontWeight: 800,
+            }}
+          >
+            {failedTxCount}
+          </span>
+        </button>
+
+        {/* Master Transaction Logs Desk (All Verified, Failed, Pending Ledger) */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'transactions' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('transactions', '#transactions')}
+          style={{
+            fontWeight: activeTab === 'transactions' ? 800 : 600,
+          }}
+        >
+          <Receipt size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Transaction Logs</span>
+          <span
+            className="sales-nav-badge"
+            style={{
+              background: activeTab === 'transactions' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
+              color: activeTab === 'transactions' ? '#ffffff' : '#047857',
+              borderColor: activeTab === 'transactions' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
+              borderWidth: 1,
+              borderStyle: 'solid',
+              fontWeight: 800,
+            }}
+          >
+            {allTransactions.length || (invoices.length + failedTxCount)}
+          </span>
+        </button>
+
+        {/* 7. Query & Support */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'queries' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('queries', '#queries')}
+        >
+          <Headphones size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Query &amp; Support</span>
+          {queries.filter((q) => q.status === 'open').length > 0 && (
+            <span
+              className="sales-nav-badge"
+              style={{
+                background: activeTab === 'queries' ? 'rgba(255,255,255,0.22)' : '#fee2e2',
+                color: activeTab === 'queries' ? '#ffffff' : '#b91c1c',
+              }}
+            >
+              {queries.filter((q) => q.status === 'open').length}
             </span>
-            <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
-              Platform Ad Engine: <b>₹300/day</b> • <b>{customers.length} Billing Accounts</b>
-            </span>
+          )}
+        </button>
+
+        {/* 8. Lead Distribution */}
+        <button
+          type="button"
+          className={`sales-nav-btn ${activeTab === 'groups' ? 'active' : ''}`}
+          onClick={() => navigateToDesk('groups', '#groups')}
+        >
+          <FolderTree size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+          <span>Lead Distribution</span>
+        </button>
+      </nav>
+
+      {/* Sidebar Footer */}
+      <div className="sales-sidebar-footer">
+        <div className="sales-rep-card">
+          <div className="sales-rep-avatar">{(activeUser.fullName || 'SE').slice(0, 2).toUpperCase()}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="sales-rep-name">{activeUser.fullName || 'Sales Executive'}</div>
+            <div className="sales-rep-role">{activeUser.role || 'Sales Operations'}</div>
           </div>
+          <button
+            type="button"
+            className="sales-logout-icon"
+            title="Sign Out"
+            onClick={onSignOut}
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
+      </div>
+    </aside>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {/* Live Real-Time Date & Time Clock */}
-            <div
+    {/* 2. MAIN OPERATIONS VIEWPORT (100% Full Width) */}
+    <main className="sales-main-viewport">
+      {/* Top Operational Bar */}
+      <header className="sales-topbar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span className="sales-status-badge">
+            <span className="sales-pulse-dot" />
+            Active Operations Desk
+          </span>
+          <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+            Platform Ad Engine: <b>₹300/day</b> • <b>{customers.length} Billing Accounts</b>
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Live Real-Time Date & Time Clock */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              background: '#ffffff',
+              border: '1px solid #cbd5e1',
+              padding: '6px 14px',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              color: '#0f172a',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            <Clock size={15} color="#4f46e5" />
+            <span>
+              {liveNow.toLocaleDateString('en-IN', {
+                weekday: 'short',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              })}{' '}
+              •{' '}
+              {liveNow.toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+              })}
+            </span>
+            <span
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 8,
-                background: '#ffffff',
-                border: '1px solid #cbd5e1',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                fontSize: '0.82rem',
-                fontWeight: 700,
-                color: '#0f172a',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                fontVariantNumeric: 'tabular-nums',
+                gap: 4,
+                fontSize: '0.68rem',
+                fontWeight: 800,
+                color: '#059669',
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                padding: '2px 6px',
+                borderRadius: 4,
+                marginLeft: 4,
               }}
             >
-              <Clock size={15} color="#4f46e5" />
-              <span>
-                {liveNow.toLocaleDateString('en-IN', {
-                  weekday: 'short',
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })}{' '}
-                •{' '}
-                {liveNow.toLocaleTimeString('en-IN', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                  hour12: true,
-                })}
-              </span>
               <span
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: '0.68rem',
-                  fontWeight: 800,
-                  color: '#059669',
-                  background: '#ecfdf5',
-                  border: '1px solid #a7f3d0',
-                  padding: '2px 6px',
-                  borderRadius: 4,
-                  marginLeft: 4,
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: '#10b981',
+                  boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.25)',
                 }}
-              >
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: '#10b981',
-                    boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.25)',
-                  }}
-                />
-                LIVE
-              </span>
-            </div>
-
-            <button
-              type="button"
-              className="sales-btn-secondary"
-              onClick={onBackToWebsite}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            >
-              Website <ExternalLink size={13} />
-            </button>
+              />
+              LIVE
+            </span>
           </div>
-        </header>
 
-        {/* Operational Desks Rendering */}
-        <div className="sales-content-scroll">
-          {activeTab === 'overview' && (
-            <AllDesksOverviewDashboard
-              customers={customers}
-              setCustomers={setCustomers}
-              verifications={verifications}
-              setVerifications={setVerifications}
-              invoices={invoices}
-              setInvoices={setInvoices}
-              queries={queries}
-              setQueries={setQueries}
-              tasks={tasks}
-              setTasks={setTasks}
-              groups={INITIAL_GROUPS}
-              navigateToDesk={navigateToDesk}
-            />
-          )}
-
-          {activeTab === 'customers' && (
-            <CustomerRegistrationsDesk
-              customers={customers}
-              setCustomers={setCustomers}
-            />
-          )}
-
-          {activeTab === 'pending_verification' && (
-            <PendingVerificationDesk
-              verifications={verifications}
-              setVerifications={setVerifications}
-              onApproveSuccess={handleVerificationApprove}
-              customers={customers}
-            />
-          )}
-
-          {activeTab === 'approved' && (
-            <ApprovedMembersDesk
-              customers={customers}
-              setCustomers={setCustomers}
-              navigateToDesk={navigateToDesk}
-            />
-          )}
-
-          {activeTab === 'leads' && <LeadManagementDesk customers={customers} />}
-
-          {activeTab === 'profiles' && (
-            <ProfileCompletionDesk
-              customers={customers}
-              setCustomers={setCustomers}
-            />
-          )}
-
-          {activeTab === 'payments' && (
-            <PaymentCollectionDesk
-              invoices={invoices}
-              setInvoices={setInvoices}
-              customers={customers}
-              setCustomers={setCustomers}
-              verifications={verifications}
-            />
-          )}
-
-          {activeTab === 'wallets' && (
-            <WalletsBalancesDesk
-              customers={customers}
-              setCustomers={setCustomers}
-            />
-          )}
-
-          {activeTab === 'balance_logs' && (
-            <BalanceLogsDesk
-              customers={customers}
-              setCustomers={setCustomers}
-              onBalanceLogsCountChange={setBalanceLogsCount}
-            />
-          )}
-
-          {activeTab === 'failed_transactions' && (
-            <FailedTransactionsDesk
-              customers={customers}
-              setCustomers={setCustomers}
-              allTransactions={allTransactions}
-              onRefresh={() => {
-                crmApi.getFailedTransactions().then((res) => {
-                  if (res && res.ok && Array.isArray(res.failedTransactions)) {
-                    setFailedTxCount(res.failedTransactions.length);
-                  }
-                });
-                crmApi.syncStateFromPostgres();
-              }}
-            />
-          )}
-
-          {activeTab === 'transactions' && (
-            <MasterTransactionLogsDesk
-              customers={customers}
-              setCustomers={setCustomers}
-              allTransactions={allTransactions}
-              invoices={invoices}
-              onRefresh={() => {
-                crmApi.fetchAllTransactions().then((res) => {
-                  if (res && res.ok && Array.isArray(res.transactions)) {
-                    const clean = res.transactions.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
-                    setAllTransactions(clean);
-                    try { localStorage.setItem('growthline_all_transactions', JSON.stringify(clean)); } catch (_) {}
-                  }
-                });
-                crmApi.syncStateFromPostgres();
-              }}
-            />
-          )}
-
-          {activeTab === 'queries' && (
-            <QuerySupportDesk
-              customers={customers}
-              setCustomers={setCustomers}
-              queries={queries}
-              setQueries={setQueries}
-            />
-          )}
-
-          {activeTab === 'tasks' && (
-            <FollowupTasksDesk
-              tasks={tasks}
-              setTasks={setTasks}
-            />
-          )}
-
-          {activeTab === 'groups' && (
-            <CustomerGroupsDesk
-              groups={INITIAL_GROUPS}
-              customers={customers}
-            />
-          )}
+          <button
+            type="button"
+            className="sales-btn-secondary"
+            onClick={onBackToWebsite}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            Website <ExternalLink size={13} />
+          </button>
         </div>
-      </main>
-    </div>
-  );
+      </header>
+
+      {/* Operational Desks Rendering */}
+      <div className="sales-content-scroll">
+        {activeTab === 'overview' && (
+          <AllDesksOverviewDashboard
+            customers={customers}
+            setCustomers={setCustomers}
+            verifications={verifications}
+            setVerifications={setVerifications}
+            invoices={invoices}
+            setInvoices={setInvoices}
+            queries={queries}
+            setQueries={setQueries}
+            tasks={tasks}
+            setTasks={setTasks}
+            groups={INITIAL_GROUPS}
+            navigateToDesk={navigateToDesk}
+          />
+        )}
+
+        {activeTab === 'customers' && (
+          <CustomerRegistrationsDesk
+            customers={customers}
+            setCustomers={setCustomers}
+          />
+        )}
+
+        {activeTab === 'pending_verification' && (
+          <PendingVerificationDesk
+            verifications={verifications}
+            setVerifications={setVerifications}
+            onApproveSuccess={handleVerificationApprove}
+            customers={customers}
+          />
+        )}
+
+        {activeTab === 'approved' && (
+          <ApprovedMembersDesk
+            customers={customers}
+            setCustomers={setCustomers}
+            navigateToDesk={navigateToDesk}
+          />
+        )}
+
+        {activeTab === 'leads' && <LeadManagementDesk customers={customers} />}
+
+        {activeTab === 'profiles' && (
+          <ProfileCompletionDesk
+            customers={customers}
+            setCustomers={setCustomers}
+          />
+        )}
+
+        {activeTab === 'payments' && (
+          <PaymentCollectionDesk
+            invoices={invoices}
+            setInvoices={setInvoices}
+            customers={customers}
+            setCustomers={setCustomers}
+            verifications={verifications}
+          />
+        )}
+
+        {activeTab === 'wallets' && (
+          <WalletsBalancesDesk
+            customers={customers}
+            setCustomers={setCustomers}
+          />
+        )}
+
+        {activeTab === 'balance_logs' && (
+          <BalanceLogsDesk
+            customers={customers}
+            setCustomers={setCustomers}
+            onBalanceLogsCountChange={setBalanceLogsCount}
+          />
+        )}
+
+        {activeTab === 'failed_transactions' && (
+          <FailedTransactionsDesk
+            customers={customers}
+            setCustomers={setCustomers}
+            allTransactions={allTransactions}
+            onRefresh={() => {
+              crmApi.getFailedTransactions().then((res) => {
+                if (res && res.ok && Array.isArray(res.failedTransactions)) {
+                  setFailedTxCount(res.failedTransactions.length);
+                }
+              });
+              crmApi.syncStateFromPostgres();
+            }}
+          />
+        )}
+
+        {activeTab === 'transactions' && (
+          <MasterTransactionLogsDesk
+            customers={customers}
+            setCustomers={setCustomers}
+            allTransactions={allTransactions}
+            invoices={invoices}
+            onRefresh={() => {
+              crmApi.fetchAllTransactions().then((res) => {
+                if (res && res.ok && Array.isArray(res.transactions)) {
+                  const clean = res.transactions.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
+                  setAllTransactions(clean);
+                  try { localStorage.setItem('growthline_all_transactions', JSON.stringify(clean)); } catch (_) { }
+                }
+              });
+              crmApi.syncStateFromPostgres();
+            }}
+          />
+        )}
+
+        {activeTab === 'queries' && (
+          <QuerySupportDesk
+            customers={customers}
+            setCustomers={setCustomers}
+            queries={queries}
+            setQueries={setQueries}
+          />
+        )}
+
+        {activeTab === 'tasks' && (
+          <FollowupTasksDesk
+            tasks={tasks}
+            setTasks={setTasks}
+          />
+        )}
+
+        {activeTab === 'groups' && (
+          <CustomerGroupsDesk
+            groups={INITIAL_GROUPS}
+            customers={customers}
+          />
+        )}
+      </div>
+    </main>
+  </div>
+);
 }

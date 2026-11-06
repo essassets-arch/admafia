@@ -52,7 +52,7 @@ export default function AllDesksOverviewDashboard({
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch (e) {}
+    } catch (e) { }
     return DEFAULT_DESK_LEADS || [];
   });
 
@@ -60,7 +60,7 @@ export default function AllDesksOverviewDashboard({
     try {
       const raw = localStorage.getItem('growthline_payment_records');
       if (raw) return JSON.parse(raw);
-    } catch (e) {}
+    } catch (e) { }
     return [];
   });
 
@@ -82,7 +82,7 @@ export default function AllDesksOverviewDashboard({
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setLeads(parsed);
-        } catch (err) {}
+        } catch (err) { }
       }
     };
     const handlePaymentAdded = (e) => {
@@ -102,7 +102,7 @@ export default function AllDesksOverviewDashboard({
         if (rawPay) setPaymentRecords(JSON.parse(rawPay));
         const rawLeads = localStorage.getItem('growthline_all_leads');
         if (rawLeads) setLeads(JSON.parse(rawLeads));
-      } catch (e) {}
+      } catch (e) { }
     };
     window.addEventListener('growthline_lead_added', handleLeadAdded);
     window.addEventListener('growthline_payment_recorded', handlePaymentAdded);
