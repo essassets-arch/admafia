@@ -62,9 +62,11 @@ export default function BalanceLogsDesk({
   const fetchLogs = async (showToast = false) => {
     setLoading(true);
     try {
-      const res = await crmApi.getBalanceLogs({
-        customerId: selectedCustomerId !== 'all' ? selectedCustomerId : undefined,
-      });
+      const params = {};
+      if (selectedCustomerId && selectedCustomerId !== 'all') {
+        params.customerId = selectedCustomerId;
+      }
+      const res = await crmApi.getBalanceLogs(params);
 
       if (res && res.ok && Array.isArray(res.logs)) {
         setLogs(res.logs);
@@ -94,7 +96,7 @@ export default function BalanceLogsDesk({
         const raw = localStorage.getItem('growthline_balance_logs');
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) setLogs(parsed);
+          if (Array.isArray(parsed) && parsed.length > 0) setLogs(parsed);
         }
       } catch (_) {}
     } finally {
@@ -169,16 +171,28 @@ export default function BalanceLogsDesk({
 
   // Total Amount Added & Total Amount Removed (computed from valid real logs)
   const totalAmountAdded = useMemo(() => {
-    return filteredLogs
-      .filter((l) => l.txType === 'credit')
-      .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
-  }, [filteredLogs]);
+    if (filteredLogs.length > 0) {
+      return filteredLogs
+        .filter((l) => l.txType === 'credit')
+        .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
+    }
+    if (selectedCustomerId === 'all' && !search && stats && stats.totalAmountAdded) {
+      return stats.totalAmountAdded;
+    }
+    return 0;
+  }, [filteredLogs, selectedCustomerId, search, stats]);
 
   const totalAmountRemoved = useMemo(() => {
-    return filteredLogs
-      .filter((l) => l.txType === 'debit')
-      .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
-  }, [filteredLogs]);
+    if (filteredLogs.length > 0) {
+      return filteredLogs
+        .filter((l) => l.txType === 'debit')
+        .reduce((sum, l) => sum + Number(l.changedAmount ?? l.amount ?? 0), 0);
+    }
+    if (selectedCustomerId === 'all' && !search && stats && stats.totalAmountRemoved) {
+      return stats.totalAmountRemoved;
+    }
+    return 0;
+  }, [filteredLogs, selectedCustomerId, search, stats]);
 
   // Export CSV
   const handleExportCSV = () => {

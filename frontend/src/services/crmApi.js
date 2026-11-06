@@ -207,7 +207,15 @@ export const crmApi = {
    * Retrieve Customer Balance Audit Logs (Previous Balance, Transaction Amount, New Balance, and Full History)
    */
   async getBalanceLogs(params = {}) {
-    const query = new URLSearchParams(params).toString();
+    const cleanParams = {};
+    if (params && typeof params === 'object') {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '' && v !== 'all' && v !== 'undefined' && v !== 'null') {
+          cleanParams[k] = v;
+        }
+      });
+    }
+    const query = new URLSearchParams(cleanParams).toString();
     return apiRequest(`/sales/balance-logs${query ? `?${query}` : ''}`, {
       method: 'GET',
     });

@@ -1876,7 +1876,11 @@ app.get('/api/sales/transactions', async (req, res) => {
 // Sales Desk: Customer Balance Audit Logs (Tracks Previous Balance, Transaction Amount, New Balance, and Full History)
 app.get('/api/sales/balance-logs', async (req, res) => {
   try {
-    const { customerId, phone, type } = req.query;
+    const rawCustomerId = req.query.customerId;
+    const customerId = (rawCustomerId && rawCustomerId !== 'undefined' && rawCustomerId !== 'null' && rawCustomerId !== 'all') ? String(rawCustomerId).trim() : null;
+    const rawPhone = req.query.phone;
+    const phone = (rawPhone && rawPhone !== 'undefined' && rawPhone !== 'null') ? String(rawPhone).trim() : null;
+    const type = req.query.type;
 
     const [wtRes, prRes, custRes, walletsRes] = await Promise.all([
       query(`
@@ -1998,6 +2002,12 @@ app.get('/api/sales/balance-logs', async (req, res) => {
       const balanceAfter = row.balance_after != null ? Number(row.balance_after) : (isDebit ? 0 : amount);
       const balanceBefore = isDebit ? balanceAfter + amount : Math.max(0, balanceAfter - amount);
 
+      // Filter by customer if requested in query
+      if (customerId && row.customer_id !== customerId && matchedCust?.id !== customerId) continue;
+      if (phone && cleanPhone !== String(phone).replace(/\D/g, '').slice(-10)) continue;
+      if (type === 'credit' && isDebit) continue;
+      if (type === 'debit' && !isDebit) continue;
+
       if (isDebit) {
         totalDebits += amount;
         totalDebitCount++;
@@ -2005,12 +2015,6 @@ app.get('/api/sales/balance-logs', async (req, res) => {
         totalCredits += amount;
         totalCreditCount++;
       }
-
-      // Filter by customer if requested in query
-      if (customerId && row.customer_id !== customerId && matchedCust?.id !== customerId) continue;
-      if (phone && cleanPhone !== String(phone).replace(/\D/g, '').slice(-10)) continue;
-      if (type === 'credit' && isDebit) continue;
-      if (type === 'debit' && !isDebit) continue;
 
       if (ref) seenRefs.add(ref);
       if (id) seenIds.add(id);
@@ -2090,12 +2094,12 @@ app.get('/api/sales/balance-logs', async (req, res) => {
       const balanceBefore = 0;
       const balanceAfter = amount;
 
-      totalCredits += amount;
-      totalCreditCount++;
-
       if (customerId && pr.customer_id !== customerId && matchedCust?.id !== customerId) continue;
       if (phone && cleanPhone !== String(phone).replace(/\D/g, '').slice(-10)) continue;
       if (type === 'debit') continue;
+
+      totalCredits += amount;
+      totalCreditCount++;
 
       seenRefs.add(ref);
       seenIds.add(pr.id);
