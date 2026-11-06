@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Users,
   ShieldCheck,
@@ -2016,11 +2016,141 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('all');
+
+  // Customer matching helper to link leads to authoritative registered customers
+  const matchLeadToCustomer = (lead, cust) => {
+    if (!lead || !cust) return false;
+    const leadCustId = String(lead.customerId || lead.customer_id || '').trim();
+    const custId = String(cust.id || '').trim();
+    const custPhone = String(cust.phone || '').replace(/\D/g, '').slice(-10);
+    const custUser = String(cust.username || '').toLowerCase().replace(/^@/, '').trim();
+    const leadCustPhone = String(lead.customerPhone || lead.customer_phone || '').replace(/\D/g, '').slice(-10);
+    const leadCustUser = String(lead.customerUsername || lead.customer_username || '').toLowerCase().replace(/^@/, '').trim();
+
+    // 1. Direct ID match
+    if (leadCustId && (leadCustId === custId || leadCustId === custPhone || leadCustId === custUser)) return true;
+
+    // 2. Customer Phone match
+    if (custPhone && leadCustPhone && custPhone === leadCustPhone) return true;
+
+    // 3. Customer Username match
+    if (custUser && leadCustUser && custUser === leadCustUser) return true;
+
+    // 4. Company Name / Business Name match
+    const leadComp = String(lead.company || lead.assignedCompany || lead.customerCompanyName || '').toLowerCase().trim();
+    const custComp = String(cust.companyName || cust.company_name || cust.name || '').toLowerCase().trim();
+    const custContact = String(cust.contactPerson || cust.contact || '').toLowerCase().trim();
+
+    if (leadComp && custComp && (leadComp === custComp || leadComp.includes(custComp) || custComp.includes(leadComp))) return true;
+    if (leadComp && custContact && (leadComp === custContact || leadComp.includes(custContact) || custContact.includes(leadComp))) return true;
+    if (leadComp && custUser && (leadComp === custUser || leadComp.includes(custUser))) return true;
+    if (leadComp && custPhone && leadComp.includes(custPhone)) return true;
+
+    return false;
+  };
+
+  const resolveCustomerForLead = (lead, customersList = []) => {
+    if (!lead) return null;
+    const matched = customersList.find((c) => matchLeadToCustomer(lead, c));
+    if (matched) return matched;
+
+    const fallbackComp = lead.company || lead.assignedCompany || lead.customerCompanyName || 'Client Account';
+    const cleanPhone = String(lead.customerPhone || '').replace(/\D/g, '').slice(-10);
+    return {
+      id: lead.customerId || fallbackComp,
+      name: fallbackComp,
+      companyName: fallbackComp,
+      phone: cleanPhone,
+      username: lead.customerUsername || fallbackComp.toLowerCase().replace(/[^a-z0-9]/g, ''),
+      balance: 0,
+      isFallback: true,
+    };
+  };
 
   // Authoritative helper to determine if a lead has been marked as read by the client
   const isLeadRead = (l) => Boolean(l.read || l.is_read || l.status === 'read');
-  const readCount = leads.filter(isLeadRead).length;
-  const unreadCount = leads.filter((l) => !isLeadRead(l)).length;
+
+  // Unified list of customer filter options with dynamic lead counts
+  const customerFilterOptions = useMemo(() => {
+    const options = [];
+    const seenKeys = new Set();
+
+    (deskCustomers || []).forEach((cust) => {
+      const key = String(cust.id || cust.phone || cust.username || cust.companyName);
+      if (!key || seenKeys.has(key)) return;
+      seenKeys.add(key);
+
+      const comp = cust.companyName || cust.name || `@${cust.username}`;
+      const phoneDigits = String(cust.phone || '').replace(/\D/g, '').slice(-10);
+      const phoneStr = phoneDigits ? `+91 ${phoneDigits}` : '';
+      const leadCount = leads.filter((l) => matchLeadToCustomer(l, cust)).length;
+
+      options.push({
+        key,
+        customer: cust,
+        displayName: comp,
+        phone: phoneStr,
+        leadCount,
+      });
+    });
+
+    (leads || []).forEach((l) => {
+      const comp = l.company || l.assignedCompany || l.customerCompanyName;
+      if (!comp) return;
+      const isMatched = deskCustomers.some((c) => matchLeadToCustomer(l, c));
+      if (!isMatched && !seenKeys.has(comp)) {
+        seenKeys.add(comp);
+        const leadCount = leads.filter((item) => {
+          const itemComp = item.company || item.assignedCompany || item.customerCompanyName;
+          return itemComp === comp;
+        }).length;
+        const phoneDigits = String(l.customerPhone || '').replace(/\D/g, '').slice(-10);
+        options.push({
+          key: comp,
+          customer: {
+            id: comp,
+            companyName: comp,
+            name: comp,
+            phone: phoneDigits,
+            username: l.customerUsername || comp.toLowerCase().replace(/[^a-z0-9]/g, ''),
+            balance: 0,
+            isFallback: true,
+          },
+          displayName: comp,
+          phone: phoneDigits ? `+91 ${phoneDigits}` : '',
+          leadCount,
+        });
+      }
+    });
+
+    return options.sort((a, b) => b.leadCount - a.leadCount);
+  }, [deskCustomers, leads]);
+
+  // Active customer object (if a single customer is selected)
+  const selectedCustomerObj = useMemo(() => {
+    if (selectedCustomerId === 'all') return null;
+    const foundOpt = customerFilterOptions.find((o) => String(o.key) === String(selectedCustomerId));
+    if (foundOpt) return foundOpt.customer;
+    return deskCustomers.find(
+      (c) => String(c.id) === String(selectedCustomerId) || String(c.phone) === String(selectedCustomerId) || c.username === selectedCustomerId
+    ) || null;
+  }, [selectedCustomerId, customerFilterOptions, deskCustomers]);
+
+  // Customer-scoped leads
+  const customerLeads = useMemo(() => {
+    if (selectedCustomerId === 'all' || !selectedCustomerObj) return leads;
+    return leads.filter((l) => matchLeadToCustomer(l, selectedCustomerObj));
+  }, [leads, selectedCustomerId, selectedCustomerObj]);
+
+  // Dynamic KPI counts for selected scope
+  const totalLeadsCount = customerLeads.length;
+  const readCount = customerLeads.filter(isLeadRead).length;
+  const unreadCount = customerLeads.filter((l) => !isLeadRead(l)).length;
+  const readRatePct = totalLeadsCount > 0 ? Math.round((readCount / totalLeadsCount) * 100) : 0;
+  const urgentCount = customerLeads.filter((l) => l.priority === 'Urgent').length;
+  const newCount = customerLeads.filter((l) => l.status === 'new').length;
+  const qualifiedCount = customerLeads.filter((l) => l.status === 'qualified').length;
 
   // Toggle read status directly from sales desk and synchronize with PostgreSQL
   const handleToggleLeadRead = async (lead) => {
@@ -2051,23 +2181,39 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
     }
   };
 
-  const filtered = leads.filter((l) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      (l.name || '').toLowerCase().includes(q) ||
-      (l.company || '').toLowerCase().includes(q) ||
-      (l.assignedCompany || '').toLowerCase().includes(q) ||
-      (l.customerCompanyName || '').toLowerCase().includes(q) ||
-      (l.city || '').toLowerCase().includes(q) ||
-      (l.phone || '').includes(search);
-    if (!matchSearch) return false;
-    if (filter === 'urgent') return l.priority === 'Urgent';
-    if (filter === 'new') return l.status === 'new';
-    if (filter === 'qualified') return l.status === 'qualified';
-    if (filter === 'read') return isLeadRead(l);
-    if (filter === 'unread') return !isLeadRead(l);
-    return true;
-  });
+  const filtered = useMemo(() => {
+    return customerLeads.filter((l) => {
+      const q = search.toLowerCase().trim();
+      if (q) {
+        const matchedCust = resolveCustomerForLead(l, deskCustomers);
+        const cName = String(matchedCust?.name || matchedCust?.companyName || '').toLowerCase();
+        const cPhone = String(matchedCust?.phone || '').replace(/\D/g, '');
+        const cUser = String(matchedCust?.username || '').toLowerCase();
+        const lPhone = String(l.phone || '').replace(/\D/g, '');
+        const lBuyerName = String(l.name || '').toLowerCase();
+        const lComp = String(l.company || l.assignedCompany || l.customerCompanyName || '').toLowerCase();
+        const lCity = String(l.city || '').toLowerCase();
+
+        const matchSearch =
+          lBuyerName.includes(q) ||
+          lPhone.includes(q) ||
+          lComp.includes(q) ||
+          lCity.includes(q) ||
+          cName.includes(q) ||
+          cPhone.includes(q) ||
+          cUser.includes(q);
+
+        if (!matchSearch) return false;
+      }
+
+      if (filter === 'urgent') return l.priority === 'Urgent';
+      if (filter === 'new') return l.status === 'new';
+      if (filter === 'qualified') return l.status === 'qualified';
+      if (filter === 'read') return isLeadRead(l);
+      if (filter === 'unread') return !isLeadRead(l);
+      return true;
+    });
+  }, [customerLeads, search, filter, deskCustomers]);
 
   return (
     <div className="desk-page-container">
@@ -2181,35 +2327,340 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         </div>
       )}
 
-      {/* KPI Quad Grid */}
+      {/* KPI Quad Grid (Dynamically Calculated for Selected Customer or All Customers) */}
       <div className="desk-kpi-grid">
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">TOTAL INBOUND LEADS</div>
-          <div className="desk-kpi-val">{leads.length}</div>
-          <div className="desk-kpi-sub">Real-time buyer inquiries</div>
+          <div className="desk-kpi-label">
+            {selectedCustomerObj ? 'CUSTOMER INBOUND LEADS' : 'TOTAL INBOUND LEADS'}
+          </div>
+          <div className="desk-kpi-val">{totalLeadsCount}</div>
+          <div className="desk-kpi-sub">
+            {selectedCustomerObj
+              ? `Delivered to ${selectedCustomerObj.companyName || selectedCustomerObj.name}`
+              : `Active across ${customerFilterOptions.length} client accounts`}
+          </div>
         </div>
         <div className="desk-kpi-card">
           <div className="desk-kpi-label">READ BY CLIENT</div>
           <div className="desk-kpi-val text-emerald">{readCount}</div>
-          <div className="desk-kpi-sub">Acknowledged in Lead Hub</div>
+          <div className="desk-kpi-sub">
+            {totalLeadsCount > 0 ? `${readRatePct}% client acknowledgment rate` : 'No leads to acknowledge'}
+          </div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">UNREAD BY CLIENT</div>
+          <div className="desk-kpi-label">UNREAD IN CRM</div>
           <div className="desk-kpi-val text-amber">{unreadCount}</div>
-          <div className="desk-kpi-sub">Awaiting client response</div>
+          <div className="desk-kpi-sub">
+            {unreadCount > 0 ? 'Awaiting client response / action' : 'All leads acknowledged ✓'}
+          </div>
         </div>
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">AVG SPEED TO LEAD</div>
-          <div className="desk-kpi-val text-indigo">{leads.length > 0 ? '01m 15s' : '0m'}</div>
-          <div className="desk-kpi-sub">Call response cadence</div>
+          <div className="desk-kpi-label">
+            {selectedCustomerObj ? 'WALLET BALANCE' : 'CLIENT READ RATE'}
+          </div>
+          <div className={`desk-kpi-val ${selectedCustomerObj ? (Number(selectedCustomerObj.balance || selectedCustomerObj.wallet_balance || 0) > 0 ? 'text-emerald' : 'text-rose') : 'text-indigo'}`}>
+            {selectedCustomerObj
+              ? `₹${Number(selectedCustomerObj.balance || selectedCustomerObj.wallet_balance || 0).toLocaleString('en-IN')}`
+              : `${readRatePct}%`}
+          </div>
+          <div className="desk-kpi-sub">
+            {selectedCustomerObj
+              ? (Number(selectedCustomerObj.balance || selectedCustomerObj.wallet_balance || 0) > 0 ? 'Ad budget active & funded' : 'Wallet empty — recharge needed')
+              : 'Across all active campaigns'}
+          </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="desk-filter-bar">
+      {/* Dedicated Customer Profile & Delivery Intelligence KPI Card (Shown when specific customer is selected) */}
+      {selectedCustomerObj && (
+        <div style={{
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%)',
+          borderRadius: 14,
+          padding: '20px 24px',
+          marginBottom: 18,
+          color: '#ffffff',
+          border: '1px solid #312e81',
+          boxShadow: '0 10px 25px rgba(15, 23, 42, 0.35)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+            {/* Customer Details */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                color: '#ffffff',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: '1.4rem',
+                fontWeight: 900,
+                boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                border: '2px solid rgba(255, 255, 255, 0.2)'
+              }}>
+                {(selectedCustomerObj.companyName || selectedCustomerObj.name || 'C').charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#ffffff', letterSpacing: '-0.01em' }}>
+                    {selectedCustomerObj.companyName || selectedCustomerObj.name}
+                  </h2>
+                  <span style={{
+                    background: '#065f46',
+                    color: '#34d399',
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #059669',
+                    textTransform: 'uppercase'
+                  }}>
+                    Active Customer
+                  </span>
+                  {selectedCustomerObj.category && (
+                    <span style={{
+                      background: 'rgba(255,255,255,0.1)',
+                      color: '#cbd5e1',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: 6
+                    }}>
+                      {selectedCustomerObj.category}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 4, flexWrap: 'wrap', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                  {selectedCustomerObj.phone && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'monospace', fontWeight: 700 }}>
+                      <Phone size={13} color="#a5b4fc" /> +91 {String(selectedCustomerObj.phone).replace(/\D/g, '').slice(-10)}
+                    </span>
+                  )}
+                  {selectedCustomerObj.username && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#a5b4fc', fontWeight: 700 }}>
+                      <User size={13} /> @{String(selectedCustomerObj.username).replace(/^@/, '')}
+                    </span>
+                  )}
+                  {selectedCustomerObj.email && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#94a3b8' }}>
+                      <Mail size={13} /> {selectedCustomerObj.email}
+                    </span>
+                  )}
+                  {selectedCustomerObj.city && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#94a3b8' }}>
+                      <MapPin size={13} /> {selectedCustomerObj.city}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {selectedCustomerObj.phone && (
+                <a
+                  href={`https://wa.me/91${String(selectedCustomerObj.phone).replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedCustomerObj.companyName || selectedCustomerObj.name)},%20this%20is%20AdMafia%20GrowthLine%20Desk%20regarding%20your%20campaign%20leads.`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    background: '#25D366',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.84rem',
+                    padding: '8px 16px',
+                    borderRadius: 8,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 4px 10px rgba(37, 211, 102, 0.25)'
+                  }}
+                >
+                  <MessageSquare size={14} /> WhatsApp Customer
+                </a>
+              )}
+              <a
+                href="/app/lead#app/lead"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.12)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255, 255, 255, 0.25)',
+                  fontWeight: 800,
+                  fontSize: '0.84rem',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  backdropFilter: 'blur(4px)'
+                }}
+              >
+                <span>Open Customer CRM</span>
+                <ExternalLink size={13} />
+              </a>
+              <button
+                type="button"
+                onClick={() => setSelectedCustomerId('all')}
+                style={{
+                  background: 'transparent',
+                  color: '#94a3b8',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  padding: '8px 14px',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5
+                }}
+              >
+                <X size={14} /> Show All Customers
+              </button>
+            </div>
+          </div>
+
+          {/* Metric Strip inside Customer Card */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gap: 12,
+            background: 'rgba(0, 0, 0, 0.25)',
+            borderRadius: 10,
+            padding: '12px 16px',
+            border: '1px solid rgba(255, 255, 255, 0.08)'
+          }}>
+            <div>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Customer Wallet Balance
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: Number(selectedCustomerObj.balance || selectedCustomerObj.wallet_balance || 0) > 0 ? '#34d399' : '#f87171', marginTop: 2 }}>
+                ₹{Number(selectedCustomerObj.balance || selectedCustomerObj.wallet_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Total Leads Delivered
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#ffffff', marginTop: 2 }}>
+                {totalLeadsCount} Leads
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Read by Client
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#34d399', marginTop: 2 }}>
+                {readCount} <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#a7f3d0' }}>({readRatePct}%)</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Unread / Pending SLA
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: unreadCount > 0 ? '#fbbf24' : '#94a3b8', marginTop: 2 }}>
+                {unreadCount} Leads
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Selector & Search Toolbar */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 14,
+        flexWrap: 'wrap',
+        background: '#ffffff',
+        padding: '12px 16px',
+        borderRadius: 12,
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+      }}>
+        {/* Customer-Wise Drop Down Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Building2 size={18} style={{ color: '#4f46e5' }} />
+            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b', letterSpacing: '0.02em' }}>
+              Customer Account:
+            </span>
+          </div>
+          <select
+            value={selectedCustomerId}
+            onChange={(e) => setSelectedCustomerId(e.target.value)}
+            style={{
+              padding: '9px 14px',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              color: selectedCustomerId !== 'all' ? '#1e1b4b' : '#0f172a',
+              background: selectedCustomerId !== 'all' ? '#eef2ff' : '#f8fafc',
+              border: selectedCustomerId !== 'all' ? '1.5px solid #6366f1' : '1px solid #cbd5e1',
+              borderRadius: 10,
+              minWidth: 280,
+              maxWidth: '100%',
+              cursor: 'pointer',
+              boxShadow: selectedCustomerId !== 'all' ? '0 0 0 3px rgba(99, 102, 241, 0.15)' : 'none',
+              outline: 'none',
+              flex: '1 1 auto'
+            }}
+          >
+            <option value="all">🏢 All Customers ({leads.length} total leads • {customerFilterOptions.length} accounts)</option>
+            {customerFilterOptions.map((opt) => (
+              <option key={opt.key} value={opt.key}>
+                🏢 {opt.displayName} ({opt.leadCount} {opt.leadCount === 1 ? 'lead' : 'leads'})
+              </option>
+            ))}
+          </select>
+          {selectedCustomerId !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setSelectedCustomerId('all')}
+              style={{
+                background: '#f1f5f9',
+                border: '1px solid #cbd5e1',
+                borderRadius: 8,
+                padding: '8px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                color: '#475569',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5
+              }}
+            >
+              <X size={14} /> Clear Customer Filter
+            </button>
+          )}
+        </div>
+
+        {/* Search input */}
+        <div className="desk-search-wrap" style={{ margin: 0, minWidth: 260 }}>
+          <Search size={16} className="desk-search-icon" />
+          <input
+            type="text"
+            className="desk-search-input"
+            placeholder="Search leads, phone, company..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Status Filter Tabs */}
+      <div className="desk-filter-bar" style={{ marginBottom: 14 }}>
         <div className="desk-tabs">
           <button type="button" className={`desk-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
-            All Leads ({leads.length})
+            All Leads ({totalLeadsCount})
           </button>
           <button
             type="button"
@@ -2236,204 +2687,307 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             ⏳ Unread ({unreadCount})
           </button>
           <button type="button" className={`desk-tab ${filter === 'urgent' ? 'active' : ''}`} onClick={() => setFilter('urgent')}>
-            Urgent SLA ({leads.filter((l) => l.priority === 'Urgent').length})
+            Urgent SLA ({urgentCount})
           </button>
           <button type="button" className={`desk-tab ${filter === 'new' ? 'active' : ''}`} onClick={() => setFilter('new')}>
-            New Inbound ({leads.filter((l) => l.status === 'new').length})
+            New Inbound ({newCount})
           </button>
           <button type="button" className={`desk-tab ${filter === 'qualified' ? 'active' : ''}`} onClick={() => setFilter('qualified')}>
-            Qualified ({leads.filter((l) => l.status === 'qualified').length})
+            Qualified ({qualifiedCount})
           </button>
-        </div>
-        <div className="desk-search-wrap">
-          <Search size={16} className="desk-search-icon" />
-          <input
-            type="text"
-            className="desk-search-input"
-            placeholder="Search leads..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
         </div>
       </div>
 
-      {/* Leads List - Clean UI: ONLY Phone Number and Company Name Where Sent */}
+      {/* Leads List - Prominently Displays Customer Name, Buyer Phone, Read Status and Actions */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {filtered.map((lead) => {
-          const rawDigits = (lead.phone || lead.name || '').replace(/\D/g, '').slice(-10);
-          const cleanPhone = rawDigits.length === 10 ? `+91 ${rawDigits}` : (lead.phone || lead.name);
-          const callDigits = rawDigits.length === 10 ? `+91${rawDigits}` : (lead.phone || '');
-          const targetComp = lead.company || lead.assignedCompany || lead.customerCompanyName || 'Client Account';
-          const isRead = isLeadRead(lead);
+        {filtered.length === 0 ? (
+          <div style={{
+            background: '#ffffff',
+            borderRadius: 14,
+            padding: '48px 24px',
+            textAlign: 'center',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              background: '#f1f5f9',
+              color: '#64748b',
+              display: 'grid',
+              placeItems: 'center',
+              margin: '0 auto 16px auto'
+            }}>
+              <Search size={24} />
+            </div>
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
+              No Leads Found
+            </h3>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+              {selectedCustomerId !== 'all'
+                ? `No leads match the current filters for ${selectedCustomerObj?.companyName || selectedCustomerObj?.name || 'this customer'}.`
+                : 'No inbound leads match your selected search or filter criteria.'}
+            </p>
+            {(selectedCustomerId !== 'all' || filter !== 'all' || search) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCustomerId('all');
+                  setFilter('all');
+                  setSearch('');
+                }}
+                className="desk-action-btn"
+                style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <RotateCcw size={14} /> Reset All Filters
+              </button>
+            )}
+          </div>
+        ) : (
+          filtered.map((lead) => {
+            const rawDigits = (lead.phone || lead.name || '').replace(/\D/g, '').slice(-10);
+            const cleanPhone = rawDigits.length === 10 ? `+91 ${rawDigits}` : (lead.phone || lead.name);
+            const callDigits = rawDigits.length === 10 ? `+91${rawDigits}` : (lead.phone || '');
+            const targetComp = lead.company || lead.assignedCompany || lead.customerCompanyName || 'Client Account';
+            const matchedCust = resolveCustomerForLead(lead, deskCustomers);
+            const customerName = matchedCust?.companyName || matchedCust?.name || targetComp;
+            const customerPhoneDigits = matchedCust?.phone ? String(matchedCust.phone).replace(/\D/g, '').slice(-10) : (lead.customerPhone ? String(lead.customerPhone).replace(/\D/g, '').slice(-10) : '');
+            const customerUser = matchedCust?.username ? `@${String(matchedCust.username).replace(/^@/, '')}` : (lead.customerUsername ? `@${String(lead.customerUsername).replace(/^@/, '')}` : '');
+            const initialChar = (customerName || 'C').charAt(0).toUpperCase();
+            const isRead = isLeadRead(lead);
 
-          return (
-            <div
-              key={lead.id}
-              className="desk-card-row"
-              style={{
-                padding: '16px 20px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 16,
-                background: '#ffffff',
-                borderRadius: 12,
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-              }}
-            >
-              {/* Left Column: Number, Company Name where sent, and Client Read Status */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
-                {/* Phone Number Display */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    background: '#ecfdf5',
-                    color: '#059669',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1px solid #a7f3d0'
-                  }}>
-                    <Phone size={18} />
+            return (
+              <div
+                key={lead.id}
+                className="desk-card-row"
+                style={{
+                  padding: '16px 20px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 16,
+                  background: '#ffffff',
+                  borderRadius: 12,
+                  border: '1px solid #e2e8f0',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                }}
+              >
+                {/* Left Columns: Buyer Phone Number, Customer Name/Details, and Client Read Status */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                  {/* Inbound Buyer Phone Number */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      background: '#ecfdf5',
+                      color: '#059669',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1px solid #a7f3d0'
+                    }}>
+                      <Phone size={18} />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Inbound Buyer Phone
+                      </span>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', letterSpacing: '0.02em', fontFamily: 'monospace' }}>
+                        {cleanPhone}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Phone Number
-                    </span>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', letterSpacing: '0.02em', fontFamily: 'monospace' }}>
-                      {cleanPhone}
-                    </span>
+
+                  {/* Customer / Client Account Details Prominently Displayed */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 18, borderLeft: '1px solid #e2e8f0' }}>
+                    <div style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                      color: '#1d4ed8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 900,
+                      fontSize: '1rem',
+                      border: '1px solid #bfdbfe'
+                    }}>
+                      {initialChar}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Customer / Client Account
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                        <span style={{
+                          fontSize: '1.02rem',
+                          fontWeight: 800,
+                          color: '#1e3a8a',
+                          letterSpacing: '-0.01em'
+                        }}>
+                          🏢 {customerName}
+                        </span>
+                        {customerPhoneDigits && (
+                          <span style={{
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            color: '#059669',
+                            background: '#ecfdf5',
+                            border: '1px solid #a7f3d0',
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            fontFamily: 'monospace'
+                          }}>
+                            📞 +91 {customerPhoneDigits}
+                          </span>
+                        )}
+                        {customerUser && (
+                          <span style={{
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            color: '#6366f1',
+                            background: '#eef2ff',
+                            border: '1px solid #c7d2fe',
+                            padding: '2px 8px',
+                            borderRadius: 6
+                          }}>
+                            {customerUser}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Client Read Status Badge: Marked as Read vs Unread */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 18, borderLeft: '1px solid #e2e8f0' }}>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Client Read Status
+                      </span>
+                      {isRead ? (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: '0.88rem',
+                          fontWeight: 800,
+                          color: '#047857',
+                          background: '#ecfdf5',
+                          border: '1.5px solid #a7f3d0',
+                          padding: '4px 12px',
+                          borderRadius: 9999,
+                          marginTop: 2,
+                          boxShadow: '0 1px 3px rgba(16, 185, 129, 0.12)'
+                        }}>
+                          <CheckCircle2 size={15} strokeWidth={2.6} style={{ color: '#059669' }} />
+                          <span>Marked as Read ✓</span>
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: '0.88rem',
+                          fontWeight: 800,
+                          color: '#b45309',
+                          background: '#fffbeb',
+                          border: '1.5px solid #fde68a',
+                          padding: '4px 12px',
+                          borderRadius: 9999,
+                          marginTop: 2
+                        }}>
+                          <Clock size={15} strokeWidth={2.4} style={{ color: '#d97706' }} />
+                          <span>Unread by Client</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Company Name where sent */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 18, borderLeft: '1px solid #e2e8f0' }}>
-                  <div>
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Sent to Client CRM
-                    </span>
-                    <span style={{
+                {/* Right Column: Actions */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <a
+                    href={`tel:${callDigits}`}
+                    className="desk-action-btn"
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600 }}
+                  >
+                    <Phone size={14} /> Direct Call Buyer
+                  </a>
+                  <a
+                    href={`https://wa.me/91${rawDigits}?text=Hello,%20thank%20you%20for%20your%20inquiry%20with%20${encodeURIComponent(customerName)}.`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="desk-action-btn"
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600 }}
+                  >
+                    <MessageSquare size={14} /> WhatsApp Buyer
+                  </a>
+
+                  {/* Quick Forward Lead to Customer Action */}
+                  {customerPhoneDigits && (
+                    <a
+                      href={`https://wa.me/91${customerPhoneDigits}?text=Hello%20${encodeURIComponent(customerName)},%20here%20is%20a%20new%20inbound%20buyer%20enquiry%20received%20for%20your%20business:%0A%0A%F0%9F%93%9E%20Buyer%20Phone:%20+91%20${rawDigits}%0A%E2%9C%85%20Verified%20via%20AdMafia%20GrowthLine.`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="desk-action-btn"
+                      style={{
+                        textDecoration: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 14px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        background: '#f0fdf4',
+                        borderColor: '#86efac',
+                        color: '#15803d'
+                      }}
+                      title={`Send WhatsApp message with buyer details to ${customerName} (+91 ${customerPhoneDigits})`}
+                    >
+                      <Send size={13} /> Forward to Client
+                    </a>
+                  )}
+
+                  {/* Direct Mark Read / Mark Unread toggle action */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleLeadRead(lead)}
+                    className="desk-action-btn"
+                    style={{
+                      background: isRead ? '#f8fafc' : '#ecfdf5',
+                      borderColor: isRead ? '#cbd5e1' : '#a7f3d0',
+                      color: isRead ? '#475569' : '#047857',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 6,
-                      fontSize: '0.94rem',
+                      padding: '8px 14px',
+                      fontSize: '0.82rem',
                       fontWeight: 700,
-                      color: '#1e40af',
-                      background: '#eff6ff',
-                      border: '1px solid #bfdbfe',
-                      padding: '4px 12px',
-                      borderRadius: 8,
-                      marginTop: 2
-                    }}>
-                      🏢 {targetComp}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Client Read Status Badge: Marked as Read vs Unread */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 18, borderLeft: '1px solid #e2e8f0' }}>
-                  <div>
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Client Read Status
-                    </span>
+                      cursor: 'pointer'
+                    }}
+                    title={isRead ? 'Click to Mark as Unread' : 'Click to Mark as Read'}
+                  >
                     {isRead ? (
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        fontSize: '0.88rem',
-                        fontWeight: 800,
-                        color: '#047857',
-                        background: '#ecfdf5',
-                        border: '1.5px solid #a7f3d0',
-                        padding: '4px 12px',
-                        borderRadius: 9999,
-                        marginTop: 2,
-                        boxShadow: '0 1px 3px rgba(16, 185, 129, 0.12)'
-                      }}>
-                        <CheckCircle2 size={15} strokeWidth={2.6} style={{ color: '#059669' }} />
-                        <span>Marked as Read ✓</span>
-                      </span>
+                      <>
+                        <RotateCcw size={13} strokeWidth={2.4} />
+                        <span>Mark Unread</span>
+                      </>
                     ) : (
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        fontSize: '0.88rem',
-                        fontWeight: 800,
-                        color: '#b45309',
-                        background: '#fffbeb',
-                        border: '1.5px solid #fde68a',
-                        padding: '4px 12px',
-                        borderRadius: 9999,
-                        marginTop: 2
-                      }}>
-                        <Clock size={15} strokeWidth={2.4} style={{ color: '#d97706' }} />
-                        <span>Unread by Client</span>
-                      </span>
+                      <>
+                        <Check size={14} strokeWidth={3} />
+                        <span>Mark as Read</span>
+                      </>
                     )}
-                  </div>
+                  </button>
                 </div>
               </div>
-
-              {/* Right Column: Actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <a
-                  href={`tel:${callDigits}`}
-                  className="desk-action-btn"
-                  style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600 }}
-                >
-                  <Phone size={14} /> Direct Call
-                </a>
-                <a
-                  href={`https://wa.me/91${rawDigits}?text=Hello,%20thank%20you%20for%20your%20inquiry%20with%20${encodeURIComponent(targetComp)}.`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="desk-action-btn"
-                  style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600 }}
-                >
-                  <MessageSquare size={14} /> WhatsApp
-                </a>
-
-                {/* Direct Mark Read / Mark Unread toggle action */}
-                <button
-                  type="button"
-                  onClick={() => handleToggleLeadRead(lead)}
-                  className="desk-action-btn"
-                  style={{
-                    background: isRead ? '#f8fafc' : '#f0fdf4',
-                    borderColor: isRead ? '#cbd5e1' : '#86efac',
-                    color: isRead ? '#475569' : '#15803d',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '8px 14px',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                  title={isRead ? 'Click to Mark as Unread' : 'Click to Mark as Read'}
-                >
-                  {isRead ? (
-                    <>
-                      <RotateCcw size={13} strokeWidth={2.4} />
-                      <span>Mark Unread</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check size={14} strokeWidth={3} />
-                      <span>Mark as Read</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* ADD LEAD MODAL IN LEAD MANAGEMENT DESK */}
