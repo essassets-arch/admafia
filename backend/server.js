@@ -810,7 +810,24 @@ app.get('/api/state', async (req, res) => {
         ORDER BY wt.created_at DESC
       `),
       query('SELECT * FROM deleted_failed_transactions ORDER BY deleted_at DESC'),
-      query(`SELECT wt.*, c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.category FROM wallet_transactions wt LEFT JOIN customers c ON (wt.customer_id = c.id OR wt.customer_id = c.phone OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)) ORDER BY wt.created_at DESC`),
+      query(`
+        SELECT 
+          wt.*, 
+          c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.category,
+          pr.receipt_number, pr.paid_at AS payment_paid_at, pr.payment_mode AS pr_payment_mode
+        FROM wallet_transactions wt 
+        LEFT JOIN customers c ON (
+          wt.customer_id = c.id 
+          OR wt.customer_id = c.phone 
+          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        LEFT JOIN payment_records pr ON (
+          wt.reference_utr = pr.utr_reference 
+          OR wt.reference_utr = pr.receipt_number
+          OR wt.id = pr.id
+        )
+        ORDER BY wt.created_at DESC
+      `),
     ]);
 
     res.json({
@@ -866,20 +883,36 @@ app.get('/api/state', async (req, res) => {
       allTransactions: (() => {
         const customers = custRes.rows.map(r => mapCustomerRow(r));
         const seenRefs = new Set();
+        const seenIds = new Set();
         const list = [];
         for (const r of allWtRes.rows) {
           const it = mapTransactionItem(r, customers);
-          if (it) { if (it.ref) seenRefs.add(it.ref); list.push(it); }
+          if (it) {
+            if (it.ref) seenRefs.add(it.ref);
+            if (it.id) seenIds.add(it.id);
+            list.push(it);
+          }
         }
         for (const r of payRes.rows) {
-          const ref = r.utr_reference || r.utr;
+          const ref = r.utr_reference || r.utr || r.receipt_number;
           if (ref && seenRefs.has(ref)) continue;
-          const it = mapTransactionItem({ ...r, reference_utr: ref, payment_method: r.payment_mode, created_at: r.paid_at, tx_type: r.tx_type || 'Credit' }, customers);
-          if (it) { if (it.ref) seenRefs.add(it.ref); list.push(it); }
+          if (r.id && seenIds.has(r.id)) continue;
+          const it = mapTransactionItem({
+            ...r,
+            reference_utr: ref,
+            payment_method: r.payment_mode,
+            created_at: r.paid_at,
+            tx_type: r.tx_type || 'Credit',
+          }, customers);
+          if (it) {
+            if (it.ref) seenRefs.add(it.ref);
+            if (it.id) seenIds.add(it.id);
+            list.push(it);
+          }
         }
         for (const f of failedRes.rows) {
           const fRef = f.reference_utr || f.gateway_reference || `FAIL-${f.id}`;
-          if (seenRefs.has(fRef) || seenRefs.has(`FAIL-${f.id}`)) continue;
+          if (seenRefs.has(fRef) || seenRefs.has(`FAIL-${f.id}`) || (f.id && seenIds.has(`tx_fail_${f.id}`))) continue;
           seenRefs.add(fRef);
           list.push({
             id: `tx_fail_${f.id}`,
@@ -921,55 +954,6 @@ app.get('/api/state', async (req, res) => {
             description: f.error_reason || f.description || 'Payment declined by customer bank or user cancelled checkout',
             failureReason: f.error_reason || f.description || 'Payment declined by customer bank or user cancelled checkout',
           });
-        }
-        for (const c of customers) {
-          const amt = Number(c.amount_paid || c.amountPaid || c.balance || 0);
-          if (amt > 0) {
-            const custRef = `PAY-REG-${c.id || c.phone}`;
-            if (!seenRefs.has(custRef) && !seenRefs.has(`PAY-${c.phone}`)) {
-              seenRefs.add(custRef);
-              list.push({
-                id: `tx_reg_${c.id || c.phone}`,
-                ref: custRef,
-                receiptNo: `RCP-2026-${String(c.phone || c.id).slice(-4).padStart(4, '0')}`,
-                receiptNumber: `RCP-2026-${String(c.phone || c.id).slice(-4).padStart(4, '0')}`,
-                customerId: c.id,
-                company: c.company_name || c.name || `@${c.username}` || 'Client Account',
-                companyName: c.company_name || c.name || `@${c.username}` || 'Client Account',
-                contact: c.contact_person || c.contact || 'Client Lead',
-                contactPerson: c.contact_person || c.contact || 'Client Lead',
-                username: (c.username || '').replace(/^@/, ''),
-                phone: c.phone || '',
-                email: c.email || '',
-                city: c.city || 'India',
-                state: c.state || 'Maharashtra',
-                category: c.category || 'IT & Software',
-                amount: amt,
-                gstAmount: Math.round(amt * 0.18),
-                totalAmount: amt,
-                balanceAfter: Number(c.balance || amt),
-                status: 'verified',
-                statusBadge: 'Settled ✓',
-                rawStatus: 'paid',
-                type: 'registration',
-                typeLabel: 'Account Registration & Ad Top-Up',
-                paymentMode: 'Razorpay UPI / Online Gateway',
-                date: new Date(c.registered_at || new Date()).toLocaleString('en-IN', {
-                  timeZone: 'Asia/Kolkata',
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: true,
-                }),
-                createdAt: c.registered_at || new Date(),
-                createdAtRaw: c.registered_at || new Date(),
-                description: 'Customer Account Registration & Initial Wallet Top-Up',
-                failureReason: null,
-              });
-            }
-          }
         }
         list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         return list;
@@ -1747,17 +1731,23 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
 // Sales Desk: Unified Master Transaction Logs (Verified, Failed, Pending, Top-Ups, Debits)
 app.get('/api/sales/transactions', async (req, res) => {
   try {
-    const [wtRes, prRes, custRes, failedRes] = await Promise.all([
+    const [wtRes, prRes, custRes, delFailedRes] = await Promise.all([
       query(`
         SELECT 
           wt.id, wt.customer_id, wt.wallet_id, wt.tx_type, wt.amount, wt.balance_after,
           wt.reference_utr, wt.description, wt.payment_method, wt.status, wt.created_at,
-          c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.category
+          c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.category,
+          pr.receipt_number, pr.paid_at AS payment_paid_at, pr.payment_mode AS pr_payment_mode
         FROM wallet_transactions wt
         LEFT JOIN customers c ON (
           wt.customer_id = c.id 
           OR wt.customer_id = c.phone 
           OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
+        )
+        LEFT JOIN payment_records pr ON (
+          wt.reference_utr = pr.utr_reference 
+          OR wt.reference_utr = pr.receipt_number
+          OR wt.id = pr.id
         )
         ORDER BY wt.created_at DESC
       `),
@@ -1775,33 +1765,29 @@ app.get('/api/sales/transactions', async (req, res) => {
         ORDER BY pr.paid_at DESC
       `),
       query('SELECT * FROM vw_sales_customer_accounts'),
-      query(`
-        SELECT 
-          id, customer_id, customer_name, customer_phone, amount,
-          error_reason, error_code, payment_method, utr_reference, created_at,
-          customer_username, gateway_reference
-        FROM failed_transactions
-        ORDER BY created_at DESC
-      `).catch(() => ({ rows: [] })),
+      query('SELECT * FROM deleted_failed_transactions ORDER BY deleted_at DESC').catch(() => ({ rows: [] })),
     ]);
 
     const customers = custRes.rows.map((r) => mapCustomerRow(r));
     const seenRefs = new Set();
+    const seenIds = new Set();
     const transactions = [];
 
-    // 1. Process wallet_transactions
+    // 1. Process wallet_transactions (Authoritative ledger for credits, debits & declined attempts)
     for (const r of wtRes.rows) {
       const item = mapTransactionItem(r, customers);
       if (item) {
         if (item.ref) seenRefs.add(item.ref);
+        if (item.id) seenIds.add(item.id);
         transactions.push(item);
       }
     }
 
-    // 2. Process payment_records (deduplicating by reference)
+    // 2. Process payment_records (deduplicating by reference / receipt / id)
     for (const r of prRes.rows) {
-      const ref = r.utr_reference || r.utr;
+      const ref = r.utr_reference || r.utr || r.receipt_number;
       if (ref && seenRefs.has(ref)) continue;
+      if (r.id && seenIds.has(r.id)) continue;
       const item = mapTransactionItem({
         ...r,
         reference_utr: ref,
@@ -1811,115 +1797,20 @@ app.get('/api/sales/transactions', async (req, res) => {
       }, customers);
       if (item) {
         if (item.ref) seenRefs.add(item.ref);
+        if (item.id) seenIds.add(item.id);
         transactions.push(item);
-      }
-    }
-
-    // 3. Process failed_transactions
-    for (const f of (failedRes?.rows || [])) {
-      const fRef = f.utr_reference || f.gateway_reference || `FAIL-${f.id}`;
-      if (seenRefs.has(fRef) || seenRefs.has(`FAIL-${f.id}`)) continue;
-      seenRefs.add(fRef);
-      transactions.push({
-        id: `tx_fail_${f.id}`,
-        ref: fRef,
-        receiptNo: `FAIL-${String(f.id).slice(-4)}`,
-        receiptNumber: `FAIL-${String(f.id).slice(-4)}`,
-        customerId: f.customer_id,
-        company: f.customer_name || 'Client Account',
-        companyName: f.customer_name || 'Client Account',
-        contact: f.customer_name || 'Authorized Lead',
-        contactPerson: f.customer_name || 'Authorized Lead',
-        username: (f.customer_username || '').replace(/^@/, ''),
-        phone: f.customer_phone || '',
-        email: '',
-        city: 'India',
-        state: 'Maharashtra',
-        category: 'IT & Software',
-        amount: Number(f.amount || 0),
-        gstAmount: 0,
-        totalAmount: Number(f.amount || 0),
-        balanceAfter: null,
-        status: 'failed',
-        statusBadge: 'Payment Declined ✗',
-        rawStatus: 'failed',
-        type: 'topup',
-        typeLabel: 'Wallet Top-Up (Declined)',
-        paymentMode: f.payment_method || 'Razorpay Gateway (Declined)',
-        date: new Date(f.created_at || new Date()).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        }),
-        createdAt: f.created_at || new Date(),
-        createdAtRaw: f.created_at || new Date(),
-        description: f.error_reason || 'Payment declined by customer bank or user cancelled checkout',
-        failureReason: f.error_reason || 'Payment declined by customer bank or user cancelled checkout',
-      });
-    }
-
-    // 4. Synthesize customer initial payments if not already captured
-    for (const c of customers) {
-      const amt = Number(c.amount_paid || c.amountPaid || c.balance || 0);
-      if (amt > 0) {
-        const custRef = `PAY-REG-${c.id || c.phone}`;
-        if (!seenRefs.has(custRef) && !seenRefs.has(`PAY-${c.phone}`)) {
-          seenRefs.add(custRef);
-          transactions.push({
-            id: `tx_reg_${c.id || c.phone}`,
-            ref: custRef,
-            receiptNo: `RCP-2026-${String(c.phone || c.id).slice(-4).padStart(4, '0')}`,
-            receiptNumber: `RCP-2026-${String(c.phone || c.id).slice(-4).padStart(4, '0')}`,
-            customerId: c.id,
-            company: c.company_name || c.name || `@${c.username}` || 'Client Account',
-            companyName: c.company_name || c.name || `@${c.username}` || 'Client Account',
-            contact: c.contact_person || c.contact || 'Client Lead',
-            contactPerson: c.contact_person || c.contact || 'Client Lead',
-            username: (c.username || '').replace(/^@/, ''),
-            phone: c.phone || '',
-            email: c.email || '',
-            city: c.city || 'India',
-            state: c.state || 'Maharashtra',
-            category: c.category || 'IT & Software',
-            amount: amt,
-            gstAmount: Math.round(amt * 0.18),
-            totalAmount: amt,
-            balanceAfter: Number(c.balance || amt),
-            status: 'verified',
-            statusBadge: 'Settled ✓',
-            rawStatus: 'paid',
-            type: 'registration',
-            typeLabel: 'Account Registration & Ad Top-Up',
-            paymentMode: 'Razorpay UPI / Online Gateway',
-            date: new Date(c.registered_at || new Date()).toLocaleString('en-IN', {
-              timeZone: 'Asia/Kolkata',
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            }),
-            createdAt: c.registered_at || new Date(),
-            createdAtRaw: c.registered_at || new Date(),
-            description: 'Customer Account Registration & Initial Wallet Top-Up',
-            failureReason: null,
-          });
-        }
       }
     }
 
     // Sort newest first
     transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    // Analytics stats
+    // Dynamic analytics metrics calculated from 100% real ledger rows
     let totalVolume = 0;
     let verifiedCount = 0;
     let verifiedVolume = 0;
+    let debitCount = 0;
+    let debitVolume = 0;
     let failedCount = 0;
     let failedVolume = 0;
     let pendingCount = 0;
@@ -1928,21 +1819,30 @@ app.get('/api/sales/transactions', async (req, res) => {
     let refundedVolume = 0;
 
     for (const t of transactions) {
-      totalVolume += t.amount;
-      if (t.status === 'verified') {
-        verifiedCount++;
-        verifiedVolume += t.amount;
+      const amt = Number(t.amount || 0);
+      if (t.status === 'verified' || t.status === 'paid' || t.status === 'settled') {
+        if (t.type === 'daily_burn' || (t.typeLabel && t.typeLabel.toLowerCase().includes('debit'))) {
+          debitCount++;
+          debitVolume += amt;
+        } else {
+          verifiedCount++;
+          verifiedVolume += amt;
+          totalVolume += amt;
+        }
       } else if (t.status === 'failed') {
         failedCount++;
-        failedVolume += t.amount;
+        failedVolume += amt;
       } else if (t.status === 'pending') {
         pendingCount++;
-        pendingVolume += t.amount;
+        pendingVolume += amt;
       } else if (t.status === 'refunded') {
         refundedCount++;
-        refundedVolume += t.amount;
+        refundedVolume += amt;
       }
     }
+
+    const settledTotal = verifiedCount + failedCount;
+    const settlementRate = settledTotal > 0 ? Math.round((verifiedCount / settledTotal) * 100) : 100;
 
     res.json({
       ok: true,
@@ -1952,13 +1852,15 @@ app.get('/api/sales/transactions', async (req, res) => {
         totalVolume,
         verifiedCount,
         verifiedVolume,
+        debitCount,
+        debitVolume,
         failedCount,
         failedVolume,
         pendingCount,
         pendingVolume,
         refundedCount,
         refundedVolume,
-        settlementRate: transactions.length > 0 ? Math.round((verifiedCount / transactions.length) * 100) : 100,
+        settlementRate,
       },
     });
   } catch (err) {

@@ -204,7 +204,9 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       const raw = localStorage.getItem('growthline_all_transactions');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
+        }
       }
     } catch (e) {}
     return [];
@@ -270,9 +272,14 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
           setVerificationsState(sanitizedV);
           try { localStorage.setItem(STORAGE_VERIFICATIONS, JSON.stringify(sanitizedV)); } catch (_) {}
         }
+        if (Array.isArray(state.payments)) setInvoices(state.payments);
         if (Array.isArray(state.queries)) setQueries(state.queries);
         if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
-        if (Array.isArray(state.allTransactions)) setAllTransactions(state.allTransactions);
+        if (Array.isArray(state.allTransactions)) {
+          const clean = state.allTransactions.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
+          setAllTransactions(clean);
+          try { localStorage.setItem('growthline_all_transactions', JSON.stringify(clean)); } catch (_) {}
+        }
       }
     });
 
@@ -281,9 +288,13 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
       if (state) {
         if (Array.isArray(state.customers)) setCustomersState(state.customers);
         if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
+        if (Array.isArray(state.payments)) setInvoices(state.payments);
         if (Array.isArray(state.queries)) setQueries(state.queries);
         if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);
-        if (Array.isArray(state.allTransactions)) setAllTransactions(state.allTransactions);
+        if (Array.isArray(state.allTransactions)) {
+          const clean = state.allTransactions.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
+          setAllTransactions(clean);
+        }
       }
     };
 
@@ -941,11 +952,14 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
               allTransactions={allTransactions}
               invoices={invoices}
               onRefresh={() => {
-                crmApi.syncStateFromPostgres().then((state) => {
-                  if (state && Array.isArray(state.allTransactions)) {
-                    setAllTransactions(state.allTransactions);
+                crmApi.fetchAllTransactions().then((res) => {
+                  if (res && res.ok && Array.isArray(res.transactions)) {
+                    const clean = res.transactions.filter((t) => !String(t.id).startsWith('tx_reg_') && !String(t.ref).startsWith('PAY-REG-'));
+                    setAllTransactions(clean);
+                    try { localStorage.setItem('growthline_all_transactions', JSON.stringify(clean)); } catch (_) {}
                   }
                 });
+                crmApi.syncStateFromPostgres();
               }}
             />
           )}

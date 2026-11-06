@@ -184,11 +184,11 @@ export const resolveCustomerIdentity = (custOrObj, customers = []) => {
   const matchedCust =
     customers && customers.length
       ? customers.find(
-          (c) =>
-            c.id === custOrObj.customerId ||
-            c.id === custOrObj.id ||
-            (cleanPhone && c.phone && String(c.phone).replace(/\D/g, '').slice(-10) === cleanPhone)
-        )
+        (c) =>
+          c.id === custOrObj.customerId ||
+          c.id === custOrObj.id ||
+          (cleanPhone && c.phone && String(c.phone).replace(/\D/g, '').slice(-10) === cleanPhone)
+      )
       : null;
 
   const rawUser = String(custOrObj.username || matchedCust?.username || '').replace(/^@/, '').trim();
@@ -407,7 +407,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
       const rawLeads = localStorage.getItem('growthline_all_leads');
       let existingLeads = [];
       if (rawLeads) {
-        try { existingLeads = JSON.parse(rawLeads); } catch(err){}
+        try { existingLeads = JSON.parse(rawLeads); } catch (err) { }
       }
       const updatedLeads = [newLead, ...existingLeads.filter((l) => l.id !== newLead.id)];
       localStorage.setItem('growthline_all_leads', JSON.stringify(updatedLeads));
@@ -426,7 +426,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
           city: newLead.city,
           requirement: newLead.requirement,
         })
-        .catch(() => {});
+        .catch(() => { });
 
       // 3. Dispatch custom events for real-time CRM updates without overwriting active user session
       window.dispatchEvent(new CustomEvent('growthline_lead_added', { detail: newLead }));
@@ -503,7 +503,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         const nextKyc = isComp ? 25 : 100;
         try {
           crmApi.patchCustomer(c.id, { profileStatus: nextProfile, kycPercent: nextKyc });
-        } catch (e) {}
+        } catch (e) { }
         return { ...c, profileStatus: nextProfile, kycPercent: nextKyc, verified: nextProfile === 'complete' };
       })
     );
@@ -518,7 +518,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         const nextBal = isPaid ? 0 : (c.balance > 0 ? c.balance : 3000);
         try {
           crmApi.patchCustomer(c.id, { paymentStatus: nextPayment, balance: nextBal });
-        } catch (e) {}
+        } catch (e) { }
         return {
           ...c,
           paymentStatus: nextPayment,
@@ -538,7 +538,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         const nextProfile = nextKyc >= 75 ? 'complete' : c.profileStatus;
         try {
           crmApi.patchCustomer(c.id, { profileStatus: nextProfile, kycPercent: nextKyc });
-        } catch (e) {}
+        } catch (e) { }
         return { ...c, kycPercent: nextKyc, profileStatus: nextProfile, verified: nextProfile === 'complete' };
       })
     );
@@ -648,7 +648,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
         deposit: added.balance,
       })
       .then(() => crmApi.syncStateFromPostgres())
-      .catch(() => {});
+      .catch(() => { });
     setIsAddModalOpen(false);
     setNewCust({
       username: '',
@@ -864,163 +864,163 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
               filtered.map((c) => {
                 const identity = resolveCustomerIdentity(c);
                 return (
-                <tr key={c.id}>
-                  {/* 1. Username & Workspace */}
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.84rem' }}>
-                        @{identity.username || c.username || 'user'}
-                      </span>
-                      <span className="desk-pill" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.68rem', fontWeight: 800, padding: '1px 6px' }}>
-                        🌐 #register
-                      </span>
-                    </div>
-                    <div style={{ fontWeight: 700, color: '#0f172a', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span>{identity.displayName}</span>
-                      {((c.balance || 0) < (c.dailyPacing || 300) || (c.runwayDays || 0) <= 1) && (
-                        <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
-                          ⚠️ Low Balance
+                  <tr key={c.id}>
+                    {/* 1. Username & Workspace */}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.84rem' }}>
+                          @{identity.username || c.username || 'user'}
                         </span>
+                        <span className="desk-pill" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.68rem', fontWeight: 800, padding: '1px 6px' }}>
+                          🌐 #register
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: 700, color: '#0f172a', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span>{identity.displayName}</span>
+                        {((c.balance || 0) < (c.dailyPacing || 300) || (c.runwayDays || 0) <= 1) && (
+                          <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
+                            ⚠️ Low Balance
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        {c.city} • Registered: {formatIndianDateTime(c.registeredAt, c.registeredAtRaw || c.registered_at)}
+                      </div>
+                    </td>
+
+                    {/* 2. Mobile Number (10 Digits) */}
+                    <td>
+                      <div style={{ fontWeight: 800, color: '#0f172a', fontFamily: 'monospace', fontSize: '0.92rem' }}>
+                        +91 {c.phone}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                        <a
+                          href={`tel:${c.phone}`}
+                          className="desk-action-btn"
+                          style={{ padding: '2px 6px', fontSize: '0.7rem', textDecoration: 'none' }}
+                          title="Direct Call"
+                        >
+                          <Phone size={11} /> Call
+                        </a>
+                        <a
+                          href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(c.contact || c.username)},%20AdMafia%20Support%20here%20regarding%20your%20registered%20workspace.`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="desk-action-btn"
+                          style={{ padding: '2px 6px', fontSize: '0.7rem', textDecoration: 'none' }}
+                          title="WhatsApp Direct"
+                        >
+                          <MessageSquare size={11} /> Chat
+                        </a>
+                      </div>
+                    </td>
+
+                    {/* 3. Work Email Address */}
+                    <td>
+                      <div style={{ fontSize: '0.84rem', color: '#334155' }}>
+                        <a href={`mailto:${c.email}`} style={{ color: '#0f172a', textDecoration: 'none', fontWeight: 600 }}>
+                          {c.email}
+                        </a>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{identity.contactPerson}</div>
+                    </td>
+
+                    {/* 4. Profile Status (Single Column - 100% Automatic) */}
+                    <td>
+                      {c.profileStatus === 'complete' || (c.kycPercent || 0) >= 100 || c.verified ? (
+                        <div>
+                          <span
+                            className="desk-pill pill-emerald"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800 }}
+                          >
+                            ✓ Complete
+                          </span>
+                          <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, marginTop: 3 }}>
+                            100% KYC Verified
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <span
+                            className="desk-pill pill-amber"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800 }}
+                          >
+                            ⏳ Incomplete
+                          </span>
+                          <div style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 600, marginTop: 3 }}>
+                            Registration Pending
+                          </div>
+                        </div>
                       )}
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                      {c.city} • Registered: {formatIndianDateTime(c.registeredAt, c.registeredAtRaw || c.registered_at)}
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* 2. Mobile Number (10 Digits) */}
-                  <td>
-                    <div style={{ fontWeight: 800, color: '#0f172a', fontFamily: 'monospace', fontSize: '0.92rem' }}>
-                      +91 {c.phone}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                      <a
-                        href={`tel:${c.phone}`}
-                        className="desk-action-btn"
-                        style={{ padding: '2px 6px', fontSize: '0.7rem', textDecoration: 'none' }}
-                        title="Direct Call"
-                      >
-                        <Phone size={11} /> Call
-                      </a>
-                      <a
-                        href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(c.contact || c.username)},%20AdMafia%20Support%20here%20regarding%20your%20registered%20workspace.`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="desk-action-btn"
-                        style={{ padding: '2px 6px', fontSize: '0.7rem', textDecoration: 'none' }}
-                        title="WhatsApp Direct"
-                      >
-                        <MessageSquare size={11} /> Chat
-                      </a>
-                    </div>
-                  </td>
+                    {/* 5. Payment Status (Automatic - Zero Manual Buttons) */}
+                    <td>
+                      <span className={`desk-pill ${c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? 'pill-emerald' : 'pill-rose'}`}>
+                        {c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? '✓ Paid' : '⏳ Pending'}
+                      </span>
+                      <div style={{ fontSize: '0.72rem', color: c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? '#059669' : '#d97706', fontWeight: 700, marginTop: 3 }}>
+                        {c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? `Settled (${formatINR(c.amountPaid || c.balance || 0)})` : 'Awaiting Payment'}
+                      </div>
+                    </td>
 
-                  {/* 3. Work Email Address */}
-                  <td>
-                    <div style={{ fontSize: '0.84rem', color: '#334155' }}>
-                      <a href={`mailto:${c.email}`} style={{ color: '#0f172a', textDecoration: 'none', fontWeight: 600 }}>
-                        {c.email}
-                      </a>
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{identity.contactPerson}</div>
-                  </td>
-
-                  {/* 4. Profile Status (Single Column - 100% Automatic) */}
-                  <td>
-                    {c.profileStatus === 'complete' || (c.kycPercent || 0) >= 100 || c.verified ? (
-                      <div>
-                        <span
-                          className="desk-pill pill-emerald"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800 }}
-                        >
-                          ✓ Complete
-                        </span>
-                        <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, marginTop: 3 }}>
-                          100% KYC Verified
+                    {/* 8. Wallet / Runway */}
+                    <td>
+                      <div style={{ fontWeight: 800, color: ((c.balance || 0) >= (c.dailyPacing || 300) && (c.runwayDays || 0) > 1) ? '#0f172a' : '#e11d48' }}>
+                        {formatINR(c.balance || 0)}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: ((c.balance || 0) >= (c.dailyPacing || 300) && (c.runwayDays || 0) > 1) ? '#059669' : '#e11d48', fontWeight: 700 }}>
+                        {c.runwayDays || 0} Days @ ₹{c.dailyPacing || 300}/d
+                      </div>
+                      {((c.balance || 0) < (c.dailyPacing || 300) || (c.runwayDays || 0) <= 1) && (
+                        <div style={{ marginTop: 4 }}>
+                          <span className="desk-pill pill-rose" style={{ fontSize: '0.64rem', padding: '1px 6px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <AlertTriangle size={10} /> ⚠️ Balance is Low
+                          </span>
                         </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <span
-                          className="desk-pill pill-amber"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800 }}
+                      )}
+                    </td>
+
+                    {/* 9. Status */}
+                    <td>
+                      <span className={`desk-pill ${c.status === 'active' ? 'pill-emerald' : 'pill-rose'}`}>
+                        {c.status === 'active' ? 'Active' : 'Suspended'}
+                      </span>
+                    </td>
+
+                    {/* 10. Actions */}
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className="desk-action-btn"
+                          onClick={() => {
+                            setSelectedCust(c);
+                            setShowPassword(false);
+                            setPasswordError('');
+                          }}
                         >
-                          ⏳ Incomplete
-                        </span>
-                        <div style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 600, marginTop: 3 }}>
-                          Registration Pending
-                        </div>
+                          <Eye size={13} /> 360°
+                        </button>
+                        <button
+                          type="button"
+                          className="desk-action-btn"
+                          style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontWeight: 700 }}
+                          onClick={() => setAddMoneyCust(c)}
+                          title="Add Money / Credit Client Wallet"
+                        >
+                          <CreditCard size={13} color="#059669" /> + Add Money
+                        </button>
+                        <button
+                          type="button"
+                          className={`desk-action-btn ${c.status === 'active' ? 'btn-warn' : 'btn-success'}`}
+                          onClick={() => handleToggleStatus(c.id)}
+                        >
+                          {c.status === 'active' ? 'Suspend' : 'Activate'}
+                        </button>
                       </div>
-                    )}
-                  </td>
-
-                  {/* 5. Payment Status (Automatic - Zero Manual Buttons) */}
-                  <td>
-                    <span className={`desk-pill ${c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? 'pill-emerald' : 'pill-rose'}`}>
-                      {c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? '✓ Paid' : '⏳ Pending'}
-                    </span>
-                    <div style={{ fontSize: '0.72rem', color: c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? '#059669' : '#d97706', fontWeight: 700, marginTop: 3 }}>
-                      {c.paymentStatus === 'paid' || (c.balance || 0) > 0 ? `Settled (${formatINR(c.amountPaid || c.balance || 0)})` : 'Awaiting Payment'}
-                    </div>
-                  </td>
-
-                  {/* 8. Wallet / Runway */}
-                  <td>
-                    <div style={{ fontWeight: 800, color: ((c.balance || 0) >= (c.dailyPacing || 300) && (c.runwayDays || 0) > 1) ? '#0f172a' : '#e11d48' }}>
-                      {formatINR(c.balance || 0)}
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: ((c.balance || 0) >= (c.dailyPacing || 300) && (c.runwayDays || 0) > 1) ? '#059669' : '#e11d48', fontWeight: 700 }}>
-                      {c.runwayDays || 0} Days @ ₹{c.dailyPacing || 300}/d
-                    </div>
-                    {((c.balance || 0) < (c.dailyPacing || 300) || (c.runwayDays || 0) <= 1) && (
-                      <div style={{ marginTop: 4 }}>
-                        <span className="desk-pill pill-rose" style={{ fontSize: '0.64rem', padding: '1px 6px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                          <AlertTriangle size={10} /> ⚠️ Balance is Low
-                        </span>
-                      </div>
-                    )}
-                  </td>
-
-                  {/* 9. Status */}
-                  <td>
-                    <span className={`desk-pill ${c.status === 'active' ? 'pill-emerald' : 'pill-rose'}`}>
-                      {c.status === 'active' ? 'Active' : 'Suspended'}
-                    </span>
-                  </td>
-
-                  {/* 10. Actions */}
-                  <td style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', gap: '6px' }}>
-                      <button
-                        type="button"
-                        className="desk-action-btn"
-                        onClick={() => {
-                          setSelectedCust(c);
-                          setShowPassword(false);
-                          setPasswordError('');
-                        }}
-                      >
-                        <Eye size={13} /> 360°
-                      </button>
-                      <button
-                        type="button"
-                        className="desk-action-btn"
-                        style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontWeight: 700 }}
-                        onClick={() => setAddMoneyCust(c)}
-                        title="Add Money / Credit Client Wallet"
-                      >
-                        <CreditCard size={13} color="#059669" /> + Add Money
-                      </button>
-                      <button
-                        type="button"
-                        className={`desk-action-btn ${c.status === 'active' ? 'btn-warn' : 'btn-success'}`}
-                        onClick={() => handleToggleStatus(c.id)}
-                      >
-                        {c.status === 'active' ? 'Suspend' : 'Activate'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
                 );
               })
             )}
@@ -1192,7 +1192,7 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
 
             <form onSubmit={handleSubmitLead}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                
+
                 {/* 1. Select Customer Account * */}
                 <div>
                   <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', marginBottom: 6, display: 'block' }}>
@@ -1530,105 +1530,105 @@ export function PendingVerificationDesk({ verifications, setVerifications, onApp
         {filtered.map((item) => {
           const vIdentity = resolveCustomerIdentity(item, customers);
           return (
-          <div key={item.id} className="desk-card-row">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{vIdentity.displayName}</h3>
-                  <span className={`desk-pill ${item.paymentStatus === 'paid' ? 'pill-emerald' : 'pill-amber'}`}>
-                    {item.paymentStatus === 'paid' ? '✓ Auto-Verified & Paid' : '✓ Auto-Verified (Budget Pending)'}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 4 }}>
-                  Contact: <span style={{ fontWeight: 600, color: '#334155' }}>{vIdentity.contactPerson}</span> • Phone: <a href={`tel:${item.phone}`} style={{ color: '#4f46e5' }}>+91 {item.phone}</a> • Submitted: {formatIndianDateTime(item.submittedAt, item.submittedAtRaw || item.submitted_at)}
-                </div>
-              </div>
-
-              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            <div key={item.id} className="desk-card-row">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>{formatINR(item.amount)}</div>
-                  <div style={{ fontSize: '0.76rem', color: '#059669', fontWeight: 700 }}>
-                    {item.runwayDays} Days Runway @ ₹300/day
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{vIdentity.displayName}</h3>
+                    <span className={`desk-pill ${item.paymentStatus === 'paid' ? 'pill-emerald' : 'pill-amber'}`}>
+                      {item.paymentStatus === 'paid' ? '✓ Auto-Verified & Paid' : '✓ Auto-Verified (Budget Pending)'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 4 }}>
+                    Contact: <span style={{ fontWeight: 600, color: '#334155' }}>{vIdentity.contactPerson}</span> • Phone: <a href={`tel:${item.phone}`} style={{ color: '#4f46e5' }}>+91 {item.phone}</a> • Submitted: {formatIndianDateTime(item.submittedAt, item.submittedAtRaw || item.submitted_at)}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedDetail(item)}
-                  className="sales-btn-primary"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '5px 14px',
-                    fontSize: '0.8rem',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    background: '#4f46e5',
-                    color: '#ffffff',
-                    border: 'none',
-                    fontWeight: 700
-                  }}
-                  title="View full payment and profile completion audit record"
-                >
-                  <Eye size={14} />
-                  <span>Detail</span>
-                </button>
-              </div>
-            </div>
 
-            {/* Dual Gate Matrix & Information */}
-            <div style={{ marginTop: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ display: 'flex', gap: 16 }}>
-                <div>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 1: Payment Status</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: 700, color: item.paymentStatus === 'paid' ? '#059669' : '#d97706' }}>
-                    {item.paymentStatus === 'paid' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
-                    {item.paymentStatus === 'paid' ? 'Settled (Online Razorpay)' : 'Awaiting Online Top-Up'}
+                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                  <div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>{formatINR(item.amount)}</div>
+                    <div style={{ fontSize: '0.76rem', color: '#059669', fontWeight: 700 }}>
+                      {item.runwayDays} Days Runway @ ₹300/day
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDetail(item)}
+                    className="sales-btn-primary"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '5px 14px',
+                      fontSize: '0.8rem',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      background: '#4f46e5',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: 700
+                    }}
+                    title="View full payment and profile completion audit record"
+                  >
+                    <Eye size={14} />
+                    <span>Detail</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Dual Gate Matrix & Information */}
+              <div style={{ marginTop: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 1: Payment Status</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: 700, color: item.paymentStatus === 'paid' ? '#059669' : '#d97706' }}>
+                      {item.paymentStatus === 'paid' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                      {item.paymentStatus === 'paid' ? 'Settled (Online Razorpay)' : 'Awaiting Online Top-Up'}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 2: Profile &amp; KYC Status</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: 700, color: '#059669' }}>
+                      <CheckCircle2 size={14} />
+                      <span>100% Completed &amp; Auto-Verified</span>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 2: Profile &amp; KYC Status</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: 700, color: '#059669' }}>
-                    <CheckCircle2 size={14} />
-                    <span>100% Completed &amp; Auto-Verified</span>
+
+                <div style={{ fontSize: '0.8rem', color: '#475569' }}>
+                  Reference: <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#e2e8f0', padding: '2px 6px', borderRadius: 4 }}>{item.utrNumber || 'Auto-Verified'}</span>
+                </div>
+              </div>
+
+              {/* Profile Completion & Verification Information Bar (Pure Info) */}
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', color: '#059669', fontWeight: 700 }}>
+                  <CheckCircle2 size={15} />
+                  <span>Profile Registration Complete &amp; 100% Auto-Verified</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ fontSize: '0.78rem', color: '#475569' }}>
+                    Account State: <strong style={{ color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: 4, border: '1px solid #a7f3d0' }}>Active Live Account</strong>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDetail(item)}
+                    className="desk-action-btn"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      color: '#4f46e5',
+                      fontWeight: 700
+                    }}
+                  >
+                    <FileText size={13} /> View Audit Details
+                  </button>
                 </div>
               </div>
-
-              <div style={{ fontSize: '0.8rem', color: '#475569' }}>
-                Reference: <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#e2e8f0', padding: '2px 6px', borderRadius: 4 }}>{item.utrNumber || 'Auto-Verified'}</span>
-              </div>
             </div>
-
-            {/* Profile Completion & Verification Information Bar (Pure Info) */}
-            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', color: '#059669', fontWeight: 700 }}>
-                <CheckCircle2 size={15} />
-                <span>Profile Registration Complete &amp; 100% Auto-Verified</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ fontSize: '0.78rem', color: '#475569' }}>
-                  Account State: <strong style={{ color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: 4, border: '1px solid #a7f3d0' }}>Active Live Account</strong>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedDetail(item)}
-                  className="desk-action-btn"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    padding: '4px 10px',
-                    fontSize: '0.75rem',
-                    color: '#4f46e5',
-                    fontWeight: 700
-                  }}
-                >
-                  <FileText size={13} /> View Audit Details
-                </button>
-              </div>
-            </div>
-          </div>
           );
         })}
       </div>
@@ -1800,7 +1800,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch (e) {}
+    } catch (e) { }
     return [];
   });
 
@@ -1832,7 +1832,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
           setLeads(cleaned);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   useEffect(() => {
@@ -1919,7 +1919,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
       const rawLeads = localStorage.getItem('growthline_all_leads');
       let existingLeads = [];
       if (rawLeads) {
-        try { existingLeads = JSON.parse(rawLeads); } catch(err){}
+        try { existingLeads = JSON.parse(rawLeads); } catch (err) { }
       }
       const updatedLeads = [newLead, ...existingLeads.filter((l) => l.id !== newLead.id)];
       localStorage.setItem('growthline_all_leads', JSON.stringify(updatedLeads));
@@ -1941,12 +1941,12 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
           city: newLead.city,
           requirement: newLead.requirement,
         })
-        .catch(() => {});
+        .catch(() => { });
 
       // Dispatch custom events without overwriting active customer session
       window.dispatchEvent(new CustomEvent('growthline_lead_added', { detail: newLead }));
       window.dispatchEvent(new Event('storage'));
-    } catch(err) {
+    } catch (err) {
       console.error(err);
     }
 
@@ -1977,7 +1977,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
           return [...cleaned, ...DEFAULT_DESK_LEADS.filter((l) => !ids.has(l.id))];
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     return DEFAULT_DESK_LEADS;
   });
 
@@ -2001,7 +2001,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setLeads(parsed);
-        } catch (err) {}
+        } catch (err) { }
       }
     };
     window.addEventListener('growthline_lead_added', handleLeadAdded);
@@ -2469,7 +2469,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 
             <form onSubmit={handleSubmitLead}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                
+
                 {/* 1. Select Customer Account * */}
                 <div>
                   <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', marginBottom: 6, display: 'block' }}>
@@ -2652,7 +2652,7 @@ export function ProfileCompletionDesk({ customers = [], setCustomers }) {
         const newProfileStatus = newPercent === 100 ? 'complete' : c.profileStatus;
         try {
           crmApi.patchCustomer(c.id, { profileStatus: newProfileStatus, kycPercent: newPercent });
-        } catch (e) {}
+        } catch (e) { }
         const updated = { ...c, kycPercent: newPercent, profileStatus: newProfileStatus, verified: newPercent === 100 };
         if (selectedProfileCust?.id === custId) {
           setSelectedProfileCust(updated);
@@ -2668,7 +2668,7 @@ export function ProfileCompletionDesk({ customers = [], setCustomers }) {
         if (c.id !== custId) return c;
         try {
           crmApi.patchCustomer(c.id, { profileStatus: 'complete', kycPercent: 100, verified: true });
-        } catch (e) {}
+        } catch (e) { }
         const updated = { ...c, kycPercent: 100, profileStatus: 'complete', verified: true };
         if (selectedProfileCust?.id === custId) {
           setSelectedProfileCust(updated);
@@ -3700,7 +3700,7 @@ export function PaymentCollectionDesk({
           return parsed.map(formatPaymentRecord);
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     return INITIAL_PAYMENT_RECORDS;
   });
 
@@ -3722,12 +3722,12 @@ export function PaymentCollectionDesk({
             });
             try {
               localStorage.setItem('growthline_payment_records', JSON.stringify(merged));
-            } catch (e) {}
+            } catch (e) { }
             return merged;
           });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       isMounted = false;
     };
@@ -3777,7 +3777,7 @@ export function PaymentCollectionDesk({
       if (hasChange) {
         try {
           localStorage.setItem('growthline_payment_records', JSON.stringify(updated));
-        } catch (e) {}
+        } catch (e) { }
         return updated;
       }
       return prev;
@@ -3804,7 +3804,7 @@ export function PaymentCollectionDesk({
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setRecords(parsed.map(formatPaymentRecord));
-        } catch (err) {}
+        } catch (err) { }
       }
     };
 
@@ -3822,7 +3822,7 @@ export function PaymentCollectionDesk({
     setRecords(newList);
     try {
       localStorage.setItem('growthline_payment_records', JSON.stringify(newList));
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // Open Add Modal with default pre-selection
@@ -3868,8 +3868,8 @@ export function PaymentCollectionDesk({
         newPayData.type === 'topup'
           ? 'Wallet Top-Up'
           : newPayData.type === 'registration'
-          ? 'Registration Package'
-          : 'Service Invoice Payment',
+            ? 'Registration Package'
+            : 'Service Invoice Payment',
       amount: amt,
       gstAmount: Math.round(amt * 0.18),
       total: Math.round(amt * 1.18),
@@ -5081,7 +5081,7 @@ export function QuerySupportDesk({
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch (e) {}
+    } catch (e) { }
     return Array.isArray(initialQueries) ? initialQueries : [];
   });
 
@@ -5094,7 +5094,7 @@ export function QuerySupportDesk({
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch (e) {}
+    } catch (e) { }
     return [];
   });
 
@@ -5115,10 +5115,10 @@ export function QuerySupportDesk({
           if (setQueries) setQueries(res.queries);
           try {
             localStorage.setItem('growthline_support_queries', JSON.stringify(res.queries));
-          } catch (e) {}
+          } catch (e) { }
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     const handleSync = (e) => {
       const fresh = e?.detail;
@@ -5249,7 +5249,7 @@ export function QuerySupportDesk({
       if (setQueries) setQueries(updated);
       try {
         localStorage.setItem('growthline_support_queries', JSON.stringify(updated));
-      } catch (err) {}
+      } catch (err) { }
 
       setIsAddModalOpen(false);
       Swal.fire({
@@ -5273,7 +5273,7 @@ export function QuerySupportDesk({
       if (setQueries) setQueries(updated);
       try {
         localStorage.setItem('growthline_support_queries', JSON.stringify(updated));
-      } catch (e) {}
+      } catch (e) { }
 
       setIsAddModalOpen(false);
       Swal.fire({
@@ -5305,7 +5305,7 @@ export function QuerySupportDesk({
     if (setQueries) setQueries(updated);
     try {
       localStorage.setItem('growthline_support_queries', JSON.stringify(updated));
-    } catch (e) {}
+    } catch (e) { }
 
     Swal.fire({
       icon: 'success',
@@ -5352,7 +5352,7 @@ export function QuerySupportDesk({
     if (setQueries) setQueries(updated);
     try {
       localStorage.setItem('growthline_support_queries', JSON.stringify(updated));
-    } catch (e) {}
+    } catch (e) { }
 
     Swal.fire({
       icon: 'success',
@@ -5390,8 +5390,8 @@ export function QuerySupportDesk({
       const matchCust = comp.includes(q) || contact.includes(q) || phone.includes(q) || city.includes(q) || cat.includes(q);
       const matchQuery = custQueries.some(
         item => (item.subject || '').toLowerCase().includes(q) ||
-                (item.category || '').toLowerCase().includes(q) ||
-                (item.internalNotes || '').toLowerCase().includes(q)
+          (item.category || '').toLowerCase().includes(q) ||
+          (item.internalNotes || '').toLowerCase().includes(q)
       );
       return matchCust || matchQuery;
     }
@@ -5594,13 +5594,12 @@ export function QuerySupportDesk({
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                             <span
-                              className={`desk-pill ${
-                                latestQuery.priority === 'Urgent'
-                                  ? 'pill-rose'
-                                  : latestQuery.priority === 'High'
+                              className={`desk-pill ${latestQuery.priority === 'Urgent'
+                                ? 'pill-rose'
+                                : latestQuery.priority === 'High'
                                   ? 'pill-amber'
                                   : 'pill-indigo'
-                              }`}
+                                }`}
                               style={{ fontSize: '0.68rem', padding: '1px 6px', fontWeight: 800 }}
                             >
                               {latestQuery.priority}
@@ -5937,13 +5936,12 @@ export function QuerySupportDesk({
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span
-                              className={`desk-pill ${
-                                q.priority === 'Urgent'
-                                  ? 'pill-rose'
-                                  : q.priority === 'High'
+                              className={`desk-pill ${q.priority === 'Urgent'
+                                ? 'pill-rose'
+                                : q.priority === 'High'
                                   ? 'pill-amber'
                                   : 'pill-indigo'
-                              }`}
+                                }`}
                               style={{ fontSize: '0.66rem', padding: '1px 6px', fontWeight: 800 }}
                             >
                               {q.priority}
@@ -6597,7 +6595,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
           <div className="sales-modal-card" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
             <div className="desk-modal-header" style={{ marginBottom: 20 }}>
               <div>
-{(() => {
+                {(() => {
                   const selProper = resolveCustomerIdentity(selectedMember, customers);
                   return (
                     <div>
@@ -6692,7 +6690,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed;
       }
-    } catch (e) {}
+    } catch (e) { }
     return [];
   });
   const [loading, setLoading] = useState(true);
@@ -6708,7 +6706,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed;
       }
-    } catch (e) {}
+    } catch (e) { }
     return [];
   });
 
@@ -6720,7 +6718,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
         setFailedList(res.failedTransactions);
         try {
           localStorage.setItem('growthline_failed_transactions', JSON.stringify(res.failedTransactions));
-        } catch (e) {}
+        } catch (e) { }
         setLoading(false);
         return;
       }
@@ -6736,7 +6734,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           setFailedList(parsed);
         }
       }
-    } catch (e) {}
+    } catch (e) { }
     setLoading(false);
   }, []);
 
@@ -6747,7 +6745,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
         setDeletedHistoryList(res.history);
         try {
           localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(res.history));
-        } catch (e) {}
+        } catch (e) { }
         return;
       }
     } catch (e) {
@@ -6762,7 +6760,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           setDeletedHistoryList(parsed);
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   useEffect(() => {
@@ -6882,8 +6880,8 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
         runwayDays: newRunway,
         paymentStatus: 'paid',
         status: 'active',
-      }).catch(() => {});
-    } catch (e) {}
+      }).catch(() => { });
+    } catch (e) { }
 
     Swal.fire({
       icon: 'success',
@@ -6949,7 +6947,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       const updated = [archivedItem, ...prev.filter(item => item.ref !== tx.ref && item.id !== tx.id)];
       try {
         localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(updated));
-      } catch (err) {}
+      } catch (err) { }
       return updated;
     });
 
@@ -6962,13 +6960,13 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           localStorage.setItem('growthline_wallet_transactions', JSON.stringify(updated));
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     setFailedList((prev) => {
       const updated = prev.filter((t) => t.id !== tx.id && t.ref !== tx.ref);
       try {
         localStorage.setItem('growthline_failed_transactions', JSON.stringify(updated));
-      } catch (e) {}
+      } catch (e) { }
       return updated;
     });
     if (selectedFailTx && (selectedFailTx.id === tx.id || selectedFailTx.ref === tx.ref)) {
@@ -6977,7 +6975,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
 
     try {
       window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
-    } catch (e) {}
+    } catch (e) { }
 
     Swal.fire({
       icon: 'success',
@@ -7040,7 +7038,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       const updated = [...archivedBatch, ...prev];
       try {
         localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(updated));
-      } catch (err) {}
+      } catch (err) { }
       return updated;
     });
 
@@ -7058,17 +7056,17 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
           localStorage.setItem('growthline_wallet_transactions', JSON.stringify(updated));
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     setFailedList([]);
     try {
       localStorage.setItem('growthline_failed_transactions', JSON.stringify([]));
-    } catch (e) {}
+    } catch (e) { }
     setSelectedFailTx(null);
 
     try {
       window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
-    } catch (e) {}
+    } catch (e) { }
 
     Swal.fire({
       icon: 'success',
@@ -7113,7 +7111,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       const updated = prev.filter(t => t.id !== item.id && t.ref !== item.ref);
       try {
         localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(updated));
-      } catch (err) {}
+      } catch (err) { }
       return updated;
     });
 
@@ -7127,13 +7125,13 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       const updated = [restoredItem, ...prev.filter(t => t.id !== restoredItem.id && t.ref !== restoredItem.ref)];
       try {
         localStorage.setItem('growthline_failed_transactions', JSON.stringify(updated));
-      } catch (e) {}
+      } catch (e) { }
       return updated;
     });
 
     try {
       window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
-    } catch (e) {}
+    } catch (e) { }
 
     Swal.fire({
       icon: 'success',
@@ -7179,13 +7177,13 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
       const updated = prev.filter(t => t.id !== item.id && t.ref !== item.ref);
       try {
         localStorage.setItem('growthline_deleted_failed_transactions', JSON.stringify(updated));
-      } catch (err) {}
+      } catch (err) { }
       return updated;
     });
 
     try {
       window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
-    } catch (e) {}
+    } catch (e) { }
 
     Swal.fire({
       icon: 'success',
@@ -7228,11 +7226,11 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
     setDeletedHistoryList([]);
     try {
       localStorage.removeItem('growthline_deleted_failed_transactions');
-    } catch (err) {}
+    } catch (err) { }
 
     try {
       window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
-    } catch (e) {}
+    } catch (e) { }
 
     Swal.fire({
       icon: 'success',
@@ -7385,15 +7383,15 @@ export function FailedTransactionsDesk({ customers = [], setCustomers }) {
             style={
               filter === 'deleted'
                 ? {
-                    background: '#fee2e2',
-                    color: '#b91c1c',
-                    borderColor: '#fca5a5',
-                    fontWeight: 800,
-                  }
+                  background: '#fee2e2',
+                  color: '#b91c1c',
+                  borderColor: '#fca5a5',
+                  fontWeight: 800,
+                }
                 : {
-                    color: '#64748b',
-                    fontWeight: 700,
-                  }
+                  color: '#64748b',
+                  fontWeight: 700,
+                }
             }
           >
             🗑️ Deleted History ({deletedHistoryList.length})

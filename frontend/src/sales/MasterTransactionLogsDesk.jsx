@@ -39,175 +39,64 @@ const formatINR = (val) =>
 
 export function synthesizeMasterTransactions(txList = [], custList = [], invList = []) {
   const seenRefs = new Set();
+  const seenIds = new Set();
   const list = [];
 
-  // 1. Authoritative or fetched transactions
+  // 1. Authoritative real transactions from PostgreSQL backend
   if (Array.isArray(txList)) {
     for (const t of txList) {
+      if (!t) continue;
+      // Filter out any legacy synthetic or fake mock transactions
+      if (String(t.id).startsWith('tx_reg_') || String(t.ref).startsWith('PAY-REG-')) continue;
       const key = t.ref || t.id;
       if (key && !seenRefs.has(key)) {
         seenRefs.add(key);
+        if (t.id) seenIds.add(t.id);
         list.push(t);
       }
     }
   }
 
-  // If we already have transactions, return them
-  if (list.length > 0) {
-    list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-    return list;
-  }
-
-  // 2. Desk 5 payment records / invoices
-  const invSource = Array.isArray(invList) && invList.length > 0
-    ? invList
-    : (() => {
-        try {
-          const raw = localStorage.getItem('growthline_payment_records');
-          if (raw) {
-            const p = JSON.parse(raw);
-            if (Array.isArray(p)) return p;
-          }
-        } catch (_) {}
-        return [];
-      })();
-
-  for (const inv of invSource) {
-    const ref = inv.utr || inv.utr_reference || inv.id;
-    if (ref && !seenRefs.has(ref)) {
-      seenRefs.add(ref);
-      const isPaid = (inv.status || '').toLowerCase() === 'paid' || (inv.status || '').toLowerCase() === 'verified';
-      list.push({
-        id: inv.id || `inv_${Date.now()}`,
-        ref: ref,
-        receiptNo: inv.receiptNumber || inv.receiptNo || (inv.id ? `RCP-2026-${String(inv.id).slice(-4).padStart(4, '0')}` : 'RCP-2026-1001'),
-        receiptNumber: inv.receiptNumber || inv.receiptNo || 'RCP-2026-1001',
-        customerId: inv.customerId,
-        company: inv.company || inv.companyName || 'Client Account',
-        companyName: inv.company || inv.companyName || 'Client Account',
-        contact: inv.contact || inv.contactPerson || 'Authorized Lead',
-        contactPerson: inv.contact || inv.contactPerson || 'Authorized Lead',
-        username: (inv.username || '').replace(/^@/, ''),
-        phone: inv.phone || '',
-        email: inv.email || '',
-        city: inv.city || 'India',
-        state: inv.state || 'Maharashtra',
-        category: inv.category || 'IT & Software',
-        amount: Number(inv.amount || inv.totalAmount || 0),
-        gstAmount: Number(inv.gstAmount || Math.round(Number(inv.amount || 0) * 0.18)),
-        totalAmount: Number(inv.totalAmount || inv.amount || 0),
-        balanceAfter: null,
-        status: isPaid ? 'verified' : (inv.status || 'verified'),
-        statusBadge: isPaid ? 'Settled ✓' : (inv.status || 'Settled ✓'),
-        rawStatus: inv.status || 'paid',
-        type: inv.type || 'topup',
-        typeLabel: inv.type === 'registration' ? 'Registration Package' : 'Marketing Ad Wallet Top-Up',
-        paymentMode: inv.paymentMode || inv.mode || 'Razorpay UPI / Online Gateway',
-        date: inv.date || new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-        createdAt: inv.paidAtRaw || inv.created_at || new Date(),
-        description: inv.notes || 'Customer Marketing Ad Wallet Top-Up',
-        failureReason: null,
-      });
-    }
-  }
-
-  // 3. Stored failed transactions
-  try {
-    const rawF = localStorage.getItem('growthline_failed_transactions');
-    if (rawF) {
-      const p = JSON.parse(rawF);
-      if (Array.isArray(p)) {
-        for (const f of p) {
-          const fRef = f.ref || f.utr || f.utr_reference || `FAIL-${f.id}`;
-          if (!seenRefs.has(fRef) && !seenRefs.has(`FAIL-${f.id}`)) {
-            seenRefs.add(fRef);
-            list.push({
-              id: f.id || `fail_${Date.now()}`,
-              ref: fRef,
-              receiptNo: `FAIL-${String(f.id).slice(-4).padStart(4, '0')}`,
-              receiptNumber: `FAIL-${String(f.id).slice(-4).padStart(4, '0')}`,
-              customerId: f.customerId,
-              company: f.company || f.customerName || 'Client Account',
-              companyName: f.company || f.customerName || 'Client Account',
-              contact: f.contact || f.contactPerson || 'Authorized Lead',
-              contactPerson: f.contact || f.contactPerson || 'Authorized Lead',
-              username: (f.username || f.customer_username || '').replace(/^@/, ''),
-              phone: f.phone || f.customer_phone || '',
-              email: f.email || '',
-              city: f.city || 'India',
-              state: f.state || 'Maharashtra',
-              category: f.category || 'IT & Software',
-              amount: Number(f.amount || 0),
-              gstAmount: 0,
-              totalAmount: Number(f.amount || 0),
-              balanceAfter: null,
-              status: 'failed',
-              statusBadge: 'Payment Declined ✗',
-              rawStatus: 'failed',
-              type: 'topup',
-              typeLabel: 'Wallet Top-Up (Declined)',
-              paymentMode: f.paymentMode || f.method || 'Razorpay Gateway (Declined)',
-              date: f.date || new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-              createdAt: f.createdAt || new Date(),
-              description: f.errorReason || f.description || 'Payment declined by customer bank or user cancelled checkout',
-              failureReason: f.errorReason || f.description || 'Payment declined by customer bank or user cancelled checkout',
-            });
-          }
-        }
-      }
-    }
-  } catch (_) {}
-
-  // 4. Any customer with balance > 0 or amountPaid > 0
-  if (Array.isArray(custList)) {
-    for (const c of custList) {
-      const amt = Number(c.amountPaid || c.amount_paid || c.balance || c.walletBalance || 0);
-      if (amt > 0) {
-        const cleanP = String(c.phone || '').replace(/\D/g, '').slice(-10);
-        const custRef = `PAY-REG-${c.id || cleanP}`;
-        if (!seenRefs.has(custRef) && !seenRefs.has(`PAY-${cleanP}`)) {
-          seenRefs.add(custRef);
-          seenRefs.add(`PAY-${cleanP}`);
-          list.push({
-            id: `tx_reg_${c.id || cleanP}`,
-            ref: custRef,
-            receiptNo: `RCP-2026-${cleanP.slice(-4) || '1001'}`,
-            receiptNumber: `RCP-2026-${cleanP.slice(-4) || '1001'}`,
-            customerId: c.id,
-            company: c.companyName || c.company || c.name || `@${c.username}` || 'Client Account',
-            companyName: c.companyName || c.company || c.name || `@${c.username}` || 'Client Account',
-            contact: c.contactPerson || c.contact || 'Client Lead',
-            contactPerson: c.contactPerson || c.contact || 'Client Lead',
-            username: (c.username || '').replace(/^@/, ''),
-            phone: cleanP,
-            email: c.email || '',
-            city: c.city || 'India',
-            state: c.state || 'Maharashtra',
-            category: c.category || 'IT & Software',
-            amount: amt,
-            gstAmount: Math.round(amt * 0.18),
-            totalAmount: amt,
-            balanceAfter: Number(c.balance || amt),
-            status: 'verified',
-            statusBadge: 'Settled ✓',
-            rawStatus: 'paid',
-            type: 'registration',
-            typeLabel: 'Account Registration & Initial Top-Up',
-            paymentMode: 'Razorpay UPI / Online Gateway',
-            date: new Date(c.registeredAt || c.registered_at || new Date()).toLocaleString('en-IN', {
-              timeZone: 'Asia/Kolkata',
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            }),
-            createdAt: c.registeredAt || c.registered_at || new Date(),
-            description: 'Customer Account Registration & Initial Wallet Top-Up',
-            failureReason: null,
-          });
-        }
+  // 2. Desk 5 payment records / tax invoices (if not already represented in transactions)
+  if (Array.isArray(invList) && invList.length > 0) {
+    for (const inv of invList) {
+      if (!inv) continue;
+      const ref = inv.utr || inv.utr_reference || inv.receiptNumber || inv.receiptNo || inv.id;
+      if (ref && !seenRefs.has(ref) && !seenIds.has(inv.id)) {
+        seenRefs.add(ref);
+        seenIds.add(inv.id);
+        const isPaid = (inv.status || '').toLowerCase() === 'paid' || (inv.status || '').toLowerCase() === 'verified';
+        list.push({
+          id: inv.id,
+          ref: ref,
+          receiptNo: inv.receiptNumber || inv.receiptNo || inv.receipt_number || inv.invoiceNumber || inv.invoice_number || (inv.id ? `REC-${String(inv.id).slice(-4)}` : 'REC-1001'),
+          receiptNumber: inv.receiptNumber || inv.receiptNo || inv.receipt_number || 'REC-1001',
+          customerId: inv.customerId || inv.customer_id,
+          company: inv.company || inv.companyName || 'Client Account',
+          companyName: inv.company || inv.companyName || 'Client Account',
+          contact: inv.contact || inv.contactPerson || 'Authorized Lead',
+          contactPerson: inv.contact || inv.contactPerson || 'Authorized Lead',
+          username: (inv.username || '').replace(/^@/, ''),
+          phone: inv.phone || '',
+          email: inv.email || '',
+          city: inv.city || 'India',
+          state: inv.state || 'Maharashtra',
+          category: inv.category || 'IT & Software',
+          amount: Number(inv.amount || inv.totalAmount || 0),
+          gstAmount: Number(inv.gstAmount || 0),
+          totalAmount: Number(inv.totalAmount || inv.amount || 0),
+          balanceAfter: null,
+          status: isPaid ? 'verified' : (inv.status || 'verified'),
+          statusBadge: isPaid ? 'Settled ✓' : (inv.status || 'Settled ✓'),
+          rawStatus: inv.status || 'paid',
+          type: inv.type || 'topup',
+          typeLabel: inv.typeLabel || (inv.type === 'registration' ? 'Registration Package' : 'Marketing Ad Wallet Top-Up'),
+          paymentMode: inv.paymentMode || inv.mode || 'Razorpay Gateway',
+          date: inv.date || (inv.paidAtRaw ? new Date(inv.paidAtRaw).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })),
+          createdAt: inv.paidAtRaw || inv.created_at || new Date(),
+          description: inv.notes || 'Customer Marketing Ad Wallet Top-Up',
+          failureReason: null,
+        });
       }
     }
   }
@@ -229,7 +118,7 @@ export default function MasterTransactionLogsDesk({
 
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'verified' | 'failed' | 'pending' | 'refunded'
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'verified' | 'debit' | 'failed' | 'pending' | 'refunded'
   const [methodFilter, setMethodFilter] = useState('all'); // 'all' | 'upi' | 'card' | 'debit' | 'bank'
   const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'today' | '7days' | '30days'
   const [selectedTx, setSelectedTx] = useState(null);
@@ -244,29 +133,29 @@ export default function MasterTransactionLogsDesk({
     });
   }, [initialTx, customers, invoices]);
 
-  // Fetch latest transactions from PostgreSQL backend
+  // Fetch latest transactions dynamically from PostgreSQL backend
   const fetchTransactions = async (showToast = false) => {
     setLoading(true);
     try {
       const res = await crmApi.fetchAllTransactions();
       const raw = res && res.ok && Array.isArray(res.transactions) ? res.transactions : [];
-      const merged = synthesizeMasterTransactions(raw, customers, invoices);
-      setTransactions(merged);
+      const clean = synthesizeMasterTransactions(raw, customers, invoices);
+      setTransactions(clean);
       try {
-        localStorage.setItem('growthline_all_transactions', JSON.stringify(merged));
+        localStorage.setItem('growthline_all_transactions', JSON.stringify(clean));
       } catch (_) {}
       if (showToast) {
         Swal.fire({
           icon: 'success',
           title: 'Transactions Synchronized',
-          text: `Successfully synced ${merged.length} master transaction logs.`,
+          text: `Successfully synced ${clean.length} live transaction logs from database.`,
           timer: 2000,
           showConfirmButton: false,
         });
       }
     } catch (err) {
       console.warn('[MasterTransactionLogsDesk] Failed to load transactions:', err);
-      const fallback = synthesizeMasterTransactions([], customers, invoices);
+      const fallback = synthesizeMasterTransactions(initialTx, customers, invoices);
       setTransactions(fallback);
     } finally {
       setLoading(false);
@@ -275,6 +164,31 @@ export default function MasterTransactionLogsDesk({
 
   useEffect(() => {
     fetchTransactions(false);
+
+    const handleSynced = (e) => {
+      const state = e?.detail;
+      if (state && Array.isArray(state.allTransactions)) {
+        const clean = synthesizeMasterTransactions(state.allTransactions, customers, state.payments || invoices);
+        setTransactions(clean);
+      } else {
+        fetchTransactions(false);
+      }
+    };
+
+    const handleWalletUpdated = () => fetchTransactions(false);
+    const handleFailedUpdated = () => fetchTransactions(false);
+
+    window.addEventListener('growthline_postgres_synced', handleSynced);
+    window.addEventListener('growthline_wallet_transactions_updated', handleWalletUpdated);
+    window.addEventListener('growthline_payment_recorded', handleWalletUpdated);
+    window.addEventListener('growthline_failed_tx_updated', handleFailedUpdated);
+
+    return () => {
+      window.removeEventListener('growthline_postgres_synced', handleSynced);
+      window.removeEventListener('growthline_wallet_transactions_updated', handleWalletUpdated);
+      window.removeEventListener('growthline_payment_recorded', handleWalletUpdated);
+      window.removeEventListener('growthline_failed_tx_updated', handleFailedUpdated);
+    };
   }, []);
 
   // Filtered dataset
@@ -283,22 +197,31 @@ export default function MasterTransactionLogsDesk({
     const now = new Date();
 
     return transactions.filter((tx) => {
+      const isDebit = tx.type === 'daily_burn' || (tx.typeLabel && tx.typeLabel.toLowerCase().includes('debit')) || (tx.description && tx.description.toLowerCase().includes('auto-debit'));
+
       // 1. Status Filter
       if (statusFilter !== 'all') {
         const s = (tx.status || '').toLowerCase();
-        if (statusFilter === 'verified' && s !== 'verified' && s !== 'paid' && s !== 'settled') return false;
-        if (statusFilter === 'failed' && s !== 'failed') return false;
-        if (statusFilter === 'pending' && s !== 'pending') return false;
-        if (statusFilter === 'refunded' && s !== 'refunded') return false;
+        if (statusFilter === 'verified') {
+          if (isDebit || (s !== 'verified' && s !== 'paid' && s !== 'settled')) return false;
+        } else if (statusFilter === 'debit') {
+          if (!isDebit) return false;
+        } else if (statusFilter === 'failed') {
+          if (s !== 'failed') return false;
+        } else if (statusFilter === 'pending') {
+          if (s !== 'pending') return false;
+        } else if (statusFilter === 'refunded') {
+          if (s !== 'refunded') return false;
+        }
       }
 
       // 2. Payment Method Filter
       if (methodFilter !== 'all') {
         const m = (tx.paymentMode || tx.method || '').toLowerCase();
-        if (methodFilter === 'upi' && !m.includes('upi')) return false;
+        if (methodFilter === 'upi' && !m.includes('upi') && !m.includes('gpay')) return false;
         if (methodFilter === 'card' && !m.includes('card')) return false;
-        if (methodFilter === 'debit' && !m.includes('debit') && !m.includes('daily')) return false;
-        if (methodFilter === 'bank' && !m.includes('bank') && !m.includes('transfer') && !m.includes('utr')) return false;
+        if (methodFilter === 'debit' && !m.includes('debit') && !m.includes('daily') && !isDebit) return false;
+        if (methodFilter === 'bank' && !m.includes('bank') && !m.includes('transfer') && !m.includes('utr') && !m.includes('sales')) return false;
       }
 
       // 3. Date Filter
@@ -338,6 +261,8 @@ export default function MasterTransactionLogsDesk({
     let totalVolume = 0;
     let verifiedCount = 0;
     let verifiedVolume = 0;
+    let debitCount = 0;
+    let debitVolume = 0;
     let failedCount = 0;
     let failedVolume = 0;
     let pendingCount = 0;
@@ -347,11 +272,16 @@ export default function MasterTransactionLogsDesk({
 
     for (const t of transactions) {
       const amt = Number(t.amount || 0);
-      totalVolume += amt;
       const s = (t.status || '').toLowerCase();
-      if (s === 'verified' || s === 'paid' || s === 'settled') {
+      const isDebit = t.type === 'daily_burn' || (t.typeLabel && t.typeLabel.toLowerCase().includes('debit')) || (t.description && t.description.toLowerCase().includes('auto-debit'));
+
+      if (isDebit) {
+        debitCount++;
+        debitVolume += amt;
+      } else if (s === 'verified' || s === 'paid' || s === 'settled') {
         verifiedCount++;
         verifiedVolume += amt;
+        totalVolume += amt;
       } else if (s === 'failed') {
         failedCount++;
         failedVolume += amt;
@@ -372,6 +302,8 @@ export default function MasterTransactionLogsDesk({
       totalVolume,
       verifiedCount,
       verifiedVolume,
+      debitCount,
+      debitVolume,
       failedCount,
       failedVolume,
       pendingCount,
@@ -483,18 +415,16 @@ export default function MasterTransactionLogsDesk({
     if (result.isConfirmed) {
       const { amt, utr } = result.value;
       try {
-        const patchRes = await fetch(`https://admafia.marketing/api/wallets/${tx.phone}/topup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: amt,
-            utr,
-            method: 'Sales-Assisted Bank Credit',
-            notes: `Assisted recovery for failed transaction ${tx.ref || tx.id}`,
-          }),
-        }).then((r) => r.json());
+        const patchRes = await crmApi.salesTopUpWallet({
+          customerId: tx.customerId || identity.customerId,
+          phone: tx.phone,
+          amount: amt,
+          referenceUtr: utr,
+          notes: `Assisted recovery for failed transaction ${tx.ref || tx.id}`,
+          paymentMethod: 'Sales Deposit (Instant UPI / GPay Transfer)',
+        });
 
-        if (patchRes.ok) {
+        if (patchRes && (patchRes.ok || patchRes.success)) {
           Swal.fire({
             icon: 'success',
             title: 'Wallet Credited Successfully',
@@ -502,9 +432,10 @@ export default function MasterTransactionLogsDesk({
             confirmButtonColor: '#059669',
           });
           fetchTransactions(false);
+          crmApi.syncStateFromPostgres();
           if (onRefresh) onRefresh();
         } else {
-          Swal.fire({ icon: 'error', title: 'Top-up Failed', text: patchRes.error || 'Server error occurred' });
+          Swal.fire({ icon: 'error', title: 'Top-up Failed', text: patchRes?.error || 'Server error occurred' });
         }
       } catch (err) {
         Swal.fire({ icon: 'error', title: 'Network Error', text: err.message });
@@ -534,6 +465,22 @@ export default function MasterTransactionLogsDesk({
               <CheckCircle2 size={13} />
               {stats.verifiedCount} Verified Settlements
             </span>
+            {stats.debitCount > 0 && (
+              <span
+                className="desk-badge-count-alert"
+                style={{
+                  background: '#eef2ff',
+                  color: '#4f46e5',
+                  borderColor: '#c7d2fe',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+              >
+                <Clock size={13} />
+                {stats.debitCount} Daily Auto-Debits
+              </span>
+            )}
             {stats.failedCount > 0 && (
               <span
                 className="desk-badge-count-alert"
@@ -552,7 +499,7 @@ export default function MasterTransactionLogsDesk({
             )}
           </div>
           <p className="desk-subtitle">
-            Centralized audit trail across all payment gateways and customer ad accounts: verified settlements, failed attempts, refunds, and daily wallet debits.
+            Centralized audit trail across all payment gateways and customer ad accounts: verified settlements, daily wallet debits, refunds, and failed checkout attempts.
           </p>
         </div>
 
@@ -584,19 +531,19 @@ export default function MasterTransactionLogsDesk({
 
       {/* 2. KPI Metrics Quad Grid */}
       <div className="desk-kpi-grid">
-        <div className="desk-kpi-card" style={{ borderLeft: '4px solid #4f46e5' }}>
-          <div className="desk-kpi-label">TOTAL TRANSACTED VOLUME</div>
-          <div className="desk-kpi-val text-indigo">{formatINR(stats.totalVolume)}</div>
+        <div className="desk-kpi-card" style={{ borderLeft: '4px solid #059669' }}>
+          <div className="desk-kpi-label">TOTAL CREDITED VOLUME</div>
+          <div className="desk-kpi-val text-emerald">{formatINR(stats.totalVolume)}</div>
           <div className="desk-kpi-sub" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span>{stats.totalCount} total transaction logs recorded</span>
+            <span>{stats.verifiedCount} verified customer wallet top-ups</span>
           </div>
         </div>
 
-        <div className="desk-kpi-card" style={{ borderLeft: '4px solid #059669' }}>
-          <div className="desk-kpi-label">VERIFIED &amp; SETTLED</div>
-          <div className="desk-kpi-val text-emerald">{formatINR(stats.verifiedVolume)}</div>
-          <div className="desk-kpi-sub" style={{ color: '#059669', fontWeight: 700 }}>
-            ✓ {stats.verifiedCount} cleared payments ({stats.settlementRate}% success rate)
+        <div className="desk-kpi-card" style={{ borderLeft: '4px solid #4f46e5' }}>
+          <div className="desk-kpi-label">DAILY AD SPEND DEBITS</div>
+          <div className="desk-kpi-val text-indigo">{formatINR(stats.debitVolume)}</div>
+          <div className="desk-kpi-sub" style={{ color: '#4f46e5', fontWeight: 700 }}>
+            ⚡ {stats.debitCount} automated campaign daily burn debits
           </div>
         </div>
 
@@ -610,13 +557,13 @@ export default function MasterTransactionLogsDesk({
           </div>
         </div>
 
-        <div className="desk-kpi-card" style={{ borderLeft: '4px solid #d97706' }}>
-          <div className="desk-kpi-label">PENDING / IN REVIEW</div>
-          <div className="desk-kpi-val" style={{ color: '#d97706' }}>
-            {formatINR(stats.pendingVolume)}
+        <div className="desk-kpi-card" style={{ borderLeft: '4px solid #0284c7' }}>
+          <div className="desk-kpi-label">SETTLEMENT SUCCESS RATE</div>
+          <div className="desk-kpi-val" style={{ color: '#0284c7' }}>
+            {stats.settlementRate}%
           </div>
-          <div className="desk-kpi-sub" style={{ color: '#d97706', fontWeight: 700 }}>
-            ⏳ {stats.pendingCount} checkouts awaiting confirmation
+          <div className="desk-kpi-sub" style={{ color: '#0284c7', fontWeight: 700 }}>
+            ✓ {stats.verifiedCount} of {stats.verifiedCount + stats.failedCount || stats.totalCount} payment checkouts cleared
           </div>
         </div>
       </div>
@@ -644,6 +591,19 @@ export default function MasterTransactionLogsDesk({
             >
               ✓ Verified ({stats.verifiedCount})
             </button>
+            {stats.debitCount > 0 && (
+              <button
+                type="button"
+                className={`desk-tab ${statusFilter === 'debit' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('debit')}
+                style={{
+                  color: statusFilter === 'debit' ? '#ffffff' : '#4f46e5',
+                  background: statusFilter === 'debit' ? '#4f46e5' : 'transparent',
+                }}
+              >
+                ⚡ Daily Debits ({stats.debitCount})
+              </button>
+            )}
             <button
               type="button"
               className={`desk-tab ${statusFilter === 'failed' ? 'active' : ''}`}
@@ -689,10 +649,10 @@ export default function MasterTransactionLogsDesk({
               onChange={(e) => setMethodFilter(e.target.value)}
             >
               <option value="all">All Payment Methods</option>
-              <option value="upi">Razorpay UPI</option>
+              <option value="upi">Razorpay UPI / Online Gateway</option>
               <option value="card">Credit / Debit Cards</option>
               <option value="debit">Daily Ad Spend Auto-Debit</option>
-              <option value="bank">Direct Bank / UTR Transfer</option>
+              <option value="bank">Sales-Assisted Bank / UTR</option>
             </select>
 
             <select
@@ -768,7 +728,8 @@ export default function MasterTransactionLogsDesk({
             ) : (
               filtered.map((tx) => {
                 const identity = resolveCustomerIdentity(tx, customers);
-                const isVerified = tx.status === 'verified' || tx.status === 'paid' || tx.status === 'settled';
+                const isDebit = tx.type === 'daily_burn' || (tx.typeLabel && tx.typeLabel.toLowerCase().includes('debit')) || (tx.description && tx.description.toLowerCase().includes('auto-debit'));
+                const isVerified = (tx.status === 'verified' || tx.status === 'paid' || tx.status === 'settled') && !isDebit;
                 const isFailed = tx.status === 'failed';
                 const isPending = tx.status === 'pending';
                 const isRefunded = tx.status === 'refunded';
@@ -779,7 +740,7 @@ export default function MasterTransactionLogsDesk({
                   <tr
                     key={tx.id || tx.ref}
                     style={{
-                      background: isFailed ? '#fffcfc' : isPending ? '#fffdf7' : '#ffffff',
+                      background: isFailed ? '#fffcfc' : isPending ? '#fffdf7' : isDebit ? '#fafbff' : '#ffffff',
                     }}
                   >
                     {/* 1. Receipt / Ref Number */}
@@ -790,18 +751,18 @@ export default function MasterTransactionLogsDesk({
                             style={{
                               fontWeight: 800,
                               fontFamily: 'monospace',
-                              color: isVerified ? '#065f46' : isFailed ? '#991b1b' : '#92400e',
+                              color: isDebit ? '#4338ca' : isVerified ? '#065f46' : isFailed ? '#991b1b' : '#92400e',
                               fontSize: '0.86rem',
-                              background: isVerified ? '#ecfdf5' : isFailed ? '#fee2e2' : '#fef3c7',
+                              background: isDebit ? '#eef2ff' : isVerified ? '#ecfdf5' : isFailed ? '#fee2e2' : '#fef3c7',
                               padding: '2px 6px',
                               borderRadius: 4,
                             }}
                           >
-                            {tx.receiptNo || tx.receiptNumber || 'RCP-2026'}
+                            {isDebit ? (tx.ref && tx.ref.startsWith('SYS-') ? tx.ref : (tx.receiptNo || 'DEB-AUTO')) : (tx.receiptNo || tx.receiptNumber || 'RCP-2026')}
                           </span>
                         </div>
 
-                        {tx.ref && (
+                        {tx.ref && !isDebit && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                             <span
                               style={{
@@ -838,8 +799,8 @@ export default function MasterTransactionLogsDesk({
                         <div
                           className="appr-client-avatar"
                           style={{
-                            background: isVerified ? '#ecfdf5' : isFailed ? '#fee2e2' : '#f1f5f9',
-                            color: isVerified ? '#047857' : isFailed ? '#b91c1c' : '#475569',
+                            background: isDebit ? '#eef2ff' : isVerified ? '#ecfdf5' : isFailed ? '#fee2e2' : '#f1f5f9',
+                            color: isDebit ? '#4338ca' : isVerified ? '#047857' : isFailed ? '#b91c1c' : '#475569',
                           }}
                         >
                           {identity.initials}
@@ -903,10 +864,10 @@ export default function MasterTransactionLogsDesk({
                           style={{
                             fontWeight: 900,
                             fontSize: '1.02rem',
-                            color: isVerified ? '#047857' : isFailed ? '#dc2626' : '#0f172a',
+                            color: isDebit ? '#4338ca' : isVerified ? '#047857' : isFailed ? '#dc2626' : '#0f172a',
                           }}
                         >
-                          {formatINR(tx.amount)}
+                          {isDebit ? `- ${formatINR(tx.amount)}` : isVerified ? `+ ${formatINR(tx.amount)}` : formatINR(tx.amount)}
                         </span>
                         {tx.balanceAfter != null && (
                           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 1 }}>
@@ -919,7 +880,25 @@ export default function MasterTransactionLogsDesk({
                     {/* 4. Status & Verification */}
                     <td>
                       <div>
-                        {isVerified ? (
+                        {isDebit ? (
+                          <span
+                            className="desk-pill"
+                            style={{
+                              background: '#eef2ff',
+                              color: '#4338ca',
+                              border: '1px solid #c7d2fe',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              padding: '4px 10px',
+                              fontWeight: 800,
+                              fontSize: '0.78rem',
+                            }}
+                          >
+                            <Clock size={13} />
+                            Daily Auto-Debit
+                          </span>
+                        ) : isVerified ? (
                           <span
                             className="desk-pill pill-emerald"
                             style={{
@@ -990,7 +969,7 @@ export default function MasterTransactionLogsDesk({
                     <td>
                       <div>
                         <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>
-                          {tx.typeLabel || 'Wallet Top-Up'}
+                          {tx.typeLabel || (isDebit ? 'Daily Ad Spend Auto-Debit' : 'Marketing Wallet Top-Up')}
                         </div>
                         <div
                           style={{
@@ -1003,7 +982,7 @@ export default function MasterTransactionLogsDesk({
                           }}
                         >
                           <CreditCard size={12} color="#64748b" />
-                          <span>{tx.paymentMode || 'Razorpay Gateway'}</span>
+                          <span>{tx.paymentMode || (isDebit ? 'Automated Daily Wallet Burn' : 'Razorpay Gateway')}</span>
                         </div>
                       </div>
                     </td>
@@ -1025,7 +1004,7 @@ export default function MasterTransactionLogsDesk({
                           lineHeight: 1.35,
                         }}
                       >
-                        {tx.failureReason || tx.description || 'Customer advertising ad wallet recharge'}
+                        {tx.failureReason || tx.description || (isDebit ? 'Automated daily ad spend deduction' : 'Customer advertising ad wallet recharge')}
                       </div>
                     </td>
 
@@ -1086,7 +1065,8 @@ export default function MasterTransactionLogsDesk({
       {/* 5. TRANSACTION 360° DOSSIER MODAL */}
       {selectedTx && (() => {
         const identity = resolveCustomerIdentity(selectedTx, customers);
-        const isVerified = selectedTx.status === 'verified' || selectedTx.status === 'paid' || selectedTx.status === 'settled';
+        const isDebit = selectedTx.type === 'daily_burn' || (selectedTx.typeLabel && selectedTx.typeLabel.toLowerCase().includes('debit')) || (selectedTx.description && selectedTx.description.toLowerCase().includes('auto-debit'));
+        const isVerified = (selectedTx.status === 'verified' || selectedTx.status === 'paid' || selectedTx.status === 'settled') && !isDebit;
         const isFailed = selectedTx.status === 'failed';
         const cleanPhone = String(selectedTx.phone || '').replace(/\D/g, '').slice(-10);
 
@@ -1102,15 +1082,15 @@ export default function MasterTransactionLogsDesk({
                   <span
                     className="desk-pill"
                     style={{
-                      background: isVerified ? '#ecfdf5' : isFailed ? '#fee2e2' : '#fef3c7',
-                      color: isVerified ? '#047857' : isFailed ? '#991b1b' : '#92400e',
-                      border: `1px solid ${isVerified ? '#a7f3d0' : isFailed ? '#fca5a5' : '#fde68a'}`,
+                      background: isDebit ? '#eef2ff' : isVerified ? '#ecfdf5' : isFailed ? '#fee2e2' : '#fef3c7',
+                      color: isDebit ? '#4338ca' : isVerified ? '#047857' : isFailed ? '#991b1b' : '#92400e',
+                      border: `1px solid ${isDebit ? '#c7d2fe' : isVerified ? '#a7f3d0' : isFailed ? '#fca5a5' : '#fde68a'}`,
                       fontSize: '0.72rem',
                       fontWeight: 800,
                       marginBottom: 6,
                     }}
                   >
-                    {isVerified ? '✓ 100% VERIFIED & SETTLED' : isFailed ? '✗ FAILED TRANSACTION' : '⏳ PENDING CONFIRMATION'}
+                    {isDebit ? '⚡ DAILY AD SPEND AUTO-DEBIT' : isVerified ? '✓ 100% VERIFIED & SETTLED' : isFailed ? '✗ FAILED TRANSACTION' : '⏳ PENDING CONFIRMATION'}
                   </span>
                   <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#0f172a' }}>
                     {identity.displayName}
@@ -1127,8 +1107,8 @@ export default function MasterTransactionLogsDesk({
               {/* Amount Highlight Banner */}
               <div
                 style={{
-                  background: isVerified ? '#f0fdf4' : isFailed ? '#fff5f5' : '#fffbeb',
-                  border: `1px solid ${isVerified ? '#bbf7d0' : isFailed ? '#fecaca' : '#fde68a'}`,
+                  background: isDebit ? '#f5f3ff' : isVerified ? '#f0fdf4' : isFailed ? '#fff5f5' : '#fffbeb',
+                  border: `1px solid ${isDebit ? '#ddd6fe' : isVerified ? '#bbf7d0' : isFailed ? '#fecaca' : '#fde68a'}`,
                   borderRadius: 12,
                   padding: '16px 20px',
                   display: 'flex',
@@ -1141,8 +1121,8 @@ export default function MasterTransactionLogsDesk({
                   <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: '#64748b' }}>
                     Transaction Amount
                   </div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: isVerified ? '#047857' : isFailed ? '#dc2626' : '#0f172a' }}>
-                    {formatINR(selectedTx.amount)}
+                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: isDebit ? '#4338ca' : isVerified ? '#047857' : isFailed ? '#dc2626' : '#0f172a' }}>
+                    {isDebit ? `- ${formatINR(selectedTx.amount)}` : isVerified ? `+ ${formatINR(selectedTx.amount)}` : formatINR(selectedTx.amount)}
                   </div>
                 </div>
 
@@ -1151,7 +1131,7 @@ export default function MasterTransactionLogsDesk({
                     Payment Mode
                   </div>
                   <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                    {selectedTx.paymentMode || 'Razorpay Gateway'}
+                    {selectedTx.paymentMode || (isDebit ? 'Automated Daily Wallet Burn' : 'Razorpay Gateway')}
                   </div>
                 </div>
               </div>
@@ -1160,10 +1140,10 @@ export default function MasterTransactionLogsDesk({
               <div className="tx-modal-grid">
                 <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
                   <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
-                    Receipt Number
+                    Receipt / Reference Number
                   </div>
                   <div style={{ fontWeight: 800, fontSize: '0.90rem', color: '#0f172a', fontFamily: 'monospace', marginTop: 2 }}>
-                    {selectedTx.receiptNo || selectedTx.receiptNumber || 'RCP-2026-1001'}
+                    {isDebit ? (selectedTx.ref && selectedTx.ref.startsWith('SYS-') ? selectedTx.ref : (selectedTx.receiptNo || 'DEB-AUTO')) : (selectedTx.receiptNo || selectedTx.receiptNumber || 'RCP-2026-1001')}
                   </div>
                 </div>
 
