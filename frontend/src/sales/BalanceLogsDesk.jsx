@@ -212,7 +212,6 @@ export default function BalanceLogsDesk({
       'CHANGED AMOUNT',
       'NEW BALANCE',
       'REASON',
-      'UPDATED BY',
       'DATE',
     ];
 
@@ -223,7 +222,6 @@ export default function BalanceLogsDesk({
       formatScreenshotCurrency(l.changedAmount ?? l.amount ?? 0),
       formatScreenshotCurrency(l.newBalance ?? l.balanceAfter ?? 0),
       `"${(l.reason || l.description || '').replace(/"/g, '""')}"`,
-      `"${(l.updatedBy || 'Super Admin').replace(/"/g, '""')}"`,
       `"${(l.date || '').replace(/"/g, '""')}"`,
     ]);
 
@@ -496,13 +494,10 @@ export default function BalanceLogsDesk({
               <th style={{ width: 170, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 NEW BALANCE
               </th>
-              <th style={{ minWidth: 120, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+              <th style={{ minWidth: 140, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 REASON
               </th>
-              <th style={{ width: 140, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
-                UPDATED BY
-              </th>
-              <th style={{ width: 150, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+              <th style={{ width: 160, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 DATE
               </th>
             </tr>
@@ -510,7 +505,7 @@ export default function BalanceLogsDesk({
           <tbody>
             {filteredLogs.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748b' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748b' }}>
                   <Scale size={32} color="#94a3b8" style={{ margin: '0 auto 10px auto', display: 'block' }} />
                   <div style={{ fontWeight: 700, fontSize: '0.94rem', color: '#0f172a' }}>
                     No Balance Logs Found
@@ -626,12 +621,7 @@ export default function BalanceLogsDesk({
                       {log.reason || log.description || 'd'}
                     </td>
 
-                    {/* 7. UPDATED BY */}
-                    <td style={{ padding: '14px 16px', color: '#0f172a', fontWeight: 600, fontSize: '0.84rem' }}>
-                      {log.updatedBy || 'Super Admin'}
-                    </td>
-
-                    {/* 8. DATE */}
+                    {/* 7. DATE */}
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ fontSize: '0.78rem', color: '#0f172a', lineHeight: 1.3 }}>
                         <div style={{ fontWeight: 600 }}>{dt.dateStr}</div>
@@ -765,14 +755,13 @@ export default function BalanceLogsDesk({
                     <th>CHANGED AMOUNT</th>
                     <th>NEW BALANCE</th>
                     <th>REASON</th>
-                    <th>UPDATED BY</th>
                     <th>DATE</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedCustomerForStatement.logs.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
                         No balance transactions on record for this customer.
                       </td>
                     </tr>
@@ -792,7 +781,6 @@ export default function BalanceLogsDesk({
                             {formatScreenshotCurrency(clog.newBalance ?? clog.balanceAfter ?? 0)}
                           </td>
                           <td style={{ color: '#475569' }}>{clog.reason || clog.description || 'd'}</td>
-                          <td style={{ fontWeight: 600 }}>{clog.updatedBy || 'Super Admin'}</td>
                           <td>
                             <div>{cdt.dateStr}</div>
                             <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{cdt.timeStr}</div>
