@@ -13,6 +13,22 @@ import {
 import Swal from 'sweetalert2';
 import crmApi from '../services/crmApi';
 
+const isTestUser = (c) => {
+  if (!c) return false;
+  const u = String(c.username || c.user || '').toLowerCase().replace(/^@/, '').trim();
+  const p = String(c.phone || '').replace(/\D/g, '').slice(-10);
+  const e = String(c.email || '').toLowerCase().trim();
+  const n = String(c.companyName || c.customerName || c.name || '').toLowerCase().trim();
+  const id = String(c.id || c.customerId || '').toLowerCase().trim();
+
+  if (u === 'abc' || u === 'xxx') return true;
+  if (p === '7383198428' || p === '1111111111') return true;
+  if (e === 'aviralshukla2612@gmail.com') return true;
+  if (n === 'abc' || n === 'xxx') return true;
+  if (id === 'cust_reg_7383198428' || id === 'cust_reg_1111111111' || id.includes('7383198428') || id.includes('1111111111')) return true;
+  return false;
+};
+
 const formatScreenshotCurrency = (val) => {
   const num = Math.abs(Number(val || 0));
   return `₹${num.toFixed(2)}`;
@@ -72,10 +88,10 @@ export default function BalanceLogsDesk({
 
       if (res && res.ok) {
         if (Array.isArray(res.logs)) {
-          setLogs(res.logs);
+          setLogs(res.logs.filter((l) => !isTestUser(l)));
         }
         if (Array.isArray(res.customerLogs)) {
-          setCustomerLogs(res.customerLogs);
+          setCustomerLogs(res.customerLogs.filter((l) => !isTestUser(l)));
         }
         if (res.stats) {
           setStats(res.stats);
@@ -147,7 +163,7 @@ export default function BalanceLogsDesk({
     const custMap = new Map();
 
     // 1. Seed from registered customer accounts
-    customers.forEach((c) => {
+    customers.filter((c) => !isTestUser(c)).forEach((c) => {
       const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
       const name = c.companyName || c.name || c.username || 'Customer';
       custMap.set(c.id, {
@@ -210,6 +226,7 @@ export default function BalanceLogsDesk({
     const q = search.trim().toLowerCase();
 
     return displayDataset.filter((log) => {
+      if (isTestUser(log)) return false;
       // Exclude synthetic initial account opening entries requested to be removed
       const rLower = String(log.reason || log.description || '').toLowerCase();
       if (

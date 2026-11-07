@@ -10,6 +10,7 @@ import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibili
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
 import { superadminRouter, logSuperAdminAudit } from './routes/superadmin.js';
+import { purgeSpecifiedTestUsers } from './scripts/purge-test-users.js';
 
 // Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
 process.on('uncaughtException', (err) => {
@@ -5419,19 +5420,8 @@ app.listen(PORT, () => {
         [testUtrs, testTxIds]
       ).catch(() => {});
 
-      query(
-        `UPDATE wallets 
-         SET available_balance = 0, total_lifetime_paid = 0 
-         WHERE customer_id IN (
-           SELECT id FROM customers WHERE phone IN ('7383198428', '8200792130')
-         )`
-      ).catch(() => {});
-
-      query(
-        `UPDATE customers 
-         SET payment_status = 'pending', amount_paid = 0 
-         WHERE phone IN ('7383198428', '8200792130')`
-      ).catch(() => {});
+      // Purge specified test accounts (@abc, @xxx) requested by admin
+      purgeSpecifiedTestUsers().catch((err) => console.warn('[Purge Test Users Warning]', err.message));
 
       // Run daily ad spend pacing evaluation 3s after startup, then every 30 minutes
       setTimeout(() => {

@@ -106,12 +106,34 @@ const sanitizeVerification = (v) => {
   };
 };
 
+export const isTestUser = (c) => {
+  if (!c) return false;
+  const u = String(c.username || '').toLowerCase().replace(/^@/, '').trim();
+  const p = String(c.phone || c.customerPhone || c.customer_phone || '').replace(/\D/g, '').slice(-10);
+  const e = String(c.email || c.customerEmail || c.customer_email || '').toLowerCase().trim();
+  const n = String(c.companyName || c.company_name || c.company || c.name || c.contactPerson || '').toLowerCase().trim();
+  const id = String(c.id || c.customerId || c.customer_id || '').toLowerCase().trim();
+
+  if (u === 'abc' || u === 'xxx') return true;
+  if (p === '7383198428' || p === '1111111111') return true;
+  if (e === 'aviralshukla2612@gmail.com') return true;
+  if (n === 'abc' || n === 'xxx') return true;
+  if (id === 'cust_reg_7383198428' || id === 'cust_reg_1111111111' || id.includes('7383198428') || id.includes('1111111111')) return true;
+  return false;
+};
+
 const loadStoredCustomers = () => {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOMERS);
     if (raw) {
       const stored = JSON.parse(raw);
-      if (Array.isArray(stored)) return stored.map(sanitizeCustomer);
+      if (Array.isArray(stored)) {
+        const filtered = stored.filter((c) => !isTestUser(c));
+        if (filtered.length !== stored.length) {
+          try { localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(filtered)); } catch (_) {}
+        }
+        return filtered.map(sanitizeCustomer);
+      }
     }
     return [];
   } catch (err) {
@@ -123,7 +145,14 @@ const loadStoredVerifications = () => {
   try {
     const raw = localStorage.getItem(STORAGE_VERIFICATIONS);
     const stored = raw ? JSON.parse(raw) : [];
-    return Array.isArray(stored) ? stored.map(sanitizeVerification) : [];
+    if (Array.isArray(stored)) {
+      const filtered = stored.filter((v) => !isTestUser(v));
+      if (filtered.length !== stored.length) {
+        try { localStorage.setItem(STORAGE_VERIFICATIONS, JSON.stringify(filtered)); } catch (_) {}
+      }
+      return filtered.map(sanitizeVerification);
+    }
+    return [];
   } catch (err) {
     return [];
   }
@@ -263,7 +292,9 @@ useEffect(() => {
 const setCustomers = useCallback((updater) => {
   setCustomersState((prev) => {
     const rawNext = typeof updater === 'function' ? updater(prev) : updater;
-    const next = Array.isArray(rawNext) ? rawNext.map(sanitizeCustomer) : rawNext;
+    const next = Array.isArray(rawNext)
+      ? rawNext.filter((c) => !isTestUser(c)).map(sanitizeCustomer)
+      : rawNext;
     try {
       localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(next));
     } catch (e) {
@@ -276,7 +307,10 @@ const setCustomers = useCallback((updater) => {
 // Wrapper to save verifications persistently
 const setVerifications = useCallback((updater) => {
   setVerificationsState((prev) => {
-    const next = typeof updater === 'function' ? updater(prev) : updater;
+    const rawNext = typeof updater === 'function' ? updater(prev) : updater;
+    const next = Array.isArray(rawNext)
+      ? rawNext.filter((v) => !isTestUser(v)).map(sanitizeVerification)
+      : rawNext;
     try {
       localStorage.setItem(STORAGE_VERIFICATIONS, JSON.stringify(next));
     } catch (e) {
@@ -291,12 +325,12 @@ useEffect(() => {
   crmApi.syncStateFromPostgres().then((state) => {
     if (state) {
       if (Array.isArray(state.customers)) {
-        const sanitized = state.customers.map(sanitizeCustomer);
+        const sanitized = state.customers.filter((c) => !isTestUser(c)).map(sanitizeCustomer);
         setCustomersState(sanitized);
         try { localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(sanitized)); } catch (_) { }
       }
       if (Array.isArray(state.verifications)) {
-        const sanitizedV = state.verifications.map(sanitizeVerification);
+        const sanitizedV = state.verifications.filter((v) => !isTestUser(v)).map(sanitizeVerification);
         setVerificationsState(sanitizedV);
         try { localStorage.setItem(STORAGE_VERIFICATIONS, JSON.stringify(sanitizedV)); } catch (_) { }
       }
@@ -314,8 +348,8 @@ useEffect(() => {
   const handlePostgresSynced = (e) => {
     const state = e?.detail;
     if (state) {
-      if (Array.isArray(state.customers)) setCustomersState(state.customers);
-      if (Array.isArray(state.verifications)) setVerificationsState(state.verifications);
+      if (Array.isArray(state.customers)) setCustomersState(state.customers.filter((c) => !isTestUser(c)));
+      if (Array.isArray(state.verifications)) setVerificationsState(state.verifications.filter((v) => !isTestUser(v)));
       if (Array.isArray(state.payments)) setInvoices(state.payments);
       if (Array.isArray(state.queries)) setQueries(state.queries);
       if (Array.isArray(state.failedTransactions)) setFailedTxCount(state.failedTransactions.length);

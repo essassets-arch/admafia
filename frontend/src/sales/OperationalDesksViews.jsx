@@ -240,10 +240,27 @@ export const resolveCustomerIdentity = (custOrObj, customers = []) => {
   };
 };
 
+export const isTestUser = (c) => {
+  if (!c) return false;
+  const u = String(c.username || c.user || c.customerUsername || c.customer_username || '').toLowerCase().replace(/^@/, '').trim();
+  const p = String(c.phone || c.customerPhone || c.customer_phone || '').replace(/\D/g, '').slice(-10);
+  const e = String(c.email || c.customerEmail || c.customer_email || '').toLowerCase().trim();
+  const n = String(c.companyName || c.company_name || c.company || c.name || c.contactPerson || c.customerCompanyName || '').toLowerCase().trim();
+  const id = String(c.id || c.customerId || c.customer_id || '').toLowerCase().trim();
+
+  if (u === 'abc' || u === 'xxx') return true;
+  if (p === '7383198428' || p === '1111111111') return true;
+  if (e === 'aviralshukla2612@gmail.com') return true;
+  if (n === 'abc' || n === 'xxx') return true;
+  if (id === 'cust_reg_7383198428' || id === 'cust_reg_1111111111' || id.includes('7383198428') || id.includes('1111111111')) return true;
+  return false;
+};
+
 /* ==========================================================================
    DESK 1: CUSTOMER REGISTRATIONS (Real Intake from http://localhost:5173/#register)
    ========================================================================== */
-export function CustomerRegistrationsDesk({ customers, setCustomers }) {
+export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setCustomers }) {
+  const customers = useMemo(() => (propsCustomers || []).filter((c) => !isTestUser(c)), [propsCustomers]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedCust, setSelectedCust] = useState(null);
@@ -1005,15 +1022,6 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
                         </button>
                         <button
                           type="button"
-                          className="desk-action-btn"
-                          style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontWeight: 700 }}
-                          onClick={() => setAddMoneyCust(c)}
-                          title="Add Money / Credit Client Wallet"
-                        >
-                          <CreditCard size={13} color="#059669" /> + Add Money
-                        </button>
-                        <button
-                          type="button"
                           className={`desk-action-btn ${c.status === 'active' ? 'btn-warn' : 'btn-success'}`}
                           onClick={() => handleToggleStatus(c.id)}
                         >
@@ -1459,7 +1467,8 @@ export function CustomerRegistrationsDesk({ customers, setCustomers }) {
 /* ==========================================================================
    DESK 2: PENDING VERIFICATION (Badge: 7)
    ========================================================================== */
-export function PendingVerificationDesk({ verifications, setVerifications, onApproveSuccess, customers = [] }) {
+export function PendingVerificationDesk({ verifications: propsVerifications = [], setVerifications, onApproveSuccess, customers = [] }) {
+  const verifications = useMemo(() => (propsVerifications || []).filter((v) => !isTestUser(v)), [propsVerifications]);
   const [filter, setFilter] = useState('all');
   const [selectedDetail, setSelectedDetail] = useState(null);
 
@@ -1794,12 +1803,12 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
   const [leadSuccessToast, setLeadSuccessToast] = useState(null);
 
   const [deskCustomers, setDeskCustomers] = useState(() => {
-    if (Array.isArray(propsCustomers) && propsCustomers.length > 0) return propsCustomers;
+    if (Array.isArray(propsCustomers) && propsCustomers.length > 0) return propsCustomers.filter((c) => !isTestUser(c));
     try {
       const raw = localStorage.getItem('growthline_registered_customers');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed.filter((c) => !isTestUser(c));
       }
     } catch (e) { }
     return [];
@@ -1807,7 +1816,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 
   useEffect(() => {
     if (Array.isArray(propsCustomers) && propsCustomers.length > 0) {
-      setDeskCustomers(propsCustomers);
+      setDeskCustomers(propsCustomers.filter((c) => !isTestUser(c)));
     }
   }, [propsCustomers]);
 
@@ -1816,10 +1825,12 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
       .syncStateFromPostgres()
       .then((state) => {
         if (Array.isArray(state?.customers) && state.customers.length > 0) {
-          setDeskCustomers(state.customers);
+          setDeskCustomers(state.customers.filter((c) => !isTestUser(c)));
         }
         if (Array.isArray(state?.leads) && state.leads.length > 0) {
-          const cleaned = state.leads.map((item) => {
+          const cleaned = state.leads
+            .filter((item) => !isTestUser(item))
+            .map((item) => {
             const rawDigits = (item.phone || item.name || '').replace(/\D/g, '').slice(-10);
             return {
               ...item,
@@ -1965,7 +1976,9 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = parsed.map((item) => {
+          const cleaned = parsed
+            .filter((item) => !isTestUser(item))
+            .map((item) => {
             const rawDigits = (item.phone || item.name || '').replace(/\D/g, '').slice(-10);
             return {
               ...item,
@@ -5641,7 +5654,8 @@ export function PaymentCollectionDesk({
 /* ==========================================================================
    DESK 6: WALLETS & BALANCES (Badge: 33)
    ========================================================================== */
-export function WalletsBalancesDesk({ customers, setCustomers }) {
+export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustomers }) {
+  const customers = useMemo(() => (propsCustomers || []).filter((c) => !isTestUser(c)), [propsCustomers]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedWalletCust, setSelectedWalletCust] = useState(null);
