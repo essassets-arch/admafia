@@ -36,18 +36,14 @@ cd "$APP_DIR"
 git reset --hard origin/main 2>/dev/null || true
 git pull origin main 2>/dev/null || true
 
-# 1b. Write authoritative backend environment variables with live Razorpay credentials
-cat > "$APP_DIR/backend/.env" << 'EOF'
-PORT=5000
-PGHOST=db
-PGPORT=5432
-PGUSER=admafia_user
-PGPASSWORD=AdMafiaStrongPass2026!
-PGDATABASE=admafia_crm
-RAZORPAY_KEY_ID=rzp_live_TuUlRUHnVlWd5i
-RAZORPAY_KEY_SECRET=ItZeWawXWwTt98Dx60n47Sza
-NODE_ENV=production
-EOF
+# 1b. Keep payment credentials in the private backend/.env file. Never overwrite it during deploy.
+if [ ! -f "$APP_DIR/backend/.env" ] \
+  || ! grep -Eq '^RAZORPAY_KEY_ID=rzp_(test|live)_.+' "$APP_DIR/backend/.env" \
+  || ! grep -Eq '^RAZORPAY_KEY_SECRET=.+$' "$APP_DIR/backend/.env"; then
+  echo "ERROR: backend/.env must contain the Razorpay key ID and its matching secret."
+  echo "Copy backend/.env.example to backend/.env and set the credentials privately before deploying."
+  exit 1
+fi
 
 # 2. Stop host PM2 process if running to free port 5050/5000
 pm2 delete admafia 2>/dev/null || true

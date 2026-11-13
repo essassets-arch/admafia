@@ -37,8 +37,8 @@ app.use(express.json({
   },
 }));
 
-const razorpayKeyId = (process.env.RAZORPAY_KEY_ID || 'rzp_live_TuUlRUHnVlWd5i').trim();
-const razorpayKeySecret = (process.env.RAZORPAY_KEY_SECRET || 'ItZeWawXWwTt98Dx60n47Sza').trim();
+const razorpayKeyId = (process.env.RAZORPAY_KEY_ID || '').trim();
+const razorpayKeySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
 const razorpayWebhookSecret = (process.env.RAZORPAY_WEBHOOK_SECRET || razorpayKeySecret).trim();
 const walletCreditToken = randomBytes(32).toString('hex');
 

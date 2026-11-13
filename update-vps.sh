@@ -23,20 +23,14 @@ echo "📥 1/5 Pulling latest changes from GitHub (main)..."
 git fetch origin main
 git reset --hard origin/main
 
-# 1b. Write authoritative backend environment variables with live Razorpay credentials
-# PGHOST=127.0.0.1 allows host-level scripts and PM2 to connect to PostgreSQL on port 5432.
-# When running inside Docker containers, docker-compose.yml environment (PGHOST: db) takes precedence.
-cat > "$APP_DIR/backend/.env" << 'EOF'
-PORT=5000
-PGHOST=127.0.0.1
-PGPORT=5432
-PGUSER=admafia_user
-PGPASSWORD=AdMafiaStrongPass2026!
-PGDATABASE=admafia_crm
-RAZORPAY_KEY_ID=rzp_live_TuUlRUHnVlWd5i
-RAZORPAY_KEY_SECRET=ItZeWawXWwTt98Dx60n47Sza
-NODE_ENV=production
-EOF
+# 1b. Keep payment credentials in the private backend/.env file. Never overwrite it during deploy.
+if [ ! -f "$APP_DIR/backend/.env" ] \
+  || ! grep -Eq '^RAZORPAY_KEY_ID=rzp_(test|live)_.+' "$APP_DIR/backend/.env" \
+  || ! grep -Eq '^RAZORPAY_KEY_SECRET=.+$' "$APP_DIR/backend/.env"; then
+  echo "ERROR: backend/.env must contain the Razorpay key ID and its matching secret."
+  echo "Copy backend/.env.example to backend/.env and set the credentials privately before deploying."
+  exit 1
+fi
 
 # 2. Build Frontend Production Distribution (Removes old cache and rebuilds dist)
 echo "🔨 2/5 Building frontend production assets..."
