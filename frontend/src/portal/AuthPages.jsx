@@ -15,20 +15,16 @@ import {
   Wallet,
   Globe,
   Target,
-  ChevronDown,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 import countryService, { formatDailyRate, formatDailyBudget, formatCurrency } from '../services/countryService';
 
 export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWebsite }) {
   const [selectedCountry, setSelectedCountry] = useState(() => countryService.getCurrentCountry());
-  const [allCountries, setAllCountries] = useState(() => countryService.getAllCountries());
-  const [showCountryMenu, setShowCountryMenu] = useState(false);
 
   useEffect(() => {
-    return countryService.subscribe((country, list) => {
+    return countryService.subscribe((country) => {
       if (country) setSelectedCountry(country);
-      if (Array.isArray(list) && list.length > 0) setAllCountries(list);
     });
   }, []);
 
@@ -43,12 +39,6 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
   const [error, setError] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleCountrySelect = (c) => {
-    setSelectedCountry(c);
-    countryService.setManualCountry(c);
-    setShowCountryMenu(false);
-  };
 
   const isIndia = selectedCountry?.country_code === 'IN';
   const phoneCode = selectedCountry?.phone_code || (isIndia ? '+91' : '+1');
@@ -424,88 +414,6 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
             )}
 
             <form onSubmit={handleSubmit} noValidate className="auth-fullpage-form">
-              {/* Region & Currency Selector */}
-              <div className="auth-input-group" style={{ marginBottom: '14px' }}>
-                <label>
-                  <span>Select Region &amp; Billing Currency</span>
-                  <span className="req-star">*</span>
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowCountryMenu(!showCountryMenu)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      width: '100%',
-                      padding: '10px 14px',
-                      background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '8px',
-                      fontSize: '0.92rem',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                      color: '#1e293b',
-                    }}
-                  >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '1.25rem' }}>{selectedCountry?.flag_emoji || '🌐'}</span>
-                      <span>{selectedCountry?.country_name} ({selectedCountry?.currency_code})</span>
-                      <span style={{ color: '#d97706', fontSize: '0.84rem' }}>
-                        • Min {selectedCountry?.currency_symbol}{selectedCountry?.daily_min_budget}/day
-                      </span>
-                    </span>
-                    <ChevronDown size={16} color="#64748b" />
-                  </button>
-
-                  {showCountryMenu && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        background: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                        zIndex: 50,
-                        marginTop: '4px',
-                        maxHeight: '220px',
-                        overflowY: 'auto',
-                      }}
-                    >
-                      {allCountries.map((c) => (
-                        <div
-                          key={c.country_code}
-                          onClick={() => handleCountrySelect(c)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '10px 14px',
-                            cursor: 'pointer',
-                            borderBottom: '1px solid #f1f5f9',
-                            background: c.country_code === selectedCountry?.country_code ? '#f0fdf4' : 'transparent',
-                            fontSize: '0.88rem',
-                          }}
-                        >
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span>{c.flag_emoji}</span>
-                            <strong>{c.country_name}</strong>
-                            <span style={{ color: '#64748b' }}>({c.currency_code})</span>
-                          </span>
-                          <span style={{ color: '#059669', fontWeight: 700 }}>
-                            {c.currency_symbol}{c.daily_min_budget}/d
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
               <div className="auth-form-2col">
                 {/* 1. Mobile Number* */}
                 <div className="auth-input-group">
