@@ -235,8 +235,8 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       {/* 1. Global Navigation Topbar */}
       <header className="auth-fullpage-topbar">
         <div className="auth-fullpage-topbar-inner">
-          <div 
-            className="auth-fullpage-brand" 
+          <div
+            className="auth-fullpage-brand"
             onClick={onBackToWebsite}
             style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             title="AdMafia Marketing"
@@ -424,195 +424,195 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
             </div>
 
             {error && (
-              <div className="auth-error-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                  <span className="error-icon">⚠️</span>
-                  <span>{error}</span>
-                </div>
-                {error.toLowerCase().includes('sign in') && (
-                  <button
-                    type="button"
-                    onClick={onSwitchToLogin}
-                    style={{
-                      background: '#1e293b',
-                      color: '#ffffff',
-                      border: 'none',
-                      padding: '4px 12px',
-                      borderRadius: '6px',
-                      fontSize: '0.82rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Sign In →
-                  </button>
-                )}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} noValidate className="auth-fullpage-form">
-              <div className="auth-form-2col">
-                {/* 1. Mobile Number* */}
-                <div className="auth-input-group">
-                  <label htmlFor="regMobile">
-                    <span>{isIndia ? 'Mobile Number (10 Digits)' : `Phone Number (${phoneCode})`}</span>
-                    <span className="req-star">*</span>
-                  </label>
-                  <div className="clean-input-box" style={{ display: 'flex', alignItems: 'center' }}>
-                    <div
+                <div className="auth-error-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                    <span className="error-icon">⚠️</span>
+                    <span>{error}</span>
+                  </div>
+                  {error.toLowerCase().includes('sign in') && (
+                    <button
+                      type="button"
+                      onClick={onSwitchToLogin}
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '0 10px',
-                        background: '#f1f5f9',
-                        borderRight: '1px solid #cbd5e1',
-                        height: '100%',
+                        background: '#1e293b',
+                        color: '#ffffff',
+                        border: 'none',
+                        padding: '4px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.82rem',
                         fontWeight: 700,
-                        color: '#334155',
-                        fontSize: '0.88rem',
-                        userSelect: 'none',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      <span>{selectedCountry?.flag_emoji}</span>
-                      <span>{phoneCode}</span>
+                      Sign In →
+                    </button>
+                  )}
+                </div>
+            )}
+
+                <form onSubmit={handleSubmit} noValidate className="auth-fullpage-form">
+                  <div className="auth-form-2col">
+                    {/* 1. Mobile Number* */}
+                    <div className="auth-input-group">
+                      <label htmlFor="regMobile">
+                        <span>{isIndia ? 'Mobile Number (10 Digits)' : `Phone Number (${phoneCode})`}</span>
+                        <span className="req-star">*</span>
+                      </label>
+                      <div className="clean-input-box" style={{ display: 'flex', alignItems: 'center' }}>
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '0 10px',
+                            background: '#f1f5f9',
+                            borderRight: '1px solid #cbd5e1',
+                            height: '100%',
+                            fontWeight: 700,
+                            color: '#334155',
+                            fontSize: '0.88rem',
+                            userSelect: 'none',
+                          }}
+                        >
+                          <span>{selectedCountry?.flag_emoji}</span>
+                          <span>{phoneCode}</span>
+                        </div>
+                        <input
+                          id="regMobile"
+                          type="tel"
+                          required
+                          maxLength={isIndia ? 10 : 15}
+                          placeholder={isIndia ? '9724916167' : '501234567'}
+                          value={formData.mobile}
+                          onChange={(e) => setFormData({ ...formData, mobile: e.target.value.replace(/\D/g, '') })}
+                          className="clean-input"
+                          style={{ flex: 1, paddingLeft: '10px' }}
+                        />
+                      </div>
                     </div>
-                    <input
-                      id="regMobile"
-                      type="tel"
-                      required
-                      maxLength={isIndia ? 10 : 15}
-                      placeholder={isIndia ? '9724916167' : '501234567'}
-                      value={formData.mobile}
-                      onChange={(e) => setFormData({ ...formData, mobile: e.target.value.replace(/\D/g, '') })}
-                      className="clean-input"
-                      style={{ flex: 1, paddingLeft: '10px' }}
-                    />
-                  </div>
-                </div>
 
-                {/* 3. Username* */}
-                <div className="auth-input-group">
-                  <label htmlFor="regUser">
-                    <span>Workspace Username</span>
-                    <span className="req-star">*</span>
-                  </label>
-                  <div className="clean-input-box">
-                    <div className="input-prefix-icon">
-                      <User size={17} />
+                    {/* 3. Username* */}
+                    <div className="auth-input-group">
+                      <label htmlFor="regUser">
+                        <span>Workspace Username</span>
+                        <span className="req-star">*</span>
+                      </label>
+                      <div className="clean-input-box">
+                        <div className="input-prefix-icon">
+                          <User size={17} />
+                        </div>
+                        <input
+                          id="regUser"
+                          type="text"
+                          required
+                          placeholder="Min. 3 characters"
+                          value={formData.username}
+                          onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                          className="clean-input"
+                        />
+                      </div>
                     </div>
-                    <input
-                      id="regUser"
-                      type="text"
-                      required
-                      placeholder="Min. 3 characters"
-                      value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                      className="clean-input"
-                    />
                   </div>
-                </div>
-              </div>
 
-              {/* 2. Work Email Address */}
-              <div className="auth-input-group">
-                <label htmlFor="regEmail">
-                  <span>Work Email Address</span>
-                </label>
-                <div className="clean-input-box">
-                  <div className="input-prefix-icon">
-                    <Mail size={17} />
+                  {/* 2. Work Email Address */}
+                  <div className="auth-input-group">
+                    <label htmlFor="regEmail">
+                      <span>Work Email Address</span>
+                    </label>
+                    <div className="clean-input-box">
+                      <div className="input-prefix-icon">
+                        <Mail size={17} />
+                      </div>
+                      <input
+                        id="regEmail"
+                        type="email"
+                        placeholder="contact@yourcompany.com"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="clean-input"
+                      />
+                    </div>
                   </div>
-                  <input
-                    id="regEmail"
-                    type="email"
-                    placeholder="contact@yourcompany.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="clean-input"
-                  />
-                </div>
-              </div>
 
-              {/* 4. Password* */}
-              <div className="auth-input-group">
-                <label htmlFor="regPwd">
-                  <span>Create Password (Min. 6 characters)</span>
-                  <span className="req-star">*</span>
-                </label>
-                <div className="clean-input-box auth-pwd-box">
-                  <div className="input-prefix-icon">
-                    <Lock size={17} />
+                  {/* 4. Password* */}
+                  <div className="auth-input-group">
+                    <label htmlFor="regPwd">
+                      <span>Create Password (Min. 6 characters)</span>
+                      <span className="req-star">*</span>
+                    </label>
+                    <div className="clean-input-box auth-pwd-box">
+                      <div className="input-prefix-icon">
+                        <Lock size={17} />
+                      </div>
+                      <input
+                        id="regPwd"
+                        type={showPwd ? 'text' : 'password'}
+                        required
+                        placeholder="••••••••••••"
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        className="clean-input clean-input-pwd"
+                      />
+                      <button
+                        type="button"
+                        className="pwd-toggle-btn"
+                        onClick={() => setShowPwd(!showPwd)}
+                        title={showPwd ? 'Hide password' : 'Show password'}
+                        aria-label={showPwd ? 'Hide password' : 'Show password'}
+                      >
+                        {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
                   </div>
-                  <input
-                    id="regPwd"
-                    type={showPwd ? 'text' : 'password'}
-                    required
-                    placeholder="••••••••••••"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="clean-input clean-input-pwd"
-                  />
-                  <button
-                    type="button"
-                    className="pwd-toggle-btn"
-                    onClick={() => setShowPwd(!showPwd)}
-                    title={showPwd ? 'Hide password' : 'Show password'}
-                    aria-label={showPwd ? 'Hide password' : 'Show password'}
-                  >
-                    {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+
+                  {/* 5. Terms of Service & Privacy Policy Checkbox */}
+                  <div className="auth-terms-row">
+                    <label className="checkbox-wrap">
+                      <input
+                        type="checkbox"
+                        checked={formData.terms}
+                        onChange={(e) => setFormData({ ...formData, terms: e.target.checked })}
+                      />
+                      <span className="terms-text">
+                        I agree to the{' '}
+                        <a
+                          href="#terms"
+                          onClick={(e) => e.preventDefault()}
+                          className="auth-policy-link"
+                        >
+                          Terms of Service
+                        </a>{' '}
+                        and{' '}
+                        <a
+                          href="#privacy"
+                          onClick={(e) => e.preventDefault()}
+                          className="auth-policy-link"
+                        >
+                          Privacy Policy
+                        </a>.
+                      </span>
+                    </label>
+                  </div>
+
+                  <button type="submit" className="btn-portal-primary" disabled={isSubmitting}>
+                    <span>{isSubmitting ? 'Creating Workspace...' : 'Create Account & Open Dashboard'}</span>
+                    <ArrowRight size={18} className="btn-arrow-icon" />
+                  </button>
+                </form>
+
+                <div className="auth-switch-link">
+                  Already registered?{' '}
+                  <button type="button" onClick={onSwitchToLogin} className="link-button-bold">
+                    Sign In to Workspace
                   </button>
                 </div>
+
+                <div className="auth-mobile-trust-bar">
+                  <ShieldCheck size={14} color="#10b981" />
+                  <span>Official 256-bit Encrypted AdMafia Client Portal</span>
+                </div>
               </div>
-
-              {/* 5. Terms of Service & Privacy Policy Checkbox */}
-              <div className="auth-terms-row">
-                <label className="checkbox-wrap">
-                  <input
-                    type="checkbox"
-                    checked={formData.terms}
-                    onChange={(e) => setFormData({ ...formData, terms: e.target.checked })}
-                  />
-                  <span className="terms-text">
-                    I agree to the{' '}
-                    <a
-                      href="#terms"
-                      onClick={(e) => e.preventDefault()}
-                      className="auth-policy-link"
-                    >
-                      Terms of Service
-                    </a>{' '}
-                    and{' '}
-                    <a
-                      href="#privacy"
-                      onClick={(e) => e.preventDefault()}
-                      className="auth-policy-link"
-                    >
-                      Privacy Policy
-                    </a>.
-                  </span>
-                </label>
-              </div>
-
-              <button type="submit" className="btn-portal-primary" disabled={isSubmitting}>
-                <span>{isSubmitting ? 'Creating Workspace...' : 'Create Account & Open Dashboard'}</span>
-                <ArrowRight size={18} className="btn-arrow-icon" />
-              </button>
-            </form>
-
-            <div className="auth-switch-link">
-              Already registered?{' '}
-              <button type="button" onClick={onSwitchToLogin} className="link-button-bold">
-                Sign In to Workspace
-              </button>
-            </div>
-
-            <div className="auth-mobile-trust-bar">
-              <ShieldCheck size={14} color="#10b981" />
-              <span>Official 256-bit Encrypted AdMafia Client Portal</span>
-            </div>
-          </div>
         </section>
       </main>
     </div>
@@ -670,7 +670,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
             );
           }
         }
-      } catch (err) {}
+      } catch (err) { }
     }
 
     if (!matchedCustomer) {
@@ -707,8 +707,8 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
       {/* 1. Global Navigation Topbar */}
       <header className="auth-fullpage-topbar">
         <div className="auth-fullpage-topbar-inner">
-          <div 
-            className="auth-fullpage-brand" 
+          <div
+            className="auth-fullpage-brand"
             onClick={onBackToWebsite}
             style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             title="AdMafia Marketing"

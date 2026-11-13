@@ -5536,6 +5536,47 @@ if (fs.existsSync(frontendDistPath)) {
     }
   });
 
+  // Personalize the initial document on the server, before React is downloaded.
+  // Both this HTML response and the country bootstrap are private/no-store so a
+  // CDN or reverse proxy cannot reuse one visitor's prices for another.
+  app.get(['/', '/index.html'], async (req, res, next) => {
+    try {
+      const { country } = await resolveVisitorCountry(req);
+      const dailyAmount = Number(country.daily_min_budget || 300);
+      const number = new Intl.NumberFormat('en-US', {
+        maximumFractionDigits: Number(country.decimal_precision || 0),
+      }).format(dailyAmount);
+      const symbol = country.currency_symbol || country.currency_code;
+      const dailyRate = `${symbol}${number}/Day`;
+      const monthly = Number(country.monthly_budget || dailyAmount * 30);
+      const monthlyRate = `${symbol}${new Intl.NumberFormat('en-US', {
+        maximumFractionDigits: Number(country.decimal_precision || 0),
+      }).format(monthly)}`;
+      const bootstrap = JSON.stringify(country).replace(/</g, '\\u003c');
+      const ssrHomepage = `<div class="ssr-homepage" style="font-family:Arial,sans-serif;color:#172033;max-width:1100px;margin:0 auto;padding:48px 24px;line-height:1.5">
+        <header><a href="/" aria-label="AdMafia Marketing home">AdMafia Marketing</a></header>
+        <main><section><h1>Start Generating Leads from Just ${dailyRate}!</h1><p>Generate qualified customer leads with AdMafia Marketing.</p><a href="/#contact">Start Generating Leads at ${dailyRate}</a></section>
+        <section id="pricing"><h2>Affordable Lead Generation Services Starting at ${dailyRate}</h2><p>Daily starting budget: ${dailyRate}</p><p>Estimated monthly spend (30 days): ${monthlyRate}</p><p>Budget calculator starting rate: ${dailyRate}</p></section>
+        <section id="faq"><h2>Frequently Asked Questions</h2><details><summary>What is the minimum starting price?</summary><p>You can start with a minimum budget of ${dailyRate}. Estimated monthly spend is ${monthlyRate}.</p></details></section>
+        <section id="contact"><h2>Contact AdMafia Marketing</h2><p>Starting budget: ${dailyRate}</p><a href="/#contact">Get Started Now</a></section></main>
+        <footer><p>Starting budget: ${dailyRate}</p><p>Estimated monthly spend: ${monthlyRate}</p></footer>
+      </div>`;
+      let html = await fs.promises.readFile(path.join(frontendDistPath, 'index.html'), 'utf8');
+      html = html.replace('<div id="root"></div>', `<div id="root">${ssrHomepage}</div>`);
+      html = html.replace('</head>', `<script>window.__ADMAFIA_COUNTRY__=${bootstrap};</script></head>`);
+      res.set({
+        'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        'CDN-Cache-Control': 'no-store',
+        'Surrogate-Control': 'no-store',
+        'Vary': 'CF-IPCountry, CF-Connecting-IP, X-Forwarded-For',
+        'Content-Type': 'text/html; charset=utf-8',
+      });
+      return res.status(200).send(html);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   app.use(express.static(frontendDistPath, {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.html')) {
