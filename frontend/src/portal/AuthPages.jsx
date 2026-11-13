@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Eye,
   EyeOff,
@@ -15,10 +15,23 @@ import {
   Wallet,
   Globe,
   Target,
+  ChevronDown,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
+import countryService, { formatDailyRate, formatDailyBudget, formatCurrency } from '../services/countryService';
 
 export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWebsite }) {
+  const [selectedCountry, setSelectedCountry] = useState(() => countryService.getCurrentCountry());
+  const [allCountries, setAllCountries] = useState(() => countryService.getAllCountries());
+  const [showCountryMenu, setShowCountryMenu] = useState(false);
+
+  useEffect(() => {
+    return countryService.subscribe((country, list) => {
+      if (country) setSelectedCountry(country);
+      if (Array.isArray(list) && list.length > 0) setAllCountries(list);
+    });
+  }, []);
+
   const [formData, setFormData] = useState({
     mobile: '',
     email: '',
@@ -31,13 +44,33 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
   const [showPwd, setShowPwd] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const handleCountrySelect = (c) => {
+    setSelectedCountry(c);
+    countryService.setManualCountry(c);
+    setShowCountryMenu(false);
+  };
+
+  const isIndia = selectedCountry?.country_code === 'IN';
+  const phoneCode = selectedCountry?.phone_code || (isIndia ? '+91' : '+1');
+  const dailyRateText = formatDailyRate(selectedCountry);
+  const dailyBudgetText = formatDailyBudget(selectedCountry);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const cleanMobile = formData.mobile.trim();
-    if (!/^[0-9]{10}$/.test(cleanMobile)) {
-      setError('Mobile Number must be exactly 10 digits.');
-      return;
+
+    if (isIndia) {
+      if (!/^[0-9]{10}$/.test(cleanMobile)) {
+        setError('Mobile Number must be exactly 10 digits for India.');
+        return;
+      }
+    } else {
+      if (!/^[0-9]{7,15}$/.test(cleanMobile)) {
+        setError('Please enter a valid phone number (7 to 15 digits).');
+        return;
+      }
     }
+
     if (formData.username.trim().length < 3) {
       setError('Username must be at least 3 characters.');
       return;
@@ -59,6 +92,8 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (l) => l.toUpperCase());
 
+    const fullPhone = isIndia ? cleanMobile : `${phoneCode} ${cleanMobile}`;
+
     // Provisions authoritative customer record for both client portal and subadmin desks
     let newCustomer = {
       id: `cust_reg_${cleanMobile}`,
@@ -67,13 +102,16 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       companyName: formattedName,
       contact: formattedName,
       contactPerson: formattedName,
-      phone: cleanMobile,
+      phone: fullPhone,
       email: formData.email.trim(),
       password: formData.password,
       passwordMasked: '••••••••••••',
       city: '',
       state: '',
-      country: 'India',
+      country: selectedCountry.country_name || 'India',
+      countryCode: selectedCountry.country_code || 'IN',
+      currency: selectedCountry.currency_code || 'INR',
+      currencySymbol: selectedCountry.currency_symbol || '₹',
       category: '',
       industry: '',
       website: '',
@@ -86,15 +124,15 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       payment_status: 'pending',
       amountPaid: 0,
       totalLifetimePaid: 0,
-      dailyPacing: 300,
-      dailyAdSpend: 300,
+      dailyPacing: selectedCountry.daily_min_budget || 300,
+      dailyAdSpend: selectedCountry.daily_min_budget || 300,
       balance: 0,
       walletBalance: 0,
       runwayDays: 0,
       verified: true,
       isSelfRegistered: true,
       completedAt: new Date().toISOString(),
-      registeredAt: new Date().toLocaleString('en-IN', {
+      registeredAt: new Date().toLocaleString('en-US', {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
@@ -109,11 +147,15 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       // Save directly to PostgreSQL Backend API
       const dbCustomer = await crmApi.registerCustomer({
         username: formData.username.trim(),
-        phone: cleanMobile,
+        phone: fullPhone,
         email: formData.email.trim(),
         password: formData.password,
         companyName: formattedName,
         contactPerson: formattedName,
+        country: selectedCountry.country_name,
+        countryCode: selectedCountry.country_code,
+        currency: selectedCountry.currency_code,
+        initialBudget: selectedCountry.daily_min_budget,
       });
       if (dbCustomer) {
         newCustomer = { ...newCustomer, ...dbCustomer, password: formData.password };
@@ -127,7 +169,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       const rawCustomers = localStorage.getItem('growthline_registered_customers');
       const storedCustomers = rawCustomers ? JSON.parse(rawCustomers) : [];
       const filteredCustomers = storedCustomers.filter(
-        (c) => c.phone !== cleanMobile && c.username !== newCustomer.username
+        (c) => c.phone !== fullPhone && c.username !== newCustomer.username
       );
       localStorage.setItem('growthline_registered_customers', JSON.stringify([newCustomer, ...filteredCustomers]));
 
@@ -138,15 +180,17 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         company: newCustomer.name,
         contact: newCustomer.contact,
         phone: newCustomer.phone,
+        countryCode: selectedCountry.country_code,
+        currency: selectedCountry.currency_code,
         packageTier: 'Self-Registered (Awaiting Wallet Top-Up)',
         amount: 0,
-        dailyRate: 300,
+        dailyRate: selectedCountry.daily_min_budget || 300,
         runwayDays: 0,
         utrNumber: 'Awaiting Payment',
         paymentStatus: 'pending',
         profileStatus: 'incomplete',
         queueType: 'Payment Pending',
-        submittedAt: new Date().toLocaleString('en-IN', {
+        submittedAt: new Date().toLocaleString('en-US', {
           day: '2-digit',
           month: 'short',
           year: 'numeric',
@@ -228,10 +272,10 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
             <div className="auth-hero-block">
               <h1 className="auth-showcase-heading">
                 Start receiving verified buyer enquiries{' '}
-                <span className="auth-showcase-highlight">from ₹300/day.</span>
+                <span className="auth-showcase-highlight">from {dailyRateText}.</span>
               </h1>
               <p className="auth-showcase-subtext">
-                Create your dedicated <strong>AdMafia Business Workspace</strong> in 30 seconds. Top up your ad wallet, configure your target city &amp; industry, and receive real-time customer names and unmasked 10-digit mobile numbers.
+                Create your dedicated <strong>AdMafia Business Workspace</strong> in 30 seconds. Top up your ad wallet, configure your target city &amp; industry, and receive real-time customer names and unmasked mobile numbers.
               </p>
             </div>
 
@@ -256,7 +300,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                     <span className="auth-lead-tag-verified">Verified Buyer ✓</span>
                   </div>
                   <div className="auth-lead-phone-row">
-                    <span className="auth-lead-phone">+91 97249 16167</span>
+                    <span className="auth-lead-phone">{phoneCode} 97•••• 6167</span>
                     <span className="auth-lead-phone-badge">Direct Unmasked Mobile</span>
                   </div>
                   <div className="auth-lead-intent-sub">
@@ -277,12 +321,12 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
               <div className="auth-live-card-metrics">
                 <div className="auth-metric-item">
                   <small>Minimum Ad Spend</small>
-                  <strong>₹300 / Day</strong>
+                  <strong>{dailyBudgetText} / Day</strong>
                   <span className="auth-metric-sub">100% Towards Meta Ads</span>
                 </div>
                 <div className="auth-metric-item highlight">
                   <small>Setup &amp; Platform Fee</small>
-                  <strong>₹0 (100% Free)</strong>
+                  <strong>Free</strong>
                   <span className="auth-metric-sub">Zero Hidden Cut</span>
                 </div>
                 <div className="auth-metric-item">
@@ -314,10 +358,10 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                 </div>
                 <div className="auth-step-body">
                   <div className="auth-step-header">
-                    <h4>2. Pure Wallet Balance Control (Min ₹300)</h4>
-                    <span className="auth-step-tag blue">Direct UPI / Bank UTR</span>
+                    <h4>2. Pure Wallet Balance Control (Min {dailyBudgetText})</h4>
+                    <span className="auth-step-tag blue">Direct Gateway / Bank UTR</span>
                   </div>
-                  <p>Add funds anytime via Razorpay UPI or Bank UTR with full daily ad budget control.</p>
+                  <p>Add funds anytime with full daily ad budget control in your local currency.</p>
                 </div>
               </div>
 
@@ -380,26 +424,124 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
             )}
 
             <form onSubmit={handleSubmit} noValidate className="auth-fullpage-form">
+              {/* Region & Currency Selector */}
+              <div className="auth-input-group" style={{ marginBottom: '14px' }}>
+                <label>
+                  <span>Select Region &amp; Billing Currency</span>
+                  <span className="req-star">*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowCountryMenu(!showCountryMenu)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      padding: '10px 14px',
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '8px',
+                      fontSize: '0.92rem',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      color: '#1e293b',
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.25rem' }}>{selectedCountry?.flag_emoji || '🌐'}</span>
+                      <span>{selectedCountry?.country_name} ({selectedCountry?.currency_code})</span>
+                      <span style={{ color: '#d97706', fontSize: '0.84rem' }}>
+                        • Min {selectedCountry?.currency_symbol}{selectedCountry?.daily_min_budget}/day
+                      </span>
+                    </span>
+                    <ChevronDown size={16} color="#64748b" />
+                  </button>
+
+                  {showCountryMenu && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                        zIndex: 50,
+                        marginTop: '4px',
+                        maxHeight: '220px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {allCountries.map((c) => (
+                        <div
+                          key={c.country_code}
+                          onClick={() => handleCountrySelect(c)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #f1f5f9',
+                            background: c.country_code === selectedCountry?.country_code ? '#f0fdf4' : 'transparent',
+                            fontSize: '0.88rem',
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>{c.flag_emoji}</span>
+                            <strong>{c.country_name}</strong>
+                            <span style={{ color: '#64748b' }}>({c.currency_code})</span>
+                          </span>
+                          <span style={{ color: '#059669', fontWeight: 700 }}>
+                            {c.currency_symbol}{c.daily_min_budget}/d
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="auth-form-2col">
                 {/* 1. Mobile Number* */}
                 <div className="auth-input-group">
                   <label htmlFor="regMobile">
-                    <span>Mobile Number (10 Digits)</span>
+                    <span>{isIndia ? 'Mobile Number (10 Digits)' : `Phone Number (${phoneCode})`}</span>
                     <span className="req-star">*</span>
                   </label>
-                  <div className="clean-input-box">
-                    <div className="input-prefix-icon">
-                      <Phone size={17} />
+                  <div className="clean-input-box" style={{ display: 'flex', alignItems: 'center' }}>
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '0 10px',
+                        background: '#f1f5f9',
+                        borderRight: '1px solid #cbd5e1',
+                        height: '100%',
+                        fontWeight: 700,
+                        color: '#334155',
+                        fontSize: '0.88rem',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <span>{selectedCountry?.flag_emoji}</span>
+                      <span>{phoneCode}</span>
                     </div>
                     <input
                       id="regMobile"
                       type="tel"
                       required
-                      maxLength={10}
-                      placeholder="e.g. 9724916167"
+                      maxLength={isIndia ? 10 : 15}
+                      placeholder={isIndia ? '9724916167' : '501234567'}
                       value={formData.mobile}
                       onChange={(e) => setFormData({ ...formData, mobile: e.target.value.replace(/\D/g, '') })}
                       className="clean-input"
+                      style={{ flex: 1, paddingLeft: '10px' }}
                     />
                   </div>
                 </div>

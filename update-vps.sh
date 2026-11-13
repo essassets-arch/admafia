@@ -110,6 +110,8 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header CF-IPCountry \$http_cf_ipcountry;
+        proxy_set_header CF-Connecting-IP \$http_cf_connecting_ip;
         proxy_cache_bypass \$http_upgrade;
     }
 }
@@ -132,6 +134,8 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header CF-IPCountry \$http_cf_ipcountry;
+        proxy_set_header CF-Connecting-IP \$http_cf_connecting_ip;
         proxy_cache_bypass \$http_upgrade;
     }
 }

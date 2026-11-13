@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import MetaAdsCalculator from './components/MetaAdsCalculator';
 import WhatsAppWidget from './components/WhatsAppWidget';
+import CountrySelector from './components/CountrySelector';
+import countryService, { formatDailyRate, formatDailyBudget, formatMonthlySpend, formatCurrency } from './services/countryService';
 import AuthPage from './components/AuthPage';
 import PortalDashboard from './portal/PortalDashboard';
 import WorkspaceSetupPage from './portal/WorkspaceSetupPage';
@@ -158,6 +160,48 @@ const platformPages = [
 ];
 
 export default function App() {
+  const [activeCountry, setActiveCountry] = useState(() => countryService.getCurrentCountry());
+
+  useEffect(() => {
+    return countryService.subscribe((country) => {
+      if (country) setActiveCountry(country);
+    });
+  }, []);
+
+  const dailyRate = formatDailyRate(activeCountry);
+  const dailyRateLower = dailyRate.toLowerCase();
+  const dailyBudget = formatDailyBudget(activeCountry);
+  const currencySymbol = activeCountry?.currency_symbol || '₹';
+
+  const dynamicGets = [
+    ['Affordable Starting Budget', `Get started with a minimum budget of ${dailyBudget} per day.`],
+    ['Qualified Customer Leads', 'Connect with potential customers relevant to your business offerings.'],
+    ['Customer Contact Details', 'Receive available customer information, including names and phone numbers.'],
+    ['Targeted Audience Reach', 'Connect with potential customers based on your business category and preferred locations.'],
+    ['Direct Customer Communication', 'Contact your leads and discuss their requirements directly.'],
+    ['Business Growth Opportunities', 'Build your customer pipeline and work towards increasing sales.'],
+  ];
+
+  const dynamicWhy = [
+    ['Quality-Focused Lead Generation', 'Our approach focuses on connecting businesses with relevant potential customers instead of simply increasing website visits or online engagement.'],
+    ['Affordable Starting Budget', `Start generating customer enquiries with a minimum starting budget of ${dailyBudget} per day.`],
+    ['Direct Customer Contact', 'Receive available customer contact information and communicate with potential customers directly.'],
+    ['Business-Specific Lead Generation', 'Every business has different customer requirements. We consider your business category, services and preferred audience when planning lead generation.'],
+    ['Location-Based Opportunities', 'Connect with potential customers in your preferred cities and service areas.'],
+    ['Simple and Transparent Process', 'A straightforward process that helps you receive enquiries and manage your own customer relationships.'],
+  ];
+
+  const dynamicFaqs = [
+    ['What is AdMafia Marketing?', 'AdMafia Marketing is a lead generation platform that helps businesses connect with potential customers by providing relevant customer enquiries and available contact details.'],
+    ['What type of leads will I receive?', 'You can receive customer enquiries relevant to your business category, products or services. The available information may include customer names, phone numbers and details submitted with their enquiry.'],
+    ['What is the minimum starting price?', `You can start with a minimum budget of ${dailyBudget} per day. The actual lead generation results depend on your business category, target location, audience demand and campaign performance.`],
+    ['Are the leads suitable for my business?', 'Our lead generation approach focuses on your business category, target audience and preferred location to find relevant potential customers. However, no lead generation service can guarantee that every enquiry will become a qualified sales opportunity or paying customer.'],
+    ['Can I choose the location for my leads?', 'Yes. You can specify your preferred city, area or service location when sharing your business requirements.'],
+    ['Which types of businesses can use AdMafia Marketing?', 'Our platform supports different business categories, including real estate, education, healthcare, home services, automobile businesses, beauty services, retail and professional services, subject to applicable eligibility requirements.'],
+    ['Will AdMafia Marketing close sales for my business?', 'No. Our primary service is generating and providing customer enquiries. You will communicate with the leads, understand their requirements, handle follow-ups and convert them into customers.'],
+    ['How can I get started?', 'Simply share your business details, products or services, target audience and preferred location. Our team will help you understand the process and get started with lead generation.'],
+  ];
+
   const [formData, setFormData] = useState({
     csrf: 'csrf_admafia_marketing_token',
     website: '',
@@ -793,6 +837,7 @@ export default function App() {
           </nav>
 
           <div className="nav-actions">
+            <CountrySelector />
             {currentUser ? (
               <>
                 <button 
@@ -879,10 +924,14 @@ export default function App() {
         {mobileMenuOpen && (
           <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
             <div className="mobile-drawer-menu" onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 8px', borderBottom: '1px solid #f1f5f9' }}>
+                <div className="mobile-drawer-section-title" style={{ padding: 0 }}>Region &amp; Currency</div>
+                <CountrySelector />
+              </div>
               <div className="mobile-drawer-section-title">Website Sections</div>
               <div className="mobile-drawer-links">
                 <a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }} className="mobile-drawer-link">
-                  <span>Starting Budget (₹300/Day)</span>
+                  <span>Starting Budget ({dailyRate})</span>
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
                 <a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }} className="mobile-drawer-link">
@@ -950,7 +999,7 @@ export default function App() {
             <div>
               <div className="hero-badge">
                 <Sparkles size={16} />
-                <span>Start Generating Leads from Just ₹300/Day!</span>
+                <span>Start Generating Leads from Just {dailyRate}!</span>
               </div>
               <h1 id="h1">
                 Get Qualified Leads. Grow Your Business.{' '}
@@ -1004,7 +1053,7 @@ export default function App() {
                 <em>New lead</em>
               </div>
               <div className="lead-card">
-                <i>₹</i>
+                <i>{currencySymbol}</i>
                 <div>
                   <strong>Direct Customer Connect</strong>
                   <span>Call. Explain. Convert.</span>
@@ -1014,21 +1063,21 @@ export default function App() {
           </div>
         </section>
 
-        {/* Section 2: Affordable Lead Generation Services Starting at ₹300/Day */}
+        {/* Section 2: Affordable Lead Generation Services Starting at Daily Minimum */}
         <section className="budget" id="pricing" aria-labelledby="h-budget">
           <div className="wrap">
             <div className="top">
               <div>
-                <h2 id="h-budget">Affordable Lead Generation Services Starting at ₹300/Day</h2>
+                <h2 id="h-budget">Affordable Lead Generation Services Starting at {dailyRate}</h2>
                 <div className="section-subhead">
                   More Opportunities for Your Business. Without a Huge Budget.
                 </div>
                 <p className="lead" style={{ marginTop: '12px', fontWeight: 700, color: 'var(--ink2)', fontSize: '1.08rem' }}>
-                  Start with a minimum budget of just ₹300 per day and create more opportunities to grow your customer base.
+                  Start with a minimum budget of just {dailyBudget} per day and create more opportunities to grow your customer base.
                 </p>
               </div>
               <div className="price">
-                ₹300<small> /day minimum</small>
+                {dailyBudget}<small> /day minimum</small>
               </div>
             </div>
 
@@ -1040,7 +1089,7 @@ export default function App() {
               What Do You Get with AdMafia Marketing?
             </h3>
             <ul className="gets">
-              {gets.map((g, idx) => (
+              {dynamicGets.map((g, idx) => (
                 <li key={idx}>
                   <b>{g[0]}</b>
                   <span>{g[1]}</span>
@@ -1063,13 +1112,13 @@ export default function App() {
                 </button>
               ) : (
                 <a className="btn dark" href="#contact">
-                  Start Generating Leads at ₹300/Day
+                  Start Generating Leads at {dailyRate}
                 </a>
               )}
             </div>
 
             <p className="note" style={{ marginTop: '32px' }}>
-              <strong>Note:</strong> ₹300/day is the minimum starting budget, not a guaranteed cost per lead. Lead volume and quality may vary depending on business category, audience demand, location and campaign performance. A lead indicates interest, not a guaranteed purchase or sale.
+              <strong>Note:</strong> {dailyRate} is the minimum starting budget, not a guaranteed cost per lead. Lead volume and quality may vary depending on business category, audience demand, location and campaign performance. A lead indicates interest, not a guaranteed purchase or sale.
             </p>
           </div>
         </section>
@@ -1111,7 +1160,7 @@ export default function App() {
               Your Business Growth Starts with the Right Customers.
             </div>
             <div className="grid">
-              {why.map((w, idx) => (
+              {dynamicWhy.map((w, idx) => (
                 <article className="card" key={idx}>
                   <h3>{w[0]}</h3>
                   <p>{w[1]}</p>
@@ -1155,7 +1204,7 @@ export default function App() {
               Your Next Customer Could Be Waiting for the Right Opportunity to Connect.
             </div>
             <div className="band-tagline-main">
-              Starting at Just ₹300/Day.
+              Starting at Just {dailyRate}.
             </div>
             <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
               <a className="btn dark" href="#contact">
@@ -1176,7 +1225,7 @@ export default function App() {
           <div className="wrap">
             <h2 id="h-faq">Frequently Asked Questions</h2>
             <div className="faq">
-              {faqs.map((f, idx) => (
+              {dynamicFaqs.map((f, idx) => (
                 <details key={idx}>
                   <summary>{f[0]}</summary>
                   <p>{f[1]}</p>
@@ -1199,7 +1248,7 @@ export default function App() {
               </p>
               <div style={{ marginTop: '28px', display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(255, 184, 0, 0.15)', padding: '10px 22px', borderRadius: '999px', border: '1px solid rgba(255, 184, 0, 0.45)' }}>
                 <span style={{ color: '#d9d7f5', fontSize: '1rem', fontWeight: 600 }}>Starting Budget:</span>
-                <strong style={{ color: '#ffb800', fontSize: '1.3rem', fontWeight: 800 }}>₹300/Day</strong>
+                <strong style={{ color: '#ffb800', fontSize: '1.3rem', fontWeight: 800 }}>{dailyRate}</strong>
               </div>
             </div>
             <form onSubmit={handleSubmit} noValidate>
@@ -1242,7 +1291,7 @@ export default function App() {
                 required
                 autoComplete="tel"
                 inputMode="tel"
-                placeholder="10-digit mobile number"
+                placeholder={activeCountry?.phone_code ? `${activeCountry.phone_code} mobile number` : 'Mobile number'}
                 value={formData.phone}
                 onChange={handleChange}
               />
@@ -1283,7 +1332,7 @@ export default function App() {
                 />
               </div>
               <p style={{ fontSize: '0.86rem', lineHeight: '1.6', color: '#94a3b8', margin: '0 0 16px' }}>
-                Get qualified leads, grow your business, and increase your customers. AdMafia Marketing helps businesses connect directly with interested buyers with names and phone numbers starting from just ₹300/day.
+                Get qualified leads, grow your business, and increase your customers. AdMafia Marketing helps businesses connect directly with interested buyers with names and phone numbers starting from just {dailyRateLower}.
               </p>
               
               <div className="footer-social-links">
@@ -1366,7 +1415,7 @@ export default function App() {
                 </li>
                 <li>
                   <a href="#contact" onClick={(e) => { e.preventDefault(); navigateTo('#contact', 'landing'); }}>
-                    <span>Starting Budget (₹300/Day)</span>
+                    <span>Starting Budget ({dailyRate})</span>
                   </a>
                 </li>
                 <li>
@@ -1381,7 +1430,7 @@ export default function App() {
             <div className="footer-col">
               <h4>Lead Solutions</h4>
               <ul className="footer-links">
-                <li><a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }}>Starting Budget (₹300/Day)</a></li>
+                <li><a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }}>Starting Budget ({dailyRate})</a></li>
                 <li><a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }}>How AdMafia Works</a></li>
                 <li><a href="#why" onClick={(e) => { e.preventDefault(); navigateTo('#why', 'landing'); }}>Why Choose AdMafia</a></li>
                 <li><a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }}>Industry Solutions</a></li>

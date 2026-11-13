@@ -10,6 +10,7 @@ import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibili
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
 import { superadminRouter, logSuperAdminAudit } from './routes/superadmin.js';
+import { countryPricingRouter, superadminCountryPricingRouter } from './routes/countryPricing.js';
 import { purgeSpecifiedTestUsers } from './scripts/purge-test-users.js';
 
 // Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
@@ -100,6 +101,9 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     city: row.city || '',
     state: row.state || 'Maharashtra',
     country: row.country || 'India',
+    countryCode: String(row.country_code || 'IN').toUpperCase(),
+    currency: String(row.currency || 'INR').toUpperCase(),
+    currencySymbol: row.currency === 'USD' ? '$' : row.currency === 'AED' ? 'AED ' : row.currency === 'GBP' ? '£' : row.currency === 'SAR' ? 'SAR ' : '₹',
     status: row.status || 'active',
     profileStatus: row.profile_status || 'incomplete',
     profile_status: row.profile_status || 'incomplete',
@@ -984,16 +988,50 @@ app.post('/api/auth/register', async (req, res) => {
       companyName,
       contactPerson,
       city = '',
-      state = 'Maharashtra',
+      state = '',
+      country = 'India',
+      countryCode = 'IN',
+      currency = 'INR',
       category = 'IT & Software',
       deposit = 0,
       initialDeposit: reqInitialDeposit,
     } = req.body || {};
 
-    const cleanPhone = String(phone || mobile || '').replace(/\D/g, '').slice(-10);
-    if (cleanPhone.length !== 10) {
-      return res.status(400).json({ ok: false, error: 'Valid 10-digit mobile number is required.' });
+    const cleanCountryCode = String(countryCode || 'IN').trim().toUpperCase();
+    const rawPhone = String(phone || mobile || '').trim();
+    const cleanDigits = rawPhone.replace(/\D/g, '');
+
+    let cleanPhone = cleanDigits;
+    if (cleanCountryCode === 'IN') {
+      cleanPhone = cleanDigits.slice(-10);
+      if (cleanPhone.length !== 10) {
+        return res.status(400).json({ ok: false, error: 'Valid 10-digit mobile number is required for Indian registration.' });
+      }
+    } else {
+      if (cleanDigits.length < 7 || cleanDigits.length > 15) {
+        return res.status(400).json({ ok: false, error: 'Valid international phone number (7-15 digits) is required.' });
+      }
     }
+
+    // Determine country pricing, currency and daily starting budget
+    let dailyBudget = 300;
+    let registeredCurrency = currency || 'INR';
+    let registeredCountryName = country || 'India';
+    try {
+      const cpRes = await query(
+        `SELECT country_name, currency_code, daily_min_budget FROM country_pricing WHERE UPPER(country_code) = $1 LIMIT 1`,
+        [cleanCountryCode]
+      );
+      if (cpRes.rows.length > 0) {
+        dailyBudget = Number(cpRes.rows[0].daily_min_budget) || (cleanCountryCode === 'IN' ? 300 : 10);
+        registeredCurrency = cpRes.rows[0].currency_code || registeredCurrency;
+        registeredCountryName = cpRes.rows[0].country_name || registeredCountryName;
+      } else if (cleanCountryCode !== 'IN') {
+        dailyBudget = 10;
+        registeredCurrency = currency || 'USD';
+      }
+    } catch (e) {}
+
     const cleanUsername = (username || `user_${cleanPhone.slice(-4)}`).trim().replace(/^@/, '');
     const isGeneric = (str) =>
       !str ||
@@ -1008,19 +1046,22 @@ app.post('/api/auth/register', async (req, res) => {
     const walId = `wal_${cleanPhone}`;
     const pvId = `pv_${cleanPhone}`;
     const initialDeposit = Math.max(0, Number(deposit || reqInitialDeposit) || 0);
-    const payStatus = initialDeposit >= 300 ? 'paid' : 'pending';
+    const payStatus = initialDeposit >= dailyBudget ? 'paid' : 'pending';
 
     await query(
       `INSERT INTO customers (
         id, username, phone, email, password_hash,
-        company_name, category, contact_person, city, state,
+        company_name, category, contact_person, city, state, country, country_code, currency,
         status, profile_status, payment_status, kyc_percent, verified, completed_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', 'complete', $11, 100, TRUE, NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active', 'complete', $14, 100, TRUE, NOW())
       ON CONFLICT (phone) DO UPDATE SET
         username = EXCLUDED.username,
         email = EXCLUDED.email,
         password_hash = EXCLUDED.password_hash,
         company_name = EXCLUDED.company_name,
+        country = EXCLUDED.country,
+        country_code = EXCLUDED.country_code,
+        currency = EXCLUDED.currency,
         profile_status = 'complete',
         kyc_percent = 100,
         verified = TRUE,
@@ -1036,26 +1077,30 @@ app.post('/api/auth/register', async (req, res) => {
         category,
         contactName,
         city,
-        state,
+        state || '',
+        registeredCountryName,
+        cleanCountryCode,
+        registeredCurrency,
         payStatus,
       ]
     );
 
     await query(
       `INSERT INTO wallets (
-        id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active
-      ) VALUES ($1, $2, $3, 300.00, $3, FALSE)
+        id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active, currency
+      ) VALUES ($1, $2, $3, $4, $3, FALSE, $5)
       ON CONFLICT (customer_id) DO UPDATE SET
         available_balance = wallets.available_balance + EXCLUDED.available_balance,
-        total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid`,
-      [walId, custId, initialDeposit]
+        total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
+        currency = EXCLUDED.currency`,
+      [walId, custId, initialDeposit, dailyBudget, registeredCurrency]
     );
 
     if (initialDeposit > 0) {
       await query(
         `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, 'Razorpay Secure (UPI/Card)', 'Verified ✓')
+          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, currency
+        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, 'Direct Secure Payment', 'Verified ✓', $8)
         ON CONFLICT (reference_utr) DO UPDATE SET balance_after = EXCLUDED.balance_after`,
         [
           `tx_init_${cleanPhone}_${Date.now()}`,
@@ -1065,6 +1110,7 @@ app.post('/api/auth/register', async (req, res) => {
           initialDeposit,
           `INIT_${cleanPhone}`,
           'Initial Account Opening Ad Wallet Deposit',
+          registeredCurrency,
         ]
       );
     }
@@ -1085,7 +1131,7 @@ app.post('/api/auth/register', async (req, res) => {
         cleanPhone,
         initialDeposit,
         payStatus,
-        initialDeposit >= 300 ? 'Completed' : 'Payment Pending',
+        initialDeposit >= dailyBudget ? 'Completed' : 'Payment Pending',
       ]
     );
 
@@ -3228,10 +3274,11 @@ export async function creditCustomerWallet({
   referenceUtr,
   paymentMethod = 'Razorpay Secure (UPI/Card)',
   description,
+  currency,
 }) {
   const cleanAmount = Number(amount || 0);
-  if (!Number.isSafeInteger(cleanAmount) || cleanAmount < 300) {
-    throw new Error('Minimum wallet top-up amount is ₹300.');
+  if (!Number.isFinite(cleanAmount) || cleanAmount <= 0) {
+    throw new Error('Valid wallet top-up amount is required.');
   }
 
   const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
@@ -3252,11 +3299,10 @@ export async function creditCustomerWallet({
 
     if (custRes.rowCount === 0) {
       const fallbackId = customerId || `cust_${cleanPhone || Date.now()}`;
-      // Inactive, unguessable locked credential hash requiring proper activation
       const lockedCredentialHash = `$2b$12$${randomBytes(32).toString('hex')}!LOCKED`;
       await txQuery(
-        `INSERT INTO customers (id, phone, username, contact_person, company_name, email, password_hash, status, payment_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', 'paid')
+        `INSERT INTO customers (id, phone, username, contact_person, company_name, email, password_hash, status, payment_status, currency)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', 'paid', $8)
          ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone, payment_status = 'paid'`,
         [
           fallbackId,
@@ -3266,6 +3312,7 @@ export async function creditCustomerWallet({
           `Business ${cleanPhone || fallbackId}`,
           `${cleanPhone || fallbackId}@client.admafia.marketing`,
           lockedCredentialHash,
+          currency || 'INR',
         ]
       );
       custRes = await txQuery(`SELECT * FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`, [fallbackId, cleanPhone]);
@@ -3276,6 +3323,14 @@ export async function creditCustomerWallet({
     }
 
     const cust = custRes.rows[0];
+    const custCurrency = String(cust.currency || currency || 'INR').toUpperCase();
+    const currencySymbol = custCurrency === 'USD' ? '$' : custCurrency === 'AED' ? 'AED ' : custCurrency === 'GBP' ? '£' : custCurrency === 'SAR' ? 'SAR ' : '₹';
+
+    if (custCurrency === 'INR' && cleanAmount < 300) {
+      throw new Error('Minimum wallet top-up amount is ₹300.');
+    } else if (custCurrency !== 'INR' && cleanAmount < 10) {
+      throw new Error(`Minimum wallet top-up amount is ${currencySymbol}10.`);
+    }
 
     // 2. Check for duplicate credit idempotency using row lock
     const existingTx = await txQuery(
@@ -3300,16 +3355,18 @@ export async function creditCustomerWallet({
     }
 
     // 3. Upsert wallet balance atomically
+    const defaultDailyMin = custCurrency === 'INR' ? 300.00 : 10.00;
     const walRes = await txQuery(
       `INSERT INTO wallets (
-        id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active
-      ) VALUES ($1, $2, $3, 300.00, $3, FALSE)
+        id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active, currency
+      ) VALUES ($1, $2, $3, $4, $3, FALSE, $5)
       ON CONFLICT (customer_id) DO UPDATE SET
         available_balance = wallets.available_balance + EXCLUDED.available_balance,
         total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
+        currency = COALESCE(wallets.currency, EXCLUDED.currency),
         updated_at = NOW()
       RETURNING *`,
-      [`wal_${Date.now()}`, cust.id, cleanAmount]
+      [`wal_${Date.now()}`, cust.id, cleanAmount, defaultDailyMin, custCurrency]
     );
 
     const newBalance = Number(walRes.rows[0]?.available_balance || cleanAmount);
@@ -3323,18 +3380,18 @@ export async function creditCustomerWallet({
 
     // 5. Insert or update wallet transaction with 'Verified ✓'
     const txId = `tx_${Date.now()}`;
-    const txDesc = description || `Ad Wallet Balance Top-Up (₹${cleanAmount.toLocaleString('en-IN')} Added)`;
+    const txDesc = description || `Ad Wallet Balance Top-Up (${currencySymbol}${cleanAmount.toLocaleString()} Added)`;
     const txInsert = await txQuery(
       `INSERT INTO wallet_transactions (
-        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-      ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓')
+        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, currency
+      ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓', $9)
       ON CONFLICT (reference_utr) DO UPDATE SET
         balance_after = EXCLUDED.balance_after,
         status = 'Verified ✓',
         description = EXCLUDED.description,
         payment_method = EXCLUDED.payment_method
       RETURNING *`,
-      [txId, cust.id, walletId, cleanAmount, newBalance, utr, txDesc, paymentMethod]
+      [txId, cust.id, walletId, cleanAmount, newBalance, utr, txDesc, paymentMethod, custCurrency]
     );
 
     // 6. Insert payment_records for Sales Desk (/sales#payments)
@@ -3343,8 +3400,8 @@ export async function creditCustomerWallet({
     const payInsert = await txQuery(
       `INSERT INTO payment_records (
         id, receipt_number, customer_id, company_name, contact_person, phone, city,
-        tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'topup', $8, 0, $8, $9, $10, 'paid', $11)
+        tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, notes, currency
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'topup', $8, 0, $8, $9, $10, 'paid', $11, $12)
       ON CONFLICT (receipt_number) DO UPDATE SET total_amount = EXCLUDED.total_amount
       RETURNING *`,
       [
@@ -3354,26 +3411,29 @@ export async function creditCustomerWallet({
         cust.company_name,
         cust.contact_person,
         cust.phone,
-        cust.city || 'India',
+        cust.city || cust.country || 'India',
         cleanAmount,
         paymentMethod,
         utr,
-        `Wallet Top-Up (+₹${cleanAmount.toLocaleString('en-IN')})`,
+        `Wallet Top-Up (+${currencySymbol}${cleanAmount.toLocaleString()})`,
+        custCurrency,
       ]
     );
 
     // 7. Insert tax invoice with SAC code breakdown
     const invId = `inv_${Date.now()}_${randomBytes(3).toString('hex')}`;
     const invoiceNo = `INV-${new Date().getFullYear()}-${Date.now()}-${randomBytes(3).toString('hex').toUpperCase()}`;
-    const baseAmt = Math.round(cleanAmount / 1.18);
-    const cgstAmt = Math.round((cleanAmount - baseAmt) / 2);
-    const sgstAmt = cleanAmount - baseAmt - cgstAmt;
+    const taxRate = custCurrency === 'INR' ? 1.18 : 1.0;
+    const baseAmt = Math.round(cleanAmount / taxRate);
+    const totalTax = cleanAmount - baseAmt;
+    const cgstAmt = Math.round(totalTax / 2);
+    const sgstAmt = totalTax - cgstAmt;
 
     const invInsert = await txQuery(
       `INSERT INTO tax_invoices (
         id, invoice_no, customer_id, payment_record_id, particulars, sac_code,
-        base_amount, cgst_amount, sgst_amount, total_amount, payment_mode, status
-      ) VALUES ($1, $2, $3, $4, $5, '998311', $6, $7, $8, $9, $10, 'Paid')
+        base_amount, cgst_amount, sgst_amount, total_amount, payment_mode, status, currency
+      ) VALUES ($1, $2, $3, $4, $5, '998311', $6, $7, $8, $9, $10, 'Paid', $11)
       ON CONFLICT (invoice_no) DO UPDATE SET total_amount = EXCLUDED.total_amount
       RETURNING *`,
       [
@@ -3387,6 +3447,7 @@ export async function creditCustomerWallet({
         sgstAmt,
         cleanAmount,
         `${paymentMethod} (Ref: ${utr})`,
+        custCurrency,
       ]
     );
 
@@ -5359,6 +5420,16 @@ app.use('/api/graphics', graphicsRouter);
 // 6D. SUPER ADMIN CONTROL CENTER API ROUTER (/api/superadmin/*)
 // =============================================================================
 app.use('/api/superadmin', superadminRouter);
+
+// =============================================================================
+// 6E. PUBLIC COUNTRY PRICING & LOCALIZATION API ROUTER (/api/public/*)
+// =============================================================================
+app.use('/api/public', countryPricingRouter);
+
+// =============================================================================
+// 6F. SUPER ADMIN COUNTRY PRICING CONFIGURATION ROUTER (/api/superadmin/country-pricing)
+// =============================================================================
+app.use('/api/superadmin/country-pricing', superadminCountryPricingRouter);
 
 // =============================================================================
 // 7. PRODUCTION STATIC FRONTEND SERVING (When frontend/dist is built on VPS)

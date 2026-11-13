@@ -1,14 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import countryService, { formatCurrency } from '../services/countryService';
 
 export default function MetaAdsCalculator() {
-  const [dailyBudget, setDailyBudget] = useState(300);
+  const [country, setCountry] = useState(countryService.getCurrentCountry);
+  const minDaily = Number(country?.daily_min_budget || 300);
+  const maxDaily = minDaily * 10;
+  const sliderStep = minDaily === 300 ? 100 : (minDaily === 10 ? 5 : Math.max(1, Math.round(minDaily / 5)));
 
-  // Exact math formulas matching the screenshot:
+  const [dailyBudget, setDailyBudget] = useState(minDaily);
+
+  // Sync state when country changes
+  useEffect(() => {
+    const unsubscribe = countryService.subscribe((newCountry) => {
+      if (newCountry) {
+        setCountry(newCountry);
+        const newMin = Number(newCountry.daily_min_budget || 300);
+        setDailyBudget((prev) => (prev < newMin ? newMin : prev));
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // Recalculate metrics:
+  // Formula: Monthly Advertising Budget = Daily Advertising Budget × 30
   const monthlySpend = dailyBudget * 30;
-  const minReach = Math.round(dailyBudget * 6.5 * 30);
-  const maxReach = Math.round(dailyBudget * 14 * 30);
-  const minLeads = Math.round((dailyBudget * 30) / 180);
-  const maxLeads = Math.round((dailyBudget * 30) / 75);
+
+  // Reach multipliers (scaled proportionally to visibility index)
+  const reachFactor = minDaily === 300 ? 1 : 30; // normalizing factor if currency base differs
+  const minReach = Math.round(dailyBudget * 6.5 * reachFactor * 30);
+  const maxReach = Math.round(dailyBudget * 14 * reachFactor * 30);
+
+  // Enquiry projections:
+  const costPerLeadRef = minDaily === 300 ? 120 : (minDaily * 0.4);
+  const minLeads = Math.max(3, Math.round(monthlySpend / (costPerLeadRef * 1.5)));
+  const maxLeads = Math.max(8, Math.round(monthlySpend / costPerLeadRef));
+
+  const sym = country?.currency_symbol || '₹';
 
   return (
     <div className="planner-container">
@@ -16,7 +43,6 @@ export default function MetaAdsCalculator() {
       <div className="planner-header">
         <div className="planner-title-group">
           <div className="planner-heading-row">
-            {/* Colorful Slider / Planner Icon matching screenshot */}
             <div className="planner-icon-box">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                 <rect x="2" y="2" width="20" height="20" rx="5" fill="#fff5f2" stroke="#ff8476" strokeWidth="1.5" />
@@ -31,13 +57,13 @@ export default function MetaAdsCalculator() {
             <h2>Interactive Meta Ads Budget Planner</h2>
           </div>
           <p className="planner-subtitle">
-            Adjust your daily budget to preview estimated monthly visibility &amp; enquiries
+            Adjust your daily budget in {country?.country_name} ({country?.currency_code}) to preview estimated monthly visibility &amp; enquiries
           </p>
         </div>
 
-        {/* Dark Navy Pill Badge */}
+        {/* Dynamic Country Currency Daily Badge */}
         <div className="planner-daily-badge">
-          Daily: <span className="gold-text">₹{dailyBudget.toLocaleString('en-IN')}</span> /day
+          Daily: <span className="gold-text">{formatCurrency(dailyBudget, country)}</span> /day
         </div>
       </div>
 
@@ -46,21 +72,21 @@ export default function MetaAdsCalculator() {
         <div className="slider-track-capsule">
           <input
             type="range"
-            min="300"
-            max="3000"
-            step="100"
+            min={minDaily}
+            max={maxDaily}
+            step={sliderStep}
             value={dailyBudget}
             onChange={(e) => setDailyBudget(Number(e.target.value))}
             className="capsule-range-slider"
-            aria-label="Daily advertising budget slider"
+            aria-label={`Daily advertising budget slider in ${country?.currency_code}`}
           />
         </div>
 
-        {/* Labels below slider */}
+        {/* Dynamic Labels below slider */}
         <div className="slider-labels-row">
-          <span>₹300 (Starter)</span>
-          <span>₹1,500 (Growth)</span>
-          <span>₹3,000+ (Scale)</span>
+          <span>{formatCurrency(minDaily, country)} (Starter)</span>
+          <span>{formatCurrency(minDaily * 5, country)} (Growth)</span>
+          <span>{formatCurrency(maxDaily, country)}+ (Scale)</span>
         </div>
       </div>
 
@@ -73,10 +99,10 @@ export default function MetaAdsCalculator() {
               <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
               <circle cx="12" cy="12" r="3" />
             </svg>
-            <span>Monthly Ad Spend</span>
+            <span>Monthly Advertising Spend</span>
           </div>
           <div className="metric-value">
-            ₹{monthlySpend.toLocaleString('en-IN')}
+            {formatCurrency(monthlySpend, country)}
           </div>
         </div>
 
@@ -92,7 +118,7 @@ export default function MetaAdsCalculator() {
             <span>Estimated Monthly Reach</span>
           </div>
           <div className="metric-value">
-            {minReach.toLocaleString('en-IN')} - {maxReach.toLocaleString('en-IN')}
+            {minReach.toLocaleString('en-US')} - {maxReach.toLocaleString('en-US')}
           </div>
         </div>
 
@@ -109,6 +135,10 @@ export default function MetaAdsCalculator() {
             {minLeads} - {maxLeads}+ Leads*
           </div>
         </div>
+      </div>
+
+      <div style={{ marginTop: '16px', fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>
+        *Projections are campaign estimates based on industry benchmarks in {country?.country_name}. Actual lead volumes vary by category, targeting, and audience response.
       </div>
 
       <style>{`
@@ -207,7 +237,6 @@ export default function MetaAdsCalculator() {
           padding: 0;
         }
 
-        /* WebKit Slider Thumb (Chrome, Safari, Edge) */
         .capsule-range-slider::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
@@ -229,7 +258,6 @@ export default function MetaAdsCalculator() {
           cursor: grabbing;
         }
 
-        /* Firefox Slider Thumb */
         .capsule-range-slider::-moz-range-thumb {
           width: 24px;
           height: 24px;
@@ -254,7 +282,6 @@ export default function MetaAdsCalculator() {
           padding: 0 2px;
         }
 
-        /* 3 Stat Cards */
         .planner-cards-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);

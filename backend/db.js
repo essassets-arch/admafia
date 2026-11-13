@@ -36,6 +36,8 @@ SELECT
     c.city,
     c.state,
     c.country,
+    COALESCE(c.country_code, 'IN') AS country_code,
+    COALESCE(w.currency, c.currency, 'INR') AS currency,
     c.status,
     c.profile_status,
     c.payment_status,
@@ -481,6 +483,89 @@ export async function initDatabase() {
       role = EXCLUDED.role,
       department = EXCLUDED.department,
       status = 'active';
+
+    -- Country Pricing & Dynamic Localization Master
+    CREATE TABLE IF NOT EXISTS country_pricing (
+      id VARCHAR(64) PRIMARY KEY,
+      country_code VARCHAR(4) NOT NULL UNIQUE,
+      country_name VARCHAR(100) NOT NULL,
+      currency_code VARCHAR(10) NOT NULL,
+      currency_symbol VARCHAR(10) NOT NULL,
+      currency_position VARCHAR(10) NOT NULL DEFAULT 'before',
+      decimal_precision INT NOT NULL DEFAULT 2,
+      daily_min_budget NUMERIC(12, 2) NOT NULL,
+      monthly_budget NUMERIC(12, 2) NOT NULL,
+      min_wallet_topup NUMERIC(12, 2) NOT NULL,
+      tax_name VARCHAR(50) DEFAULT 'VAT/GST',
+      tax_rate NUMERIC(5, 2) DEFAULT 0.00,
+      payment_gateway VARCHAR(50) DEFAULT 'razorpay',
+      phone_code VARCHAR(10) DEFAULT '+91',
+      flag_emoji VARCHAR(10) DEFAULT '🌐',
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      is_default BOOLEAN NOT NULL DEFAULT FALSE,
+      effective_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_country_pricing_code ON country_pricing(country_code);
+    CREATE INDEX IF NOT EXISTS idx_country_pricing_active ON country_pricing(is_active);
+
+    CREATE TABLE IF NOT EXISTS country_pricing_audit_logs (
+      id VARCHAR(64) PRIMARY KEY,
+      country_code VARCHAR(4) NOT NULL,
+      country_name VARCHAR(100) NOT NULL,
+      old_pricing JSONB,
+      new_pricing JSONB,
+      changed_by VARCHAR(100) DEFAULT 'Super Admin',
+      change_reason TEXT,
+      effective_date DATE DEFAULT CURRENT_DATE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cp_audit_code ON country_pricing_audit_logs(country_code);
+    CREATE INDEX IF NOT EXISTS idx_cp_audit_created ON country_pricing_audit_logs(created_at DESC);
+
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS country_code VARCHAR(4) DEFAULT 'IN';
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR';
+    ALTER TABLE customers ALTER COLUMN phone TYPE VARCHAR(32);
+    ALTER TABLE customers DROP CONSTRAINT IF EXISTS chk_customers_phone_10digits;
+
+    ALTER TABLE wallets ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR';
+    ALTER TABLE wallets DROP CONSTRAINT IF EXISTS wallets_daily_ad_spend_check;
+
+    ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR';
+    ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR';
+    ALTER TABLE payment_records DROP CONSTRAINT IF EXISTS payment_records_amount_check;
+    ALTER TABLE tax_invoices ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR';
+
+    -- Initial authoritative country pricing records
+    INSERT INTO country_pricing (
+      id, country_code, country_name, currency_code, currency_symbol,
+      currency_position, decimal_precision, daily_min_budget, monthly_budget,
+      min_wallet_topup, tax_name, tax_rate, payment_gateway, phone_code,
+      flag_emoji, is_active, is_default, effective_date
+    ) VALUES
+      ('cp_in', 'IN', 'India', 'INR', '₹', 'before', 0, 300.00, 9000.00, 300.00, 'GST', 18.00, 'razorpay', '+91', '🇮🇳', TRUE, TRUE, CURRENT_DATE),
+      ('cp_ae', 'AE', 'United Arab Emirates', 'AED', 'AED ', 'before', 2, 10.00, 300.00, 10.00, 'VAT', 5.00, 'international', '+971', '🇦🇪', TRUE, FALSE, CURRENT_DATE),
+      ('cp_us', 'US', 'United States', 'USD', '$', 'before', 2, 10.00, 300.00, 10.00, 'Sales Tax', 0.00, 'international', '+1', '🇺🇸', TRUE, FALSE, CURRENT_DATE),
+      ('cp_gb', 'GB', 'United Kingdom', 'GBP', '£', 'before', 2, 10.00, 300.00, 10.00, 'VAT', 20.00, 'international', '+44', '🇬🇧', TRUE, FALSE, CURRENT_DATE),
+      ('cp_sa', 'SA', 'Saudi Arabia', 'SAR', 'SAR ', 'before', 2, 10.00, 300.00, 10.00, 'VAT', 15.00, 'international', '+966', '🇸🇦', TRUE, FALSE, CURRENT_DATE)
+    ON CONFLICT (country_code) DO UPDATE SET
+      country_name = EXCLUDED.country_name,
+      currency_code = EXCLUDED.currency_code,
+      currency_symbol = EXCLUDED.currency_symbol,
+      currency_position = EXCLUDED.currency_position,
+      daily_min_budget = EXCLUDED.daily_min_budget,
+      monthly_budget = EXCLUDED.monthly_budget,
+      min_wallet_topup = EXCLUDED.min_wallet_topup,
+      tax_name = EXCLUDED.tax_name,
+      tax_rate = EXCLUDED.tax_rate,
+      phone_code = EXCLUDED.phone_code,
+      flag_emoji = EXCLUDED.flag_emoji,
+      is_active = EXCLUDED.is_active,
+      is_default = EXCLUDED.is_default,
+      updated_at = NOW();
   `);
 
   // Ensure unified view vw_sales_customer_accounts is always compiled and live

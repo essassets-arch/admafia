@@ -22,8 +22,13 @@ export default function MarketingWallet({
   onViewInvoice,
   invoices = [],
 }) {
-  const [selectedPreset, setSelectedPreset] = useState(300);
-  const [customAmount, setCustomAmount] = useState('300');
+  const currency = customer?.currency || 'INR';
+  const symbol = customer?.currencySymbol || (currency === 'INR' ? '₹' : (currency === 'USD' ? '$' : (currency === 'GBP' ? '£' : (currency === 'AED' ? 'AED ' : (currency === 'SAR' ? 'SAR ' : `${currency} `)))));
+  const minDailyBudget = Number(dailyAdSpend || customer?.dailyAdSpend || (currency === 'INR' ? 300 : 10));
+  const minTopUp = minDailyBudget;
+
+  const [selectedPreset, setSelectedPreset] = useState(minTopUp);
+  const [customAmount, setCustomAmount] = useState(String(minTopUp));
   const [activeLedgerTab, setActiveLedgerTab] = useState('all'); // 'all' | 'recharges' | 'deductions' | 'failed' | 'invoices'
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
@@ -32,20 +37,33 @@ export default function MarketingWallet({
   const [paymentResultModal, setPaymentResultModal] = useState(null); // { status: 'success'|'failed', ... }
   const [copiedTxId, setCopiedTxId] = useState(null);
 
+  const formatMoney = (amount) => {
+    const num = Number(amount || 0);
+    const decimals = currency === 'INR' ? 0 : 2;
+    return `${symbol}${num.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  };
+
   // Active recharge amount
-  const activeAmount = customAmount ? Number(customAmount) || 0 : (selectedPreset || 300);
-  const calculatedRuntimeDays = Math.max(1, Math.floor(activeAmount / (dailyAdSpend || 300)));
-  const daysRunway = Math.floor(walletBalance / (dailyAdSpend || 300));
+  const activeAmount = customAmount ? Number(customAmount) || 0 : (selectedPreset || minTopUp);
+  const calculatedRuntimeDays = Math.max(1, Math.floor(activeAmount / (dailyAdSpend || minTopUp)));
+  const daysRunway = Math.floor(walletBalance / (dailyAdSpend || minTopUp));
   const isCampaignLive = Boolean(customer.adCampaignActive) && walletBalance >= dailyAdSpend;
 
   // Presets exact specification (Pure wallet amounts — no days configuration)
-  const presets = [
+  const presets = currency === 'INR' ? [
     { label: '₹300', amount: 300, tag: 'Min' },
     { label: '₹500', amount: 500, tag: null },
     { label: '₹1,000', amount: 1000, tag: 'Popular' },
     { label: '₹2,000', amount: 2000, tag: null },
     { label: '₹5,000', amount: 5000, tag: null },
     { label: '₹10,000', amount: 10000, tag: 'Best Value' },
+  ] : [
+    { label: `${symbol}${minTopUp}`, amount: minTopUp, tag: 'Min' },
+    { label: `${symbol}${minTopUp * 2}`, amount: minTopUp * 2, tag: null },
+    { label: `${symbol}${minTopUp * 5}`, amount: minTopUp * 5, tag: 'Popular' },
+    { label: `${symbol}${minTopUp * 10}`, amount: minTopUp * 10, tag: null },
+    { label: `${symbol}${minTopUp * 25}`, amount: minTopUp * 25, tag: null },
+    { label: `${symbol}${minTopUp * 50}`, amount: minTopUp * 50, tag: 'Best Value' },
   ];
 
   // Reconcile return from Razorpay Hosted Payment Link callback
@@ -60,17 +78,17 @@ export default function MarketingWallet({
 
       if (paymentStatus === 'success') {
         setIsVerifyingPayment(true);
-        const creditedAmt = Number(amountStr) || activeAmount || 300;
+        const creditedAmt = Number(amountStr) || activeAmount || minTopUp;
         setPaymentResultModal({
           status: 'success',
           title: 'Payment Successful!',
           amount: creditedAmt,
           paymentId: paymentId || 'Verified',
-          date: new Date().toLocaleString('en-IN'),
+          date: new Date().toLocaleString('en-US'),
         });
         setActionAlert({
           type: 'success',
-          message: `Payment Verified! ₹${creditedAmt.toLocaleString('en-IN')} added directly to wallet via Razorpay (Ref: ${paymentId || 'Verified'}).`,
+          message: `Payment Verified! ${formatMoney(creditedAmt)} added directly to wallet via Razorpay (Ref: ${paymentId || 'Verified'}).`,
         });
 
         const idOrPhone = customer?.id || customer?.phone || customer?.username;
@@ -107,7 +125,7 @@ export default function MarketingWallet({
           reason: reason,
           amount: failedAmount,
           paymentId: refUtr,
-          date: new Date().toLocaleString('en-IN'),
+          date: new Date().toLocaleString('en-US'),
         });
 
         setActionAlert({
@@ -118,7 +136,7 @@ export default function MarketingWallet({
         const failedTxObj = {
           id: `tx_fail_${Date.now()}`,
           ref: refUtr,
-          amount: failedAmount > 0 ? failedAmount : 300,
+          amount: failedAmount > 0 ? failedAmount : minTopUp,
           desc: `Online recharge failed: ${reason}`,
           status: 'Failed ✕',
           type: 'Credit',
@@ -257,8 +275,8 @@ export default function MarketingWallet({
   const handlePayViaRazorpay = async () => {
     if (isProcessingPayment || isVerifyingPayment) return;
 
-    if (!Number.isSafeInteger(activeAmount) || activeAmount < 300) {
-      setActionAlert({ type: 'error', message: 'Minimum wallet recharge amount is ₹300.' });
+    if (!Number.isSafeInteger(activeAmount) || activeAmount < minTopUp) {
+      setActionAlert({ type: 'error', message: `Minimum wallet recharge amount is ${formatMoney(minTopUp)}.` });
       setTimeout(() => setActionAlert(null), 3000);
       return;
     }
@@ -305,9 +323,9 @@ export default function MarketingWallet({
       const options = {
         key: orderRes.keyId,
         amount: orderRes.amount,
-        currency: orderRes.currency || 'INR',
+        currency: orderRes.currency || currency || 'INR',
         name: 'AdMafia',
-        description: `Ad Wallet Instant Top-Up (₹${activeAmount.toLocaleString('en-IN')})`,
+        description: `Ad Wallet Instant Top-Up (${formatMoney(activeAmount)})`,
         image: 'https://admafia.marketing/assets/logo.png',
         order_id: orderRes.orderId,
         prefill: {
@@ -345,11 +363,11 @@ export default function MarketingWallet({
                   title: 'Payment Successful!',
                   amount: activeAmount,
                   paymentId: response.razorpay_payment_id,
-                  date: new Date().toLocaleString('en-IN'),
+                  date: new Date().toLocaleString('en-US'),
                 });
                 setActionAlert({
                   type: 'success',
-                  message: `Payment Verified! ₹${activeAmount.toLocaleString('en-IN')} added directly to wallet via Razorpay (Ref: ${response.razorpay_payment_id}).`,
+                  message: `Payment Verified! ${formatMoney(activeAmount)} added directly to wallet via Razorpay (Ref: ${response.razorpay_payment_id}).`,
                 });
                 if (onTopUpWallet) {
                   onTopUpWallet(activeAmount, response.razorpay_payment_id, verifyRes);
@@ -445,7 +463,7 @@ export default function MarketingWallet({
     }
   };
 
-  // Trigger Deduct Today's ₹300 Ad Spend
+  // Trigger Deduct Today's Ad Spend
   const handleDeductTodaySpend = async () => {
     if (onDeductDailyAdSpend) {
       const res = await onDeductDailyAdSpend();
@@ -454,7 +472,7 @@ export default function MarketingWallet({
       } else {
         setActionAlert({
           type: 'error',
-          message: res?.message || `Insufficient balance! Please recharge wallet to deduct today's ₹${dailyAdSpend}.`,
+          message: res?.message || `Insufficient balance! Please recharge wallet to deduct today's ${formatMoney(dailyAdSpend)}.`,
         });
       }
       setTimeout(() => setActionAlert(null), 3500);
@@ -566,9 +584,9 @@ export default function MarketingWallet({
               </svg>
             </div>
           </div>
-          <div className="kpi-card-value">₹{walletBalance.toLocaleString('en-IN')}</div>
+          <div className="kpi-card-value">{formatMoney(walletBalance)}</div>
           <div className="kpi-card-subline">
-            <span>Total Paid: ₹{totalPaidLifetime.toLocaleString('en-IN')}</span>
+            <span>Total Paid: {formatMoney(totalPaidLifetime)}</span>
             <span className="kpi-dot-divider">•</span>
             <button
               type="button"
@@ -591,11 +609,11 @@ export default function MarketingWallet({
             </div>
           </div>
           <div className="kpi-card-value">
-            ₹{dailyAdSpend} <span className="kpi-unit-text">/ day</span>
+            {formatMoney(dailyAdSpend)} <span className="kpi-unit-text">/ day</span>
           </div>
           <div className="kpi-card-subline">
             <span className="territory-chip">
-              Target Territory: {[customer.city, customer.state].filter(Boolean).join(', ') || 'India'}
+              Target Territory: {[customer.city, customer.state].filter(Boolean).join(', ') || customer.country || 'Global'}
             </span>
           </div>
         </div>
@@ -629,9 +647,9 @@ export default function MarketingWallet({
               </svg>
             </div>
           </div>
-          <div className="kpi-card-value">₹{totalSpent.toLocaleString('en-IN')}</div>
+          <div className="kpi-card-value">{formatMoney(totalSpent)}</div>
           <div className="kpi-card-subline">
-            <span>Acquired {leadsCount} verified buyer leads (₹{leadsCount > 0 ? Math.round(totalSpent / leadsCount) : 0}/lead)</span>
+            <span>Acquired {leadsCount} verified buyer leads ({formatMoney(leadsCount > 0 ? Math.round(totalSpent / leadsCount) : 0)}/lead)</span>
           </div>
         </div>
       </div>
@@ -648,8 +666,8 @@ export default function MarketingWallet({
               </svg>
             </div>
             <div>
-              <h3>Low Wallet Balance Warning: ₹{walletBalance.toFixed(0)} Remaining</h3>
-              <p>Daily ad burn requires ₹{dailyAdSpend}/day. Inbound lead campaign is paused until recharged.</p>
+              <h3>Low Wallet Balance Warning: {formatMoney(walletBalance)} Remaining</h3>
+              <p>Daily ad burn requires {formatMoney(dailyAdSpend)}/day. Inbound lead campaign is paused until recharged.</p>
             </div>
           </div>
           <button
@@ -701,14 +719,14 @@ export default function MarketingWallet({
               })}
             </div>
 
-            <div className="topup-section-micro-heading">OR ENTER CUSTOM AMOUNT (MIN ₹300):</div>
+            <div className="topup-section-micro-heading">OR ENTER CUSTOM AMOUNT (MIN {symbol}{minTopUp}):</div>
             <div className="custom-amount-input-row-exact">
               <div className="custom-input-box-exact" style={{ width: '100%' }}>
-                <span className="currency-prefix-exact">₹</span>
+                <span className="currency-prefix-exact">{symbol}</span>
                 <input
                   type="text"
                   className="custom-field-exact"
-                  placeholder="Enter amount (e.g. 300)"
+                  placeholder={`Enter amount (e.g. ${minTopUp})`}
                   value={customAmount}
                   onChange={handleCustomAmountChange}
                 />
@@ -725,7 +743,7 @@ export default function MarketingWallet({
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   <path d="M9 12l2 2 4-4" />
                 </svg>
-                <span>RAZORPAY VERIFIED</span>
+                <span>SECURE GATEWAY</span>
               </div>
             </div>
 
@@ -735,15 +753,15 @@ export default function MarketingWallet({
                 <div className="razorpay-icon-black">R</div>
                 <div className="gateway-box-text">
                   <div className="gateway-box-title-row">
-                    <strong>Razorpay Secure Gateway</strong>
+                    <strong>Payment Gateway ({currency})</strong>
                     <span className={razorpayMode === 'LIVE MODE' ? 'live-mode-badge-emerald' : 'test-mode-badge-green'}>
-                      {razorpayMode === 'LIVE MODE' ? '● LIVE MODE' : (razorpayMode || 'TEST MODE')}
+                      {razorpayMode === 'LIVE MODE' ? '● LIVE MODE' : (razorpayMode || 'ONLINE')}
                     </span>
                   </div>
                   <div className="gateway-box-sub">
                     {razorpayMode === 'LIVE MODE'
                       ? 'Secured 256-Bit Encrypted Live Production Gateway'
-                      : 'Secured 256-Bit Encrypted Sandbox Gateway (Test Mode)'}
+                      : 'Secured 256-Bit Encrypted Online Gateway'}
                   </div>
                 </div>
               </div>
@@ -759,7 +777,7 @@ export default function MarketingWallet({
               type="button"
               className="btn-pay-green-exact"
               onClick={handlePayViaRazorpay}
-              disabled={isProcessingPayment || isVerifyingPayment || !Number.isSafeInteger(activeAmount) || activeAmount < 300}
+              disabled={isProcessingPayment || isVerifyingPayment || !Number.isSafeInteger(activeAmount) || activeAmount < minTopUp}
             >
               {isProcessingPayment ? (
                 <>
@@ -773,7 +791,7 @@ export default function MarketingWallet({
                 </>
               ) : (
                 <>
-                  <span>Pay ₹{activeAmount.toLocaleString('en-IN')} via Razorpay</span>
+                  <span>Pay {formatMoney(activeAmount)}</span>
                   <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>&rarr;</span>
                 </>
               )}
@@ -806,10 +824,10 @@ export default function MarketingWallet({
               </span>
               <span className="engine-title-text">Day-Wise Ad Spend Engine</span>
             </h2>
-            <span className="engine-autocut-badge">₹{dailyAdSpend} / Day Auto-Cut</span>
+            <span className="engine-autocut-badge">{formatMoney(dailyAdSpend)} / Day Auto-Cut</span>
           </div>
           <p className="engine-card-desc">
-            Transparent day-by-day deduction: exactly ₹{dailyAdSpend} deducted daily from your balance to deliver high-priority buyer inbound leads in {customer.city || customer.state || 'India'}.
+            Transparent day-by-day deduction: exactly {formatMoney(dailyAdSpend)} deducted daily from your balance to deliver high-priority buyer inbound leads in {customer.city || customer.state || customer.country || 'Global'}.
           </p>
         </div>
 
@@ -837,8 +855,8 @@ export default function MarketingWallet({
                 {!customer.adCampaignActive
                   ? 'Campaign paused by user. Resume to start delivering ads.'
                   : isDeductedToday
-                  ? `Today's ₹${dailyAdSpend} placement debited`
-                  : `Ready to cut ₹${dailyAdSpend} for today's placement`}
+                  ? `Today's ${formatMoney(dailyAdSpend)} placement debited`
+                  : `Ready to cut ${formatMoney(dailyAdSpend)} for today's placement`}
               </div>
             </div>
           </div>
@@ -857,7 +875,7 @@ export default function MarketingWallet({
               <div className="mini-box-caption text-coral">
                 {!customer.adCampaignActive
                   ? 'Resume campaign to re-enable scheduled daily cuts'
-                  : `-₹${dailyAdSpend} from wallet (Est. Bal: ₹${Math.max(0, walletBalance - dailyAdSpend).toLocaleString('en-IN')})`}
+                  : `-${formatMoney(dailyAdSpend)} from wallet (Est. Bal: ${formatMoney(Math.max(0, walletBalance - dailyAdSpend))})`}
               </div>
             </div>
           </div>
@@ -867,7 +885,7 @@ export default function MarketingWallet({
             <div className="mini-box-label">Total Runtime Deducted</div>
             <div className="engine-mini-content">
               <div className="mini-box-big-text">{actualDaysDelivered} Days Delivered</div>
-              <div className="mini-box-caption">₹{actualDebitedTotal.toLocaleString('en-IN')} total debited from wallet</div>
+              <div className="mini-box-caption">{formatMoney(actualDebitedTotal)} total debited from wallet</div>
             </div>
           </div>
         </div>
@@ -883,7 +901,7 @@ export default function MarketingWallet({
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <span>{isDeductedToday ? `Deduct ₹${dailyAdSpend} Ad Spend (Manual)` : `Deduct Today's ₹${dailyAdSpend} Ad Spend`}</span>
+            <span>{isDeductedToday ? `Deduct ${formatMoney(dailyAdSpend)} Ad Spend (Manual)` : `Deduct Today's ${formatMoney(dailyAdSpend)} Ad Spend`}</span>
           </button>
 
           <button
@@ -913,7 +931,7 @@ export default function MarketingWallet({
             <h2>Wallet Ledger &amp; Transaction History</h2>
           </div>
           <p className="ledger-history-desc">
-            Complete transparent log of all recharge deposits, daily ad spend deductions, and GST invoices.
+            Complete transparent log of all recharge deposits, daily ad spend deductions, and tax invoices.
           </p>
         </div>
 
@@ -938,7 +956,7 @@ export default function MarketingWallet({
             className={`ledger-tab-btn ${activeLedgerTab === 'deductions' ? 'active' : ''}`}
             onClick={() => setActiveLedgerTab('deductions')}
           >
-            Daily Ad Cuts (-₹{dailyAdSpend}/d) ({debitsList.length})
+            Daily Ad Cuts (-{formatMoney(dailyAdSpend)}/d) ({debitsList.length})
           </button>
           <button
             type="button"
@@ -1036,13 +1054,13 @@ export default function MarketingWallet({
                         <td>
                           {isFailed ? (
                             <strong style={{ color: '#dc2626', textDecoration: 'line-through', fontWeight: 800 }}>
-                              ₹{Number(tx.amount || 0).toLocaleString('en-IN')}
+                              {formatMoney(tx.amount)}
                             </strong>
                           ) : (
                             <strong className={`tx-amount-text ${tx.type === 'Credit' ? 'credit' : 'debit'}`}>
                               {tx.type === 'Credit'
-                                ? `+₹${Number(tx.amount || 0).toLocaleString('en-IN')}`
-                                : `-₹${Number(tx.amount || 0).toLocaleString('en-IN')}`}
+                                ? `+${formatMoney(tx.amount)}`
+                                : `-${formatMoney(tx.amount)}`}
                             </strong>
                           )}
                         </td>
@@ -1176,12 +1194,14 @@ export default function MarketingWallet({
                       </td>
                       <td className="tx-date-cell">{inv.date}</td>
                       <td className="tx-desc-cell">{inv.particulars}</td>
-                      <td>₹{inv.baseAmount.toLocaleString('en-IN')}</td>
+                      <td>{formatMoney(inv.baseAmount)}</td>
                       <td>
-                        <small style={{ color: '#64748b' }}>CGST 9% (₹{inv.cgst}) + SGST 9% (₹{inv.sgst})</small>
+                        <small style={{ color: '#64748b' }}>
+                          {currency === 'INR' ? `CGST 9% (₹${inv.cgst}) + SGST 9% (₹${inv.sgst})` : 'Tax Inclusive'}
+                        </small>
                       </td>
                       <td>
-                        <strong style={{ color: '#0f172a' }}>₹{inv.totalAmount.toLocaleString('en-IN')}</strong>
+                        <strong style={{ color: '#0f172a' }}>{formatMoney(inv.totalAmount)}</strong>
                       </td>
                       <td>
                         <span className="tx-status-verified-pill">Paid ✓</span>
@@ -1248,7 +1268,7 @@ export default function MarketingWallet({
 
             <p className="result-modal-subtitle">
               {paymentResultModal.status === 'success'
-                ? `₹${Number(paymentResultModal.amount || 0).toLocaleString('en-IN')} has been credited directly to your Ad Growth Wallet.`
+                ? `${formatMoney(paymentResultModal.amount)} has been credited directly to your Ad Growth Wallet.`
                 : (paymentResultModal.reason || 'The transaction was cancelled or declined. No wallet funds were deducted.')}
             </p>
 
@@ -1262,7 +1282,7 @@ export default function MarketingWallet({
               <div className="result-detail-row">
                 <span className="result-detail-label">Amount</span>
                 <strong className="result-detail-value">
-                  ₹{Number(paymentResultModal.amount || 0).toLocaleString('en-IN')}
+                  {formatMoney(paymentResultModal.amount)}
                 </strong>
               </div>
               <div className="result-detail-row">
@@ -1274,7 +1294,7 @@ export default function MarketingWallet({
               <div className="result-detail-row">
                 <span className="result-detail-label">Current Balance</span>
                 <strong className="result-detail-value highlight">
-                  ₹{walletBalance.toLocaleString('en-IN')}
+                  {formatMoney(walletBalance)}
                 </strong>
               </div>
               <div className="result-detail-row">

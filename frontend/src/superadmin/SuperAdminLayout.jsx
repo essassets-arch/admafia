@@ -18,7 +18,8 @@ import {
   Clock,
   Sparkles,
   Palette,
-  Briefcase
+  Briefcase,
+  Globe,
 } from 'lucide-react';
 
 import SuperAdminDashboardDesk from './SuperAdminDashboardDesk';
@@ -28,6 +29,7 @@ import SuperAdminRefundsDesk from './SuperAdminRefundsDesk';
 import SuperAdminTopupsDesk from './SuperAdminTopupsDesk';
 import SuperAdminAccountsDesk from './SuperAdminAccountsDesk';
 import SuperAdminAddUserDesk from './SuperAdminAddUserDesk';
+import SuperAdminCountryPricingDesk from './SuperAdminCountryPricingDesk';
 
 import superadminApi from '../services/superadminApi';
 import adminAuthApi from '../services/adminAuthApi';
@@ -49,6 +51,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
       if (p.includes('/superadmin/refunds') || h.includes('superadmin/refunds') || h.includes('refunds')) return 'refunds';
       if (p.includes('/superadmin/topups') || h.includes('superadmin/topups') || h.includes('topups')) return 'topups';
       if (p.includes('/superadmin/accounts') || h.includes('superadmin/accounts') || h.includes('accounts')) return 'accounts';
+      if (p.includes('/superadmin/country-pricing') || h.includes('country-pricing')) return 'country_pricing';
       if (p.includes('/superadmin/add-user') || p.includes('/superadmin/add_user') || h.includes('add-user') || h.includes('add_user')) return 'add_user';
       if (p.includes('/superadmin/dashboard') || h.includes('superadmin/dashboard') || h.includes('dashboard')) return 'dashboard';
       return 'dashboard';
@@ -156,6 +159,12 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
       badge: null,
     },
     {
+      id: 'country_pricing',
+      label: 'Country Pricing & IP',
+      icon: Globe,
+      badge: null,
+    },
+    {
       id: 'add_user',
       label: 'Add User / Business',
       icon: UserPlus,
@@ -177,6 +186,8 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
         return { title: 'Account Top-Up & Deposits', subtitle: 'Bank UTR payment verification and wallet credits' };
       case 'accounts':
         return { title: 'Account Governance (Block / Activate)', subtitle: 'Business and system user status management with audit trails' };
+      case 'country_pricing':
+        return { title: 'Country Pricing & IP Geolocation Master', subtitle: 'Manage international daily budgets, local currencies, taxes and live IP detection' };
       case 'add_user':
         return { title: 'Add User / Business', subtitle: 'Provision enterprise businesses and assign staff roles' };
       default:
@@ -397,6 +408,10 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
 
           {activeDesk === 'accounts' && (
             <SuperAdminAccountsDesk />
+          )}
+
+          {activeDesk === 'country_pricing' && (
+            <SuperAdminCountryPricingDesk />
           )}
 
           {activeDesk === 'add_user' && (

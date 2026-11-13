@@ -743,3 +743,48 @@ CREATE TABLE IF NOT EXISTS account_status_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ash_customer ON account_status_history(customer_id, created_at DESC);
+
+-- =============================================================================
+-- 16. CENTRALIZED COUNTRY PRICING & LOCALIZATION MASTER
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS country_pricing (
+    id                  VARCHAR(64) PRIMARY KEY,
+    country_code        VARCHAR(4) NOT NULL UNIQUE,
+    country_name        VARCHAR(100) NOT NULL,
+    currency_code       VARCHAR(10) NOT NULL,
+    currency_symbol     VARCHAR(10) NOT NULL,
+    currency_position   VARCHAR(10) NOT NULL DEFAULT 'before', -- 'before' | 'after'
+    decimal_precision   INT NOT NULL DEFAULT 2,
+    daily_min_budget    NUMERIC(12, 2) NOT NULL,
+    monthly_budget      NUMERIC(12, 2) NOT NULL,
+    min_wallet_topup    NUMERIC(12, 2) NOT NULL,
+    tax_name            VARCHAR(50) DEFAULT 'VAT/GST',
+    tax_rate            NUMERIC(5, 2) DEFAULT 0.00,
+    payment_gateway     VARCHAR(50) DEFAULT 'razorpay', -- 'razorpay', 'stripe', 'international'
+    phone_code          VARCHAR(10) DEFAULT '+91',
+    flag_emoji          VARCHAR(10) DEFAULT '🌐',
+    is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+    is_default          BOOLEAN NOT NULL DEFAULT FALSE,
+    effective_date      DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_country_pricing_code ON country_pricing(country_code);
+CREATE INDEX IF NOT EXISTS idx_country_pricing_active ON country_pricing(is_active);
+
+-- 16B. Country Pricing Audit Logs
+CREATE TABLE IF NOT EXISTS country_pricing_audit_logs (
+    id                  VARCHAR(64) PRIMARY KEY,
+    country_code        VARCHAR(4) NOT NULL,
+    country_name        VARCHAR(100) NOT NULL,
+    old_pricing         JSONB,
+    new_pricing         JSONB,
+    changed_by          VARCHAR(100) DEFAULT 'Super Admin',
+    change_reason       TEXT,
+    effective_date      DATE DEFAULT CURRENT_DATE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cp_audit_code ON country_pricing_audit_logs(country_code);
+CREATE INDEX IF NOT EXISTS idx_cp_audit_created ON country_pricing_audit_logs(created_at DESC);
