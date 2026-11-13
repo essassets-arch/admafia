@@ -151,8 +151,22 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         newCustomer = { ...newCustomer, ...dbCustomer, password: formData.password };
       }
     } catch (apiErr) {
-      console.error('PostgreSQL registration failed:', apiErr.message);
-      setError(apiErr.message || 'Could not create your account. Please try again.');
+      console.error('PostgreSQL registration note:', apiErr.message);
+      let userFriendlyMsg = apiErr.message || 'Could not create your account. Please try again.';
+      if (
+        userFriendlyMsg.includes('uq_customers_username') ||
+        userFriendlyMsg.includes('unique constraint') ||
+        userFriendlyMsg.includes('duplicate key') ||
+        userFriendlyMsg.toLowerCase().includes('username')
+      ) {
+        userFriendlyMsg = `The username "${formData.username.trim()}" is already registered. Please choose a different username or sign in.`;
+      } else if (
+        userFriendlyMsg.toLowerCase().includes('phone') ||
+        userFriendlyMsg.toLowerCase().includes('mobile')
+      ) {
+        userFriendlyMsg = 'An account with this phone number already exists. Please sign in to your workspace.';
+      }
+      setError(userFriendlyMsg);
       setIsSubmitting(false);
       return;
     }
@@ -410,9 +424,30 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
             </div>
 
             {error && (
-              <div className="auth-error-banner">
-                <span className="error-icon">⚠️</span>
-                <span>{error}</span>
+              <div className="auth-error-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                  <span className="error-icon">⚠️</span>
+                  <span>{error}</span>
+                </div>
+                {error.toLowerCase().includes('sign in') && (
+                  <button
+                    type="button"
+                    onClick={onSwitchToLogin}
+                    style={{
+                      background: '#1e293b',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '4px 12px',
+                      borderRadius: '6px',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Sign In →
+                  </button>
+                )}
               </div>
             )}
 

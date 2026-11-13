@@ -26,8 +26,8 @@ services:
   # 2. Node.js Express REST API Backend
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: admafia-backend
     restart: always
     env_file:

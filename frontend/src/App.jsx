@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import MetaAdsCalculator from './components/MetaAdsCalculator';
 import WhatsAppWidget from './components/WhatsAppWidget';
-import CountrySelector from './components/CountrySelector';
 import countryService, { formatDailyRate, formatDailyBudget, formatMonthlySpend, formatCurrency } from './services/countryService';
 import AuthPage from './components/AuthPage';
 import PortalDashboard from './portal/PortalDashboard';
@@ -159,8 +158,8 @@ const platformPages = [
   },
 ];
 
-export default function App() {
-  const [activeCountry, setActiveCountry] = useState(() => countryService.getCurrentCountry());
+export default function App({ initialCountry = null } = {}) {
+  const [activeCountry, setActiveCountry] = useState(() => initialCountry || countryService.getCurrentCountry());
 
   useEffect(() => {
     return countryService.subscribe((country) => {
@@ -996,10 +995,7 @@ export default function App() {
                 <Sparkles size={16} />
                 <span>Start Generating Leads from Just {dailyRate}!</span>
               </div>
-              <h1 id="h1">
-                Get Qualified Leads. Grow Your Business.{' '}
-                <span>Increase Your Customers.</span>
-              </h1>
+              <h1 id="h1">{`Start Generating Leads from Just ${dailyRate}!`}</h1>
               <div className="hero-subhead">
                 Stop Searching for Customers. Start Connecting With Them.
               </div>
@@ -1077,7 +1073,7 @@ export default function App() {
             </div>
 
             <div style={{ marginTop: '48px', marginBottom: '48px' }}>
-              <MetaAdsCalculator />
+              <MetaAdsCalculator initialCountry={activeCountry} />
             </div>
 
             <h3 style={{ marginTop: '44px', fontSize: '1.45rem', fontWeight: 800 }}>

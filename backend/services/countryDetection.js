@@ -47,14 +47,13 @@ export function extractClientIp(req) {
     return String(cfIp).trim();
   }
 
-  // 2. X-Forwarded-For (leftmost public IP)
+  // 2. X-Forwarded-For (rightmost public IP). The leftmost value is client
+  // controlled unless every upstream proxy is explicitly trusted.
   const xForwardedFor = req.headers['x-forwarded-for'];
   if (xForwardedFor) {
     const ips = String(xForwardedFor).split(',').map((s) => s.trim());
-    for (const rawIp of ips) {
-      if (!isPrivateOrLocalIp(rawIp)) {
-        return rawIp;
-      }
+    for (const rawIp of ips.reverse()) {
+      if (rawIp && !isPrivateOrLocalIp(rawIp)) return rawIp;
     }
   }
 
@@ -152,17 +151,15 @@ export async function getActiveCountryPricingList() {
  * Detect country code from HTTP request using Cloudflare header, geoip-lite, or simulation param
  */
 export function detectCountryCode(req) {
-  // Allow test header or query simulation in development / testing environments
-  const simCountry = req?.query?.simulatedCountry || req?.headers['x-simulated-country'];
-  if (simCountry && /^[a-zA-Z]{2}$/.test(simCountry)) {
-    return simCountry.toUpperCase();
-  }
+  // Test simulation is available only outside production.
+  if (process.env.NODE_ENV !== 'production') {
+    const simCountry = req?.query?.simulatedCountry || req?.headers['x-simulated-country'];
+    if (simCountry && /^[a-zA-Z]{2}$/.test(simCountry)) return simCountry.toUpperCase();
 
-  const simIp = req?.query?.simulatedIp || req?.headers['x-simulated-ip'];
-  if (simIp) {
-    const geo = geoip.lookup(simIp);
-    if (geo?.country) {
-      return geo.country.toUpperCase();
+    const simIp = req?.query?.simulatedIp || req?.headers['x-simulated-ip'];
+    if (simIp) {
+      const geo = geoip.lookup(simIp);
+      if (geo?.country) return geo.country.toUpperCase();
     }
   }
 

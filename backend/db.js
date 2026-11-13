@@ -582,6 +582,29 @@ export async function initDatabase() {
       updated_at = NOW();
   `);
 
+  // Keep homepage currency glyphs valid and provision Qatar's configured rate.
+  await safeExec(`
+    UPDATE country_pricing SET currency_symbol = chr(8377) WHERE country_code = 'IN';
+    UPDATE country_pricing SET currency_symbol = chr(163) WHERE country_code = 'GB';
+    INSERT INTO country_pricing (
+      id, country_code, country_name, currency_code, currency_symbol,
+      currency_position, decimal_precision, daily_min_budget, monthly_budget,
+      min_wallet_topup, tax_name, tax_rate, payment_gateway, phone_code,
+      flag_emoji, is_active, is_default, effective_date
+    ) VALUES (
+      'cp_qa', 'QA', 'Qatar', 'QAR', 'QAR ', 'before', 2, 10, 300,
+      10, 'VAT', 0, 'international', '+974', 'QA', TRUE, FALSE, CURRENT_DATE
+    ) ON CONFLICT (country_code) DO UPDATE SET
+      country_name = EXCLUDED.country_name,
+      currency_code = EXCLUDED.currency_code,
+      currency_symbol = EXCLUDED.currency_symbol,
+      daily_min_budget = EXCLUDED.daily_min_budget,
+      monthly_budget = EXCLUDED.monthly_budget,
+      min_wallet_topup = EXCLUDED.min_wallet_topup,
+      is_active = TRUE,
+      updated_at = NOW();
+  `);
+
   // Ensure unified view vw_sales_customer_accounts is always compiled and live
   await safeExec(VW_SALES_CUSTOMER_ACCOUNTS_SQL);
 

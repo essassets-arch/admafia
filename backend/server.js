@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
 import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
@@ -11,6 +11,7 @@ import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.j
 import { graphicsRouter } from './routes/graphics.js';
 import { superadminRouter, logSuperAdminAudit } from './routes/superadmin.js';
 import { countryPricingRouter, superadminCountryPricingRouter } from './routes/countryPricing.js';
+import { resolveVisitorCountry } from './services/countryDetection.js';
 import { purgeSpecifiedTestUsers } from './scripts/purge-test-users.js';
 
 // Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
@@ -28,6 +29,7 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const PORT = Number(process.env.PORT || 5000);
+let databaseReady = null;
 
 app.use(cors());
 app.use(express.json({
@@ -1048,6 +1050,26 @@ app.post('/api/auth/register', async (req, res) => {
     const initialDeposit = Math.max(0, Number(deposit || reqInitialDeposit) || 0);
     const payStatus = initialDeposit >= dailyBudget ? 'paid' : 'pending';
 
+    // Proactively verify if username is already taken by another account
+    try {
+      const existingUserRes = await query(
+        `SELECT id, username, phone FROM customers WHERE LOWER(username) = LOWER($1) LIMIT 1`,
+        [cleanUsername]
+      );
+      if (existingUserRes.rows.length > 0) {
+        const existing = existingUserRes.rows[0];
+        const existingDigits = String(existing.phone || '').replace(/\D/g, '');
+        if (existingDigits !== cleanPhone) {
+          return res.status(409).json({
+            ok: false,
+            error: `The username "${cleanUsername}" is already taken. Please choose another username.`,
+          });
+        }
+      }
+    } catch (checkErr) {
+      console.warn('[POST /api/auth/register] Username pre-check note:', checkErr.message);
+    }
+
     await query(
       `INSERT INTO customers (
         id, username, phone, email, password_hash,
@@ -1141,22 +1163,49 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(201).json({ ok: true, customer });
   } catch (err) {
     console.error('[POST /api/auth/register]', err);
-    if (err.code === '23505') {
-      const constraint = String(err.constraint || '');
-      if (constraint === 'uq_customers_username') {
-        return res.status(409).json({ ok: false, error: 'That username is already in use. Please choose another username or sign in to the existing account.' });
+    const msg = String(err.message || '');
+    const constraint = String(err.constraint || '');
+    const code = String(err.code || '');
+
+    if (
+      code === '23505' ||
+      msg.includes('unique constraint') ||
+      msg.includes('duplicate key') ||
+      msg.includes('uq_customers')
+    ) {
+      if (
+        constraint === 'uq_customers_username' ||
+        msg.includes('uq_customers_username') ||
+        msg.toLowerCase().includes('username')
+      ) {
+        return res.status(409).json({
+          ok: false,
+          error: `The username "${cleanUsername || 'entered'}" is already registered. Please choose another username or sign in.`,
+        });
       }
-      if (constraint === 'customers_phone_key' || constraint === 'uq_customers_phone') {
-        return res.status(409).json({ ok: false, error: 'An account with this phone number already exists. Please sign in instead.' });
+      if (
+        constraint === 'customers_phone_key' ||
+        constraint === 'uq_customers_phone' ||
+        msg.includes('phone')
+      ) {
+        return res.status(409).json({
+          ok: false,
+          error: 'An account with this phone number already exists. Please sign in to your workspace.',
+        });
       }
-      return res.status(409).json({ ok: false, error: 'An account with these details already exists. Please sign in or use different details.' });
-    }
-    if (err.code === '42703' && /wallets.*currency|currency.*wallets/i.test(err.message || '')) {
-      return res.status(503).json({
+      return res.status(409).json({
         ok: false,
-        error: 'Registration is temporarily unavailable because the database schema is out of date. Apply the wallet currency migration and restart the backend.',
+        error: 'An account with these details already exists. Please choose a different username or sign in.',
       });
     }
+
+    if (code === '42703' && /wallets.*currency|currency.*wallets/i.test(msg)) {
+      return res.status(503).json({
+        ok: false,
+        error: 'Registration is temporarily unavailable because the database schema is updating. Please retry in a moment.',
+      });
+    }
+
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -5452,6 +5501,41 @@ app.use('/api/superadmin/country-pricing', superadminCountryPricingRouter);
 // =============================================================================
 const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 if (fs.existsSync(frontendDistPath)) {
+  // Personalize the initial document on the server, before React is downloaded.
+  // Both this HTML response and the country bootstrap are private/no-store so a
+  // CDN or reverse proxy cannot reuse one visitor's prices for another.
+  app.get(['/', '/index.html'], async (req, res, next) => {
+    try {
+      if (databaseReady) await databaseReady;
+      const { country } = await resolveVisitorCountry(req);
+      const dailyAmount = Number(country.daily_min_budget || 300);
+      const priceNumber = new Intl.NumberFormat('en-US', {
+        maximumFractionDigits: Number(country.decimal_precision || 0),
+      }).format(dailyAmount);
+      const safeSymbol = String(country.currency_symbol || country.currency_code).replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      })[char]);
+      const dailyRate = `${safeSymbol}${priceNumber}/Day`;
+      const bootstrap = JSON.stringify(country).replace(/</g, '\\u003c');
+      const { renderHomepage } = await import(pathToFileURL(path.join(frontendDistPath, 'server', 'entry-server.js')).href);
+      const ssrHomepage = await renderHomepage(country);
+      let html = await fs.promises.readFile(path.join(frontendDistPath, 'index.html'), 'utf8');
+      html = html.replace('<div id="root"></div>', `<div id="root">${ssrHomepage}</div>`);
+      html = html.replaceAll('₹300/Day', dailyRate).replaceAll('₹300', `${safeSymbol}${priceNumber}`);
+      html = html.replace('</head>', `<script>window.__ADMAFIA_COUNTRY__=${bootstrap};window.__ADMAFIA_SSR__=true;</script></head>`);
+      res.set({
+        'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        'CDN-Cache-Control': 'no-store',
+        'Surrogate-Control': 'no-store',
+        'Vary': 'CF-IPCountry, CF-Connecting-IP, X-Forwarded-For',
+        'Content-Type': 'text/html; charset=utf-8',
+      });
+      return res.status(200).send(html);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   app.use(express.static(frontendDistPath, {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.html')) {
@@ -5471,7 +5555,8 @@ if (fs.existsSync(frontendDistPath)) {
 }
 
 app.listen(PORT, () => {
-  initDatabase()
+  databaseReady = initDatabase();
+  databaseReady
     .then((info) => {
       console.log(`🚀 Growthline CRM Backend API listening on http://localhost:${PORT} (DB mode: ${info.mode})`);
 

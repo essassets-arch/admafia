@@ -30,7 +30,9 @@ export const DEFAULT_INDIA_COUNTRY = {
   is_manual_override: false,
 };
 
-let currentCountry = null;
+let currentCountry = typeof window !== 'undefined' && window.__ADMAFIA_COUNTRY__
+  ? { ...window.__ADMAFIA_COUNTRY__, is_auto_detected: true, is_manual_override: false }
+  : null;
 let allAvailableCountries = [DEFAULT_INDIA_COUNTRY];
 let listeners = new Set();
 let isInitialized = false;
@@ -165,21 +167,6 @@ export const countryService = {
               localStorage.setItem(AUTO_DETECTED_KEY, JSON.stringify(data.country));
             } catch (e) {}
 
-            // Check if visitor has manually overridden their country
-            const manualRaw = localStorage.getItem(STORAGE_KEY);
-            if (manualRaw) {
-              const manual = JSON.parse(manualRaw);
-              const foundInList = allAvailableCountries.find(
-                (c) => c.country_code.toUpperCase() === manual.country_code?.toUpperCase()
-              );
-              if (foundInList) {
-                currentCountry = { ...foundInList, is_manual_override: true };
-                notifyListeners();
-                isInitialized = true;
-                return currentCountry;
-              }
-            }
-
             // Otherwise, adopt the server-side auto-detected country
             currentCountry = {
               ...data.country,
@@ -247,7 +234,9 @@ export const countryService = {
 };
 
 // Start background initialization immediately
-countryService.init().catch(() => {});
+if (!(typeof window !== 'undefined' && window.__ADMAFIA_IS_SERVER_RENDER__)) {
+  countryService.init().catch(() => {});
+}
 
 export default countryService;
 

@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, hydrateRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
@@ -12,8 +12,15 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   }).catch(() => {});
 }
 
-createRoot(document.getElementById('root')).render(
+const rootElement = document.getElementById('root')
+const app = (
   <StrictMode>
-    <App />
-  </StrictMode>,
+    <App initialCountry={window.__ADMAFIA_COUNTRY__ || null} />
+  </StrictMode>
 )
+
+if (window.__ADMAFIA_SSR__) {
+  hydrateRoot(rootElement, app)
+} else {
+  createRoot(rootElement).render(app)
+}

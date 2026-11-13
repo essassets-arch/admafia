@@ -60,6 +60,7 @@ EOF
 
 npm install
 npm run build
+npm run build:ssr
 
 # 5. Start Backend + Frontend Server with PM2 on Port 5050
 cd "$APP_DIR/backend"

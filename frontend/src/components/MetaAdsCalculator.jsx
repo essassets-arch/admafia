@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import countryService, { formatCurrency } from '../services/countryService';
 
-export default function MetaAdsCalculator() {
-  const [country, setCountry] = useState(countryService.getCurrentCountry);
+export default function MetaAdsCalculator({ initialCountry = null }) {
+  const [country, setCountry] = useState(() => initialCountry || countryService.getCurrentCountry());
   const minDaily = Number(country?.daily_min_budget || 300);
   const maxDaily = minDaily * 10;
   const sliderStep = minDaily === 300 ? 100 : (minDaily === 10 ? 5 : Math.max(1, Math.round(minDaily / 5)));
