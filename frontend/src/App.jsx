@@ -959,15 +959,6 @@ export default function App() {
               <div className="hero-subhead">
                 Stop Searching for Customers. Start Connecting With Them.
               </div>
-              <p className="hero-desc">
-                Looking for potential customers for your business? AdMafia Marketing helps businesses connect with people who are interested in their products and services.
-              </p>
-              <p className="hero-subdesc">
-                Get relevant customer enquiries directly, including names and phone numbers, so you can connect with potential buyers, build relationships and convert opportunities into sales.
-              </p>
-              <div className="hero-tagline">
-                We Generate Leads. You Connect. You Convert.
-              </div>
               <div className="row">
                 {currentUser ? (
                   <button
@@ -1032,12 +1023,6 @@ export default function App() {
                 <div className="section-subhead">
                   More Opportunities for Your Business. Without a Huge Budget.
                 </div>
-                <p className="lead">
-                  Finding the right customers is one of the biggest challenges for any business. Whether you are a startup, local business owner, service provider or established company, getting consistent customer enquiries can make a real difference to your growth.
-                </p>
-                <p className="lead" style={{ marginTop: '12px' }}>
-                  AdMafia Marketing makes customer acquisition simpler by helping businesses connect with potential customers who have shown interest in their products or services.
-                </p>
                 <p className="lead" style={{ marginTop: '12px', fontWeight: 700, color: 'var(--ink2)', fontSize: '1.08rem' }}>
                   Start with a minimum budget of just ₹300 per day and create more opportunities to grow your customer base.
                 </p>
@@ -1169,17 +1154,8 @@ export default function App() {
             <div className="band-subhead">
               Your Next Customer Could Be Waiting for the Right Opportunity to Connect.
             </div>
-            <p className="band-text">
-              Every growing business needs a consistent flow of potential customers. AdMafia Marketing helps you discover new business opportunities by connecting you with relevant customer enquiries.
-            </p>
-            <p className="band-text" style={{ marginTop: '10px' }}>
-              Whether you're a startup looking for your first customers or an established business aiming to expand, we're here to help you build more opportunities for growth.
-            </p>
             <div className="band-tagline-main">
               Starting at Just ₹300/Day.
-            </div>
-            <div className="band-tagline-sub">
-              We Generate Leads. You Connect. You Convert.
             </div>
             <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
               <a className="btn dark" href="#contact">
@@ -1447,9 +1423,6 @@ export default function App() {
           <div className="footer-bottom">
             <div>
               <span>&copy; {new Date().getFullYear()} {site.name}. All rights reserved.</span>
-            </div>
-            <div>
-              <span>We Generate Leads. You Connect. You Convert.</span>
             </div>
           </div>
         </div>
