@@ -32,9 +32,24 @@ fi
 
 cd "$APP_DIR"
 
+# Preserve private server credentials across Git resets.
+BACKEND_ENV_BACKUP="$(mktemp)"
+BACKEND_ENV_EXISTED=0
+if [ -f "$APP_DIR/backend/.env" ]; then
+  cp "$APP_DIR/backend/.env" "$BACKEND_ENV_BACKUP"
+  BACKEND_ENV_EXISTED=1
+fi
+
 # 1. Reset local uncommitted files to avoid git merge conflicts
 git reset --hard origin/main 2>/dev/null || true
 git pull origin main 2>/dev/null || true
+
+if [ "$BACKEND_ENV_EXISTED" -eq 1 ]; then
+  install -m 600 "$BACKEND_ENV_BACKUP" "$APP_DIR/backend/.env"
+else
+  rm -f "$APP_DIR/backend/.env"
+fi
+rm -f "$BACKEND_ENV_BACKUP"
 
 # 1b. Keep payment credentials in the private backend/.env file. Never overwrite it during deploy.
 if [ ! -f "$APP_DIR/backend/.env" ] \

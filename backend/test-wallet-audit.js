@@ -4,6 +4,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'crypto';
+import 'dotenv/config';
 
 let passed = 0;
 let failed = 0;
@@ -120,8 +121,11 @@ async function runWalletAudit() {
   // AREA 4: RAZORPAY PAYMENT LINK GENERATION & MINIMUM VALIDATION
   // -------------------------------------------------------------------------
   console.log('\n4️⃣  Verifying Razorpay Hosted Payment Link Generation...');
-  const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_S7dlJIqMvrpcaj';
-  const keySecret = process.env.RAZORPAY_KEY_SECRET || 'ongR1rNVsrzSoVyjGx6VY9Zm';
+  const keyId = process.env.RAZORPAY_KEY_ID || '';
+  const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
+  if (!keyId || !keySecret) {
+    throw new Error('Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in backend/.env before running the wallet audit.');
+  }
 
   function validateTopupAmount(amount) {
     const num = Number(amount);
