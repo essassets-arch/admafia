@@ -48,65 +48,56 @@ const site = {
   phoneRaw: '+916359120081',
   instagram: 'https://www.instagram.com/admafia.marketing/',
   facebook: 'https://www.facebook.com/profile.php?id=61596014007136',
-  title: 'Facebook & Instagram Lead Generation Ads from ₹300/Day | AdMafia Marketing',
-  desc: 'Get customer enquiries with names and phone numbers through targeted Meta Ads. Start Facebook & Instagram lead generation campaigns from ₹300/day with AdMafia Marketing.',
+  title: 'Get Qualified Leads. Grow Your Business. Increase Your Customers | AdMafia Marketing',
+  desc: 'Stop Searching for Customers. Start Connecting With Them. AdMafia Marketing helps businesses connect with interested people and generate leads from just ₹300/Day.',
 };
 
 // ---------- CONTENT ----------
 const gets = [
-  ['Starting budget', '₹300 per day (minimum)'],
-  ['Targeted Meta Ads', 'Facebook and Instagram advertising'],
-  ['Customer enquiries', 'Receive submitted names and phone numbers'],
-  ['Location-based targeting', 'Advertise in your preferred service areas'],
-  ['Direct lead follow-up', 'Contact interested customers yourself'],
-  ['Campaign optimisation', 'Advertising focused on relevant enquiries'],
+  ['Affordable Starting Budget', 'Get started with a minimum budget of ₹300 per day.'],
+  ['Qualified Customer Leads', 'Connect with potential customers relevant to your business offerings.'],
+  ['Customer Contact Details', 'Receive available customer information, including names and phone numbers.'],
+  ['Targeted Audience Reach', 'Connect with potential customers based on your business category and preferred locations.'],
+  ['Direct Customer Communication', 'Contact your leads and discuss their requirements directly.'],
+  ['Business Growth Opportunities', 'Build your customer pipeline and work towards increasing sales.'],
 ];
 
 const steps = [
-  ['Tell us about your business', 'Share your business category, services, target location, ideal customers and advertising requirements.'],
-  ['We create your Meta Ads campaign', 'Our team plans and runs targeted campaigns on Facebook and Instagram to reach potential customers.'],
-  ['Receive customer enquiries', 'When interested users submit their details, you receive the lead information, including name and phone number.'],
-  ['Connect and convert', 'Contact your leads, explain your offer, answer questions and turn qualified opportunities into customers.'],
-];
-
-const services = [
-  ['Facebook Lead Generation Ads', 'Reach potential customers through targeted Facebook campaigns designed to generate enquiries.'],
-  ['Instagram Lead Generation Ads', 'Promote your business on Instagram and generate enquiries from users interested in your offerings.'],
-  ['Meta Ads Campaign Management', 'Campaign planning, audience targeting, ad creatives and optimisation, managed for you.'],
-  ['Local Business Lead Generation', 'Reach customers in your preferred city, area or service location with geo-targeted ads.'],
-  ['Service-Based Business Advertising', 'Home services, education, real estate, consulting and other professional services.'],
-  ['Customer Enquiry Generation', 'Receive contact information from people who show interest, so your team can follow up directly.'],
+  ['Step 1: Tell Us About Your Business', 'Share your business name, industry, products or services, target location and the type of customers you want to reach.'],
+  ['Step 2: We Find Potential Customers', 'We work on generating relevant enquiries based on your business category, target audience and customer requirements.'],
+  ['Step 3: Receive Qualified Customer Leads', 'Get customer enquiries with available contact details, including names and phone numbers, so you can connect with potential customers directly.'],
+  ['Step 4: Connect, Follow Up and Convert', 'Contact your leads, understand their requirements, explain your offerings and turn genuine business opportunities into paying customers.'],
 ];
 
 const why = [
-  ['Targeted advertising', 'Reach audiences by campaign objective, location and available Meta targeting options.'],
-  ['Direct customer contact', 'Get submitted names and phone numbers without unnecessary intermediaries.'],
-  ['Business-focused campaigns', 'Strategies built around your category, services and customer acquisition goals.'],
-  ['Flexible requirements', 'Promote services, products, offers or events that meet ad policies.'],
-  ['Easy lead follow-up', 'Manage conversations using your own sales process.'],
-  ['Performance-oriented', 'Focus on measurable enquiries and ways to improve results.'],
+  ['Quality-Focused Lead Generation', 'Our approach focuses on connecting businesses with relevant potential customers instead of simply increasing website visits or online engagement.'],
+  ['Affordable Starting Budget', 'Start generating customer enquiries with a minimum starting budget of ₹300 per day.'],
+  ['Direct Customer Contact', 'Receive available customer contact information and communicate with potential customers directly.'],
+  ['Business-Specific Lead Generation', 'Every business has different customer requirements. We consider your business category, services and preferred audience when planning lead generation.'],
+  ['Location-Based Opportunities', 'Connect with potential customers in your preferred cities and service areas.'],
+  ['Simple and Transparent Process', 'A straightforward process that helps you receive enquiries and manage your own customer relationships.'],
 ];
 
 const industries = [
-  ['Real Estate', 'Property enquiries from potential buyers and tenants.'],
-  ['Education & Coaching', 'Students and parents looking for courses, classes and training.'],
-  ['Home Services', 'People needing cleaning, repairs, maintenance and household services.'],
-  ['Healthcare & Wellness', 'Eligible healthcare and wellness services, in line with ad policies.'],
-  ['Automobile Services', 'Enquiries for vehicle services, dealerships and automotive businesses.'],
-  ['Professional Services', 'Consulting, legal, financial and other eligible professional services.'],
-  ['Beauty & Salon', 'Salon services, beauty treatments and appointment-based offers.'],
-  ['Local Retail & Businesses', 'Enquiries for local products, services and promotions.'],
+  ['Real Estate Businesses', 'Connect with potential property buyers, home seekers, investors and tenants.'],
+  ['Education & Coaching Institutes', 'Generate enquiries from students and parents interested in courses, classes and educational programmes.'],
+  ['Healthcare & Wellness Businesses', 'Connect with potential customers interested in eligible healthcare, wellness and related services.'],
+  ['Home Service Providers', 'Find potential customers looking for cleaning, repairs, maintenance, plumbing, electrical and other home services.'],
+  ['Automobile Businesses', 'Generate enquiries for vehicle sales, automobile services, dealerships and automotive solutions.'],
+  ['Beauty & Salon Businesses', 'Connect with people interested in salon services, beauty treatments and appointment bookings.'],
+  ['Professional Service Providers', 'Generate enquiries for consulting, legal, financial and other professional services.'],
+  ['Retail & Local Businesses', 'Reach potential customers interested in your products, offers and local business services.'],
 ];
 
 const faqs = [
-  ['What is AdMafia Marketing?', 'AdMafia Marketing is a business lead generation and digital advertising platform that helps businesses generate customer enquiries through targeted Facebook and Instagram advertising campaigns.'],
-  ['How does AdMafia Marketing generate business leads?', 'We create and manage Meta Ads campaigns targeting relevant audiences. When potential customers submit an enquiry, their contact details are collected and shared with the business for follow-up.'],
-  ['Will I receive customer names and phone numbers?', 'Yes. When users voluntarily provide their contact information through a lead form, businesses can receive the submitted details, such as names and phone numbers, subject to applicable privacy and advertising requirements.'],
-  ['Can I choose my target city or location?', "Yes. You can specify your preferred advertising locations, and campaigns can be configured using Meta's available geographic targeting options."],
-  ['Do you provide lead generation services for small businesses?', 'Yes. AdMafia Marketing supports small businesses, local service providers, startups and established businesses seeking customer enquiries through digital advertising.'],
-  ['Do you convert leads into customers?', 'AdMafia Marketing focuses on generating customer enquiries. Your business handles customer communication, follow-ups, negotiations and final sales conversions.'],
-  ['Are all leads guaranteed to convert into sales?', 'No. Lead quality and conversion depend on audience interest, advertising strategy, pricing, competition and your follow-up process. We do not guarantee that every enquiry will become a paying customer.'],
-  ['How can I start generating leads with AdMafia Marketing?', 'Share your business details, advertising objectives and target audience. Our team can then discuss your campaign requirements and the next steps.'],
+  ['What is AdMafia Marketing?', 'AdMafia Marketing is a lead generation platform that helps businesses connect with potential customers by providing relevant customer enquiries and available contact details.'],
+  ['What type of leads will I receive?', 'You can receive customer enquiries relevant to your business category, products or services. The available information may include customer names, phone numbers and details submitted with their enquiry.'],
+  ['What is the minimum starting price?', 'You can start with a minimum budget of ₹300 per day. The actual lead generation results depend on your business category, target location, audience demand and campaign performance.'],
+  ['Are the leads suitable for my business?', 'Our lead generation approach focuses on your business category, target audience and preferred location to find relevant potential customers. However, no lead generation service can guarantee that every enquiry will become a qualified sales opportunity or paying customer.'],
+  ['Can I choose the location for my leads?', 'Yes. You can specify your preferred city, area or service location when sharing your business requirements.'],
+  ['Which types of businesses can use AdMafia Marketing?', 'Our platform supports different business categories, including real estate, education, healthcare, home services, automobile businesses, beauty services, retail and professional services, subject to applicable eligibility requirements.'],
+  ['Will AdMafia Marketing close sales for my business?', 'No. Our primary service is generating and providing customer enquiries. You will communicate with the leads, understand their requirements, handle follow-ups and convert them into customers.'],
+  ['How can I get started?', 'Simply share your business details, products or services, target audience and preferred location. Our team will help you understand the process and get started with lead generation.'],
 ];
 
 const platformPages = [
@@ -758,6 +749,13 @@ export default function App() {
           {/* Desktop Navigation Links */}
           <nav className="desktop-nav-menu" aria-label="Main Navigation">
             <a 
+              href="#pricing" 
+              onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }} 
+              className="desktop-nav-link"
+            >
+              Budget &amp; Calculator
+            </a>
+            <a 
               href="#how" 
               onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }} 
               className="desktop-nav-link"
@@ -765,18 +763,11 @@ export default function App() {
               How It Works
             </a>
             <a 
-              href="#pricing" 
-              onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }} 
+              href="#why" 
+              onClick={(e) => { e.preventDefault(); navigateTo('#why', 'landing'); }} 
               className="desktop-nav-link"
             >
-              Calculator
-            </a>
-            <a 
-              href="#services" 
-              onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }} 
-              className="desktop-nav-link"
-            >
-              Services
+              Why Choose Us
             </a>
             <a 
               href="#industries" 
@@ -890,16 +881,16 @@ export default function App() {
             <div className="mobile-drawer-menu" onClick={(e) => e.stopPropagation()}>
               <div className="mobile-drawer-section-title">Website Sections</div>
               <div className="mobile-drawer-links">
+                <a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }} className="mobile-drawer-link">
+                  <span>Starting Budget (₹300/Day)</span>
+                  <ChevronRight size={16} color="#94a3b8" />
+                </a>
                 <a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }} className="mobile-drawer-link">
                   <span>How It Works</span>
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
-                <a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }} className="mobile-drawer-link">
-                  <span>Ad Spend Calculator</span>
-                  <ChevronRight size={16} color="#94a3b8" />
-                </a>
-                <a href="#services" onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }} className="mobile-drawer-link">
-                  <span>Services &amp; Targeting</span>
+                <a href="#why" onClick={(e) => { e.preventDefault(); navigateTo('#why', 'landing'); }} className="mobile-drawer-link">
+                  <span>Why Choose AdMafia</span>
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
                 <a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }} className="mobile-drawer-link">
@@ -911,7 +902,7 @@ export default function App() {
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
                 <a href="#contact" onClick={(e) => { e.preventDefault(); navigateTo('#contact', 'landing'); }} className="mobile-drawer-link">
-                  <span>Pricing &amp; Contact</span>
+                  <span>Contact &amp; Get Leads</span>
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
               </div>
@@ -953,15 +944,26 @@ export default function App() {
       </header>
 
       <main>
-          <section className="hero" aria-labelledby="h1">
-            <div className="wrap">
-              <div>
-                <h1 id="h1">
-                Turn Facebook &amp; Instagram Ads into real enquiries{' '}
-                <span>from just ₹300/Day</span>
+        {/* Section 1: Hero Section */}
+        <section className="hero" aria-labelledby="h1">
+          <div className="wrap">
+            <div>
+              <div className="hero-badge">
+                <Sparkles size={16} />
+                <span>Start Generating Leads from Just ₹300/Day!</span>
+              </div>
+              <h1 id="h1">
+                Get Qualified Leads. Grow Your Business.{' '}
+                <span>Increase Your Customers.</span>
               </h1>
+              <div className="hero-subhead">
+                Stop Searching for Customers. Start Connecting With Them.
+              </div>
               <p>
-                Generate customer enquiries through targeted Meta Ads campaigns. Reach potential customers, receive their names and phone numbers, and convert enquiries into business.
+                Looking for potential customers for your business? AdMafia Marketing helps businesses connect with people who are interested in their products and services.
+              </p>
+              <p className="hero-subdesc">
+                Get relevant customer enquiries directly, including names and phone numbers, so you can connect with potential buyers, build relationships and convert opportunities into sales.
               </p>
               <div className="row">
                 {currentUser ? (
@@ -974,14 +976,14 @@ export default function App() {
                   </button>
                 ) : (
                   <a className="btn" href="#contact">
-                    Start Advertising at ₹300/Day
+                    Get Qualified Leads
                   </a>
                 )}
                 <a className="btn alt" href="#how">
-                  See how it works
+                  Start Growing Your Business
                 </a>
               </div>
-              <small>We generate leads. You connect. You convert.</small>
+              <small>We Generate Leads. You Connect. You Convert.</small>
             </div>
             <div className="stack" aria-hidden="true">
               <div className="lead-card">
@@ -1011,7 +1013,7 @@ export default function App() {
               <div className="lead-card">
                 <i>₹</i>
                 <div>
-                  <strong>You follow up</strong>
+                  <strong>Direct Customer Connect</strong>
                   <span>Call. Explain. Convert.</span>
                 </div>
               </div>
@@ -1019,13 +1021,23 @@ export default function App() {
           </div>
         </section>
 
+        {/* Section 2: Affordable Lead Generation Services Starting at ₹300/Day */}
         <section className="budget" id="pricing" aria-labelledby="h-budget">
           <div className="wrap">
             <div className="top">
               <div>
-                <h2 id="h-budget">Affordable lead generation services starting at ₹300/day</h2>
-                <p className="lead">
-                  Small budget. Smart advertising. You don't need a massive ad budget to start reaching potential customers, whether you're a startup, local business or established service provider.
+                <h2 id="h-budget">Affordable Lead Generation Services Starting at ₹300/Day</h2>
+                <div className="section-subhead">
+                  More Opportunities for Your Business. Without a Huge Budget.
+                </div>
+                <p className="lead" style={{ marginTop: '16px' }}>
+                  Finding the right customers is one of the biggest challenges for any business. Whether you are a startup, local business owner, service provider or established company, getting consistent customer enquiries can make a real difference to your growth.
+                </p>
+                <p className="lead" style={{ marginTop: '10px' }}>
+                  AdMafia Marketing makes customer acquisition simpler by helping businesses connect with potential customers who have shown interest in their products or services.
+                </p>
+                <p className="lead" style={{ marginTop: '10px', fontWeight: 600, color: 'var(--ink2)' }}>
+                  Start with a minimum budget of just ₹300 per day and create more opportunities to grow your customer base.
                 </p>
               </div>
               <div className="price">
@@ -1037,7 +1049,9 @@ export default function App() {
               <MetaAdsCalculator />
             </div>
 
-            <h3 style={{ marginTop: '44px', fontSize: '1.4rem' }}>What do you get?</h3>
+            <h3 style={{ marginTop: '44px', fontSize: '1.45rem', fontWeight: 800 }}>
+              What Do You Get with AdMafia Marketing?
+            </h3>
             <ul className="gets">
               {gets.map((g, idx) => (
                 <li key={idx}>
@@ -1046,10 +1060,12 @@ export default function App() {
                 </li>
               ))}
             </ul>
-            <p className="note">
-              <strong>Note:</strong> ₹300/day is the minimum advertising budget, not a guaranteed cost per lead. Lead volume and results depend on campaign performance, competition and audience response. Any additional management fees are disclosed separately.
+
+            <p className="tag" style={{ marginTop: '36px' }}>
+              Your Business Needs Customers. We Help You Find Them.
             </p>
-            <p style={{ marginTop: '28px' }}>
+
+            <div style={{ marginTop: '24px' }}>
               {currentUser ? (
                 <button
                   type="button"
@@ -1060,63 +1076,27 @@ export default function App() {
                 </button>
               ) : (
                 <a className="btn dark" href="#contact">
-                  Launch Your Campaign at ₹300/Day
+                  Start Generating Leads at ₹300/Day
                 </a>
               )}
+            </div>
+
+            <p className="note" style={{ marginTop: '32px' }}>
+              <strong>Note:</strong> ₹300/day is the minimum starting budget, not a guaranteed cost per lead. Lead volume and quality may vary depending on business category, audience demand, location and campaign performance. A lead indicates interest, not a guaranteed purchase or sale.
             </p>
           </div>
         </section>
 
-        <section aria-labelledby="h-more">
-          <div className="wrap">
-            <h2 id="h-more">Your business deserves more than just likes and clicks</h2>
-            <p className="lead">
-              Getting attention online is easy. Turning that attention into business opportunities needs the right strategy. We help you connect with people interested in your products or services, without complicated ad processes.
-            </p>
-            <ul className="gets" style={{ borderTopColor: 'var(--coral)' }}>
-              <li>
-                <b>Reach the right people</b>
-                <span>By location, interests and relevant audience signals.</span>
-              </li>
-              <li>
-                <b>Receive enquiries</b>
-                <span>Customer names and phone numbers.</span>
-              </li>
-              <li>
-                <b>Promote offers</b>
-                <span>Products, services and special offers.</span>
-              </li>
-              <li>
-                <b>Talk directly</b>
-                <span>Connect with interested prospects.</span>
-              </li>
-              <li>
-                <b>Own your follow-up</b>
-                <span>Manage sales conversions independently.</span>
-              </li>
-            </ul>
-            <p style={{ marginTop: '28px' }}>
-              {currentUser ? (
-                <button
-                  type="button"
-                  className="btn dark"
-                  onClick={() => navigateTo('/app/lead#app/dashboard', 'portal')}
-                >
-                  Open Client Dashboard →
-                </button>
-              ) : (
-                <a className="btn dark" href="#contact">
-                  Start Generating Leads
-                </a>
-              )}
-            </p>
-          </div>
-        </section>
-
+        {/* Section 3: How AdMafia Marketing Works */}
         <section id="how" style={{ background: 'var(--mist)' }} aria-labelledby="h-how">
           <div className="wrap">
-            <h2 id="h-how">How AdMafia Marketing works</h2>
-            <p className="lead">A simple way to generate leads for your business.</p>
+            <h2 id="h-how">How AdMafia Marketing Works</h2>
+            <div className="section-subhead">
+              From Finding Potential Customers to Growing Your Business.
+            </div>
+            <p className="lead" style={{ marginTop: '14px' }}>
+              Getting new customers doesn't have to be complicated. Our simple lead generation process helps you connect with potential buyers.
+            </p>
             <ol className="steps">
               {steps.map((s, idx) => (
                 <li key={idx}>
@@ -1125,38 +1105,24 @@ export default function App() {
                 </li>
               ))}
             </ol>
-            <p className="tag">You focus on closing deals. We focus on generating opportunities.</p>
-            <p style={{ marginTop: '22px' }}>
+            <p className="tag">
+              We Bring You Opportunities. You Turn Them into Business.
+            </p>
+            <p style={{ marginTop: '24px' }}>
               <a className="btn dark" href="#contact">
-                Launch Your Campaign
+                Get Started Today
               </a>
             </p>
           </div>
         </section>
 
-        <section className="services" id="services" aria-labelledby="h-serv">
+        {/* Section 4: Why Choose AdMafia Marketing? */}
+        <section className="why" id="why" aria-labelledby="h-why">
           <div className="wrap">
-            <h2 id="h-serv">Our digital advertising &amp; lead generation services</h2>
-            <div className="grid">
-              {services.map((s, idx) => (
-                <article className="card" key={idx}>
-                  <h3>{s[0]}</h3>
-                  <p>{s[1]}</p>
-                </article>
-              ))}
+            <h2 id="h-why">Why Choose AdMafia Marketing?</h2>
+            <div className="section-subhead gold">
+              Your Business Growth Starts with the Right Customers.
             </div>
-            <p style={{ marginTop: '36px' }}>
-              <a className="btn dark" href="#contact">
-                Explore Lead Generation Services
-              </a>
-            </p>
-          </div>
-        </section>
-
-        <section className="why" aria-labelledby="h-why">
-          <div className="wrap">
-            <h2 id="h-why">Why choose AdMafia Marketing?</h2>
-            <p className="lead">Smart advertising. Relevant enquiries. Better growth opportunities.</p>
             <div className="grid">
               {why.map((w, idx) => (
                 <article className="card" key={idx}>
@@ -1168,10 +1134,16 @@ export default function App() {
           </div>
         </section>
 
+        {/* Section 5: Lead Generation Solutions for Every Business */}
         <section id="industries" aria-labelledby="h-ind">
           <div className="wrap">
-            <h2 id="h-ind">Lead generation solutions for different industries</h2>
-            <p className="lead">Whatever your business, reach customers who may need your services.</p>
+            <h2 id="h-ind">Lead Generation Solutions for Every Business</h2>
+            <div className="section-subhead">
+              Whatever You Sell, We Help You Find Potential Customers.
+            </div>
+            <p className="lead" style={{ marginTop: '14px' }}>
+              AdMafia Marketing helps businesses across different industries generate relevant customer enquiries.
+            </p>
             <div className="chips">
               {industries.map((i, idx) => (
                 <article className="chip" key={idx}>
@@ -1182,27 +1154,50 @@ export default function App() {
             </div>
             <p style={{ marginTop: '36px' }}>
               <a className="btn dark" href="#contact">
-                Advertise Your Business
+                Get Leads for Your Industry
               </a>
             </p>
           </div>
         </section>
 
+        {/* Section 6: Stop Waiting for Customers. Start Growing Your Business. */}
         <section className="band" aria-labelledby="h-band">
           <div className="wrap">
-            <h2 id="h-band">Stop waiting for customers. Start reaching them.</h2>
-            <p>
-              Your next customer could be scrolling through Facebook or Instagram right now. Promote your business to relevant audiences and take control of your sales conversations.
+            <h2 id="h-band">Stop Waiting for Customers. Start Growing Your Business.</h2>
+            <p style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--ink)', margin: '16px auto 10px', maxWidth: '52ch' }}>
+              Your Next Customer Could Be Waiting for the Right Opportunity to Connect.
             </p>
-            <a className="btn dark" href="#contact">
-              Start Your Advertising Campaign
-            </a>
+            <p style={{ maxWidth: '58ch', margin: '0 auto 12px', color: '#4a3d00', fontSize: '1.05rem', lineHeight: '1.6' }}>
+              Every growing business needs a consistent flow of potential customers. AdMafia Marketing helps you discover new business opportunities by connecting you with relevant customer enquiries.
+            </p>
+            <p style={{ maxWidth: '58ch', margin: '0 auto 24px', color: '#4a3d00', fontSize: '1.05rem', lineHeight: '1.6' }}>
+              Whether you're a startup looking for your first customers or an established business aiming to expand, we're here to help you build more opportunities for growth.
+            </p>
+            <div className="band-tagline-main">
+              Starting at Just ₹300/Day.
+            </div>
+            <div className="band-tagline-sub">
+              We Generate Leads. You Connect. You Convert.
+            </div>
+            <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <a className="btn dark" href="#contact">
+                Start Generating Leads
+              </a>
+              <a 
+                className="btn alt" 
+                href="#contact"
+                style={{ borderColor: 'var(--ink)', color: 'var(--ink)', fontWeight: 700 }}
+              >
+                Contact Our Team
+              </a>
+            </div>
           </div>
         </section>
 
+        {/* Section 7: Frequently Asked Questions */}
         <section id="faq" aria-labelledby="h-faq">
           <div className="wrap">
-            <h2 id="h-faq">Frequently asked questions</h2>
+            <h2 id="h-faq">Frequently Asked Questions</h2>
             <div className="faq">
               {faqs.map((f, idx) => (
                 <details key={idx}>
@@ -1214,19 +1209,26 @@ export default function App() {
           </div>
         </section>
 
+        {/* Section 8: Final CTA */}
         <section className="contact" id="contact" aria-labelledby="h-contact">
           <div className="wrap">
             <div>
-              <h2 id="h-contact">Ready to generate leads starting at ₹300/day?</h2>
-              <p className="lead" style={{ color: '#bdbbe6' }}>
-                Your next customer could be just one ad away. Share your business details and our team will discuss your campaign and next steps.
+              <h2 id="h-contact">More Leads. More Conversations. More Opportunities to Grow.</h2>
+              <p className="lead" style={{ color: '#d9d7f5', fontSize: '1.18rem', marginTop: '18px', lineHeight: '1.5' }}>
+                Your business deserves a consistent opportunity to reach new customers.
               </p>
-              <p className="pills">₹300/day minimum &middot; Targeted Meta Ads &middot; Direct customer enquiries</p>
+              <p style={{ color: '#bdbbe6', fontSize: '1.05rem', lineHeight: '1.6', marginTop: '10px' }}>
+                Start generating relevant customer enquiries with AdMafia Marketing.
+              </p>
+              <div style={{ marginTop: '28px', display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(255, 184, 0, 0.15)', padding: '10px 22px', borderRadius: '999px', border: '1px solid rgba(255, 184, 0, 0.45)' }}>
+                <span style={{ color: '#d9d7f5', fontSize: '1rem', fontWeight: 600 }}>Starting Budget:</span>
+                <strong style={{ color: '#ffb800', fontSize: '1.3rem', fontWeight: 800 }}>₹300/Day</strong>
+              </div>
             </div>
             <form onSubmit={handleSubmit} noValidate>
               {sent && (
                 <div className="msg ok" role="status">
-                  Thank you! Our team will contact you shortly.
+                  Thank you! Our team will contact you shortly to start generating leads.
                 </div>
               )}
               {errors.map((er, idx) => (
@@ -1251,6 +1253,7 @@ export default function App() {
                 name="name"
                 required
                 autoComplete="name"
+                placeholder="Full Name"
                 value={formData.name}
                 onChange={handleChange}
               />
@@ -1262,6 +1265,7 @@ export default function App() {
                 required
                 autoComplete="tel"
                 inputMode="tel"
+                placeholder="10-digit mobile number"
                 value={formData.phone}
                 onChange={handleChange}
               />
@@ -1269,7 +1273,7 @@ export default function App() {
               <input
                 id="business"
                 name="business"
-                placeholder="e.g. Real estate, salon, coaching"
+                placeholder="e.g. Real estate, education, healthcare, salon"
                 value={formData.business}
                 onChange={handleChange}
               />
@@ -1277,11 +1281,12 @@ export default function App() {
               <input
                 id="city"
                 name="city"
+                placeholder="e.g. Mumbai, Delhi NCR, Ahmedabad, Pan India"
                 value={formData.city}
                 onChange={handleChange}
               />
-              <button className="btn" type="submit">
-                Talk to Our Team
+              <button className="btn" type="submit" style={{ fontWeight: 700 }}>
+                Get Started Now | Generate Leads for My Business
               </button>
             </form>
           </div>
@@ -1301,7 +1306,7 @@ export default function App() {
                 />
               </div>
               <p style={{ fontSize: '0.86rem', lineHeight: '1.6', color: '#94a3b8', margin: '0 0 16px' }}>
-                High-performance Meta Ads lead generation engine. Turn targeted Facebook and Instagram traffic into verified customer enquiries from just ₹300/day.
+                Get qualified leads, grow your business, and increase your customers. AdMafia Marketing helps businesses connect directly with interested buyers with names and phone numbers starting from just ₹300/day.
               </p>
               
               <div className="footer-social-links">
@@ -1379,7 +1384,7 @@ export default function App() {
                 )}
                 <li>
                   <a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }}>
-                    <span>Meta Ads Calculator</span>
+                    <span>Budget &amp; Calculator</span>
                   </a>
                 </li>
                 <li>
@@ -1395,15 +1400,15 @@ export default function App() {
               </ul>
             </div>
 
-            {/* Col 3: Advertising Solutions */}
+            {/* Col 3: Lead Solutions */}
             <div className="footer-col">
-              <h4>Ad Solutions</h4>
+              <h4>Lead Solutions</h4>
               <ul className="footer-links">
-                <li><a href="#services" onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }}>Facebook Lead Generation</a></li>
-                <li><a href="#services" onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }}>Instagram Sponsored Ads</a></li>
-                <li><a href="#services" onClick={(e) => { e.preventDefault(); navigateTo('#services', 'landing'); }}>Local City Targeting</a></li>
-                <li><a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }}>Multi-Industry Campaigns</a></li>
+                <li><a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }}>Starting Budget (₹300/Day)</a></li>
                 <li><a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }}>How AdMafia Works</a></li>
+                <li><a href="#why" onClick={(e) => { e.preventDefault(); navigateTo('#why', 'landing'); }}>Why Choose AdMafia</a></li>
+                <li><a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }}>Industry Solutions</a></li>
+                <li><a href="#contact" onClick={(e) => { e.preventDefault(); navigateTo('#contact', 'landing'); }}>Get Qualified Leads</a></li>
               </ul>
             </div>
 
@@ -1443,7 +1448,7 @@ export default function App() {
               <span>&copy; {new Date().getFullYear()} {site.name}. All rights reserved.</span>
             </div>
             <div>
-              <span>Facebook and Instagram are registered trademarks of Meta Platforms, Inc. AdMafia Marketing operates independently.</span>
+              <span>We Generate Leads. You Connect. You Convert.</span>
             </div>
           </div>
         </div>
