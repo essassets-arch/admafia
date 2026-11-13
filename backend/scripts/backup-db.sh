@@ -6,7 +6,8 @@
 
 set -e
 
-BACKUP_DIR="/home/stzk/admafia/backups"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_DIR="${SCRIPT_DIR}/../../backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="${BACKUP_DIR}/admafia_crm_backup_${TIMESTAMP}.sql"
 

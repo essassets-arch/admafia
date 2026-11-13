@@ -5,14 +5,16 @@
 # =============================================================================
 set -e
 
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "🚀 Starting pgAdmin 4 installation & Nginx configuration..."
 
 # 1. Stop any existing container
 docker rm -f admafia-pgadmin 2>/dev/null || true
 
 # 2. Configure pre-registered server in pgAdmin
-mkdir -p /home/stzk/admafia/pgadmin
-cat > /home/stzk/admafia/pgadmin/servers.json << 'EOF'
+mkdir -p "$APP_DIR/pgadmin"
+cat > "$APP_DIR/pgadmin/servers.json" << 'EOF'
 {
   "Servers": {
     "1": {
@@ -27,7 +29,7 @@ cat > /home/stzk/admafia/pgadmin/servers.json << 'EOF'
   }
 }
 EOF
-chmod 644 /home/stzk/admafia/pgadmin/servers.json
+chmod 644 "$APP_DIR/pgadmin/servers.json"
 
 # 3. Pull & Run pgAdmin 4 Container on Port 5055
 echo "📦 Pulling and starting pgAdmin 4 container..."
@@ -39,7 +41,7 @@ docker run -d \
   -e "PGADMIN_DEFAULT_EMAIL=admin@admafia.marketing" \
   -e "PGADMIN_DEFAULT_PASSWORD=AdMafiaAdmin2026!" \
   -e "SCRIPT_NAME=/dbadmin" \
-  -v /home/stzk/admafia/pgadmin/servers.json:/pgadmin4/servers.json:ro \
+  -v "$APP_DIR/pgadmin/servers.json":/pgadmin4/servers.json:ro \
   dpage/pgadmin4:latest
 
 # 4. Configure Nginx for /dbadmin in ALL relevant Nginx config files (HTTP & HTTPS)

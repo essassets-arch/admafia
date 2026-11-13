@@ -5,8 +5,8 @@
 # =============================================================================
 set -e
 
-DOMAIN="admafia.marketing"
-APP_DIR="/home/stzk/admafia"
+DOMAIN="${1:-admafia.marketing}"
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "======================================================================"
 echo "🚀 Routing https://$DOMAIN to AdMafia Marketing CRM..."

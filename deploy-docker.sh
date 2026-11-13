@@ -1,17 +1,34 @@
 #!/usr/bin/env bash
 # =============================================================================
 # ADMAFIA MARKETING CRM — FULL DOCKER COMPOSE DEPLOYMENT SCRIPT
-# Runs on VPS (root@vmi3189237:/home/stzk/admafia#):
-#   ./deploy-docker.sh
+# Usage on VPS:
+#   chmod +x deploy-docker.sh
+#   ./deploy-docker.sh [DOMAIN]
 # =============================================================================
 set -e
 
-DOMAIN="admafia.marketing"
-APP_DIR="/home/stzk/admafia"
+DOMAIN="${1:-admafia.marketing}"
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "======================================================================"
 echo "🚀 Launching AdMafia CRM Docker Stack (Postgres + Backend + Frontend + pgAdmin)..."
+echo "📂 App Directory: $APP_DIR"
+echo "🌐 Domain:        $DOMAIN"
 echo "======================================================================"
+
+# 0. Ensure git, curl, nginx, certbot & docker are installed
+if ! command -v git > /dev/null 2>&1 || ! command -v curl > /dev/null 2>&1 || ! command -v nginx > /dev/null 2>&1 || ! command -v certbot > /dev/null 2>&1; then
+  echo "📦 Installing prerequisites (git, curl, nginx, certbot)..."
+  apt-get update -y
+  apt-get install -y git curl nginx certbot python3-certbot-nginx
+fi
+
+if ! command -v docker > /dev/null 2>&1; then
+  echo "🐳 Installing Docker Engine & Compose plugin..."
+  curl -fsSL https://get.docker.com | sh
+  systemctl enable docker
+  systemctl start docker
+fi
 
 cd "$APP_DIR"
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ADMAFIA MARKETING CRM — VPS DEPLOYMENT SCRIPT FOR /home/stzk/admafia
-# Usage on VPS (root@vmi3189237:/home/stzk/admafia):
+# ADMAFIA MARKETING CRM — VPS DEPLOYMENT SCRIPT
+# Usage on VPS:
 #   chmod +x deploy-vps.sh
-#   ./deploy-vps.sh
+#   ./deploy-vps.sh [DOMAIN]
 # =============================================================================
 set -e
 
 DOMAIN="${1:-admafia.marketing}"
-APP_DIR="/home/stzk/admafia"
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="5050"
 DB_NAME="admafia_crm"
 DB_USER="admafia_user"
