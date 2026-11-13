@@ -151,7 +151,10 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         newCustomer = { ...newCustomer, ...dbCustomer, password: formData.password };
       }
     } catch (apiErr) {
-      console.warn('PostgreSQL register sync note:', apiErr.message);
+      console.error('PostgreSQL registration failed:', apiErr.message);
+      setError(apiErr.message || 'Could not create your account. Please try again.');
+      setIsSubmitting(false);
+      return;
     }
 
     try {

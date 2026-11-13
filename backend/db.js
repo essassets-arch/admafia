@@ -281,6 +281,13 @@ export async function initDatabase() {
     await safeExec(cleanSql);
   }
 
+  // Keep this migration isolated so unrelated schema errors cannot prevent registration columns being added.
+  const executeMigration = dbMode === 'postgres-server'
+    ? (sql) => activePool.query(sql)
+    : (sql) => pgliteInstance.exec(sql);
+  await executeMigration("ALTER TABLE customers ADD COLUMN IF NOT EXISTS country_code VARCHAR(4) DEFAULT 'IN'");
+  await executeMigration("ALTER TABLE customers ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR'");
+
   const kolkataDow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay();
   const kolkataToday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataDow];
 

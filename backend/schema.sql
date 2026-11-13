@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS customers (
     city                VARCHAR(100) DEFAULT '',
     state               VARCHAR(100) DEFAULT 'Maharashtra',
     country             VARCHAR(100) DEFAULT 'India',
+    country_code        VARCHAR(4) DEFAULT 'IN',
+    currency            VARCHAR(10) DEFAULT 'INR',
     -- Operational & Onboarding Flags
     group_id            VARCHAR(64) REFERENCES customer_groups(id) ON DELETE SET NULL,
     status              VARCHAR(24) NOT NULL DEFAULT 'active'
