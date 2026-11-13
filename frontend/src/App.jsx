@@ -837,7 +837,6 @@ export default function App() {
           </nav>
 
           <div className="nav-actions">
-            <CountrySelector />
             {currentUser ? (
               <>
                 <button 
@@ -924,10 +923,6 @@ export default function App() {
         {mobileMenuOpen && (
           <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
             <div className="mobile-drawer-menu" onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 8px', borderBottom: '1px solid #f1f5f9' }}>
-                <div className="mobile-drawer-section-title" style={{ padding: 0 }}>Region &amp; Currency</div>
-                <CountrySelector />
-              </div>
               <div className="mobile-drawer-section-title">Website Sections</div>
               <div className="mobile-drawer-links">
                 <a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }} className="mobile-drawer-link">
