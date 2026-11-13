@@ -263,7 +263,6 @@ export async function initDatabase() {
     UPDATE customers SET profile_status = 'complete', kyc_percent = 100, verified = TRUE WHERE profile_status = 'incomplete';
     UPDATE pending_verifications SET profile_status = 'complete', queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END;
     UPDATE wallets SET active_days = '${kolkataToday}' WHERE active_days = 'MON,TUE,WED,THU,FRI' OR active_days IS NULL OR active_days = '';
-    UPDATE customers SET active_days = ARRAY['${kolkataToday}']::text[] WHERE active_days = ARRAY['MON','TUE','WED','THU','FRI']::text[] OR active_days IS NULL OR active_days = '{}'::text[];
     UPDATE customers SET 
       contact_person = CASE WHEN contact_person = 'Registered Business' OR contact_person IS NULL OR contact_person = '' THEN INITCAP(username) ELSE contact_person END,
       company_name = CASE WHEN company_name = 'Registered Business' OR company_name IS NULL OR company_name = '' THEN INITCAP(username) || ' Enterprises' ELSE company_name END
@@ -420,11 +419,32 @@ export async function initDatabase() {
     ALTER TABLE support_queries ADD COLUMN IF NOT EXISTS last_replied_by VARCHAR(140) DEFAULT '';
     ALTER TABLE support_queries DROP CONSTRAINT IF EXISTS support_queries_status_check;
     ALTER TABLE support_queries DROP CONSTRAINT IF EXISTS support_queries_priority_check;
-    ALTER TABLE system_users DROP CONSTRAINT IF EXISTS system_users_role_check;
-    ALTER TABLE system_users ADD COLUMN IF NOT EXISTS department VARCHAR(64) DEFAULT 'Super Admin';
     ALTER TABLE customers ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL;
     ALTER TABLE marketing_campaigns ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL;
     ALTER TABLE wallets ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL;
+  `);
+
+  // Ensure system_users table and department credentials exist
+  await safeExec(`
+    CREATE TABLE IF NOT EXISTS system_users (
+      id VARCHAR(64) PRIMARY KEY,
+      customer_id VARCHAR(64) REFERENCES customers(id) ON DELETE SET NULL,
+      full_name VARCHAR(140) NOT NULL,
+      email VARCHAR(160) NOT NULL UNIQUE,
+      username VARCHAR(80) NOT NULL UNIQUE,
+      phone VARCHAR(32),
+      password_hash TEXT NOT NULL,
+      role VARCHAR(60) NOT NULL DEFAULT 'Super Admin',
+      department VARCHAR(64) NOT NULL DEFAULT 'Super Admin',
+      permissions TEXT NOT NULL DEFAULT '["all"]',
+      status VARCHAR(24) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'inactive')),
+      last_login_at TIMESTAMPTZ,
+      created_by VARCHAR(140) DEFAULT 'system',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE system_users DROP CONSTRAINT IF EXISTS system_users_role_check;
+    ALTER TABLE system_users ADD COLUMN IF NOT EXISTS department VARCHAR(64) DEFAULT 'Super Admin';
 
     INSERT INTO system_users (id, full_name, email, username, phone, password_hash, role, department, permissions, status)
     VALUES

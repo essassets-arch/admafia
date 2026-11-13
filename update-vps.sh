@@ -46,6 +46,7 @@ npm run build
 echo "📦 3/5 Verifying backend dependencies & running database cleanups..."
 cd "$APP_DIR/backend"
 npm install
+node initDb.js || true
 node scripts/purge-test-users.js || true
 
 # 4. Restart Application Daemon (Docker Compose or PM2)
@@ -57,7 +58,8 @@ if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1
   pm2 save 2>/dev/null || true
   docker compose build --no-cache frontend backend
   docker compose up -d
-  # Ensure purge is executed inside container against postgres db
+  # Ensure schema init and purge are executed inside container against postgres db
+  docker compose exec -T backend node initDb.js 2>/dev/null || true
   docker compose exec -T backend node scripts/purge-test-users.js 2>/dev/null || true
 elif command -v pm2 > /dev/null 2>&1; then
   pm2 delete admafia 2>/dev/null || true
