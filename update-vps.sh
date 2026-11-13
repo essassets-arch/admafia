@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # ADMAFIA MARKETING CRM — 1-COMMAND VPS UPDATE & REBUILD SCRIPT
-# Usage on VPS (run inside /home/stzk/admafia):
+# Usage on VPS (run inside repository folder, e.g. /home/ubuntu/admafia):
 #   chmod +x update-vps.sh
 #   ./update-vps.sh
 # =============================================================================
