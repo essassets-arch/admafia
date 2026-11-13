@@ -560,26 +560,49 @@ header .btn.alt:hover,
 .hero-subhead {
   font-size: clamp(1.15rem, 2.2vw, 1.45rem);
   color: #fbbf24;
-  margin: 18px 0 16px;
+  margin: 18px 0 14px;
   font-weight: 700;
   line-height: 1.35;
   letter-spacing: -0.01em;
 }
 
 .hero p {
-  margin: 16px 0 18px;
-  max-width: 52ch;
+  margin: 14px 0 16px;
+  max-width: 54ch;
   color: #cbd5e1;
-  font-size: 1.12rem;
+  font-size: 1.08rem;
   line-height: 1.65;
+}
+
+.hero p.hero-desc {
+  margin: 14px 0 12px;
+  color: #e2e8f0;
+  font-size: 1.12rem;
+  line-height: 1.6;
 }
 
 .hero p.hero-subdesc {
   margin-top: 0;
-  margin-bottom: 28px;
+  margin-bottom: 20px;
   color: #94a3b8;
-  font-size: 1.02rem;
+  font-size: 1rem;
   line-height: 1.65;
+}
+
+.hero-tagline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 184, 0, 0.12);
+  border: 1px solid rgba(255, 184, 0, 0.35);
+  color: #ffb800;
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  padding: 8px 18px;
+  border-radius: 999px;
+  margin-bottom: 24px;
+  backdrop-filter: blur(8px);
 }
 
 .hero .row {
@@ -609,21 +632,6 @@ header .btn.alt:hover,
   color: #ffb800;
 }
 
-.band-tagline-main {
-  font-weight: 800;
-  font-size: clamp(1.35rem, 2.8vw, 1.85rem);
-  color: #0f172a;
-  margin-bottom: 6px;
-  font-family: var(--h);
-  letter-spacing: -0.02em;
-}
-
-.band-tagline-sub {
-  font-weight: 800;
-  font-size: 1.2rem;
-  color: #1e1b4b;
-  margin-bottom: 30px;
-}
 
 /* lead stack */
 .stack {
@@ -1028,18 +1036,59 @@ header .btn.alt:hover,
 
 .band h2 {
   margin: 0 auto;
-  max-width: 26ch;
+  max-width: 28ch;
   color: #0f172a;
   font-size: clamp(2.2rem, 4.6vw, 3.4rem);
   font-weight: 800;
   letter-spacing: -0.03em;
 }
 
-.band p {
-  margin: 16px auto 28px;
-  max-width: 58ch;
-  color: #1e1b4b;
+.band-subhead {
+  font-size: clamp(1.18rem, 2.4vw, 1.45rem);
+  font-weight: 700;
+  color: #0f172a;
+  margin: 16px auto 14px;
+  max-width: 52ch;
+  line-height: 1.35;
+}
+
+.band-text {
+  font-size: 1.05rem;
   line-height: 1.65;
+  color: #1e1b4b;
+  margin: 0 auto;
+  max-width: 62ch;
+  font-weight: 500;
+}
+
+.band-tagline-main {
+  font-weight: 800;
+  font-size: clamp(1.5rem, 3.2vw, 2.2rem);
+  color: #0f172a;
+  margin-top: 26px;
+  margin-bottom: 4px;
+  font-family: var(--h);
+  letter-spacing: -0.02em;
+}
+
+.band-tagline-sub {
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: #1e1b4b;
+  margin-bottom: 28px;
+}
+
+.band .btn.alt {
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+  border: 2px solid #0f172a;
+  box-shadow: none;
+}
+
+.band .btn.alt:hover {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
 }
 
 /* faq */
@@ -1448,6 +1497,56 @@ details p {
   .footer-grid {
     grid-template-columns: 1fr;
     gap: 26px;
+  }
+
+  .stack {
+    height: 340px;
+    max-width: 100%;
+  }
+
+  .lead-card {
+    padding: 14px 16px;
+    border-radius: 16px;
+    gap: 12px;
+  }
+
+  .lead-card i {
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+    border-radius: 10px;
+  }
+
+  .lead-card strong {
+    font-size: 0.96rem;
+  }
+
+  .lead-card span {
+    font-size: 0.84rem;
+  }
+
+  .lead-card em {
+    padding: 4px 10px;
+    font-size: 0.72rem;
+  }
+
+  .price {
+    padding: 20px 24px;
+  }
+
+  .contact form,
+  #contact form {
+    padding: 24px 18px;
+    border-radius: 18px;
+  }
+
+  summary {
+    padding: 18px 20px;
+    font-size: 1.05rem;
+  }
+
+  details p {
+    padding: 0 20px 20px;
   }
 }
 
