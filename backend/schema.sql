@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS wallets (
     total_ad_spent      NUMERIC(12, 2) NOT NULL DEFAULT 0.00
                         CHECK (total_ad_spent >= 0),
     ad_campaign_active  BOOLEAN NOT NULL DEFAULT FALSE,
+    currency            VARCHAR(10) DEFAULT 'INR',
     active_days         VARCHAR(120) NOT NULL DEFAULT '',
     schedule_preset     VARCHAR(64) NOT NULL DEFAULT 'custom',
     last_deducted_at    TIMESTAMPTZ,

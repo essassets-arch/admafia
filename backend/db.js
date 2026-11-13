@@ -229,12 +229,6 @@ export async function initDatabase() {
   await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS ad_campaign_active BOOLEAN DEFAULT FALSE`);
   await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS booked_dates TEXT DEFAULT ''`);
   await safeExec(`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS last_deducted_at TIMESTAMPTZ`);
-  // Keep this critical registration column outside the large, best-effort schema
-  // batch below. Existing deployments may already have wallets without currency.
-  const migrateWalletCurrency = dbMode === 'postgres-server'
-    ? (sql) => activePool.query(sql)
-    : (sql) => pgliteInstance.exec(sql);
-  await migrateWalletCurrency("ALTER TABLE wallets ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR'");
   await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post'`);
   await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_notes TEXT DEFAULT ''`);
   await safeExec(`ALTER TABLE marketing_posts ADD COLUMN IF NOT EXISTS designer_name VARCHAR(140) DEFAULT 'Graphics Designer'`);
@@ -286,6 +280,13 @@ export async function initDatabase() {
     const cleanSql = rawSql.replace(/CREATE EXTENSION IF NOT EXISTS "pgcrypto";/gi, '');
     await safeExec(cleanSql);
   }
+
+  // Registration writes wallets.currency, so apply this after schema.sql has
+  // created wallets and outside the best-effort migration batch below.
+  const migrateWalletCurrency = dbMode === 'postgres-server'
+    ? (sql) => activePool.query(sql)
+    : (sql) => pgliteInstance.exec(sql);
+  await migrateWalletCurrency("ALTER TABLE wallets ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR'");
 
   // Keep this migration isolated so unrelated schema errors cannot prevent registration columns being added.
   const executeMigration = dbMode === 'postgres-server'
