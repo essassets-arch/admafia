@@ -105,6 +105,30 @@ export async function initDatabase() {
       console.log(`[PostgreSQL] Connected directly to PostgreSQL server at ${host}:${port}/${database} (attempt ${attempt})`);
       break;
     } catch (connErr) {
+      // If host is 'db' but cannot be resolved via DNS (e.g. running on host outside Docker network), try 127.0.0.1
+      if ((connErr.code === 'EAI_AGAIN' || connErr.code === 'ENOTFOUND') && host === 'db') {
+        try {
+          console.log(`[PostgreSQL] Hostname "db" cannot be resolved (running on host outside Docker). Attempting 127.0.0.1:${port}...`);
+          const hostPool = new Pool({
+            host: '127.0.0.1',
+            port,
+            user,
+            password,
+            database,
+            max: 20,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 3000,
+          });
+          await hostPool.query('SELECT 1');
+          activePool = hostPool;
+          dbMode = 'postgres-server';
+          console.log(`[PostgreSQL] Connected directly to PostgreSQL server at 127.0.0.1:${port}/${database}`);
+          break;
+        } catch (hostErr) {
+          // Continue with standard retry logic
+        }
+      }
+
       // If database does not exist (error 3D000) and we are in local dev, attempt creation via default DB
       if (connErr.code === '3D000' && !isDockerOrDedicatedPg) {
         try {

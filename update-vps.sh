@@ -24,9 +24,11 @@ git fetch origin main
 git reset --hard origin/main
 
 # 1b. Write authoritative backend environment variables with live Razorpay credentials
+# PGHOST=127.0.0.1 allows host-level scripts and PM2 to connect to PostgreSQL on port 5432.
+# When running inside Docker containers, docker-compose.yml environment (PGHOST: db) takes precedence.
 cat > "$APP_DIR/backend/.env" << 'EOF'
 PORT=5000
-PGHOST=db
+PGHOST=127.0.0.1
 PGPORT=5432
 PGUSER=admafia_user
 PGPASSWORD=AdMafiaStrongPass2026!
@@ -42,12 +44,10 @@ cd "$APP_DIR/frontend"
 npm install
 npm run build
 
-# 3. Check Backend Dependencies & Purge Test Users
-echo "📦 3/5 Verifying backend dependencies & running database cleanups..."
+# 3. Check Backend Dependencies
+echo "📦 3/5 Verifying backend dependencies..."
 cd "$APP_DIR/backend"
 npm install
-node initDb.js || true
-node scripts/purge-test-users.js || true
 
 # 4. Restart Application Daemon (Docker Compose or PM2)
 echo "🚀 4/5 Restarting AdMafia application process on port $PORT..."
@@ -56,12 +56,20 @@ if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1
   cd "$APP_DIR"
   pm2 delete admafia 2>/dev/null || true
   pm2 save 2>/dev/null || true
+  # Ensure database container is up first
+  docker compose up -d db
   docker compose build --no-cache frontend backend
   docker compose up -d
   # Ensure schema init and purge are executed inside container against postgres db
+  sleep 3
   docker compose exec -T backend node initDb.js 2>/dev/null || true
   docker compose exec -T backend node scripts/purge-test-users.js 2>/dev/null || true
 elif command -v pm2 > /dev/null 2>&1; then
+  echo "⚡ Restarting with PM2 on host..."
+  systemctl start postgresql 2>/dev/null || true
+  cd "$APP_DIR/backend"
+  node initDb.js || true
+  node scripts/purge-test-users.js || true
   pm2 delete admafia 2>/dev/null || true
   pm2 start server.js --name "admafia"
   pm2 save
