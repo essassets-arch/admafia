@@ -1141,6 +1141,22 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(201).json({ ok: true, customer });
   } catch (err) {
     console.error('[POST /api/auth/register]', err);
+    if (err.code === '23505') {
+      const constraint = String(err.constraint || '');
+      if (constraint === 'uq_customers_username') {
+        return res.status(409).json({ ok: false, error: 'That username is already in use. Please choose another username or sign in to the existing account.' });
+      }
+      if (constraint === 'customers_phone_key' || constraint === 'uq_customers_phone') {
+        return res.status(409).json({ ok: false, error: 'An account with this phone number already exists. Please sign in instead.' });
+      }
+      return res.status(409).json({ ok: false, error: 'An account with these details already exists. Please sign in or use different details.' });
+    }
+    if (err.code === '42703' && /wallets.*currency|currency.*wallets/i.test(err.message || '')) {
+      return res.status(503).json({
+        ok: false,
+        error: 'Registration is temporarily unavailable because the database schema is out of date. Apply the wallet currency migration and restart the backend.',
+      });
+    }
     res.status(500).json({ ok: false, error: err.message });
   }
 });
