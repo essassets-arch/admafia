@@ -9,8 +9,11 @@ dist-ssr/
 !frontend/dist/**
 frontend/dist/server/
 
-# Local PostgreSQL Data & Environment Secrets
+# Database Snapshots, Migration Reports & Environment Secrets
+backups/
 backend/pgdata/
+backend/scripts/migration_checkpoint.json
+backend/scripts/migration_reconciliation_report.json
 .env
 frontend/.env
 backend/.env

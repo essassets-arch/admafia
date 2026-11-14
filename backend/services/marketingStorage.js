@@ -2,7 +2,6 @@ import { isMongoConnected } from '../mongo.js';
 import { MarketingPost } from '../models/MarketingPost.js';
 import { MarketingIdea } from '../models/MarketingIdea.js';
 import { MarketingAuditEvent, SuperAdminAuditLog } from '../models/TelemetryAudit.js';
-import { query } from '../db.js';
 
 /**
  * Marketing Storage Service (Dual-Store & Document Engine)
@@ -26,6 +25,30 @@ export async function syncPostToMongo(post) {
       createdAt: post.created_at ? new Date(post.created_at) : new Date(),
       updatedAt: post.updated_at ? new Date(post.updated_at) : new Date(),
     };
+
+    const optional = {
+      ideaId: post.idea_id,
+      platform: post.platform || post.target_platform,
+      hashtags: post.hashtags,
+      callToAction: post.call_to_action,
+      mediaUrl: post.media_url,
+      mediaType: post.media_type,
+      language: post.language,
+      campaignAssociation: post.campaign_association,
+      intendedPublishAt: post.intended_publish_at ? new Date(post.intended_publish_at) : undefined,
+      submittedBy: post.submitted_by,
+      submittedAt: post.submitted_at ? new Date(post.submitted_at) : undefined,
+      creativeFormat: post.creative_format,
+      designerNotes: post.designer_notes,
+      designerName: post.designer_name,
+      creativeInstructions: post.creative_instructions,
+      priority: post.priority,
+      deletedBy: post.deleted_by,
+      createdBy: post.created_by,
+    };
+    for (const [key, value] of Object.entries(optional)) {
+      if (value !== undefined && value !== null) doc[key] = value;
+    }
 
     return await MarketingPost.findByIdAndUpdate(
       post.id,
@@ -52,7 +75,15 @@ export async function syncRevisionToMongo(postId, rev) {
       rejectionReason: rev.rejection_reason || null,
       uploadedBy: rev.uploaded_by || rev.designer_name || 'designer',
       uploadedAt: rev.created_at ? new Date(rev.created_at) : new Date(),
+      mediaType: rev.media_type || 'image',
+      creativeFormat: rev.creative_format || undefined,
+      designerNotes: rev.designer_notes || undefined,
+      designerName: rev.designer_name || undefined,
+      revisionId: rev.revision_id || undefined,
     };
+    for (const key of Object.keys(revObj)) {
+      if (revObj[key] === undefined) delete revObj[key];
+    }
 
     // Upsert or push to revisions array
     const post = await MarketingPost.findById(postId);
@@ -60,7 +91,16 @@ export async function syncRevisionToMongo(postId, rev) {
 
     const existingIdx = post.revisions.findIndex(r => r.revisionNumber === revObj.revisionNumber);
     if (existingIdx >= 0) {
-      post.revisions[existingIdx] = revObj;
+      // Merge: never discard richer data (designer notes, review outcome...) already stored
+      const existing = typeof post.revisions[existingIdx].toObject === 'function'
+        ? post.revisions[existingIdx].toObject()
+        : post.revisions[existingIdx];
+      const merged = { ...existing, ...revObj };
+      if (existing.status && existing.status !== 'Pending Verification') {
+        merged.status = existing.status;
+        merged.rejectionReason = existing.rejectionReason;
+      }
+      post.revisions[existingIdx] = merged;
     } else {
       post.revisions.push(revObj);
     }
@@ -158,123 +198,25 @@ export async function recordSuperAdminAuditLog(log) {
 }
 
 /**
- * Migration & Historical Reconciliation ETL
- * Reconciles marketing posts, revisions, reviews, and audit events from PostgreSQL into MongoDB.
+ * Historical reconciliation ETL (legacy).
+ * MongoDB is now the only datastore: posts, revisions, reviews and audit events are written to
+ * MongoDB directly, so there is no PostgreSQL source left to reconcile from. Kept as a harmless
+ * no-op so existing callers (server.js startup) keep working. One-off historical imports are
+ * handled by scripts/migrate-pg-to-mongo.js.
  */
 export async function migrateHistoricalMarketingData() {
   if (!isMongoConnected()) {
     return { ok: false, message: 'MongoDB not connected' };
   }
 
-  console.log('[ETL] Starting PostgreSQL to MongoDB Marketing Data Sync...');
-
-  try {
-    // 1. Fetch posts
-    const postsRes = await query('SELECT * FROM marketing_posts ORDER BY created_at ASC');
-    let postsSynced = 0;
-    let revisionsSynced = 0;
-    let reviewsSynced = 0;
-
-    for (const post of postsRes.rows) {
-      // Fetch revisions for this post
-      const revRes = await query(
-        'SELECT * FROM marketing_post_revisions WHERE post_id = $1 ORDER BY revision_number ASC',
-        [post.id]
-      );
-      // Fetch reviews for this post
-      const reviewRes = await query(
-        'SELECT * FROM marketing_post_reviews WHERE post_id = $1 ORDER BY created_at ASC',
-        [post.id]
-      );
-
-      const revisions = revRes.rows.map(r => ({
-        revisionNumber: Number(r.revision_number || 1),
-        artworkUrl: r.media_url || '',
-        fileSize: Number(r.file_size || 0),
-        mimeType: r.media_type || 'image/png',
-        dimensions: { width: r.width || null, height: r.height || null },
-        status: r.status || 'Pending Verification',
-        rejectionReason: r.rejection_reason || null,
-        uploadedBy: r.designer_name || 'designer',
-        uploadedAt: r.created_at ? new Date(r.created_at) : new Date(),
-      }));
-
-      const reviews = reviewRes.rows.map(rv => ({
-        revisionNumber: Number(rv.revision_number || 1),
-        action: rv.decision || rv.action || 'Approved',
-        reviewerId: rv.reviewer_name || rv.reviewer_id || 'auditor',
-        notes: rv.approval_remarks || rv.rejection_reason || rv.notes || '',
-        reviewedAt: rv.created_at ? new Date(rv.created_at) : new Date(),
-      }));
-
-      await MarketingPost.findByIdAndUpdate(
-        post.id,
-        {
-          $set: {
-            _id: post.id,
-            customerId: post.customer_id,
-            title: post.title || 'Untitled Post',
-            caption: post.caption || '',
-            targetPlatform: post.platform || 'All',
-            category: post.category || 'General',
-            status: post.status || 'Pending Verification',
-            currentRevisionNumber: Number(post.revision_number || 1),
-            revisions,
-            reviews,
-            isDeleted: Boolean(post.is_deleted),
-            createdAt: post.created_at ? new Date(post.created_at) : new Date(),
-            updatedAt: post.updated_at ? new Date(post.updated_at) : new Date(),
-          }
-        },
-        { upsert: true }
-      );
-
-      postsSynced++;
-      revisionsSynced += revisions.length;
-      reviewsSynced += reviews.length;
+  return {
+    ok: true,
+    skipped: true,
+    synced: {
+      posts: 0,
+      revisions: 0,
+      reviews: 0,
+      auditEvents: 0,
     }
-
-    console.log(`[ETL] Synchronized ${postsSynced} posts, ${revisionsSynced} revisions, ${reviewsSynced} reviews to MongoDB.`);
-
-    // 2. Fetch and sync audit events
-    const auditRes = await query('SELECT * FROM marketing_audit_events ORDER BY created_at ASC');
-    let auditSynced = 0;
-    for (const a of auditRes.rows) {
-      let parsedDetails = {};
-      try {
-        parsedDetails = typeof a.details === 'string' ? JSON.parse(a.details) : (a.details || {});
-      } catch (e) {}
-
-      await MarketingAuditEvent.findByIdAndUpdate(
-        a.id,
-        {
-          $set: {
-            _id: a.id,
-            customerId: a.customer_id,
-            eventType: a.action || 'marketing_event',
-            postId: a.entity_id || null,
-            payload: parsedDetails,
-            timestamp: a.created_at ? new Date(a.created_at) : new Date(),
-          }
-        },
-        { upsert: true }
-      );
-      auditSynced++;
-    }
-
-    console.log(`[ETL] Synchronized ${auditSynced} marketing audit events to MongoDB.`);
-
-    return {
-      ok: true,
-      synced: {
-        posts: postsSynced,
-        revisions: revisionsSynced,
-        reviews: reviewsSynced,
-        auditEvents: auditSynced,
-      }
-    };
-  } catch (err) {
-    console.error('[ETL Error]:', err);
-    return { ok: false, error: err.message };
-  }
+  };
 }

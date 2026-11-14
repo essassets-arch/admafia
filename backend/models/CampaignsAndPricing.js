@@ -11,9 +11,9 @@ const MarketingCampaignSchema = new mongoose.Schema({
   targetAudience: { type: String, default: '' },
   dailyBudget: { type: Number, required: true, default: 300 },
   totalSpend: { type: Number, default: 0 },
+  // status: free-form (Draft | Running | Stopped | ...) -- SQL had no CHECK constraint, 'Running' is the live state
   status: {
     type: String,
-    enum: ['Draft', 'Active', 'Paused', 'Stopped', 'Completed'],
     default: 'Active',
     index: true
   },
@@ -21,7 +21,18 @@ const MarketingCampaignSchema = new mongoose.Schema({
   startDate: { type: Date, default: Date.now },
   endDate: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  updatedAt: { type: Date, default: Date.now },
+  // --- fields used by routes/marketing.js (additive) ---
+  totalBudget: { type: Number, default: 0 },
+  scheduleSettings: { type: mongoose.Schema.Types.Mixed, default: {} },
+  externalPlatformStatus: { type: String, default: 'Not Connected' },
+  externalCampaignId: { type: String, default: null },
+  marketingCode: { type: String, default: null },
+  currency: { type: String, default: 'INR' },
+  createdBy: { type: String, default: 'Marketing Manager' },
+  lastAction: { type: String, default: 'Created' },
+  lastActor: { type: String, default: 'Marketing Manager' },
+  lastActionAt: { type: Date, default: Date.now }
 }, {
   collection: 'marketing_campaigns',
   timestamps: true
@@ -49,7 +60,8 @@ const CountryPricingSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true, index: true },
   isDefault: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  updatedAt: { type: Date, default: Date.now },
+  effectiveDate: { type: Date, default: Date.now }
 }, {
   collection: 'country_pricing',
   timestamps: true
@@ -91,7 +103,8 @@ const OutboxEventSchema = new mongoose.Schema({
   retryCount: { type: Number, default: 0 },
   lastError: { type: String, default: null },
   createdAt: { type: Date, default: Date.now, index: true },
-  processedAt: { type: Date, default: null }
+  processedAt: { type: Date, default: null },
+  claimedAt: { type: Date, default: null }
 }, {
   collection: 'outbox_events',
   timestamps: { createdAt: 'createdAt', updatedAt: false }

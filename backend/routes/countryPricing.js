@@ -1,5 +1,12 @@
 import express from 'express';
-import { query, withTransaction } from '../db.js';
+import { Customer, Wallet, CountryPricing, CountryPricingAuditLog } from '../models/index.js';
+import { withMongoTransaction } from '../repositories/tx.js';
+import {
+  countryPricingToRow,
+  countryPricingAuditToRow,
+  sortPricingRows,
+  findCountryPricingByIdOrCode,
+} from '../repositories/countryPricingRepo.js';
 import {
   resolveVisitorCountry,
   getActiveCountryPricingList,
@@ -119,36 +126,42 @@ export const superadminCountryPricingRouter = express.Router();
  */
 superadminCountryPricingRouter.get('/', async (req, res) => {
   try {
-    const countriesRes = await query(
-      `SELECT
-        cp.*,
-        COALESCE(stats.customer_count, 0) AS registered_customers,
-        COALESCE(stats.active_campaigns, 0) AS active_campaigns,
-        COALESCE(stats.total_paid, 0) AS total_revenue
-      FROM country_pricing cp
-      LEFT JOIN (
-        SELECT
-          c.country_code,
-          COUNT(c.id) AS customer_count,
-          SUM(CASE WHEN w.ad_campaign_active = TRUE THEN 1 ELSE 0 END) AS active_campaigns,
-          SUM(COALESCE(w.total_lifetime_paid, 0)) AS total_paid
-        FROM customers c
-        LEFT JOIN wallets w ON w.customer_id = c.id
-        GROUP BY c.country_code
-      ) stats ON stats.country_code = cp.country_code
-      ORDER BY cp.is_default DESC, cp.country_name ASC`
-    );
+    const [pricingDocs, statRows] = await Promise.all([
+      CountryPricing.find({}).lean(),
+      Customer.aggregate([
+        {
+          $lookup: {
+            from: Wallet.collection.name,
+            localField: '_id',
+            foreignField: 'customerId',
+            as: 'w',
+          },
+        },
+        { $addFields: { w: { $first: '$w' } } },
+        {
+          $group: {
+            _id: '$countryCode',
+            customer_count: { $sum: 1 },
+            active_campaigns: { $sum: { $cond: [{ $eq: ['$w.adCampaignActive', true] }, 1, 0] } },
+            total_paid: { $sum: { $ifNull: ['$w.totalLifetimePaid', 0] } },
+          },
+        },
+      ]),
+    ]);
 
-    const countries = countriesRes.rows.map((r) => ({
-      ...r,
-      daily_min_budget: Number(r.daily_min_budget),
-      monthly_budget: Number(r.monthly_budget),
-      min_wallet_topup: Number(r.min_wallet_topup),
-      tax_rate: Number(r.tax_rate),
-      registered_customers: Number(r.registered_customers),
-      active_campaigns: Number(r.active_campaigns),
-      total_revenue: Number(r.total_revenue),
-    }));
+    const statsByCode = new Map(statRows.map((s) => [s._id, s]));
+
+    const countries = sortPricingRows(
+      pricingDocs.map((d) => {
+        const stats = statsByCode.get(d.countryCode) || {};
+        return {
+          ...countryPricingToRow(d),
+          registered_customers: Number(stats.customer_count || 0),
+          active_campaigns: Number(stats.active_campaigns || 0),
+          total_revenue: Number(stats.total_paid || 0),
+        };
+      })
+    );
 
     return res.json({
       ok: true,
@@ -206,80 +219,64 @@ superadminCountryPricingRouter.post('/', async (req, res) => {
     const cleanDaily = Math.max(1, Number(daily_min_budget) || 10);
     const cleanMonthly = cleanDaily * 30;
     const cleanTopup = Math.max(1, Number(min_wallet_topup) || cleanDaily);
-    const newId = `cp_${cleanCode.toLowerCase()}`;
+
+    const fields = {
+      countryName: country_name.trim(),
+      currencyCode: currency_code.trim().toUpperCase(),
+      currencySymbol: currency_symbol.trim(),
+      currencyPosition: currency_position === 'after' ? 'after' : 'before',
+      decimalPrecision: Number(decimal_precision) || 2,
+      dailyMinBudget: cleanDaily,
+      monthlyBudget: cleanMonthly,
+      minWalletTopup: cleanTopup,
+      taxName: tax_name.trim(),
+      taxRate: Number(tax_rate) || 0,
+      paymentGateway: payment_gateway.trim(),
+      phoneCode: phone_code.trim(),
+      flagEmoji: flag_emoji.trim(),
+      isActive: Boolean(is_active),
+      isDefault: Boolean(is_default),
+    };
 
     // Insert country pricing & record audit log atomically
-    await withTransaction(async (client) => {
+    await withMongoTransaction(async (session) => {
       // If setting this as default, unset other defaults
       if (is_default) {
-        await client.query(`UPDATE country_pricing SET is_default = FALSE WHERE is_default = TRUE`);
+        await CountryPricing.updateMany({ isDefault: true }, { $set: { isDefault: false } }, { session });
       }
 
-      const insertRes = await client.query(
-        `INSERT INTO country_pricing (
-          id, country_code, country_name, currency_code, currency_symbol,
-          currency_position, decimal_precision, daily_min_budget, monthly_budget,
-          min_wallet_topup, tax_name, tax_rate, payment_gateway, phone_code,
-          flag_emoji, is_active, is_default, effective_date, updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_DATE, NOW()
-        )
-        ON CONFLICT (country_code) DO UPDATE SET
-          country_name = EXCLUDED.country_name,
-          currency_code = EXCLUDED.currency_code,
-          currency_symbol = EXCLUDED.currency_symbol,
-          currency_position = EXCLUDED.currency_position,
-          decimal_precision = EXCLUDED.decimal_precision,
-          daily_min_budget = EXCLUDED.daily_min_budget,
-          monthly_budget = EXCLUDED.monthly_budget,
-          min_wallet_topup = EXCLUDED.min_wallet_topup,
-          tax_name = EXCLUDED.tax_name,
-          tax_rate = EXCLUDED.tax_rate,
-          payment_gateway = EXCLUDED.payment_gateway,
-          phone_code = EXCLUDED.phone_code,
-          flag_emoji = EXCLUDED.flag_emoji,
-          is_active = EXCLUDED.is_active,
-          is_default = EXCLUDED.is_default,
-          updated_at = NOW()
-        RETURNING *`,
-        [
-          newId,
-          cleanCode,
-          country_name.trim(),
-          currency_code.trim().toUpperCase(),
-          currency_symbol.trim(),
-          currency_position === 'after' ? 'after' : 'before',
-          Number(decimal_precision) || 2,
-          cleanDaily,
-          cleanMonthly,
-          cleanTopup,
-          tax_name.trim(),
-          Number(tax_rate) || 0,
-          payment_gateway.trim(),
-          phone_code.trim(),
-          flag_emoji.trim(),
-          Boolean(is_active),
-          Boolean(is_default),
-        ]
+      const now = new Date();
+      const upsert = () => CountryPricing.findOneAndUpdate(
+        { countryCode: cleanCode },
+        {
+          $set: { ...fields, updatedAt: now },
+          $setOnInsert: { _id: cleanCode, effectiveDate: now, createdAt: now },
+        },
+        { upsert: true, new: true, session, lean: true }
       );
 
-      const created = insertRes.rows[0];
+      let createdDoc;
+      try {
+        createdDoc = await upsert();
+      } catch (err) {
+        // Concurrent upsert race on the unique countryCode index -> the document exists now, retry as update
+        if (err?.code !== 11000) throw err;
+        createdDoc = await upsert();
+      }
+      const created = JSON.parse(JSON.stringify(countryPricingToRow(createdDoc)));
 
       // Audit Log
-      await client.query(
-        `INSERT INTO country_pricing_audit_logs (
-          id, country_code, country_name, old_pricing, new_pricing,
-          changed_by, change_reason, effective_date
-        ) VALUES ($1, $2, $3, NULL, $4, $5, $6, CURRENT_DATE)`,
-        [
-          `audit_${Date.now()}_${cleanCode}`,
-          cleanCode,
-          country_name.trim(),
-          JSON.stringify(created),
-          admin_name,
-          reason,
-        ]
-      );
+      await CountryPricingAuditLog.create([{
+        _id: `audit_${Date.now()}_${cleanCode}`,
+        countryCode: cleanCode,
+        countryName: country_name.trim(),
+        oldPricing: null,
+        newPricing: created,
+        changedBy: admin_name,
+        changeReason: reason,
+        effectiveDate: now,
+        createdAt: now,
+      }], { session });
     });
 
     invalidateCountryPricingCache();
@@ -320,16 +317,13 @@ superadminCountryPricingRouter.put('/:idOrCode', async (req, res) => {
       reason = 'Pricing rates updated',
     } = req.body || {};
 
-    const existingRes = await query(
-      `SELECT * FROM country_pricing WHERE id = $1 OR UPPER(country_code) = UPPER($1) LIMIT 1`,
-      [idOrCode]
-    );
+    const existingDoc = await findCountryPricingByIdOrCode(idOrCode);
 
-    if (existingRes.rows.length === 0) {
+    if (!existingDoc) {
       return res.status(404).json({ ok: false, error: 'Country pricing record not found' });
     }
 
-    const oldRecord = existingRes.rows[0];
+    const oldRecord = countryPricingToRow(existingDoc);
     if (!['IN', 'ZZ'].includes(String(oldRecord.country_code).toUpperCase())) {
       return res.status(409).json({ ok: false, error: 'Historical country pricing records are read-only.' });
     }
@@ -345,69 +339,54 @@ superadminCountryPricingRouter.put('/:idOrCode', async (req, res) => {
     const cleanMonthly = cleanDaily * 30;
     const cleanTopup = min_wallet_topup !== undefined ? Math.max(1, Number(min_wallet_topup)) : Number(oldRecord.min_wallet_topup);
 
-    await withTransaction(async (client) => {
+    // COALESCE semantics: only provided (non-null) values overwrite the stored value
+    const set = {
+      dailyMinBudget: cleanDaily,
+      monthlyBudget: cleanMonthly,
+      minWalletTopup: cleanTopup,
+      updatedAt: new Date(),
+    };
+    const coalesce = (key, value) => { if (value !== null && value !== undefined) set[key] = value; };
+    coalesce('countryName', country_name ? country_name.trim() : null);
+    coalesce('currencyCode', currency_code ? currency_code.trim().toUpperCase() : null);
+    coalesce('currencySymbol', currency_symbol ? currency_symbol.trim() : null);
+    coalesce('currencyPosition', currency_position);
+    coalesce('decimalPrecision', decimal_precision !== undefined ? Number(decimal_precision) : null);
+    coalesce('taxName', tax_name ? tax_name.trim() : null);
+    coalesce('taxRate', tax_rate !== undefined ? Number(tax_rate) : null);
+    coalesce('paymentGateway', payment_gateway ? payment_gateway.trim() : null);
+    coalesce('phoneCode', phone_code ? phone_code.trim() : null);
+    coalesce('flagEmoji', flag_emoji ? flag_emoji.trim() : null);
+    coalesce('isActive', is_active !== undefined ? Boolean(is_active) : null);
+    coalesce('isDefault', is_default !== undefined ? Boolean(is_default) : null);
+
+    await withMongoTransaction(async (session) => {
       if (is_default) {
-        await client.query(`UPDATE country_pricing SET is_default = FALSE WHERE is_default = TRUE`);
+        await CountryPricing.updateMany({ isDefault: true }, { $set: { isDefault: false } }, { session });
       }
 
-      const updateRes = await client.query(
-        `UPDATE country_pricing SET
-          country_name = COALESCE($1, country_name),
-          currency_code = COALESCE($2, currency_code),
-          currency_symbol = COALESCE($3, currency_symbol),
-          currency_position = COALESCE($4, currency_position),
-          decimal_precision = COALESCE($5, decimal_precision),
-          daily_min_budget = $6,
-          monthly_budget = $7,
-          min_wallet_topup = $8,
-          tax_name = COALESCE($9, tax_name),
-          tax_rate = COALESCE($10, tax_rate),
-          payment_gateway = COALESCE($11, payment_gateway),
-          phone_code = COALESCE($12, phone_code),
-          flag_emoji = COALESCE($13, flag_emoji),
-          is_active = COALESCE($14, is_active),
-          is_default = COALESCE($15, is_default),
-          updated_at = NOW()
-        WHERE id = $16 OR UPPER(country_code) = UPPER($16)
-        RETURNING *`,
-        [
-          country_name ? country_name.trim() : null,
-          currency_code ? currency_code.trim().toUpperCase() : null,
-          currency_symbol ? currency_symbol.trim() : null,
-          currency_position,
-          decimal_precision !== undefined ? Number(decimal_precision) : null,
-          cleanDaily,
-          cleanMonthly,
-          cleanTopup,
-          tax_name ? tax_name.trim() : null,
-          tax_rate !== undefined ? Number(tax_rate) : null,
-          payment_gateway ? payment_gateway.trim() : null,
-          phone_code ? phone_code.trim() : null,
-          flag_emoji ? flag_emoji.trim() : null,
-          is_active !== undefined ? Boolean(is_active) : null,
-          is_default !== undefined ? Boolean(is_default) : null,
-          idOrCode,
-        ]
+      const updatedDoc = await CountryPricing.findOneAndUpdate(
+        { _id: existingDoc._id },
+        { $set: set },
+        { new: true, session, lean: true }
       );
-
-      const updated = updateRes.rows[0];
+      if (!updatedDoc) {
+        throw new Error('Country pricing record not found');
+      }
+      const updated = JSON.parse(JSON.stringify(countryPricingToRow(updatedDoc)));
 
       // Audit Log
-      await client.query(
-        `INSERT INTO country_pricing_audit_logs (
-          id, country_code, country_name, old_pricing, new_pricing,
-          changed_by, change_reason, effective_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE)`,
-        [
-          `audit_${Date.now()}_${updated.country_code}`,
-          updated.country_code,
-          updated.country_name,
-          JSON.stringify(oldRecord),
-          JSON.stringify(updated),
-          admin_name,
-          reason,
-        ]
-      );
+      await CountryPricingAuditLog.create([{
+        _id: `audit_${Date.now()}_${updated.country_code}`,
+        countryCode: updated.country_code,
+        countryName: updated.country_name,
+        oldPricing: JSON.parse(JSON.stringify(oldRecord)),
+        newPricing: updated,
+        changedBy: admin_name,
+        changeReason: reason,
+        effectiveDate: new Date(),
+        createdAt: new Date(),
+      }], { session });
     });
 
     invalidateCountryPricingCache();
@@ -428,12 +407,10 @@ superadminCountryPricingRouter.put('/:idOrCode', async (req, res) => {
  */
 superadminCountryPricingRouter.get('/audit-logs', async (req, res) => {
   try {
-    const logsRes = await query(
-      `SELECT * FROM country_pricing_audit_logs ORDER BY created_at DESC LIMIT 100`
-    );
+    const logDocs = await CountryPricingAuditLog.find({}).sort({ createdAt: -1 }).limit(100).lean();
     return res.json({
       ok: true,
-      logs: logsRes.rows || [],
+      logs: logDocs.map(countryPricingAuditToRow),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/country-pricing/audit-logs] Error:', err);
@@ -447,27 +424,40 @@ superadminCountryPricingRouter.get('/audit-logs', async (req, res) => {
  */
 superadminCountryPricingRouter.get('/analytics', async (req, res) => {
   try {
-    const statsRes = await query(
-      `SELECT
-        COALESCE(c.country_code, 'IN') AS country_code,
-        COALESCE(c.country, 'India') AS country_name,
-        COALESCE(w.currency, c.currency, 'INR') AS currency,
-        COUNT(c.id) AS total_customers,
-        SUM(CASE WHEN c.status = 'active' THEN 1 ELSE 0 END) AS active_customers,
-        SUM(CASE WHEN w.ad_campaign_active = TRUE THEN 1 ELSE 0 END) AS active_campaigns,
-        SUM(COALESCE(w.available_balance, 0)) AS total_wallet_balance,
-        SUM(COALESCE(w.total_ad_spent, 0)) AS total_ad_spent,
-        SUM(COALESCE(w.total_lifetime_paid, 0)) AS total_revenue
-      FROM customers c
-      LEFT JOIN wallets w ON w.customer_id = c.id
-      GROUP BY c.country_code, c.country, COALESCE(w.currency, c.currency, 'INR')
-      ORDER BY total_customers DESC`
-    );
+    const statRows = await Customer.aggregate([
+      {
+        $lookup: {
+          from: Wallet.collection.name,
+          localField: '_id',
+          foreignField: 'customerId',
+          as: 'w',
+        },
+      },
+      { $addFields: { w: { $first: '$w' } } },
+      {
+        $group: {
+          _id: {
+            country_code: '$countryCode',
+            country: '$country',
+            currency: { $ifNull: ['$w.currency', '$currency', 'INR'] },
+          },
+          total_customers: { $sum: 1 },
+          active_customers: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
+          active_campaigns: { $sum: { $cond: [{ $eq: ['$w.adCampaignActive', true] }, 1, 0] } },
+          total_wallet_balance: { $sum: { $ifNull: ['$w.availableBalance', 0] } },
+          total_ad_spent: { $sum: { $ifNull: ['$w.totalAdSpent', 0] } },
+          total_revenue: { $sum: { $ifNull: ['$w.totalLifetimePaid', 0] } },
+        },
+      },
+      { $sort: { total_customers: -1 } },
+    ]);
 
     return res.json({
       ok: true,
-      analytics: statsRes.rows.map((r) => ({
-        ...r,
+      analytics: statRows.map((r) => ({
+        country_code: r._id?.country_code ?? 'IN',
+        country_name: r._id?.country ?? 'India',
+        currency: r._id?.currency ?? 'INR',
         total_customers: Number(r.total_customers),
         active_customers: Number(r.active_customers),
         active_campaigns: Number(r.active_campaigns),
@@ -481,4 +471,3 @@ superadminCountryPricingRouter.get('/analytics', async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Failed to fetch analytics' });
   }
 });
-

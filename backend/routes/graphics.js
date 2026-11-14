@@ -1,24 +1,44 @@
 import express from 'express';
-import { query, withTransaction } from '../db.js';
-import {
-  syncPostToMongo,
-  syncRevisionToMongo,
-  syncReviewToMongo,
-  recordTelemetryEvent
-} from '../services/marketingStorage.js';
+import { MarketingPost, MarketingAuditEvent } from '../models/index.js';
+import { withMongoTransaction, genId } from '../repositories/tx.js';
 import { recordOutboxEvent } from '../services/outboxWorker.js';
+import {
+  PENDING_UPLOAD_STATUSES,
+  REJECTED_STATUSES,
+  containsRegex,
+  mediaStages,
+  customerLookupStages,
+  platformMatch,
+  priorityMatch,
+  postEffectiveMediaUrl,
+  reviewRowsDesc,
+  revisionRowsDesc,
+  latestReviewRow,
+  loadIdeasById,
+  loadCampaignsByPostId,
+} from '../repositories/graphicsRepo.js';
 
 export const graphicsRouter = express.Router();
 
-// Helper: Audit Logger (PostgreSQL + Transactional Outbox)
+// Helper: Audit Logger (MongoDB + Transactional Outbox)
 async function logAuditEvent(customerId, entityType, entityId, action, actor, details = {}) {
   try {
     const id = `audit_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    await query(
-      `INSERT INTO marketing_audit_events (id, customer_id, entity_type, entity_id, action, actor, details)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, customerId || null, entityType, entityId, action, actor || 'Graphics Designer', JSON.stringify(details)]
-    );
+    await MarketingAuditEvent.create({
+      _id: id,
+      customerId: customerId || 'unknown',
+      eventType: `${entityType}_${action}`,
+      postId: entityId,
+      campaignId: null,
+      payload: {
+        ...details,
+        entityType,
+        entityId,
+        actionLabel: action,
+        actor: actor || 'Graphics Designer',
+      },
+      timestamp: new Date(),
+    });
     // Reliable Transactional Outbox record
     recordOutboxEvent(null, {
       aggregateType: 'marketing_audit_event',
@@ -38,23 +58,54 @@ async function logAuditEvent(customerId, entityType, entityId, action, actor, de
   }
 }
 
+function parsePaging(query, defaultLimit = 30) {
+  const { page = 1, limit = defaultLimit } = query;
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || defaultLimit));
+  const offset = (pageNum - 1) * limitNum;
+  return { pageNum, limitNum, offset };
+}
+
+function searchStage(search) {
+  const re = containsRegex(String(search).trim());
+  return {
+    $match: {
+      $or: [
+        { title: re },
+        { caption: re },
+        { '_cust.companyName': re },
+        { '_cust.contactPerson': re },
+        { '_cust.phone': re },
+        { _id: re },
+      ],
+    },
+  };
+}
+
 // -----------------------------------------------------------------------------
 // 1. GET /api/graphics/summary (Graphics Department KPI Ribbon)
 // -----------------------------------------------------------------------------
 graphicsRouter.get('/summary', async (req, res) => {
   try {
-    const countsRes = await query(`
-      SELECT
-        COUNT(*)::INT AS total_requests,
-        COUNT(*) FILTER (WHERE status IN ('Draft', 'Pending Graphics', 'In Progress') OR media_url IS NULL OR media_url = '')::INT AS pending_uploads,
-        COUNT(*) FILTER (WHERE status = 'Pending Verification')::INT AS pending_verification,
-        COUNT(*) FILTER (WHERE status = 'Approved')::INT AS approved_count,
-        COUNT(*) FILTER (WHERE status IN ('Rejected', 'Changes Requested'))::INT AS rejected_count
-      FROM marketing_posts
-      WHERE is_deleted = FALSE
-    `);
+    const [row = {}] = await MarketingPost.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
+      ...mediaStages(),
+      {
+        $group: {
+          _id: null,
+          total_requests: { $sum: 1 },
+          pending_uploads: {
+            $sum: {
+              $cond: [{ $or: [{ $in: ['$status', PENDING_UPLOAD_STATUSES] }, { $eq: ['$_mediaUrl', ''] }] }, 1, 0],
+            },
+          },
+          pending_verification: { $sum: { $cond: [{ $eq: ['$status', 'Pending Verification'] }, 1, 0] } },
+          approved_count: { $sum: { $cond: [{ $eq: ['$status', 'Approved'] }, 1, 0] } },
+          rejected_count: { $sum: { $cond: [{ $in: ['$status', REJECTED_STATUSES] }, 1, 0] } },
+        },
+      },
+    ]);
 
-    const row = countsRes.rows[0] || {};
     res.json({
       ok: true,
       summary: {
@@ -83,166 +134,127 @@ graphicsRouter.get('/requests', async (req, res) => {
       platform = 'all',
       customerId = '',
       priority = 'all',
-      page = 1,
-      limit = 30,
     } = req.query;
 
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
-    const offset = (pageNum - 1) * limitNum;
+    const { pageNum, limitNum, offset } = parsePaging(req.query);
 
-    const whereClauses = ['mp.is_deleted = FALSE'];
-    const params = [];
+    const pre = { isDeleted: { $ne: true } };
+    const andClauses = [];
+    const afterMedia = [];
 
     if (status && status !== 'all') {
       if (status === 'Needs Artwork') {
-        whereClauses.push(`(mp.status IN ('Draft', 'Pending Graphics', 'In Progress') OR mp.media_url IS NULL OR mp.media_url = '')`);
+        afterMedia.push({
+          $match: { $or: [{ status: { $in: PENDING_UPLOAD_STATUSES } }, { _mediaUrl: '' }] },
+        });
       } else {
-        params.push(status);
-        whereClauses.push(`mp.status = $${params.length}`);
+        pre.status = String(status);
       }
     }
 
     if (platform && platform !== 'all') {
-      params.push(platform);
-      whereClauses.push(`mp.platform = $${params.length}`);
+      andClauses.push(platformMatch(String(platform)));
     }
 
     if (priority && priority !== 'all') {
-      params.push(priority);
-      whereClauses.push(`mp.priority = $${params.length}`);
+      andClauses.push(priorityMatch(String(priority)));
     }
 
     if (customerId) {
-      params.push(customerId);
-      whereClauses.push(`mp.customer_id = $${params.length}`);
+      pre.customerId = String(customerId);
     }
+    if (andClauses.length) pre.$and = andClauses;
 
-    if (search && search.trim()) {
-      params.push(`%${search.trim()}%`);
-      const pIdx = params.length;
-      whereClauses.push(`(
-        mp.title ILIKE $${pIdx} OR
-        mp.caption ILIKE $${pIdx} OR
-        c.company_name ILIKE $${pIdx} OR
-        c.contact_person ILIKE $${pIdx} OR
-        c.phone ILIKE $${pIdx} OR
-        mp.id ILIKE $${pIdx}
-      )`);
-    }
+    const hasSearch = Boolean(search && String(search).trim());
 
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const filterStages = [
+      { $match: pre },
+      ...mediaStages(),
+      ...afterMedia,
+      ...(hasSearch ? [...customerLookupStages(), searchStage(search)] : []),
+    ];
 
-    const countRes = await query(`
-      SELECT COUNT(*)::INT AS total
-      FROM marketing_posts mp
-      LEFT JOIN customers c ON c.id = mp.customer_id
-      ${whereSql}
-    `, params);
-    const totalCount = Number(countRes.rows[0]?.total || 0);
+    const countRows = await MarketingPost.aggregate([...filterStages, { $count: 'total' }]);
+    const totalCount = Number(countRows[0]?.total || 0);
 
-    const dataSql = `
-      SELECT
-        mp.id,
-        mp.customer_id,
-        c.company_name,
-        c.contact_person,
-        c.phone,
-        c.city,
-        c.category AS customer_category,
-        mp.idea_id,
-        mi.title AS idea_title,
-        mi.concept AS idea_concept,
-        mi.target_audience AS idea_target_audience,
-        mp.title,
-        mp.platform,
-        mp.caption,
-        mp.hashtags,
-        mp.call_to_action,
-        mp.media_url,
-        mp.media_type,
-        mp.creative_format,
-        mp.designer_notes,
-        mp.designer_name,
-        mp.creative_instructions,
-        mp.priority,
-        mp.language,
-        mp.status,
-        mp.revision_number,
-        mp.submitted_by,
-        mp.submitted_at,
-        mp.created_by,
-        mp.created_at,
-        mp.updated_at,
-        (
-          SELECT json_build_object(
-            'reviewerName', r.reviewer_name,
-            'decision', r.decision,
-            'remarks', r.remarks,
-            'rejectionReason', r.rejection_reason,
-            'correctionInstructions', r.correction_instructions,
-            'createdAt', r.created_at
-          )
-          FROM marketing_post_reviews r
-          WHERE r.post_id = mp.id
-          ORDER BY r.created_at DESC
-          LIMIT 1
-        ) AS latest_review
-      FROM marketing_posts mp
-      LEFT JOIN customers c ON c.id = mp.customer_id
-      LEFT JOIN marketing_ideas mi ON mi.id = mp.idea_id
-      ${whereSql}
-      ORDER BY 
-        CASE 
-          WHEN mp.status IN ('Rejected', 'Changes Requested') THEN 1
-          WHEN mp.status IN ('Draft', 'Pending Graphics') THEN 2
-          WHEN mp.status = 'In Progress' THEN 3
-          WHEN mp.status = 'Pending Verification' THEN 4
-          ELSE 5
-        END,
-        mp.created_at DESC
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-    `;
+    const rows = await MarketingPost.aggregate([
+      ...filterStages,
+      ...(hasSearch ? [] : customerLookupStages()),
+      {
+        $addFields: {
+          _rank: {
+            $switch: {
+              branches: [
+                { case: { $in: ['$status', REJECTED_STATUSES] }, then: 1 },
+                { case: { $in: ['$status', ['Draft', 'Pending Graphics']] }, then: 2 },
+                { case: { $eq: ['$status', 'In Progress'] }, then: 3 },
+                { case: { $eq: ['$status', 'Pending Verification'] }, then: 4 },
+              ],
+              default: 5,
+            },
+          },
+        },
+      },
+      { $sort: { _rank: 1, createdAt: -1, _id: 1 } },
+      { $skip: offset },
+      { $limit: limitNum },
+      { $project: { revisions: 0 } },
+    ]).allowDiskUse(true);
 
-    const dataRes = await query(dataSql, [...params, limitNum, offset]);
+    const ideas = await loadIdeasById(rows.map((r) => r.ideaId));
 
     res.json({
       ok: true,
-      requests: dataRes.rows.map((r) => ({
-        id: r.id,
-        customerId: r.customer_id,
-        companyName: r.company_name || 'Direct Customer',
-        contactPerson: r.contact_person || '',
-        phone: r.phone || '',
-        city: r.city || '',
-        customerCategory: r.customer_category || 'General',
-        ideaId: r.idea_id,
-        ideaTitle: r.idea_title || '',
-        ideaConcept: r.idea_concept || '',
-        ideaTargetAudience: r.idea_target_audience || '',
-        title: r.title,
-        platform: r.platform,
-        caption: r.caption,
-        hashtags: r.hashtags || '',
-        callToAction: r.call_to_action || 'Enquire Now',
-        mediaUrl: r.media_url || '',
-        mediaType: r.media_type || 'image',
-        creativeFormat: r.creative_format || 'Instagram / Facebook Post',
-        designerNotes: r.designer_notes || '',
-        designerName: r.designer_name || 'Graphics Designer',
-        creativeInstructions: r.creative_instructions || '',
-        priority: r.priority || 'Normal',
-        language: r.language || 'English / Hinglish',
-        status: r.status,
-        revisionNumber: Number(r.revision_number || 1),
-        submittedBy: r.submitted_by,
-        submittedAt: r.submitted_at,
-        createdBy: r.created_by,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-        latestReview: r.latest_review || null,
-        isEligibleForUpload: ['Draft', 'Pending Graphics', 'In Progress', 'Rejected', 'Changes Requested'].includes(r.status) || !r.media_url,
-      })),
+      requests: rows.map((r) => {
+        const c = r._cust || {};
+        const idea = (r.ideaId && ideas.get(String(r.ideaId))) || null;
+        const latest = latestReviewRow(r);
+        const mediaUrl = r._mediaUrl || '';
+        return {
+          id: r._id,
+          customerId: r.customerId,
+          companyName: c.companyName || 'Direct Customer',
+          contactPerson: c.contactPerson || '',
+          phone: c.phone || '',
+          city: c.city || '',
+          customerCategory: c.category || 'General',
+          ideaId: r.ideaId ?? null,
+          ideaTitle: idea?.title || '',
+          ideaConcept: idea?.concept || '',
+          ideaTargetAudience: idea?.targetAudience || '',
+          title: r.title,
+          platform: r.platform ?? r.targetPlatform,
+          caption: r.caption,
+          hashtags: r.hashtags || '',
+          callToAction: r.callToAction || 'Enquire Now',
+          mediaUrl,
+          mediaType: r.mediaType || 'image',
+          creativeFormat: r.creativeFormat || 'Instagram / Facebook Post',
+          designerNotes: r.designerNotes || '',
+          designerName: r.designerName || 'Graphics Designer',
+          creativeInstructions: r.creativeInstructions || '',
+          priority: r.priority || 'Normal',
+          language: r.language || 'English / Hinglish',
+          status: r.status,
+          revisionNumber: Number(r.currentRevisionNumber || 1),
+          submittedBy: r.submittedBy ?? null,
+          submittedAt: r.submittedAt ?? null,
+          createdBy: r.createdBy ?? null,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+          latestReview: latest
+            ? {
+                reviewerName: latest.reviewer_name,
+                decision: latest.decision,
+                remarks: latest.remarks,
+                rejectionReason: latest.rejection_reason,
+                correctionInstructions: latest.correction_instructions,
+                createdAt: latest.created_at,
+              }
+            : null,
+          isEligibleForUpload: [...PENDING_UPLOAD_STATUSES, ...REJECTED_STATUSES].includes(r.status) || !mediaUrl,
+        };
+      }),
       pagination: {
         total: totalCount,
         page: pageNum,
@@ -263,74 +275,61 @@ graphicsRouter.get('/requests/:id', async (req, res) => {
   try {
     const postId = req.params.id;
 
-    const postRes = await query(`
-      SELECT
-        mp.*,
-        c.company_name,
-        c.contact_person,
-        c.phone,
-        c.email,
-        c.city,
-        c.category AS customer_category,
-        mi.title AS idea_title,
-        mi.concept AS idea_concept,
-        mi.target_audience AS idea_target_audience
-      FROM marketing_posts mp
-      LEFT JOIN customers c ON c.id = mp.customer_id
-      LEFT JOIN marketing_ideas mi ON mi.id = mp.idea_id
-      WHERE mp.id = $1 AND mp.is_deleted = FALSE
-    `, [postId]);
+    const [post] = await MarketingPost.aggregate([
+      { $match: { _id: String(postId), isDeleted: { $ne: true } } },
+      ...customerLookupStages(),
+    ]);
 
-    if (postRes.rowCount === 0) {
+    if (!post) {
       return res.status(404).json({ ok: false, error: 'Post request not found.' });
     }
 
-    const post = postRes.rows[0];
+    const c = post._cust || {};
+    const ideas = await loadIdeasById([post.ideaId]);
+    const idea = (post.ideaId && ideas.get(String(post.ideaId))) || null;
 
-    const [revRes, reviewRes] = await Promise.all([
-      query(`SELECT * FROM marketing_post_revisions WHERE post_id = $1 ORDER BY revision_number DESC`, [postId]),
-      query(`SELECT * FROM marketing_post_reviews WHERE post_id = $1 ORDER BY created_at DESC`, [postId]),
-    ]);
+    const revisions = revisionRowsDesc(post);
+    const reviews = reviewRowsDesc(post);
 
     res.json({
       ok: true,
-      revisions: revRes.rows,
-      reviews: reviewRes.rows,
+      revisions,
+      reviews,
       request: {
-        id: post.id,
-        customerId: post.customer_id,
-        companyName: post.company_name,
-        contactPerson: post.contact_person,
-        phone: post.phone,
-        email: post.email,
-        city: post.city,
-        customerCategory: post.customer_category,
-        ideaId: post.idea_id,
-        ideaTitle: post.idea_title,
-        ideaConcept: post.idea_concept,
-        ideaTargetAudience: post.idea_target_audience,
+        id: post._id,
+        customerId: post.customerId,
+        companyName: c.companyName,
+        contactPerson: c.contactPerson,
+        phone: c.phone,
+        email: c.email,
+        city: c.city,
+        customerCategory: c.category,
+        ideaId: post.ideaId ?? null,
+        ideaTitle: idea?.title,
+        ideaConcept: idea?.concept,
+        ideaTargetAudience: idea?.targetAudience,
         title: post.title,
-        platform: post.platform,
+        platform: post.platform ?? post.targetPlatform,
         caption: post.caption,
-        hashtags: post.hashtags,
-        callToAction: post.call_to_action,
-        mediaUrl: post.media_url,
-        mediaType: post.media_type,
-        creativeFormat: post.creative_format || 'Instagram / Facebook Post',
-        designerNotes: post.designer_notes || '',
-        designerName: post.designer_name || 'Graphics Designer',
-        creativeInstructions: post.creative_instructions || '',
+        hashtags: post.hashtags ?? '',
+        callToAction: post.callToAction ?? '',
+        mediaUrl: postEffectiveMediaUrl(post),
+        mediaType: post.mediaType || 'image',
+        creativeFormat: post.creativeFormat || 'Instagram / Facebook Post',
+        designerNotes: post.designerNotes || '',
+        designerName: post.designerName || 'Graphics Designer',
+        creativeInstructions: post.creativeInstructions || '',
         priority: post.priority || 'Normal',
-        language: post.language,
+        language: post.language ?? 'English / Hinglish',
         status: post.status,
-        revisionNumber: Number(post.revision_number || 1),
-        submittedBy: post.submitted_by,
-        submittedAt: post.submitted_at,
-        createdBy: post.created_by,
-        createdAt: post.created_at,
-        updatedAt: post.updated_at,
-        revisions: revRes.rows,
-        reviews: reviewRes.rows,
+        revisionNumber: Number(post.currentRevisionNumber || 1),
+        submittedBy: post.submittedBy ?? null,
+        submittedAt: post.submittedAt ?? null,
+        createdBy: post.createdBy ?? null,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        revisions,
+        reviews,
       },
     });
   } catch (err) {
@@ -361,64 +360,85 @@ graphicsRouter.post('/upload', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Artwork media URL is required.' });
     }
 
-    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE`, [postId]);
-    if (postRes.rowCount === 0) {
+    const post = await MarketingPost.findOne({ _id: String(postId), isDeleted: { $ne: true } }).lean();
+    if (!post) {
       return res.status(404).json({ ok: false, error: 'Selected post request not found.' });
     }
-    const post = postRes.rows[0];
 
     // Cannot upload directly to already approved post that already has verified artwork
-    if (post.status === 'Approved' && post.media_url) {
+    if (post.status === 'Approved' && postEffectiveMediaUrl(post)) {
       return res.status(400).json({
         ok: false,
         error: 'This post is already Approved for live campaigns. Use revision reupload if changes are needed.',
       });
     }
 
-    const currentRev = Number(post.revision_number || 1);
-    const revId = `rev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const currentRev = Number(post.currentRevisionNumber || 1);
+    const revId = genId('rev');
+    const cleanUrl = mediaUrl.trim();
 
-    await withTransaction(async (txQuery) => {
-      // 1. Create or update revision record
-      await txQuery(`
-        INSERT INTO marketing_post_revisions (
-          id, post_id, revision_number, media_url, media_type, creative_format,
-          designer_notes, uploaded_by, uploaded_at, review_status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), 'Pending Verification')
-      `, [revId, postId, currentRev, mediaUrl.trim(), mediaType, creativeFormat, designerNotes, designerName]);
+    await withMongoTransaction(async (session) => {
+      const now = new Date();
 
-      // 2. Update post record with artwork and transition to 'Pending Verification'
-      await txQuery(`
-        UPDATE marketing_posts SET
-          media_url = $1,
-          media_type = $2,
-          creative_format = $3,
-          designer_notes = $4,
-          designer_name = $5,
-          status = 'Pending Verification',
-          submitted_by = $5,
-          submitted_at = NOW(),
-          updated_at = NOW()
-        WHERE id = $6
-      `, [mediaUrl.trim(), mediaType, creativeFormat, designerNotes, designerName, postId]);
+      // 1 + 2. Create the revision record and update the post with artwork,
+      // transitioning it to 'Pending Verification' (single atomic document update)
+      const updated = await MarketingPost.updateOne(
+        { _id: String(postId), isDeleted: { $ne: true } },
+        {
+          $set: {
+            mediaUrl: cleanUrl,
+            mediaType,
+            creativeFormat,
+            designerNotes,
+            designerName,
+            status: 'Pending Verification',
+            submittedBy: designerName,
+            submittedAt: now,
+            updatedAt: now,
+          },
+          $push: {
+            revisions: {
+              revisionId: revId,
+              revisionNumber: currentRev,
+              artworkUrl: cleanUrl,
+              fileSize: 0,
+              mimeType: mediaType,
+              mediaType,
+              creativeFormat,
+              designerNotes,
+              designerName,
+              status: 'Pending Verification',
+              uploadedBy: designerName,
+              uploadedAt: now,
+            },
+          },
+        },
+        { session }
+      );
+      if (!updated.matchedCount) {
+        const err = new Error('Selected post request not found.');
+        err.statusCode = 404;
+        throw err;
+      }
 
       // 3. Atomically enqueue into transactional outbox
-      await recordOutboxEvent(txQuery, {
+      await recordOutboxEvent(session, {
         aggregateType: 'artwork_revision',
-        aggregateId: postId,
+        aggregateId: String(postId),
         eventType: 'ARTWORK_UPLOADED',
         payload: {
+          revision_id: revId,
           revision_number: currentRev,
-          media_url: mediaUrl.trim(),
+          media_url: cleanUrl,
           media_type: mediaType,
           designer_name: designerName,
           status: 'Pending Verification',
-          created_at: new Date()
+          created_at: now
         }
       });
     });
 
-    await logAuditEvent(post.customer_id, 'graphics_upload', postId, 'Uploaded Creative Artwork', designerName, {
+    await logAuditEvent(post.customerId, 'graphics_upload', postId, 'Uploaded Creative Artwork', designerName, {
       postId,
       revisionNumber: currentRev,
       mediaUrl,
@@ -426,24 +446,18 @@ graphicsRouter.post('/upload', async (req, res) => {
       designerNotes,
     });
 
-    syncRevisionToMongo(postId, {
-      revision_number: currentRev,
-      media_url: mediaUrl.trim(),
-      media_type: mediaType,
-      designer_name: designerName,
-      status: 'Pending Verification',
-      created_at: new Date()
-    }).catch(() => {});
-
     res.json({
       ok: true,
       message: 'Artwork submitted successfully to Marketing for verification!',
       postId,
       revisionNumber: currentRev,
       status: 'Pending Verification',
-      mediaUrl: mediaUrl.trim(),
+      mediaUrl: cleanUrl,
     });
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ ok: false, error: err.message });
+    }
     console.error('[POST /api/graphics/upload]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -470,68 +484,94 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
 
     let resultPayload;
 
-    await withTransaction(async (txQuery) => {
-      // 1. Atomic row-level lock on the post record in PostgreSQL
-      const postRes = await txQuery(
-        `SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE FOR UPDATE`,
-        [postId]
-      );
-      if (postRes.rowCount === 0) {
+    await withMongoTransaction(async (session) => {
+      // 1. Read the post inside the transaction (snapshot isolation + the conditional
+      // revision-number write below replace the PostgreSQL row-level FOR UPDATE lock)
+      const post = await MarketingPost.findOne({ _id: String(postId), isDeleted: { $ne: true } })
+        .session(session)
+        .lean();
+      if (!post) {
         const err = new Error('Post request not found or archived.');
         err.statusCode = 404;
         throw err;
       }
-      const post = postRes.rows[0];
 
-      const nextRev = Number(post.revision_number || 1) + 1;
-      const revId = `rev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const currentRev = Number(post.currentRevisionNumber || 1);
+      const nextRev = currentRev + 1;
+      const revId = genId('rev');
+      const now = new Date();
+      const cleanUrl = mediaUrl.trim();
       const fullNotes = revisionSummary
         ? `${designerNotes ? designerNotes + ' | ' : ''}Correction: ${revisionSummary}`
         : designerNotes;
 
-      // 2. Insert new immutable revision record
-      await txQuery(`
-        INSERT INTO marketing_post_revisions (
-          id, post_id, revision_number, media_url, media_type, creative_format,
-          designer_notes, uploaded_by, uploaded_at, review_status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), 'Pending Verification')
-      `, [revId, postId, nextRev, mediaUrl.trim(), mediaType, creativeFormat, fullNotes, designerName]);
-
-      // 3. Update post record to next revision number and transition back to 'Pending Verification'
-      await txQuery(`
-        UPDATE marketing_posts SET
-          media_url = $1,
-          media_type = $2,
-          creative_format = $3,
-          designer_notes = $4,
-          designer_name = $5,
-          revision_number = $6,
-          status = 'Pending Verification',
-          submitted_by = $5,
-          submitted_at = NOW(),
-          updated_at = NOW()
-        WHERE id = $7
-      `, [mediaUrl.trim(), mediaType, creativeFormat, fullNotes, designerName, nextRev, postId]);
+      // 2 + 3. Insert the new immutable revision and move the post to the next revision number,
+      // back to 'Pending Verification'. Conditional on the revision number we read, so two
+      // concurrent reuploads can never both claim the same revision number.
+      const updated = await MarketingPost.updateOne(
+        {
+          _id: String(postId),
+          isDeleted: { $ne: true },
+          currentRevisionNumber: post.currentRevisionNumber ?? 1,
+        },
+        {
+          $set: {
+            mediaUrl: cleanUrl,
+            mediaType,
+            creativeFormat,
+            designerNotes: fullNotes,
+            designerName,
+            currentRevisionNumber: nextRev,
+            status: 'Pending Verification',
+            submittedBy: designerName,
+            submittedAt: now,
+            updatedAt: now,
+          },
+          $push: {
+            revisions: {
+              revisionId: revId,
+              revisionNumber: nextRev,
+              artworkUrl: cleanUrl,
+              fileSize: 0,
+              mimeType: mediaType,
+              mediaType,
+              creativeFormat,
+              designerNotes: fullNotes,
+              designerName,
+              status: 'Pending Verification',
+              uploadedBy: designerName,
+              uploadedAt: now,
+            },
+          },
+        },
+        { session }
+      );
+      if (!updated.matchedCount) {
+        const err = new Error('Post was modified by another request. Please retry.');
+        err.statusCode = 409;
+        throw err;
+      }
 
       // 4. Atomically enqueue into transactional outbox
-      await recordOutboxEvent(txQuery, {
+      await recordOutboxEvent(session, {
         aggregateType: 'artwork_revision',
-        aggregateId: postId,
+        aggregateId: String(postId),
         eventType: 'ARTWORK_UPLOADED',
         payload: {
+          revision_id: revId,
           revision_number: nextRev,
-          media_url: mediaUrl.trim(),
+          media_url: cleanUrl,
           media_type: mediaType,
           designer_name: designerName,
           status: 'Pending Verification',
-          created_at: new Date()
+          created_at: now
         }
       });
 
       resultPayload = {
-        customerId: post.customer_id,
+        customerId: post.customerId,
         nextRev,
-        mediaUrl: mediaUrl.trim(),
+        mediaUrl: cleanUrl,
         revisionSummary,
       };
     });
@@ -542,15 +582,6 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
       mediaUrl,
       revisionSummary,
     });
-
-    syncRevisionToMongo(postId, {
-      revision_number: resultPayload.nextRev,
-      media_url: resultPayload.mediaUrl,
-      media_type: mediaType,
-      designer_name: designerName,
-      status: 'Pending Verification',
-      created_at: new Date()
-    }).catch(() => {});
 
     res.json({
       ok: true,
@@ -574,101 +605,81 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
 // -----------------------------------------------------------------------------
 graphicsRouter.get('/approved', async (req, res) => {
   try {
-    const { search = '', page = 1, limit = 30 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
-    const offset = (pageNum - 1) * limitNum;
+    const { search = '' } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query);
 
-    const whereClauses = [`mp.status = 'Approved'`, `mp.media_url IS NOT NULL`, `mp.media_url != ''`, `mp.is_deleted = FALSE`];
-    const params = [];
+    const hasSearch = Boolean(search && String(search).trim());
 
-    if (search && search.trim()) {
-      params.push(`%${search.trim()}%`);
-      const pIdx = params.length;
-      whereClauses.push(`(
-        mp.title ILIKE $${pIdx} OR
-        mp.caption ILIKE $${pIdx} OR
-        c.company_name ILIKE $${pIdx} OR
-        mp.id ILIKE $${pIdx}
-      )`);
-    }
+    const filterStages = [
+      { $match: { status: 'Approved', isDeleted: { $ne: true } } },
+      ...mediaStages(),
+      { $match: { _mediaUrl: { $nin: [null, ''] } } },
+      ...(hasSearch ? [...customerLookupStages(), searchStage(search)] : []),
+    ];
 
-    const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
+    const countRows = await MarketingPost.aggregate([...filterStages, { $count: 'total' }]);
+    const totalCount = Number(countRows[0]?.total || 0);
 
-    const countRes = await query(`
-      SELECT COUNT(*)::INT AS total
-      FROM marketing_posts mp
-      LEFT JOIN customers c ON c.id = mp.customer_id
-      ${whereSql}
-    `, params);
-    const totalCount = Number(countRes.rows[0]?.total || 0);
+    const rows = await MarketingPost.aggregate([
+      ...filterStages,
+      ...(hasSearch ? [] : customerLookupStages()),
+      {
+        $addFields: {
+          _approvedAt: {
+            $max: {
+              $map: {
+                input: {
+                  $filter: {
+                    input: { $ifNull: ['$reviews', []] },
+                    as: 'rv',
+                    cond: { $eq: [{ $ifNull: ['$$rv.decision', '$$rv.action'] }, 'Approved'] },
+                  },
+                },
+                as: 'rv',
+                in: '$$rv.reviewedAt',
+              },
+            },
+          },
+        },
+      },
+      { $sort: { _approvedAt: -1, updatedAt: -1, _id: 1 } },
+      { $skip: offset },
+      { $limit: limitNum },
+      { $project: { revisions: 0 } },
+    ]).allowDiskUse(true);
 
-    const dataSql = `
-      SELECT
-        mp.id,
-        mp.customer_id,
-        c.company_name,
-        c.category AS customer_category,
-        c.city,
-        mp.title,
-        mp.platform,
-        mp.caption,
-        mp.hashtags,
-        mp.call_to_action,
-        mp.media_url,
-        mp.media_type,
-        mp.creative_format,
-        mp.revision_number,
-        mp.designer_name,
-        mp.submitted_at,
-        mp.created_at,
-        mp.updated_at,
-        r.reviewer_name,
-        r.reviewer_role,
-        r.remarks AS approval_remarks,
-        r.created_at AS approved_at,
-        (SELECT mc.name FROM marketing_campaigns mc WHERE mc.post_id = mp.id LIMIT 1) AS linked_campaign_name,
-        (SELECT mc.status FROM marketing_campaigns mc WHERE mc.post_id = mp.id LIMIT 1) AS linked_campaign_status
-      FROM marketing_posts mp
-      LEFT JOIN customers c ON c.id = mp.customer_id
-      LEFT JOIN LATERAL (
-        SELECT * FROM marketing_post_reviews mpr
-        WHERE mpr.post_id = mp.id AND mpr.decision = 'Approved'
-        ORDER BY mpr.created_at DESC
-        LIMIT 1
-      ) r ON TRUE
-      ${whereSql}
-      ORDER BY r.created_at DESC NULLS LAST, mp.updated_at DESC
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-    `;
-
-    const dataRes = await query(dataSql, [...params, limitNum, offset]);
+    const campaigns = await loadCampaignsByPostId(rows.map((r) => r._id));
 
     res.json({
       ok: true,
-      approvedPosts: dataRes.rows.map((r) => ({
-        id: r.id,
-        customerId: r.customer_id,
-        companyName: r.company_name,
-        customerCategory: r.customer_category,
-        city: r.city,
-        title: r.title,
-        platform: r.platform,
-        caption: r.caption,
-        hashtags: r.hashtags,
-        callToAction: r.call_to_action,
-        mediaUrl: r.media_url,
-        mediaType: r.media_type,
-        creativeFormat: r.creative_format,
-        revisionNumber: Number(r.revision_number || 1),
-        designerName: r.designer_name || 'Graphics Designer',
-        reviewerName: r.reviewer_name || 'Marketing Quality Auditor',
-        reviewerRole: r.reviewer_role || 'Senior Marketing Auditor',
-        approvalRemarks: r.approval_remarks || 'Verified and approved for campaigns.',
-        approvedAt: r.approved_at || r.updated_at,
-        linkedCampaignName: r.linked_campaign_name || null,
-        linkedCampaignStatus: r.linked_campaign_status || null,
-      })),
+      approvedPosts: rows.map((r) => {
+        const c = r._cust || {};
+        const review = latestReviewRow(r, 'Approved');
+        const campaign = campaigns.get(String(r._id));
+        return {
+          id: r._id,
+          customerId: r.customerId,
+          companyName: c.companyName,
+          customerCategory: c.category,
+          city: c.city,
+          title: r.title,
+          platform: r.platform ?? r.targetPlatform,
+          caption: r.caption,
+          hashtags: r.hashtags ?? '',
+          callToAction: r.callToAction ?? '',
+          mediaUrl: r._mediaUrl,
+          mediaType: r.mediaType || 'image',
+          creativeFormat: r.creativeFormat || 'Instagram / Facebook Post',
+          revisionNumber: Number(r.currentRevisionNumber || 1),
+          designerName: r.designerName || 'Graphics Designer',
+          reviewerName: review?.reviewer_name || 'Marketing Quality Auditor',
+          reviewerRole: review?.reviewer_role || 'Senior Marketing Auditor',
+          approvalRemarks: review?.remarks || 'Verified and approved for campaigns.',
+          approvedAt: review?.created_at || r.updatedAt,
+          linkedCampaignName: campaign ? (campaign.campaignName || campaign.name || null) : null,
+          linkedCampaignStatus: campaign ? (campaign.status || null) : null,
+        };
+      }),
       pagination: {
         total: totalCount,
         page: pageNum,
@@ -687,111 +698,76 @@ graphicsRouter.get('/approved', async (req, res) => {
 // -----------------------------------------------------------------------------
 graphicsRouter.get('/rejected', async (req, res) => {
   try {
-    const { search = '', page = 1, limit = 30 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
-    const offset = (pageNum - 1) * limitNum;
+    const { search = '' } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query);
 
-    const whereClauses = [`mp.status IN ('Rejected', 'Changes Requested')`, `mp.is_deleted = FALSE`];
-    const params = [];
+    const hasSearch = Boolean(search && String(search).trim());
 
-    if (search && search.trim()) {
-      params.push(`%${search.trim()}%`);
-      const pIdx = params.length;
-      whereClauses.push(`(
-        mp.title ILIKE $${pIdx} OR
-        mp.caption ILIKE $${pIdx} OR
-        c.company_name ILIKE $${pIdx} OR
-        mp.id ILIKE $${pIdx}
-      )`);
-    }
+    // Search covers title, caption, company name and post id
+    const searchOnly = (term) => {
+      const re = containsRegex(String(term).trim());
+      return {
+        $match: {
+          $or: [{ title: re }, { caption: re }, { '_cust.companyName': re }, { _id: re }],
+        },
+      };
+    };
 
-    const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
+    const filterStages = [
+      { $match: { status: { $in: REJECTED_STATUSES }, isDeleted: { $ne: true } } },
+      ...(hasSearch ? [...customerLookupStages(), searchOnly(search)] : []),
+    ];
 
-    const countRes = await query(`
-      SELECT COUNT(*)::INT AS total
-      FROM marketing_posts mp
-      LEFT JOIN customers c ON c.id = mp.customer_id
-      ${whereSql}
-    `, params);
-    const totalCount = Number(countRes.rows[0]?.total || 0);
+    const countRows = await MarketingPost.aggregate([...filterStages, { $count: 'total' }]);
+    const totalCount = Number(countRows[0]?.total || 0);
 
-    const dataSql = `
-      SELECT
-        mp.id,
-        mp.customer_id,
-        c.company_name,
-        c.category AS customer_category,
-        c.city,
-        mp.idea_id,
-        mi.title AS idea_title,
-        mp.title,
-        mp.platform,
-        mp.caption,
-        mp.hashtags,
-        mp.call_to_action,
-        mp.media_url,
-        mp.media_type,
-        mp.creative_format,
-        mp.status,
-        mp.revision_number,
-        mp.designer_name,
-        mp.designer_notes,
-        mp.submitted_at,
-        mp.created_at,
-        mp.updated_at,
-        r.reviewer_name,
-        r.reviewer_role,
-        r.decision,
-        r.remarks,
-        r.rejection_reason,
-        r.correction_instructions,
-        r.created_at AS rejected_at
-      FROM marketing_posts mp
-      LEFT JOIN customers c ON c.id = mp.customer_id
-      LEFT JOIN marketing_ideas mi ON mi.id = mp.idea_id
-      LEFT JOIN LATERAL (
-        SELECT * FROM marketing_post_reviews mpr
-        WHERE mpr.post_id = mp.id
-        ORDER BY mpr.created_at DESC
-        LIMIT 1
-      ) r ON TRUE
-      ${whereSql}
-      ORDER BY r.created_at DESC NULLS LAST, mp.updated_at DESC
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-    `;
+    const rows = await MarketingPost.aggregate([
+      ...filterStages,
+      ...mediaStages(),
+      ...(hasSearch ? [] : customerLookupStages()),
+      { $addFields: { _rejectedAt: { $max: { $ifNull: ['$reviews.reviewedAt', []] } } } },
+      { $sort: { _rejectedAt: -1, updatedAt: -1, _id: 1 } },
+      { $skip: offset },
+      { $limit: limitNum },
+      { $project: { revisions: 0 } },
+    ]).allowDiskUse(true);
 
-    const dataRes = await query(dataSql, [...params, limitNum, offset]);
+    const ideas = await loadIdeasById(rows.map((r) => r.ideaId));
 
     res.json({
       ok: true,
-      rejectedPosts: dataRes.rows.map((r) => ({
-        id: r.id,
-        customerId: r.customer_id,
-        companyName: r.company_name,
-        customerCategory: r.customer_category,
-        city: r.city,
-        ideaTitle: r.idea_title || '',
-        title: r.title,
-        platform: r.platform,
-        caption: r.caption,
-        hashtags: r.hashtags,
-        callToAction: r.call_to_action,
-        mediaUrl: r.media_url,
-        mediaType: r.media_type,
-        creativeFormat: r.creative_format || 'Instagram / Facebook Post',
-        status: r.status,
-        revisionNumber: Number(r.revision_number || 1),
-        designerName: r.designer_name || 'Graphics Designer',
-        designerNotes: r.designer_notes || '',
-        reviewerName: r.reviewer_name || 'Marketing Quality Auditor',
-        reviewerRole: r.reviewer_role || 'Senior Marketing Auditor',
-        decision: r.decision || r.status,
-        remarks: r.remarks || '',
-        rejectionReason: r.rejection_reason || r.correction_instructions || r.remarks || 'Changes required by marketing auditor.',
-        correctionInstructions: r.correction_instructions || '',
-        rejectedAt: r.rejected_at || r.updated_at,
-      })),
+      rejectedPosts: rows.map((r) => {
+        const c = r._cust || {};
+        const idea = (r.ideaId && ideas.get(String(r.ideaId))) || null;
+        const rv = latestReviewRow(r) || {};
+        return {
+          id: r._id,
+          customerId: r.customerId,
+          companyName: c.companyName,
+          customerCategory: c.category,
+          city: c.city,
+          ideaTitle: idea?.title || '',
+          title: r.title,
+          platform: r.platform ?? r.targetPlatform,
+          caption: r.caption,
+          hashtags: r.hashtags ?? '',
+          callToAction: r.callToAction ?? '',
+          mediaUrl: r._mediaUrl,
+          mediaType: r.mediaType || 'image',
+          creativeFormat: r.creativeFormat || 'Instagram / Facebook Post',
+          status: r.status,
+          revisionNumber: Number(r.currentRevisionNumber || 1),
+          designerName: r.designerName || 'Graphics Designer',
+          designerNotes: r.designerNotes || '',
+          reviewerName: rv.reviewer_name || 'Marketing Quality Auditor',
+          reviewerRole: rv.reviewer_role || 'Senior Marketing Auditor',
+          decision: rv.decision || r.status,
+          remarks: rv.remarks || '',
+          rejectionReason: rv.rejection_reason || rv.correction_instructions || rv.remarks || 'Changes required by marketing auditor.',
+          correctionInstructions: rv.correction_instructions || '',
+          rejectedAt: rv.created_at || r.updatedAt,
+        };
+      }),
       pagination: {
         total: totalCount,
         page: pageNum,

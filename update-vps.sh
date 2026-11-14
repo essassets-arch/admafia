@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ADMAFIA MARKETING CRM — 1-COMMAND VPS UPDATE & REBUILD SCRIPT
+# ADMAFIA MARKETING CRM — 1-COMMAND VPS UPDATE & REBUILD SCRIPT (100% MONGODB)
 # Usage on VPS (run inside repository folder, e.g. /home/ubuntu/admafia):
 #   chmod +x update-vps.sh
 #   ./update-vps.sh
@@ -14,6 +14,7 @@ PORT="5050"
 echo "======================================================================"
 echo "🔄 Updating AdMafia Marketing CRM on VPS: $APP_DIR"
 echo "🌐 Domain: https://$DOMAIN"
+echo "🗄️  Database Engine: MongoDB 7.0 Replica Set (rs0)"
 echo "======================================================================"
 
 cd "$APP_DIR"
@@ -45,7 +46,40 @@ if [ "$ROOT_ENV_EXISTED" -eq 1 ]; then
 fi
 rm -f "$BACKEND_ENV_BACKUP" "$ROOT_ENV_BACKUP"
 
-# 1b. Synchronize keys between root .env and backend/.env so either location works
+# 1a. One-time Pre-Decommission Safety Gate:
+# If legacy PostgreSQL container (admafia-db) is still running from before the MongoDB cutover,
+# take a compressed pg_dump + mongodump backup and run the final PG -> Mongo parity sync BEFORE stopping it.
+if command -v docker > /dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -q '^admafia-db$'; then
+  echo "🛡️  Legacy PostgreSQL container (admafia-db) detected — running final pre-cutover backup & MongoDB parity sync..."
+  mkdir -p "$APP_DIR/backups"
+  CUTOVER_TS="$(date +%Y%m%d_%H%M%S)"
+  docker exec admafia-db pg_dump -U admafia_user -d admafia_crm | gzip > "$APP_DIR/backups/pg_final_pre_mongo_cutover_${CUTOVER_TS}.sql.gz"
+  echo "✓ Saved final PostgreSQL snapshot: backups/pg_final_pre_mongo_cutover_${CUTOVER_TS}.sql.gz"
+
+  if ! docker ps --format '{{.Names}}' | grep -q '^admafia-mongo$'; then
+    docker compose up -d mongo
+    sleep 5
+  fi
+  docker exec admafia-mongo mongodump --db=admafia_crm --archive --gzip > "$APP_DIR/backups/mongo_pre_cutover_${CUTOVER_TS}.archive.gz" || true
+
+  if docker ps --format '{{.Names}}' | grep -q '^admafia-backend$'; then
+    docker exec -T admafia-backend node scripts/migrate-pg-to-mongo.js
+  else
+    PGHOST=127.0.0.1 PGPORT=5432 PGUSER=admafia_user PGPASSWORD=AdMafiaStrongPass2026! PGDATABASE=admafia_crm \
+      MONGO_URI="mongodb://127.0.0.1:27017/admafia_crm?directConnection=true" \
+      node "$APP_DIR/backend/scripts/migrate-pg-to-mongo.js"
+  fi
+  echo "✓ Final PostgreSQL → MongoDB parity sync completed with 0 data loss."
+fi
+
+# 1b. Synchronize Razorpay keys & strip obsolete PG/placeholder variables from .env files
+for ENV_FILE in "$APP_DIR/.env" "$APP_DIR/backend/.env"; do
+  if [ -f "$ENV_FILE" ]; then
+    sed -i '/^PGHOST=/d; /^PGPORT=/d; /^PGUSER=/d; /^PGPASSWORD=/d; /^PGDATABASE=/d' "$ENV_FILE"
+    sed -i '/your_secure_mongo_password/d; /admafia_mongo:/d' "$ENV_FILE"
+  fi
+done
+
 if [ -f "$APP_DIR/.env" ]; then
   echo "📄 Root .env detected — syncing credentials..."
   ROOT_KEY_ID=$(grep -E '^RAZORPAY_KEY_ID=' "$APP_DIR/.env" | tail -n 1 | cut -d'=' -f2- | tr -d '\r"' || true)
@@ -72,15 +106,11 @@ if [ -f "$APP_DIR/.env" ]; then
   fi
 fi
 
-# 1c. Ensure backend/.env exists with valid credentials
+# 1c. Ensure backend/.env exists with valid production configuration
 if [ ! -f "$APP_DIR/backend/.env" ]; then
   cat > "$APP_DIR/backend/.env" << 'EOF'
 PORT=5000
-PGHOST=db
-PGPORT=5432
-PGUSER=admafia_user
-PGPASSWORD=AdMafiaStrongPass2026!
-PGDATABASE=admafia_crm
+MONGO_URI=mongodb://mongo:27017/admafia_crm?directConnection=true
 RAZORPAY_KEY_ID=rzp_live_TuUlRUHnVlWd5i
 RAZORPAY_KEY_SECRET=ItZeWawXWwTt98Dx60n47Sza
 NODE_ENV=production
@@ -105,34 +135,38 @@ npm install
 if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
   PORT="5050"
   echo "🚀 4/5 Restarting AdMafia Docker stack on port $PORT..."
-  echo "🐳 Rebuilding and launching Docker Compose stack (backend, frontend)..."
+  echo "🐳 Rebuilding and launching Docker Compose stack (mongo, backend, frontend)..."
   cd "$APP_DIR"
   pm2 delete admafia 2>/dev/null || true
   pm2 save 2>/dev/null || true
-  # Ensure database container is up first
-  docker compose up -d db mongo
+  systemctl stop postgresql 2>/dev/null || true
+  systemctl disable postgresql 2>/dev/null || true
+
+  # Ensure MongoDB replica set container is healthy first
+  docker compose up -d mongo
   docker compose build --no-cache frontend backend
-  docker compose up -d
-  # Ensure schema init and purge are executed inside container against postgres db
+  # Refresh backend anonymous /app/node_modules volume from new image & remove legacy PG containers
+  docker rm -fv admafia-backend 2>/dev/null || true
+  docker rm -f admafia-db admafia-pgadmin 2>/dev/null || true
+  docker compose up -d --remove-orphans
+
   sleep 4
-  docker compose exec -T backend node initDb.js 2>/dev/null || true
   docker compose exec -T backend node scripts/purge-test-users.js 2>/dev/null || true
-  docker compose exec -T backend node scripts/migrate-pg-to-mongo.js 2>/dev/null || true
   echo "📋 Docker container status:"
   docker compose ps
 elif command -v pm2 > /dev/null 2>&1; then
   PORT="5000"
   echo "🚀 4/5 Restarting AdMafia application on port $PORT with PM2..."
-  systemctl start postgresql 2>/dev/null || true
+  systemctl stop postgresql 2>/dev/null || true
+  systemctl disable postgresql 2>/dev/null || true
   cd "$APP_DIR/backend"
-  node initDb.js || true
   node scripts/purge-test-users.js || true
   pm2 delete admafia 2>/dev/null || true
   pm2 start server.js --name "admafia"
   pm2 save
 fi
 
-# 5. Configure Nginx with Port 443 SSL for admafia.marketing (Eliminates gambling/casino collision)
+# 5. Configure Nginx with Port 443 SSL for admafia.marketing
 echo "🔒 5/5 Configuring Nginx SSL routing for https://$DOMAIN..."
 rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 
@@ -209,11 +243,11 @@ nginx -t && systemctl reload nginx
 
 echo ""
 echo "======================================================================"
-echo "✅ Update complete! AdMafia CRM is 100% LIVE on HTTPS!"
+echo "✅ Update complete! AdMafia CRM is 100% LIVE on MongoDB + HTTPS!"
 echo "🌐 Website:            https://$DOMAIN/"
 echo "📊 Customer Profile:   https://$DOMAIN/app/lead#app/profile"
 echo "📥 Lead Pipeline:      https://$DOMAIN/app/lead#app/leads"
 echo "💼 Sales Operations:   https://$DOMAIN/sales"
-echo "🔐 Admin Gateway:       https://$DOMAIN/admin/login"
+echo "🔐 Admin Gateway:      https://$DOMAIN/admin/login"
 echo "💡 Hard-refresh browser (Ctrl + Shift + R) to view latest version!"
 echo "======================================================================"

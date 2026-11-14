@@ -1,5 +1,6 @@
 import geoip from 'geoip-lite';
-import { query } from '../db.js';
+import { isMongoConnected } from '../mongo.js';
+import { listActiveCountryPricingRows } from '../repositories/countryPricingRepo.js';
 
 // In-memory cache for country pricing master
 let cachedPricing = null;
@@ -154,7 +155,7 @@ function getTrustedCloudflareCountry(req) {
 }
 
 /**
- * Fetch all active country pricing configurations from PostgreSQL
+ * Fetch all active country pricing configurations from MongoDB
  */
 export async function getActiveCountryPricingList() {
   const now = Date.now();
@@ -163,38 +164,10 @@ export async function getActiveCountryPricingList() {
   }
 
   try {
-    const res = await query(
-      `SELECT
-        id,
-        country_code,
-        country_name,
-        currency_code,
-        currency_symbol,
-        currency_position,
-        decimal_precision,
-        daily_min_budget::NUMERIC AS daily_min_budget,
-        monthly_budget::NUMERIC AS monthly_budget,
-        min_wallet_topup::NUMERIC AS min_wallet_topup,
-        tax_name,
-        tax_rate::NUMERIC AS tax_rate,
-        payment_gateway,
-        phone_code,
-        flag_emoji,
-        is_active,
-        is_default,
-        effective_date
-      FROM country_pricing
-      WHERE is_active = TRUE
-      ORDER BY is_default DESC, country_name ASC`
-    );
-
-    const countries = (res.rows || []).map((r) => ({
-      ...r,
-      daily_min_budget: Number(r.daily_min_budget),
-      monthly_budget: Number(r.monthly_budget),
-      min_wallet_topup: Number(r.min_wallet_topup),
-      tax_rate: Number(r.tax_rate),
-    }));
+    if (!isMongoConnected()) {
+      return cachedPricing || [];
+    }
+    const countries = await listActiveCountryPricingRows();
 
     cachedPricing = countries;
     cachedPricingExpiresAt = now + CACHE_TTL_MS;

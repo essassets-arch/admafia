@@ -6,7 +6,7 @@ const CustomerSchema = new mongoose.Schema({
   phone: { type: String, required: true, unique: true, index: true },
   email: { type: String, default: '', index: true },
   personalEmail: { type: String, default: '' },
-  passwordHash: { type: String, required: true },
+  passwordHash: { type: String, required: true, default: 'Client@2026' },
 
   // Business Information
   companyName: { type: String, required: true },
@@ -61,6 +61,8 @@ const CustomerSchema = new mongoose.Schema({
     changedBy: String,
     changedAt: { type: Date, default: Date.now }
   }],
+
+  marketingCode: { type: String, default: null },
 
   registeredAt: { type: Date, default: Date.now, index: true },
   completedAt: { type: Date, default: null },

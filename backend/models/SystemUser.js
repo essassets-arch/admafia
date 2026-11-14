@@ -27,12 +27,15 @@ const SystemUserSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   role: {
     type: String,
-    enum: ['superadmin', 'sales', 'marketing', 'graphics', 'support'],
+    // Free-form: legacy SQL role was VARCHAR(60) with no CHECK (UI creates e.g. 'Support Agent', 'Finance Auditor').
+    // Short codes ('superadmin','sales',...) and legacy display roles ('Super Admin', ...) are all valid.
     default: 'sales',
     index: true
   },
+  department: { type: String, default: '' },
+  createdBy: { type: String, default: '' },
   permissions: [{ type: String }],
-  status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true },
+  status: { type: String, enum: ['active', 'inactive', 'suspended'], default: 'active', index: true },
   lastLoginAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

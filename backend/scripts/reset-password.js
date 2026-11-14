@@ -1,4 +1,13 @@
-import { initDatabase, query } from '../db.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import { initMongo } from '../mongo.js';
+import { Customer } from '../models/index.js';
+import { ciExact } from '../repositories/tx.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 async function resetPassword() {
   const identifier = process.argv[2] || '9503515149';
@@ -9,45 +18,47 @@ async function resetPassword() {
     process.exit(1);
   }
 
-  await initDatabase();
+  await initMongo();
 
   const cleanPhone = identifier.replace(/\D/g, '').slice(-10);
+  const orConditions = [{ username: ciExact(identifier) }, { email: ciExact(identifier) }];
+  if (cleanPhone) {
+    orConditions.unshift({ phone: cleanPhone });
+  }
 
-  const search = await query(`
-    SELECT id, username, phone, email, company_name 
-    FROM customers 
-    WHERE phone = $1 OR LOWER(username) = LOWER($2) OR LOWER(email) = LOWER($2)
-    LIMIT 1
-  `, [cleanPhone, identifier]);
+  const cust = await Customer.findOne({ $or: orConditions }).lean();
 
-  if (search.rowCount === 0) {
+  if (!cust) {
     console.error(`[Error] Customer not found matching identifier: ${identifier}`);
+    await mongoose.disconnect();
     process.exit(1);
   }
 
-  const cust = search.rows[0];
-
-  await query(`
-    UPDATE customers 
-    SET password_hash = $1, updated_at = NOW() 
-    WHERE id = $2
-  `, [newPassword.trim(), cust.id]);
+  await Customer.updateOne(
+    { _id: cust._id },
+    { $set: { passwordHash: newPassword.trim(), updatedAt: new Date() } }
+  );
 
   console.log('======================================================================');
   console.log('✅ PASSWORD RESET SUCCESSFUL');
   console.log('======================================================================');
-  console.log(`👤 Customer:    ${cust.company_name} (${cust.username})`);
-  console.log(`📱 Phone:       +91 ${cust.phone}`);
-  console.log(`✉️ Email:       ${cust.email || 'N/A'}`);
+  console.log(`👤 Customer:     ${cust.companyName} (${cust.username})`);
+  console.log(`📱 Phone:        +91 ${cust.phone}`);
+  console.log(`✉️ Email:        ${cust.email || 'N/A'}`);
   console.log(`🔑 New Password: ${newPassword}`);
-  console.log('🌐 Login URL:   https://admafia.marketing/login');
+  console.log('🌐 Login URL:    https://admafia.marketing/login');
   console.log('======================================================================');
 
+  await mongoose.disconnect();
   process.exit(0);
 }
 
-resetPassword().catch(err => {
+resetPassword().catch(async (err) => {
   console.error('[Fatal Error]:', err.message);
+  try {
+    await mongoose.disconnect();
+  } catch {
+    // ignore
+  }
   process.exit(1);
 });
-

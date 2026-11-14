@@ -5,9 +5,60 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
-import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
 import { initMongo, getMongoStatus, isMongoConnected } from './mongo.js';
-import { migrateHistoricalMarketingData } from './services/marketingStorage.js';
+import { withMongoTransaction } from './repositories/tx.js';
+import {
+  Customer,
+  CustomerGroup,
+  SystemUser,
+  Wallet,
+  PendingVerification,
+  Lead,
+  WalletTransaction,
+  TaxInvoice,
+  PaymentRecord,
+  MasterLead,
+  LeadAssignment,
+  DeletedFailedTransaction,
+} from './models/index.js';
+import {
+  ciExact,
+  customerIdentifierFilter,
+  getCustomerViewRows,
+  getCustomerViewRowById,
+  getCustomerViewRowByIdentifier,
+  leadsToRows,
+  walletTxToRow,
+  invoiceToRow,
+  paymentToRow,
+  loadSalesStateRows,
+  findSystemUserRowByLogin,
+  systemUserToRow,
+} from './repositories/salesViewRepo.js';
+import {
+  SALES_FAILED_TX_FILTER,
+  DISMISSED_TX_FILTER,
+  asScalarString,
+  loadTransactionRows,
+  loadBalanceLogRows,
+  loadFailedTransactionData,
+  archiveFailedTransactions,
+  deleteWalletTransactions,
+  txIdOrUtrFilter,
+  txIdsOrUtrsFilter,
+  deletedHistoryFilter,
+  listDeletedFailedTransactionRows,
+  restoreDeletedFailedTransaction,
+  findTopupCustomerFilter,
+  utrAlreadyCredited,
+  creditSalesTopup,
+  findCustomerByIdOrPhone,
+  applyCustomerProfile,
+  applyCustomerRecordUpdate,
+  applyWalletSettings,
+  deleteCustomerCascade,
+} from './repositories/salesLedgerRepo.js';
+import { seedBaselineData, purgeLegacyTestLedgerRows } from './repositories/bootstrapRepo.js';
 import { startOutboxWorker } from './services/outboxWorker.js';
 import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
@@ -16,7 +67,46 @@ import { superadminRouter, logSuperAdminAudit } from './routes/superadmin.js';
 import { countryPricingRouter, superadminCountryPricingRouter } from './routes/countryPricing.js';
 import { resolveVisitorCountry, getPricingForCountryCode } from './services/countryDetection.js';
 import { purgeSpecifiedTestUsers } from './scripts/purge-test-users.js';
-import { creditWalletAtomic, createOrUpdateCustomerMongo } from './repositories/mongoRepository.js';
+import {
+  findCustomerFlexible,
+  getBillingCurrency,
+  findCustomerByEmailExact,
+  findCustomerByEmailCi,
+  findCustomerByPhoneDigits,
+  findPaymentCustomerByOrder,
+  upsertDeclinedTransaction,
+  insertCallbackFailureRow,
+  recordFailedTransaction,
+  creditWalletByUtr,
+  processRazorpayRefund,
+  deductWalletForDay,
+} from './repositories/razorpayRepo.js';
+import {
+  listLeadRows,
+  createDirectLeadRow,
+  updateLeadAndSyncAssignment,
+  listPaymentRecordRows,
+  deletePaymentOrTestEntries,
+  listTaxInvoiceRows,
+  listPendingVerificationRows,
+  listSupportQueryRows,
+  createSupportQueryRow,
+  updateSupportQueryRow,
+  deleteSupportQueryById,
+  createSalesTaskRow,
+  createCustomerGroupRow,
+  updateCustomerGroupRow,
+  deleteCustomerGroupCascade,
+  listGroupMembers,
+  assignGroupMembers,
+  removeGroupMember,
+  findGroupById,
+  resolveDistributionGroup,
+  distributeMasterLeadAtomic,
+  listDistributionHistory,
+  getDistributionDetail,
+  updateLeadAssignmentAndSync,
+} from './repositories/leadsAndOpsRepo.js';
 
 // Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
 process.on('uncaughtException', (err) => {
@@ -29,6 +119,7 @@ process.on('unhandledRejection', (reason) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const explicitProcessEnv = { ...process.env };
 const backendEnvPath = path.join(__dirname, '.env');
 const rootEnvPath = path.join(__dirname, '..', '.env');
 if (fs.existsSync(backendEnvPath)) {
@@ -37,6 +128,7 @@ if (fs.existsSync(backendEnvPath)) {
 if (fs.existsSync(rootEnvPath)) {
   dotenv.config({ path: rootEnvPath, override: true });
 }
+Object.assign(process.env, explicitProcessEnv);
 
 const app = express();
 const PORT = Number(process.env.PORT || 5000);
@@ -75,7 +167,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use('/uploads', express.static(uploadsDir));
 
-// Helper: Format DB customer row from vw_sales_customer_accounts to frontend shape
+// Helper: Format customer view row (see repositories/salesViewRepo.js buildCustomerViewRow) to frontend shape
 function mapCustomerRow(row, passwordPlain = '••••••••••••') {
   if (!row) return null;
   const isGeneric = (str) =>
@@ -733,21 +825,34 @@ function mapMasterLeadRow(row) {
 // =============================================================================
 app.get('/api/health', async (req, res) => {
   try {
-    const counts = await query(`
-      SELECT
-        (SELECT COUNT(*) FROM customers) AS customers_count,
-        (SELECT COUNT(*) FROM leads) AS leads_count,
-        (SELECT COUNT(*) FROM wallets) AS wallets_count,
-        (SELECT COUNT(*) FROM payment_records) AS payments_count,
-        (SELECT COUNT(*) FROM customer_groups) AS groups_count,
-        (SELECT COUNT(*) FROM master_leads) AS master_leads_count,
-        (SELECT COUNT(*) FROM lead_assignments) AS lead_assignments_count
-    `);
+    if (!isMongoConnected()) {
+      throw new Error(`MongoDB is not connected${getMongoStatus().lastError ? `: ${getMongoStatus().lastError}` : ''}`);
+    }
+    const [
+      customersCount, leadsCount, walletsCount, paymentsCount, groupsCount, masterLeadsCount, leadAssignmentsCount,
+    ] = await Promise.all([
+      Customer.countDocuments({}),
+      Lead.countDocuments({}),
+      Wallet.countDocuments({}),
+      PaymentRecord.countDocuments({}),
+      CustomerGroup.countDocuments({}),
+      MasterLead.countDocuments({}),
+      LeadAssignment.countDocuments({}),
+    ]);
+    const mongoStatus = getMongoStatus();
     res.json({
       ok: true,
-      db: getDbStatus(),
-      mongo: getMongoStatus(),
-      counts: counts.rows[0] || {},
+      db: mongoStatus,
+      mongo: mongoStatus,
+      counts: {
+        customers_count: customersCount,
+        leads_count: leadsCount,
+        wallets_count: walletsCount,
+        payments_count: paymentsCount,
+        groups_count: groupsCount,
+        master_leads_count: masterLeadsCount,
+        lead_assignments_count: leadAssignmentsCount,
+      },
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -756,112 +861,15 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/api/state', async (req, res) => {
   try {
-    const [custRes, leadsRes, payRes, pvRes, qRes, tRes, grpRes, mLeadsRes, failedRes, delFailedRes, allWtRes] = await Promise.all([
-      query('SELECT * FROM vw_sales_customer_accounts ORDER BY registered_at DESC'),
-      query('SELECT * FROM leads ORDER BY created_at DESC'),
-      query(`
-        SELECT 
-          pr.*,
-          c.username,
-          c.company_name AS cust_company,
-          c.contact_person AS cust_contact
-        FROM payment_records pr
-        LEFT JOIN customers c ON (
-          pr.customer_id = c.id 
-          OR pr.phone = c.phone 
-          OR c.phone = RIGHT(REGEXP_REPLACE(pr.customer_id, '[^0-9]', '', 'g'), 10)
-        )
-        ORDER BY pr.paid_at DESC
-      `),
-      query(`
-        SELECT 
-          pv.*,
-          c.username,
-          c.company_name AS cust_company,
-          c.contact_person AS cust_contact
-        FROM pending_verifications pv
-        LEFT JOIN customers c ON (
-          pv.customer_id = c.id 
-          OR pv.phone = c.phone 
-          OR c.phone = RIGHT(REGEXP_REPLACE(pv.customer_id, '[^0-9]', '', 'g'), 10)
-        )
-        ORDER BY pv.submitted_at DESC
-      `),
-      query('SELECT * FROM support_queries ORDER BY created_at DESC'),
-      query('SELECT * FROM sales_tasks ORDER BY created_at DESC'),
-      query(`
-        SELECT 
-          cg.*,
-          (SELECT COUNT(*) FROM customer_group_memberships cgm WHERE cgm.group_id = cg.id) AS customer_count,
-          (SELECT COUNT(*) FROM master_leads ml WHERE ml.group_id = cg.id) AS leads_received,
-          (SELECT COUNT(*) FROM lead_assignments la WHERE la.group_id = cg.id) AS leads_distributed
-        FROM customer_groups cg
-        ORDER BY cg.created_at ASC
-      `),
-      query(`
-        SELECT 
-          ml.*, 
-          cg.name AS group_name,
-          cg.icon AS group_icon,
-          (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id) AS recipients_count,
-          (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id AND la.response_interest = 'Interested') AS interested_count,
-          (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id AND la.status IN ('Converted', 'Won')) AS converted_count
-        FROM master_leads ml
-        LEFT JOIN customer_groups cg ON cg.id = ml.group_id
-        ORDER BY ml.created_at DESC
-      `),
-      query(`
-        SELECT 
-          wt.id, wt.customer_id, wt.amount, wt.reference_utr, wt.description, wt.payment_method, wt.status, wt.created_at,
-          c.id AS matched_cust_id, c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.country, c.category
-        FROM wallet_transactions wt
-        LEFT JOIN customers c ON (
-          wt.customer_id = c.id 
-          OR wt.customer_id = c.phone 
-          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
-        )
-        WHERE LOWER(wt.status) LIKE '%fail%' 
-           OR LOWER(wt.status) LIKE '%declin%'
-           OR LOWER(wt.status) LIKE '%cancel%'
-           OR LOWER(wt.status) LIKE '%dismiss%'
-           OR LOWER(wt.status) LIKE '%reject%'
-           OR LOWER(wt.tx_type) LIKE '%fail%'
-           OR LOWER(wt.description) LIKE '%fail%'
-           OR LOWER(wt.description) LIKE '%declin%'
-           OR LOWER(wt.description) LIKE '%dismiss%'
-           OR LOWER(wt.description) LIKE '%cancel%'
-           OR LOWER(wt.payment_method) LIKE '%fail%'
-           OR wt.reference_utr LIKE 'DISMISS-%'
-           OR wt.reference_utr LIKE 'FAIL-%'
-        ORDER BY wt.created_at DESC
-      `),
-      query('SELECT * FROM deleted_failed_transactions ORDER BY deleted_at DESC'),
-      query(`
-        SELECT 
-          wt.*, 
-          c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.category,
-          pr.receipt_number, pr.paid_at AS payment_paid_at, pr.payment_mode AS pr_payment_mode
-        FROM wallet_transactions wt 
-        LEFT JOIN customers c ON (
-          wt.customer_id = c.id 
-          OR wt.customer_id = c.phone 
-          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
-        )
-        LEFT JOIN payment_records pr ON (
-          wt.reference_utr = pr.utr_reference 
-          OR wt.reference_utr = pr.receipt_number
-          OR wt.id = pr.id
-        )
-        ORDER BY wt.created_at DESC
-      `),
-    ]);
+    // MongoDB: all collections loaded & converted to the legacy row shape (see repositories/salesViewRepo.js)
+    const state = await loadSalesStateRows();
 
     res.json({
       ok: true,
-      customers: custRes.rows.map((r) => mapCustomerRow(r)),
-      leads: leadsRes.rows.map(mapLeadRow),
-      payments: payRes.rows.map(mapPaymentRecordRow),
-      verifications: pvRes.rows.map((r) => {
+      customers: state.customers.map((r) => mapCustomerRow(r)),
+      leads: state.leads.map(mapLeadRow),
+      payments: state.payments.map(mapPaymentRecordRow),
+      verifications: state.verifications.map((r) => {
         const isGeneric = (str) =>
           !str ||
           str.trim().toLowerCase() === 'registered business' ||
@@ -900,18 +908,18 @@ app.get('/api/state', async (req, res) => {
           submitted_at_raw: r.submitted_at,
         };
       }),
-      queries: qRes.rows.map(mapQueryRow),
-      tasks: tRes.rows,
-      groups: grpRes.rows.map(mapGroupRow),
-      masterLeads: mLeadsRes.rows.map(mapMasterLeadRow),
-      failedTransactions: failedRes.rows.map(mapFailedTxRow),
-      deletedFailedTransactions: delFailedRes.rows.map(mapDeletedFailedTxRow),
+      queries: state.queries.map(mapQueryRow),
+      tasks: state.tasks,
+      groups: state.groups.map(mapGroupRow),
+      masterLeads: state.masterLeads.map(mapMasterLeadRow),
+      failedTransactions: state.failed.map(mapFailedTxRow),
+      deletedFailedTransactions: state.deletedFailed.map(mapDeletedFailedTxRow),
       allTransactions: (() => {
-        const customers = custRes.rows.map(r => mapCustomerRow(r));
+        const customers = state.customers.map(r => mapCustomerRow(r));
         const seenRefs = new Set();
         const seenIds = new Set();
         const list = [];
-        for (const r of allWtRes.rows) {
+        for (const r of state.allWalletTx) {
           const it = mapTransactionItem(r, customers);
           if (it) {
             if (it.ref) seenRefs.add(it.ref);
@@ -919,7 +927,7 @@ app.get('/api/state', async (req, res) => {
             list.push(it);
           }
         }
-        for (const r of payRes.rows) {
+        for (const r of state.payments) {
           const ref = r.utr_reference || r.utr || r.receipt_number;
           if (ref && seenRefs.has(ref)) continue;
           if (r.id && seenIds.has(r.id)) continue;
@@ -936,7 +944,7 @@ app.get('/api/state', async (req, res) => {
             list.push(it);
           }
         }
-        for (const f of failedRes.rows) {
+        for (const f of state.failed) {
           const fRef = f.reference_utr || f.gateway_reference || `FAIL-${f.id}`;
           if (seenRefs.has(fRef) || seenRefs.has(`FAIL-${f.id}`) || (f.id && seenIds.has(`tx_fail_${f.id}`))) continue;
           seenRefs.add(fRef);
@@ -995,6 +1003,7 @@ app.get('/api/state', async (req, res) => {
 // 2. AUTHENTICATION & CUSTOMER REGISTRATION (/api/auth/register & /api/auth/login)
 // =============================================================================
 app.post('/api/auth/register', async (req, res) => {
+  let cleanUsername = '';
   try {
     const {
       username,
@@ -1046,7 +1055,7 @@ app.post('/api/auth/register', async (req, res) => {
     const registeredCurrency = pricing.currency_code;
     const registeredCountryName = pricing.country_name;
 
-    const cleanUsername = (username || `user_${cleanPhone.slice(-4)}`).trim().replace(/^@/, '');
+    cleanUsername = (username || `user_${cleanPhone.slice(-4)}`).trim().replace(/^@/, '');
     const isGeneric = (str) =>
       !str ||
       str.trim().toLowerCase() === 'registered business' ||
@@ -1066,13 +1075,11 @@ app.post('/api/auth/register', async (req, res) => {
 
     // Proactively verify if username is already taken by another account
     try {
-      const existingUserRes = await query(
-        `SELECT id, username, phone FROM customers WHERE LOWER(username) = LOWER($1) LIMIT 1`,
-        [cleanUsername]
-      );
-      if (existingUserRes.rows.length > 0) {
-        const existing = existingUserRes.rows[0];
-        const existingDigits = String(existing.phone || '').replace(/\D/g, '');
+      const existingUser = await Customer.findOne({ username: ciExact(cleanUsername) })
+        .select('_id username phone')
+        .lean();
+      if (existingUser) {
+        const existingDigits = String(existingUser.phone || '').replace(/\D/g, '');
         if (existingDigits !== cleanPhone) {
           return res.status(409).json({
             ok: false,
@@ -1084,157 +1091,131 @@ app.post('/api/auth/register', async (req, res) => {
       console.warn('[POST /api/auth/register] Username pre-check note:', checkErr.message);
     }
 
-    await query(
-      `INSERT INTO customers (
-        id, username, phone, email, password_hash,
-        company_name, category, contact_person, city, state, country, country_code, currency,
-        status, profile_status, payment_status, kyc_percent, verified, completed_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active', 'complete', $14, 100, TRUE, NOW())
-      ON CONFLICT (phone) DO UPDATE SET
-        username = EXCLUDED.username,
-        email = EXCLUDED.email,
-        password_hash = EXCLUDED.password_hash,
-        company_name = EXCLUDED.company_name,
-        country = COALESCE(customers.country, EXCLUDED.country),
-        country_code = COALESCE(customers.country_code, EXCLUDED.country_code),
-        currency = COALESCE(customers.currency, EXCLUDED.currency),
-        profile_status = 'complete',
-        kyc_percent = 100,
-        verified = TRUE,
-        completed_at = COALESCE(customers.completed_at, NOW()),
-        updated_at = NOW()`,
-      [
-        custId,
-        cleanUsername,
-        cleanPhone,
-        email.trim(),
-        password,
-        formattedName,
-        category,
-        contactName,
-        city,
-        state || '',
-        registeredCountryName,
-        cleanCountryCode,
-        registeredCurrency,
-        payStatus,
-      ]
-    );
+    const storedPassword = String(password ?? '') || 'Password123!';
+    const now = new Date();
+    const queueType = initialDeposit >= dailyBudget ? 'Completed' : 'Payment Pending';
 
-    // Real-Time Authoritative MongoDB Customer Registration Write
-    try {
-      if (!isMongoConnected()) {
-        await initMongo().catch(() => {});
+    // Customer upsert (by phone) + wallet + verification queue entry in ONE MongoDB transaction
+    const effectiveCustId = await withMongoTransaction(async (session) => {
+      let targetCustId = custId;
+      const existingByPhone = await Customer.findOne({ phone: cleanPhone }).session(session).select('_id').lean();
+      if (existingByPhone) {
+        // Equivalent of `ON CONFLICT (phone) DO UPDATE` (country/currency/category etc. are kept as-is)
+        targetCustId = existingByPhone._id;
+        await Customer.updateOne(
+          { _id: targetCustId },
+          {
+            $set: {
+              username: cleanUsername,
+              email: email.trim(),
+              passwordHash: storedPassword,
+              companyName: formattedName,
+              profileStatus: 'complete',
+              kycPercent: 100,
+              verified: true,
+              updatedAt: now,
+            },
+          },
+          { session, timestamps: false }
+        );
+        // completed_at = COALESCE(completed_at, NOW())
+        await Customer.updateOne(
+          { _id: targetCustId, completedAt: null },
+          { $set: { completedAt: now } },
+          { session, timestamps: false }
+        );
+      } else {
+        await Customer.create(
+          [{
+            _id: custId,
+            username: cleanUsername,
+            phone: cleanPhone,
+            email: email.trim(),
+            passwordHash: storedPassword,
+            companyName: formattedName,
+            category,
+            contactPerson: contactName,
+            city,
+            state: state || '',
+            country: registeredCountryName,
+            countryCode: cleanCountryCode,
+            currency: registeredCurrency,
+            status: 'active',
+            profileStatus: 'complete',
+            paymentStatus: payStatus,
+            kycPercent: 100,
+            verified: true,
+            completedAt: now,
+          }],
+          { session }
+        );
       }
-      if (isMongoConnected()) {
-        await createOrUpdateCustomerMongo({
-          id: custId,
-          username: cleanUsername,
-          phone: cleanPhone,
-          email: email.trim(),
-          passwordHash: password,
-          companyName: formattedName,
-          contactPerson: contactName,
-          category,
-          city,
-          state: state || '',
-          country: registeredCountryName,
-          countryCode: cleanCountryCode,
-          currency: registeredCurrency,
-          status: 'active',
-          profileStatus: 'complete',
-          paymentStatus: payStatus,
-          kycPercent: 100,
-          verified: true,
-          dailyBudget,
-        });
-        console.log(`[MongoDB Real-Time] Customer ${custId} (${cleanUsername}) registered directly into MongoDB.`);
-      }
-    } catch (mRegErr) {
-      console.warn('[MongoDB Real-Time Registration Warning]:', mRegErr.message);
-    }
 
-    await query(
-      `INSERT INTO wallets (
-        id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active, currency
-      ) VALUES ($1, $2, $3, $4, $3, FALSE, $5)
-      ON CONFLICT (customer_id) DO UPDATE SET
-        available_balance = wallets.available_balance + EXCLUDED.available_balance,
-        total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
-        currency = COALESCE(wallets.currency, EXCLUDED.currency)`,
-      [walId, custId, initialDeposit, dailyBudget, registeredCurrency]
-    );
-
-    if (initialDeposit > 0) {
-      await query(
-        `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, currency
-        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, 'Direct Secure Payment', 'Verified ✓', $8)
-        ON CONFLICT (reference_utr) DO UPDATE SET balance_after = EXCLUDED.balance_after`,
-        [
-          `tx_init_${cleanPhone}_${Date.now()}`,
-          custId,
-          walId,
-          initialDeposit,
-          initialDeposit,
-          `INIT_${cleanPhone}`,
-          'Initial Account Opening Ad Wallet Deposit',
-          registeredCurrency,
-        ]
+      // Wallet (created once; registration never credits money - initialDeposit is always 0)
+      await Wallet.updateOne(
+        { customerId: targetCustId },
+        {
+          $setOnInsert: {
+            _id: walId,
+            availableBalance: initialDeposit,
+            totalLifetimePaid: initialDeposit,
+            totalAdSpent: 0,
+            adCampaignActive: false,
+            dailyAdSpend: dailyBudget,
+            currency: registeredCurrency,
+            activeDays: [],
+            schedulePreset: 'custom',
+            bookedDates: [],
+            lastDeductedAt: null,
+            createdAt: now,
+          },
+          $set: { updatedAt: now },
+        },
+        { upsert: true, session, timestamps: false }
       );
-    }
 
-    await query(
-      `INSERT INTO pending_verifications (
-        id, customer_id, company_name, contact_person, phone,
-        amount, payment_status, profile_status, queue_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'complete', $8)
-      ON CONFLICT (customer_id) DO UPDATE SET
-        profile_status = 'complete',
-        queue_type = EXCLUDED.queue_type`,
-      [
-        pvId,
-        custId,
-        formattedName,
-        contactName,
-        cleanPhone,
-        initialDeposit,
-        payStatus,
-        initialDeposit >= dailyBudget ? 'Completed' : 'Payment Pending',
-      ]
-    );
+      // Sales verification queue entry
+      await PendingVerification.updateOne(
+        { customerId: targetCustId },
+        {
+          $set: { profileStatus: 'complete', queueType },
+          $setOnInsert: {
+            _id: pvId,
+            companyName: formattedName,
+            contactPerson: contactName,
+            phone: cleanPhone,
+            amount: initialDeposit,
+            paymentStatus: payStatus,
+            packageTier: 'Self-Registered (Wallet Top-Up)',
+            dailyRate: 300,
+            utrNumber: 'Awaiting Payment',
+            submittedAt: now,
+            verifiedAt: null,
+          },
+        },
+        { upsert: true, session }
+      );
 
-    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [custId]);
-    const customer = mapCustomerRow(viewRes.rows[0], password);
+      return targetCustId;
+    });
+
+    const viewRow = await getCustomerViewRowById(effectiveCustId);
+    const customer = mapCustomerRow(viewRow, password);
 
     res.status(201).json({ ok: true, customer });
   } catch (err) {
     console.error('[POST /api/auth/register]', err);
     const msg = String(err.message || '');
-    const constraint = String(err.constraint || '');
-    const code = String(err.code || '');
+    const dupKeys = Object.keys(err.keyPattern || err.keyValue || {});
 
-    if (
-      code === '23505' ||
-      msg.includes('unique constraint') ||
-      msg.includes('duplicate key') ||
-      msg.includes('uq_customers')
-    ) {
-      if (
-        constraint === 'uq_customers_username' ||
-        msg.includes('uq_customers_username') ||
-        msg.toLowerCase().includes('username')
-      ) {
+    if (err.code === 11000 || /E11000|duplicate key/i.test(msg)) {
+      if (dupKeys.includes('username') || msg.toLowerCase().includes('username')) {
         return res.status(409).json({
           ok: false,
           error: `The username "${cleanUsername || 'entered'}" is already registered. Please choose another username or sign in.`,
         });
       }
-      if (
-        constraint === 'customers_phone_key' ||
-        constraint === 'uq_customers_phone' ||
-        msg.includes('phone')
-      ) {
+      if (dupKeys.includes('phone') || msg.includes('phone')) {
         return res.status(409).json({
           ok: false,
           error: 'An account with this phone number already exists. Please sign in to your workspace.',
@@ -1243,13 +1224,6 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(409).json({
         ok: false,
         error: 'An account with these details already exists. Please choose a different username or sign in.',
-      });
-    }
-
-    if (code === '42703' && /wallets.*currency|currency.*wallets/i.test(msg)) {
-      return res.status(503).json({
-        ok: false,
-        error: 'Registration is temporarily unavailable because the database schema is updating. Please retry in a moment.',
       });
     }
 
@@ -1267,42 +1241,31 @@ app.post('/api/auth/login', async (req, res) => {
 
     const cleanPhone = q.replace(/\D/g, '').slice(-10);
 
-    // 1. Check customers table (Business Account login by username, email, or 10-digit mobile)
-    const custCheck = await query(
-      `SELECT id, password_hash, status FROM customers
-       WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR phone = $2
-       LIMIT 1`,
-      [q, cleanPhone]
-    );
+    // 1. Check customers collection (Business Account login by username, email, or 10-digit mobile)
+    const custOr = [{ username: ciExact(q) }, { email: ciExact(q) }];
+    if (cleanPhone) custOr.push({ phone: cleanPhone });
+    const custDoc = await Customer.findOne({ $or: custOr }).select('_id passwordHash status').lean();
 
     let targetCustomerId = null;
     let expectedPasswordHash = null;
     let accountStatus = null;
     let authUser = null;
 
-    if (custCheck.rowCount > 0) {
-      const row = custCheck.rows[0];
-      targetCustomerId = row.id;
-      expectedPasswordHash = row.password_hash;
-      accountStatus = row.status;
+    if (custDoc) {
+      targetCustomerId = custDoc._id;
+      expectedPasswordHash = custDoc.passwordHash;
+      accountStatus = custDoc.status;
     } else {
-      // 2. Check system_users table (User login created by Super Admin)
-      const userCheck = await query(
-        `SELECT id, customer_id, full_name, email, username, phone, password_hash, role, permissions, status
-         FROM system_users
-         WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR phone = $2
-         LIMIT 1`,
-        [q, cleanPhone]
-      );
+      // 2. Check system_users collection (User login created by Super Admin)
+      const uRow = await findSystemUserRowByLogin(q, cleanPhone);
 
-      if (userCheck.rowCount === 0) {
+      if (!uRow) {
         return res.status(404).json({
           ok: false,
           error: 'No registered account found with these credentials. Please check your username, mobile number, or email.',
         });
       }
 
-      const uRow = userCheck.rows[0];
       expectedPasswordHash = uRow.password_hash;
       accountStatus = uRow.status;
       authUser = {
@@ -1312,7 +1275,7 @@ app.post('/api/auth/login', async (req, res) => {
         username: uRow.username,
         phone: uRow.phone,
         role: uRow.role,
-        permissions: uRow.permissions,
+        permissions: Array.isArray(uRow.permissions) ? JSON.stringify(uRow.permissions) : uRow.permissions,
         customerId: uRow.customer_id,
       };
 
@@ -1320,9 +1283,9 @@ app.post('/api/auth/login', async (req, res) => {
         targetCustomerId = uRow.customer_id;
       } else {
         // Platform user opening customer dashboard: bind to primary customer workspace
-        const defaultCust = await query(`SELECT id FROM customers WHERE status = 'active' ORDER BY registered_at ASC LIMIT 1`);
-        if (defaultCust.rowCount > 0) {
-          targetCustomerId = defaultCust.rows[0].id;
+        const defaultCust = await Customer.findOne({ status: 'active' }).sort({ registeredAt: 1 }).select('_id').lean();
+        if (defaultCust) {
+          targetCustomerId = defaultCust._id;
         }
       }
     }
@@ -1341,7 +1304,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (authUser?.id) {
-      await query(`UPDATE system_users SET last_login_at = NOW() WHERE id = $1`, [authUser.id]).catch(() => { });
+      await SystemUser.updateOne({ _id: authUser.id }, { $set: { lastLoginAt: new Date() } }, { timestamps: false }).catch(() => { });
     }
 
     if (!targetCustomerId) {
@@ -1351,29 +1314,30 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [targetCustomerId]);
-    if (viewRes.rowCount === 0) {
+    const viewRow = await getCustomerViewRowById(targetCustomerId);
+    if (!viewRow) {
       return res.status(404).json({ ok: false, error: 'Customer workspace record not found.' });
     }
 
-    const customer = mapCustomerRow(viewRes.rows[0], expectedPasswordHash);
+    const customer = mapCustomerRow(viewRow, expectedPasswordHash);
     if (authUser) {
       customer.authUser = authUser;
     }
 
-    const [leadsRes, txRes, invRes] = await Promise.all([
-      query('SELECT * FROM leads WHERE customer_id = $1 ORDER BY created_at DESC', [targetCustomerId]),
-      query('SELECT * FROM wallet_transactions WHERE customer_id = $1 ORDER BY created_at DESC', [targetCustomerId]),
-      query('SELECT * FROM tax_invoices WHERE customer_id = $1 ORDER BY created_at DESC', [targetCustomerId]),
+    const [leadDocs, txDocs, invDocs] = await Promise.all([
+      Lead.find({ customerId: targetCustomerId }).sort({ assignedAt: -1 }).lean(),
+      WalletTransaction.find({ customerId: targetCustomerId }).sort({ createdAt: -1 }).lean(),
+      TaxInvoice.find({ customerId: targetCustomerId }).sort({ createdAt: -1 }).lean(),
     ]);
+    const custForLeads = [{ _id: viewRow.id, username: viewRow.username, phone: viewRow.phone, companyName: viewRow.company_name }];
 
     res.json({
       ok: true,
       customer,
       user: authUser || null,
-      leads: leadsRes.rows.map(mapLeadRow),
-      transactions: txRes.rows.map(mapWalletTxRow),
-      invoices: invRes.rows.map(mapInvoiceRow),
+      leads: leadsToRows(leadDocs, custForLeads).map(mapLeadRow),
+      transactions: txDocs.map(walletTxToRow).map(mapWalletTxRow),
+      invoices: invDocs.map(invoiceToRow).map(mapInvoiceRow),
     });
   } catch (err) {
     console.error('[POST /api/auth/login]', err);
@@ -1493,22 +1457,14 @@ app.post('/api/auth/admin-login', async (req, res) => {
 
     const cleanPhone = q.replace(/\D/g, '').slice(-10);
 
-    const userCheck = await query(
-      `SELECT id, customer_id, full_name, email, username, phone, password_hash, role, COALESCE(department, '') as department, permissions, status
-       FROM system_users
-       WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR (length($2) = 10 AND phone = $2)
-       LIMIT 1`,
-      [q, cleanPhone]
-    );
+    const uRow = await findSystemUserRowByLogin(q, cleanPhone, { requireTenDigitPhone: true });
 
-    if (userCheck.rowCount === 0) {
+    if (!uRow) {
       return res.status(404).json({
         ok: false,
         error: 'No administrator or department account found matching these credentials. Please check your username, email, or mobile number.',
       });
     }
-
-    const uRow = userCheck.rows[0];
 
     if (uRow.password_hash !== password) {
       return res.status(401).json({ ok: false, error: 'Incorrect password for this administrator account.' });
@@ -1521,7 +1477,7 @@ app.post('/api/auth/admin-login', async (req, res) => {
       });
     }
 
-    await query(`UPDATE system_users SET last_login_at = NOW() WHERE id = $1`, [uRow.id]).catch(() => { });
+    await SystemUser.updateOne({ _id: uRow.id }, { $set: { lastLoginAt: new Date() } }, { timestamps: false }).catch(() => { });
 
     // Determine target department and landing route
     let department = uRow.department;
@@ -1589,18 +1545,20 @@ app.get('/api/auth/admin-session', async (req, res) => {
       return res.status(401).json({ ok: false, error: 'No active session token provided.' });
     }
 
-    let userCheck;
+    let userRow = null;
     if (userId) {
-      userCheck = await query(`SELECT id, full_name, email, username, phone, role, COALESCE(department, '') as department, permissions, status FROM system_users WHERE id = $1 LIMIT 1`, [userId]);
+      userRow = systemUserToRow(await SystemUser.findById(String(userId)).lean());
     } else {
-      userCheck = await query(`SELECT id, full_name, email, username, phone, role, COALESCE(department, '') as department, permissions, status FROM system_users WHERE status = 'active' ORDER BY last_login_at DESC NULLS LAST LIMIT 1`);
+      userRow = systemUserToRow(
+        await SystemUser.findOne({ status: 'active' }).sort({ lastLoginAt: -1 }).lean()
+      );
     }
 
-    if (userCheck.rowCount === 0) {
+    if (!userRow) {
       return res.status(404).json({ ok: false, error: 'Session user record not found.' });
     }
 
-    const u = userCheck.rows[0];
+    const u = userRow;
     res.json({
       ok: true,
       user: {
@@ -1624,8 +1582,8 @@ app.get('/api/auth/admin-session', async (req, res) => {
 // =============================================================================
 app.get('/api/customers', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM vw_sales_customer_accounts ORDER BY registered_at DESC');
-    res.json({ ok: true, customers: result.rows.map((r) => mapCustomerRow(r)) });
+    const rows = await getCustomerViewRows({});
+    res.json({ ok: true, customers: rows.map((r) => mapCustomerRow(r)) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -1634,38 +1592,29 @@ app.get('/api/customers', async (req, res) => {
 app.get('/api/customers/:identifier', async (req, res) => {
   try {
     const rawId = String(req.params.identifier || '').trim();
-    const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
 
-    const viewRes = await query(
-      `SELECT * FROM vw_sales_customer_accounts
-       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($1)
-       LIMIT 1`,
-      [rawId, cleanPhone]
-    );
+    const viewRow = await getCustomerViewRowByIdentifier(rawId);
 
-    if (viewRes.rowCount === 0) {
+    if (!viewRow) {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
     }
 
-    const customer = mapCustomerRow(viewRes.rows[0]);
-    const [leadsRes, txRes, invRes] = await Promise.all([
-      query(
-        `SELECT * FROM leads 
-         WHERE customer_id = $1 
-            OR (customer_phone <> '' AND customer_phone = $2)
-         ORDER BY created_at DESC`,
-        [customer.id, customer.phone]
-      ),
-      query('SELECT * FROM wallet_transactions WHERE customer_id = $1 ORDER BY created_at DESC', [customer.id]),
-      query('SELECT * FROM tax_invoices WHERE customer_id = $1 ORDER BY created_at DESC', [customer.id]),
+    const customer = mapCustomerRow(viewRow);
+    const leadFilter = [{ customerId: customer.id }];
+    if (customer.phone) leadFilter.push({ customerPhone: customer.phone });
+    const [leadDocs, txDocs, invDocs] = await Promise.all([
+      Lead.find({ $or: leadFilter }).sort({ assignedAt: -1 }).lean(),
+      WalletTransaction.find({ customerId: customer.id }).sort({ createdAt: -1 }).lean(),
+      TaxInvoice.find({ customerId: customer.id }).sort({ createdAt: -1 }).lean(),
     ]);
+    const custForLeads = [{ _id: viewRow.id, username: viewRow.username, phone: viewRow.phone, companyName: viewRow.company_name }];
 
     res.json({
       ok: true,
       customer,
-      leads: leadsRes.rows.map(mapLeadRow),
-      transactions: txRes.rows.map(mapWalletTxRow),
-      invoices: invRes.rows.map(mapInvoiceRow),
+      leads: leadsToRows(leadDocs, custForLeads).map(mapLeadRow),
+      transactions: txDocs.map(walletTxToRow).map(mapWalletTxRow),
+      invoices: invDocs.map(invoiceToRow).map(mapInvoiceRow),
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1676,29 +1625,23 @@ app.get('/api/customers/:identifier', async (req, res) => {
 app.get('/api/admin/customer-password/:identifier', async (req, res) => {
   try {
     const rawId = String(req.params.identifier || '').trim();
-    const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
 
-    const lookupRes = await query(
-      `SELECT id, username, phone, email, password_hash, company_name, contact_person
-       FROM customers
-       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($1)
-       LIMIT 1`,
-      [rawId, cleanPhone]
-    );
+    const cust = await Customer.findOne(customerIdentifierFilter(rawId))
+      .select('_id username phone email passwordHash companyName contactPerson')
+      .lean();
 
-    if (lookupRes.rowCount === 0) {
+    if (!cust) {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
     }
 
-    const cust = lookupRes.rows[0];
     res.json({
       ok: true,
-      id: cust.id,
-      name: cust.company_name || cust.contact_person,
+      id: cust._id,
+      name: cust.companyName || cust.contactPerson,
       username: cust.username,
       phone: cust.phone,
       email: cust.email,
-      password: cust.password_hash || 'Password123!',
+      password: cust.passwordHash || 'Password123!',
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1719,7 +1662,9 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
       notes = '',
     } = req.body || {};
 
-    const creditAmount = parseFloat(amount);
+    const parsedAmount = parseFloat(amount);
+    // Money safety: reject NaN/Infinity and keep exactly 2 decimals (wallet columns were NUMERIC(12,2))
+    const creditAmount = Number.isFinite(parsedAmount) ? Math.round((parsedAmount + Number.EPSILON) * 100) / 100 : NaN;
     const cleanUtr = String(referenceUtr || '').trim();
 
     if (!customerId && !phone) {
@@ -1730,8 +1675,7 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
     }
 
     // 1. Check for duplicate UTR in wallet_transactions to prevent double crediting
-    const dupCheck = await query(`SELECT id FROM wallet_transactions WHERE reference_utr = $1`, [cleanUtr]);
-    if (dupCheck.rowCount > 0) {
+    if (await utrAlreadyCredited(cleanUtr)) {
       return res.status(409).json({
         ok: false,
         error: `Duplicate Reference: Payment UTR "${cleanUtr}" has already been credited in the ledger.`,
@@ -1740,19 +1684,12 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
 
     // 2. Resolve customer
     const cleanPhone = String(phone || customerId || '').trim();
-    const custRes = await query(
-      `SELECT id, company_name, contact_person, phone, email, currency
-       FROM customers
-       WHERE id = $1 OR phone = $2 OR phone = $3
-       LIMIT 1`,
-      [customerId || '', cleanPhone, cleanPhone.replace(/\D/g, '').slice(-10)]
-    );
+    const customer = await Customer.findOne(findTopupCustomerFilter(customerId, cleanPhone)).lean();
 
-    if (custRes.rowCount === 0) {
+    if (!customer) {
       return res.status(404).json({ ok: false, error: 'Customer account not found for wallet top-up.' });
     }
-    const customer = custRes.rows[0];
-    const targetCustId = customer.id;
+    const targetCustId = customer._id;
     const custCurrency = customer.currency || 'INR';
     const isUsd = custCurrency === 'USD';
     const minCreditAmount = isUsd ? 10 : 300;
@@ -1762,109 +1699,26 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
       return res.status(400).json({ ok: false, error: `Minimum wallet credit amount is ${minCreditSymbol}${minCreditAmount}.` });
     }
 
-    let recordedNewBalance = 0;
-    let recordedOldBalance = 0;
-    let walletId = null;
-    let receiptNo = null;
-
-    await withTransaction(async (tx) => {
-      // 3. Upsert wallet balance atomically
-      const defaultDailySpend = isUsd ? 10.00 : 300.00;
-      const walRes = await tx(
-        `INSERT INTO wallets (
-          id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active, currency
-        ) VALUES ($1, $2, $3, $4, $3, FALSE, $5)
-        ON CONFLICT (customer_id) DO UPDATE SET
-          available_balance = wallets.available_balance + EXCLUDED.available_balance,
-          total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
-          updated_at = NOW()
-        RETURNING *`,
-        [`wal_${Date.now()}`, targetCustId, creditAmount, defaultDailySpend, custCurrency]
-      );
-
-      walletId = walRes.rows[0]?.id;
-      recordedNewBalance = Number(walRes.rows[0]?.available_balance || creditAmount);
-      recordedOldBalance = Number((recordedNewBalance - creditAmount).toFixed(2));
-
-      // 4. Update customer status
-      await tx(
-        `UPDATE customers
-         SET payment_status = 'paid',
-             updated_at = NOW()
-         WHERE id = $1`,
-        [targetCustId]
-      );
-      await tx(
-        `UPDATE pending_verifications
-         SET payment_status = 'paid',
-             queue_type = 'Completed',
-             verified_at = NOW()
-         WHERE customer_id = $1`,
-        [targetCustId]
-      );
-
-      // 5. Insert into wallet_transactions
-      const txId = `tx_sales_${Date.now()}_${randomBytes(3).toString('hex')}`;
-      const salesLabel = salesPersonName ? `${salesPersonName} (Sales Team)` : 'Sales Desk';
-      const txDesc = `Ad Wallet Top-Up by Sales (${salesLabel})${notes ? ` - ${notes.trim()}` : ''}`;
-      const cleanMethod = `Sales Deposit (${paymentMethod})`;
-
-      await tx(
-        `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, currency, created_at
-        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓', $9, NOW())`,
-        [
-          txId,
-          targetCustId,
-          walletId,
-          creditAmount,
-          recordedNewBalance,
-          cleanUtr,
-          txDesc,
-          cleanMethod,
-          custCurrency,
-        ]
-      );
-
-      // 6. Insert into topup_requests for Super Admin Top-ups Queue & Verified History
-      const topupId = `tp_sales_${Date.now()}_${randomBytes(3).toString('hex')}`;
-      await tx(
-        `INSERT INTO topup_requests (
-          id, customer_id, wallet_id, amount, payment_method, reference_utr, notes, status, processed_by, processed_at, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'Approved', $8, NOW(), NOW(), NOW())
-        ON CONFLICT (reference_utr) DO NOTHING`,
-        [
-          topupId,
-          targetCustId,
-          walletId,
-          creditAmount,
-          cleanMethod,
-          cleanUtr,
-          notes ? `Sales Top-Up: ${notes.trim()}` : `Manual Top-Up credited via Sales Desk by ${salesLabel}`,
-          salesLabel,
-        ]
-      );
-
-      // 7. Insert payment_records for billing / tax receipts
-      receiptNo = `REC_${Date.now()}_${randomBytes(2).toString('hex').toUpperCase()}`;
-      await tx(
-        `INSERT INTO payment_records (
-          id, receipt_number, customer_id, company_name, contact_person, phone, tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, currency, paid_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'topup', $7, 0.00, $7, $8, $9, 'paid', $10, NOW())`,
-        [
-          `pay_${Date.now()}_${randomBytes(3).toString('hex')}`,
-          receiptNo,
-          targetCustId,
-          customer.company_name,
-          customer.contact_person,
-          customer.phone,
-          creditAmount,
-          cleanMethod,
-          cleanUtr,
-          custCurrency,
-        ]
-      );
-    });
+    // 3-7. Atomic wallet credit ($inc) + customer/verification status + ledger rows in ONE MongoDB transaction
+    let credit;
+    try {
+      credit = await creditSalesTopup({
+        customer,
+        creditAmount,
+        cleanUtr,
+        paymentMethod: String(paymentMethod),
+        salesPersonName,
+        notes,
+      });
+    } catch (txErr) {
+      if (txErr?.code === 'DUPLICATE_UTR') {
+        return res.status(409).json({ ok: false, error: txErr.message });
+      }
+      throw txErr;
+    }
+    const recordedNewBalance = credit.newBalance;
+    const recordedOldBalance = credit.oldBalance;
+    const receiptNo = credit.receiptNo;
 
     // 8. Log audit trail for Super Admin
     await logSuperAdminAudit({
@@ -1876,7 +1730,7 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
       targetId: targetCustId,
       reason: notes || 'Offline / Direct payment credited by sales person',
       details: {
-        customerName: customer.company_name,
+        customerName: customer.companyName,
         customerPhone: customer.phone,
         amount: creditAmount,
         previousBalance: recordedOldBalance,
@@ -1887,34 +1741,14 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
       },
     });
 
-    // Real-Time Authoritative MongoDB Write
-    try {
-      if (!isMongoConnected()) {
-        await initMongo().catch(() => {});
-      }
-      if (isMongoConnected()) {
-        await creditWalletAtomic({
-          customerId: targetCustId,
-          amount: creditAmount,
-          referenceUtr: cleanUtr,
-          paymentMethod,
-          description: `Direct Sales Top-Up: ${notes || 'Verified'}`,
-          receiptNumber: receiptNo,
-        });
-        console.log(`[MongoDB Real-Time] Sales Top-Up of ₹${creditAmount} saved immediately to MongoDB for ${targetCustId}`);
-      }
-    } catch (mErr) {
-      console.warn('[MongoDB Real-Time Sync Warning]:', mErr.message);
-    }
-
-    // 9. Fetch updated customer row from view
-    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [targetCustId]);
-    const updatedCustomer = viewRes.rowCount > 0 ? mapCustomerRow(viewRes.rows[0]) : null;
+    // 9. Fetch updated customer row (replaces vw_sales_customer_accounts)
+    const viewRow = await getCustomerViewRowById(targetCustId);
+    const updatedCustomer = viewRow ? mapCustomerRow(viewRow) : null;
 
     res.json({
       ok: true,
       customerId: targetCustId,
-      companyName: customer.company_name,
+      companyName: customer.companyName,
       amount: creditAmount,
       previousBalance: recordedOldBalance,
       newBalance: recordedNewBalance,
@@ -1922,7 +1756,7 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
       referenceUtr: cleanUtr,
       customer: updatedCustomer,
       paymentRecord: { receiptNo },
-      message: `${isUsd ? '$' : '₹'}${creditAmount.toLocaleString()} successfully credited to ${customer.company_name}'s wallet by ${salesPersonName}.`,
+      message: `${isUsd ? '$' : '₹'}${creditAmount.toLocaleString()} successfully credited to ${customer.companyName}'s wallet by ${salesPersonName}.`,
     });
   } catch (err) {
     console.error('[POST /api/sales/wallet/topup]', err);
@@ -1930,53 +1764,19 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
   }
 });
 
+
 // Sales Desk: Unified Master Transaction Logs (Verified, Failed, Pending, Top-Ups, Debits)
 app.get('/api/sales/transactions', async (req, res) => {
   try {
-    const [wtRes, prRes, custRes, delFailedRes] = await Promise.all([
-      query(`
-        SELECT 
-          wt.id, wt.customer_id, wt.wallet_id, wt.tx_type, wt.amount, wt.balance_after,
-          wt.reference_utr, wt.description, wt.payment_method, wt.status, wt.created_at,
-          c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.category,
-          pr.receipt_number, pr.paid_at AS payment_paid_at, pr.payment_mode AS pr_payment_mode
-        FROM wallet_transactions wt
-        LEFT JOIN customers c ON (
-          wt.customer_id = c.id 
-          OR wt.customer_id = c.phone 
-          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
-        )
-        LEFT JOIN payment_records pr ON (
-          wt.reference_utr = pr.utr_reference 
-          OR wt.reference_utr = pr.receipt_number
-          OR wt.id = pr.id
-        )
-        ORDER BY wt.created_at DESC
-      `),
-      query(`
-        SELECT 
-          pr.*,
-          c.username, c.company_name AS cust_company, c.contact_person AS cust_contact,
-          c.phone AS cust_phone, c.email AS cust_email, c.city AS cust_city, c.state AS cust_state, c.category AS cust_category
-        FROM payment_records pr
-        LEFT JOIN customers c ON (
-          pr.customer_id = c.id 
-          OR pr.phone = c.phone 
-          OR c.phone = RIGHT(REGEXP_REPLACE(pr.customer_id, '[^0-9]', '', 'g'), 10)
-        )
-        ORDER BY pr.paid_at DESC
-      `),
-      query('SELECT * FROM vw_sales_customer_accounts'),
-      query('SELECT * FROM deleted_failed_transactions ORDER BY deleted_at DESC').catch(() => ({ rows: [] })),
-    ]);
+    const { wtRows, prRows, customerRows } = await loadTransactionRows();
 
-    const customers = custRes.rows.map((r) => mapCustomerRow(r));
+    const customers = customerRows.map((r) => mapCustomerRow(r));
     const seenRefs = new Set();
     const seenIds = new Set();
     const transactions = [];
 
     // 1. Process wallet_transactions (Authoritative ledger for credits, debits & declined attempts)
-    for (const r of wtRes.rows) {
+    for (const r of wtRows) {
       const item = mapTransactionItem(r, customers);
       if (item) {
         if (item.ref) seenRefs.add(item.ref);
@@ -1986,7 +1786,7 @@ app.get('/api/sales/transactions', async (req, res) => {
     }
 
     // 2. Process payment_records (deduplicating by reference / receipt / id)
-    for (const r of prRes.rows) {
+    for (const r of prRows) {
       const ref = r.utr_reference || r.utr || r.receipt_number;
       if (ref && seenRefs.has(ref)) continue;
       if (r.id && seenIds.has(r.id)) continue;
@@ -2080,69 +1880,9 @@ app.get('/api/sales/balance-logs', async (req, res) => {
     const phone = (rawPhone && rawPhone !== 'undefined' && rawPhone !== 'null') ? String(rawPhone).trim() : null;
     const type = req.query.type;
 
-    const [wtRes, prRes, custRes, walletsRes] = await Promise.all([
-      query(`
-        SELECT 
-          wt.id,
-          wt.customer_id,
-          wt.wallet_id,
-          wt.tx_type,
-          wt.amount,
-          wt.balance_after,
-          wt.reference_utr,
-          wt.description,
-          wt.payment_method,
-          wt.status,
-          wt.created_at,
-          c.username,
-          c.company_name,
-          c.contact_person,
-          c.phone,
-          c.email,
-          c.city,
-          c.state,
-          c.category,
-          w.available_balance AS current_wallet_balance,
-          w.daily_ad_spend,
-          w.total_lifetime_paid
-        FROM wallet_transactions wt
-        LEFT JOIN customers c ON (
-          wt.customer_id = c.id 
-          OR wt.customer_id = c.phone 
-          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
-        )
-        LEFT JOIN wallets w ON (
-          wt.customer_id = w.customer_id 
-          OR c.id = w.customer_id
-        )
-        WHERE (
-          LOWER(wt.status) NOT LIKE '%fail%' 
-          AND LOWER(wt.status) NOT LIKE '%declin%'
-          AND LOWER(wt.status) NOT LIKE '%cancel%'
-          AND LOWER(wt.status) NOT LIKE '%dismiss%'
-          AND LOWER(wt.status) NOT LIKE '%reject%'
-        )
-        ORDER BY wt.created_at DESC
-      `),
-      query(`
-        SELECT 
-          pr.*,
-          c.username, c.company_name AS cust_company, c.contact_person AS cust_contact,
-          c.phone AS cust_phone, c.email AS cust_email, c.city AS cust_city, c.state AS cust_state, c.category AS cust_category
-        FROM payment_records pr
-        LEFT JOIN customers c ON (
-          pr.customer_id = c.id 
-          OR pr.phone = c.phone 
-          OR c.phone = RIGHT(REGEXP_REPLACE(pr.customer_id, '[^0-9]', '', 'g'), 10)
-        )
-        WHERE LOWER(pr.status) = 'paid' OR LOWER(pr.status) = 'settled' OR LOWER(pr.status) = 'verified'
-        ORDER BY pr.paid_at DESC
-      `),
-      query('SELECT * FROM vw_sales_customer_accounts'),
-      query('SELECT * FROM wallets'),
-    ]);
+    const { wtRows, prRows, customerRows, walletRows } = await loadBalanceLogRows();
 
-    const customers = custRes.rows.map((r) => mapCustomerRow(r));
+    const customers = customerRows.map((r) => mapCustomerRow(r));
     const testUtrs = new Set(['aaggg', 'aa', 'pay_tvcjrvjjkphawp', 'pay_tvcfjhw56ixevu']);
     const testReceipts = new Set(['REC_1793882500916_D467', 'REC_1793881526162_E051', 'RCP-2026-5814', 'RCP-2026-9969']);
 
@@ -2156,7 +1896,7 @@ app.get('/api/sales/balance-logs', async (req, res) => {
     let totalDebitCount = 0;
 
     // 1. Process wallet_transactions (primary double-entry balance log)
-    for (const row of wtRes.rows) {
+    for (const row of wtRows) {
       const ref = String(row.reference_utr || '').trim();
       const id = String(row.id || '').trim();
 
@@ -2264,7 +2004,7 @@ app.get('/api/sales/balance-logs', async (req, res) => {
     }
 
     // 2. Include any verified payment_records not yet captured in wallet_transactions
-    for (const pr of prRes.rows) {
+    for (const pr of prRows) {
       const ref = String(pr.utr_reference || pr.receipt_number || pr.id || '').trim();
       if (!ref || seenRefs.has(ref) || seenIds.has(pr.id)) continue;
       if (testUtrs.has(ref) || testReceipts.has(ref) || testUtrs.has(ref.toLowerCase())) continue;
@@ -2359,7 +2099,7 @@ app.get('/api/sales/balance-logs', async (req, res) => {
     for (const c of customers) {
       const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
       const name = c.companyName || c.name || c.username || 'Client Account';
-      const wallet = walletsRes.rows.find((w) => w.customer_id === c.id || (w.phone && String(w.phone).slice(-10) === cleanPhone));
+      const wallet = walletRows.find((w) => w.customer_id === c.id || (w.phone && String(w.phone).slice(-10) === cleanPhone));
       const currBal = wallet ? Number(wallet.available_balance || 0) : Number(c.balance || 0);
 
       customerLogsMap.set(c.id, {
@@ -2414,7 +2154,7 @@ app.get('/api/sales/balance-logs', async (req, res) => {
     const customerLogs = Array.from(customerLogsMap.values());
     customerLogs.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
 
-    const totalCirculatingBalance = walletsRes.rows.reduce(
+    const totalCirculatingBalance = walletRows.reduce(
       (sum, w) => sum + Math.max(0, Number(w.available_balance || 0)),
       0
     );
@@ -2433,7 +2173,7 @@ app.get('/api/sales/balance-logs', async (req, res) => {
         totalAmountRemoved: Number(totalDebits.toFixed(2)),
         totalCreditCount,
         totalDebitCount,
-        activeWalletsCount: walletsRes.rows.filter((w) => Number(w.available_balance || 0) > 0).length,
+        activeWalletsCount: walletRows.filter((w) => Number(w.available_balance || 0) > 0).length,
       },
     });
   } catch (err) {
@@ -2445,12 +2185,10 @@ app.get('/api/sales/balance-logs', async (req, res) => {
 app.get('/api/sales/failed-transactions', async (req, res) => {
   try {
     // 1. Fetch deleted/archived IDs & refs so dismissed/cleared records are not shown in active list
-    const delRes = await query(
-      'SELECT id, original_id, reference_utr, customer_id, phone FROM deleted_failed_transactions ORDER BY deleted_at DESC'
-    ).catch(() => ({ rows: [] }));
+    const { deletedRows, failedRows, unpaidRows } = await loadFailedTransactionData();
     const deletedRefs = new Set();
     const deletedCustIds = new Set();
-    for (const d of delRes.rows) {
+    for (const d of deletedRows) {
       if (d.reference_utr) deletedRefs.add(d.reference_utr);
       if (d.original_id) deletedRefs.add(d.original_id);
       if (d.id) deletedRefs.add(d.id);
@@ -2459,55 +2197,11 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
       if (dp) deletedCustIds.add(dp);
     }
 
-    // 2. Query wallet_transactions for all recorded failed/declined entries
-    const querySql = `
-      SELECT 
-        wt.id,
-        wt.customer_id,
-        wt.amount,
-        wt.reference_utr,
-        wt.description,
-        wt.payment_method,
-        wt.status,
-        wt.created_at,
-        c.id AS matched_cust_id,
-        c.username,
-        c.company_name,
-        c.contact_person,
-        c.phone,
-        c.email,
-        c.city,
-        c.state,
-        c.country,
-        c.category
-      FROM wallet_transactions wt
-      LEFT JOIN customers c ON (
-        wt.customer_id = c.id 
-        OR wt.customer_id = c.phone 
-        OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
-      )
-      WHERE LOWER(wt.status) LIKE '%fail%' 
-         OR LOWER(wt.status) LIKE '%declin%'
-         OR LOWER(wt.status) LIKE '%cancel%'
-         OR LOWER(wt.status) LIKE '%dismiss%'
-         OR LOWER(wt.status) LIKE '%reject%'
-         OR LOWER(wt.tx_type) LIKE '%fail%'
-         OR LOWER(wt.description) LIKE '%fail%'
-         OR LOWER(wt.description) LIKE '%declin%'
-         OR LOWER(wt.description) LIKE '%dismiss%'
-         OR LOWER(wt.description) LIKE '%cancel%'
-         OR LOWER(wt.description) LIKE '%reject%'
-         OR LOWER(wt.payment_method) LIKE '%fail%'
-         OR wt.reference_utr LIKE 'DISMISS-%'
-         OR wt.reference_utr LIKE 'FAIL-%'
-      ORDER BY wt.created_at DESC
-    `;
-    const result = await query(querySql);
     const seenRefs = new Set();
     const seenCustIds = new Set();
     const list = [];
 
-    for (const r of result.rows) {
+    for (const r of failedRows) {
       const ref = r.reference_utr || r.id;
       if (deletedRefs.has(ref) || deletedRefs.has(r.id)) continue;
       if (seenRefs.has(ref)) continue;
@@ -2518,35 +2212,8 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
       list.push(mapFailedTxRow(r));
     }
 
-    // 3. Query real registered customers whose onboarding checkout is pending/abandoned/declined
-    // (Real accounts registered on the website that started checkout but dropped off before paying)
-    const unpaidCustSql = `
-      SELECT 
-        c.id, c.username, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.country, c.category,
-        c.registered_at, c.payment_status,
-        COALESCE(w.available_balance, 0) AS balance,
-        COALESCE(w.daily_ad_spend, 300) AS daily_pacing
-      FROM customers c
-      LEFT JOIN wallets w ON w.customer_id = c.id
-      WHERE (
-        LOWER(COALESCE(c.payment_status, 'pending')) IN ('pending', 'failed', 'declined', 'unpaid', 'awaiting')
-        OR COALESCE(w.available_balance, 0) = 0
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM payment_records pr 
-        WHERE (pr.customer_id = c.id OR pr.phone = RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', '', 'g'), 10))
-          AND LOWER(pr.status) IN ('paid', 'verified', 'settled')
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM wallet_transactions wt2
-        WHERE (wt2.customer_id = c.id OR wt2.customer_id = c.phone)
-          AND wt2.tx_type = 'Credit'
-          AND LOWER(wt2.status) IN ('verified', 'settled', 'verified ✓', 'settled ✓', 'paid')
-      )
-      ORDER BY c.registered_at DESC
-    `;
-    const unpaidRes = await query(unpaidCustSql);
-    for (const c of unpaidRes.rows) {
+    // 3. Registered customers whose onboarding checkout is pending/abandoned/declined (loaded above)
+    for (const c of unpaidRows) {
       const cleanP = String(c.phone || '').replace(/\D/g, '').slice(-10);
       if (deletedCustIds.has(c.id) || (cleanP && deletedCustIds.has(cleanP))) continue;
       const ref = `FAIL-REG-${cleanP || c.id}`;
@@ -2609,119 +2276,11 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
   }
 });
 
-// Helper to safely archive failed transactions before deletion
-async function archiveFailedTransactions({ whereClause = '', params = [], txSnapshot = null, deletedBy = 'Sales Admin' } = {}) {
-  try {
-    if (txSnapshot) {
-      const s = txSnapshot;
-      const cleanPhone = String(s.phone || s.customerId || '').replace(/\D/g, '').slice(-10);
-      const properContact = String(s.contactPerson || s.contact || '').trim() || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
-      const properCompany = String(s.companyName || s.customerName || s.company || '').trim() || properContact;
-      const delId = `del_${s.id || s.ref || Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
-
-      await query(`
-        INSERT INTO deleted_failed_transactions (
-          id, original_id, customer_id, customer_name, company_name, contact_person,
-          phone, email, city, state, category, amount, reference_utr, description,
-          payment_method, failure_reason, original_created_at, deleted_at, deleted_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW(), $17)
-        ON CONFLICT (id) DO NOTHING
-      `, [
-        delId,
-        s.id || s.ref,
-        s.customerId || null,
-        properCompany,
-        properCompany,
-        properContact,
-        cleanPhone,
-        s.email || '',
-        s.city || 'India',
-        s.state || 'Maharashtra',
-        s.category || 'IT & Software',
-        Number(s.amount || 0),
-        s.ref || s.id,
-        s.desc || 'Failed wallet recharge',
-        s.method || 'Razorpay Secure',
-        s.failureReason || s.desc || 'Bank transaction declined',
-        deletedBy,
-      ]);
-    }
-
-    if (whereClause) {
-      const selectSql = `
-        SELECT 
-          wt.id,
-          wt.customer_id,
-          wt.amount,
-          wt.reference_utr,
-          wt.description,
-          wt.payment_method,
-          wt.status,
-          wt.created_at,
-          c.username,
-          c.company_name,
-          c.contact_person,
-          c.phone,
-          c.email,
-          c.city,
-          c.state,
-          c.category
-        FROM wallet_transactions wt
-        LEFT JOIN customers c ON (
-          wt.customer_id = c.id 
-          OR wt.customer_id = c.phone 
-          OR c.phone = RIGHT(REGEXP_REPLACE(wt.customer_id, '[^0-9]', '', 'g'), 10)
-        )
-        WHERE ${whereClause}
-      `;
-      const recs = await query(selectSql, params);
-      for (const r of recs.rows) {
-        const delId = `del_${r.id || Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
-        const cleanPhone = String(r.phone || r.customer_id || '').replace(/\D/g, '').slice(-10);
-        const properContact = String(r.contact_person || '').trim() || (cleanPhone ? `Customer ${cleanPhone.slice(-4)}` : 'Client Admin');
-        const properCompany = String(r.company_name || '').trim() || properContact;
-        await query(`
-          INSERT INTO deleted_failed_transactions (
-            id, original_id, customer_id, customer_name, company_name, contact_person,
-            phone, email, city, state, category, amount, reference_utr, description,
-            payment_method, failure_reason, original_created_at, deleted_at, deleted_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), $18)
-          ON CONFLICT (id) DO NOTHING
-        `, [
-          delId,
-          r.id,
-          r.customer_id,
-          properCompany,
-          properCompany,
-          properContact,
-          cleanPhone,
-          r.email || '',
-          r.city || 'India',
-          r.state || 'Maharashtra',
-          r.category || 'IT & Software',
-          Number(r.amount || 0),
-          r.reference_utr,
-          r.description || '',
-          r.payment_method || 'Razorpay Secure',
-          r.description || 'Payment declined by bank',
-          r.created_at || new Date(),
-          deletedBy,
-        ]);
-      }
-    }
-  } catch (err) {
-    console.warn('[archiveFailedTransactions non-fatal]', err.message);
-  }
-}
-
 // Sales Desk: Get Deleted Failed Transactions History (Desk 11 History Tab)
 app.get('/api/sales/failed-transactions/history', async (req, res) => {
   try {
-    const result = await query(`
-      SELECT * FROM deleted_failed_transactions 
-      ORDER BY deleted_at DESC
-    `);
-    res.json({ ok: true, history: result.rows.map(mapDeletedFailedTxRow) });
+    const rows = await listDeletedFailedTransactionRows();
+    res.json({ ok: true, history: rows.map(mapDeletedFailedTxRow) });
   } catch (err) {
     console.error('[GET /api/sales/failed-transactions/history]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -2733,35 +2292,10 @@ app.post('/api/sales/failed-transactions/history/restore', async (req, res) => {
   try {
     const { id } = req.body || {};
     if (!id) return res.status(400).json({ ok: false, error: 'Missing id to restore' });
+    const cleanId = asScalarString(id);
+    if (cleanId === null) return res.status(400).json({ ok: false, error: 'Invalid id to restore' });
 
-    const findRes = await query(
-      `SELECT * FROM deleted_failed_transactions WHERE id = $1 OR original_id = $1 OR reference_utr = $1 LIMIT 1`,
-      [id]
-    );
-
-    if (findRes.rowCount > 0) {
-      const row = findRes.rows[0];
-      const targetCustId = row.customer_id || row.phone || 'cust_restored';
-      const utr = row.reference_utr || `RESTORE-${Date.now()}`;
-      const amount = Number(row.amount || 0);
-
-      await query(`
-        INSERT INTO wallet_transactions (
-          id, customer_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
-        ) VALUES ($1, $2, 'Credit', $3, 0, $4, $5, $6, 'Payment Declined ✕', COALESCE($7, NOW()))
-        ON CONFLICT (reference_utr) DO UPDATE SET status = 'Payment Declined ✕'
-      `, [
-        row.original_id || `wt_res_${Date.now()}`,
-        targetCustId,
-        amount,
-        utr,
-        row.description || 'Restored failed payment attempt',
-        row.payment_method || 'Razorpay Secure (Failed)',
-        row.original_created_at || new Date(),
-      ]);
-
-      await query(`DELETE FROM deleted_failed_transactions WHERE id = $1`, [row.id]);
-    }
+    await restoreDeletedFailedTransaction(cleanId);
 
     res.json({ ok: true, restored: true });
   } catch (err) {
@@ -2775,20 +2309,23 @@ app.delete('/api/sales/failed-transactions/history/:id', async (req, res) => {
   try {
     const rawId = decodeURIComponent(req.params.id || '').trim();
     if (rawId === 'all' || rawId === 'clear-all') {
-      const delRes = await query(`DELETE FROM deleted_failed_transactions RETURNING id`);
-      return res.json({ ok: true, deletedCount: delRes.rowCount });
+      const delRes = await DeletedFailedTransaction.deleteMany({});
+      return res.json({ ok: true, deletedCount: delRes.deletedCount || 0 });
     }
 
-    const delRes = await query(
-      `DELETE FROM deleted_failed_transactions WHERE id = $1 OR original_id = $1 OR reference_utr = $1 RETURNING id`,
-      [rawId]
-    );
-    res.json({ ok: true, deletedCount: delRes.rowCount });
+    const delRes = await DeletedFailedTransaction.deleteMany(deletedHistoryFilter(rawId));
+    res.json({ ok: true, deletedCount: delRes.deletedCount || 0 });
   } catch (err) {
     console.error('[DELETE /api/sales/failed-transactions/history/:id]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// Archive matching failed wallet transactions into history, then remove them from the active ledger
+async function archiveAndDeleteFailedTx(filter, txSnapshot) {
+  await archiveFailedTransactions({ filter, txSnapshot });
+  return deleteWalletTransactions(filter);
+}
 
 // Sales Desk: Delete / Remove a Failed Transaction (or 'all' / 'dismissed')
 app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
@@ -2797,72 +2334,17 @@ app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
     const { txSnapshot } = req.body || {};
 
     if (rawId === 'all' || rawId === 'clear-all') {
-      await archiveFailedTransactions({
-        whereClause: `
-          LOWER(wt.status) LIKE '%fail%' 
-          OR LOWER(wt.status) LIKE '%declin%'
-          OR LOWER(wt.status) LIKE '%cancel%'
-          OR LOWER(wt.status) LIKE '%dismiss%'
-          OR LOWER(wt.status) LIKE '%reject%'
-          OR LOWER(wt.tx_type) LIKE '%fail%'
-          OR LOWER(wt.description) LIKE '%fail%'
-          OR LOWER(wt.description) LIKE '%declin%'
-          OR LOWER(wt.description) LIKE '%dismiss%'
-          OR LOWER(wt.description) LIKE '%cancel%'
-          OR LOWER(wt.description) LIKE '%reject%'
-          OR LOWER(wt.payment_method) LIKE '%fail%'
-          OR wt.reference_utr LIKE 'DISMISS-%'
-          OR wt.reference_utr LIKE 'FAIL-%'
-        `,
-        txSnapshot,
-      });
-
-      const delRes = await query(`
-        DELETE FROM wallet_transactions 
-        WHERE LOWER(status) LIKE '%fail%' 
-           OR LOWER(status) LIKE '%declin%'
-           OR LOWER(status) LIKE '%cancel%'
-           OR LOWER(status) LIKE '%dismiss%'
-           OR LOWER(status) LIKE '%reject%'
-           OR LOWER(tx_type) LIKE '%fail%'
-           OR LOWER(description) LIKE '%fail%'
-           OR LOWER(description) LIKE '%declin%'
-           OR LOWER(description) LIKE '%dismiss%'
-           OR LOWER(description) LIKE '%cancel%'
-           OR LOWER(description) LIKE '%reject%'
-           OR LOWER(payment_method) LIKE '%fail%'
-           OR reference_utr LIKE 'DISMISS-%'
-           OR reference_utr LIKE 'FAIL-%'
-        RETURNING id
-      `);
-      return res.json({ ok: true, deletedCount: delRes.rowCount });
+      const deletedCount = await archiveAndDeleteFailedTx(SALES_FAILED_TX_FILTER, txSnapshot);
+      return res.json({ ok: true, deletedCount });
     }
 
     if (rawId === 'dismissed') {
-      await archiveFailedTransactions({
-        whereClause: `wt.reference_utr LIKE 'DISMISS-%'`,
-        txSnapshot,
-      });
-
-      const delRes = await query(`
-        DELETE FROM wallet_transactions 
-        WHERE reference_utr LIKE 'DISMISS-%'
-        RETURNING id
-      `);
-      return res.json({ ok: true, deletedCount: delRes.rowCount });
+      const deletedCount = await archiveAndDeleteFailedTx(DISMISSED_TX_FILTER, txSnapshot);
+      return res.json({ ok: true, deletedCount });
     }
 
-    await archiveFailedTransactions({
-      whereClause: `wt.id = $1 OR wt.reference_utr = $1`,
-      params: [rawId],
-      txSnapshot,
-    });
-
-    const delRes = await query(
-      `DELETE FROM wallet_transactions WHERE id = $1 OR reference_utr = $1 RETURNING id`,
-      [rawId]
-    );
-    res.json({ ok: true, deletedCount: delRes.rowCount });
+    const deletedCount = await archiveAndDeleteFailedTx(txIdOrUtrFilter(rawId), txSnapshot);
+    res.json({ ok: true, deletedCount });
   } catch (err) {
     console.error('[DELETE /api/sales/failed-transactions/:id]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -2873,91 +2355,36 @@ app.delete('/api/sales/failed-transactions', async (req, res) => {
   try {
     const { id, ids, type, txSnapshot } = req.body || req.query || {};
     if (type === 'all' || id === 'all') {
-      await archiveFailedTransactions({
-        whereClause: `
-          LOWER(wt.status) LIKE '%fail%' 
-          OR LOWER(wt.status) LIKE '%declin%'
-          OR LOWER(wt.status) LIKE '%cancel%'
-          OR LOWER(wt.status) LIKE '%dismiss%'
-          OR LOWER(wt.status) LIKE '%reject%'
-          OR LOWER(wt.tx_type) LIKE '%fail%'
-          OR LOWER(wt.description) LIKE '%fail%'
-          OR LOWER(wt.description) LIKE '%declin%'
-          OR LOWER(wt.description) LIKE '%dismiss%'
-          OR LOWER(wt.description) LIKE '%cancel%'
-          OR LOWER(wt.description) LIKE '%reject%'
-          OR LOWER(wt.payment_method) LIKE '%fail%'
-          OR wt.reference_utr LIKE 'DISMISS-%'
-          OR wt.reference_utr LIKE 'FAIL-%'
-        `,
-        txSnapshot,
-      });
-
-      const delRes = await query(`
-        DELETE FROM wallet_transactions 
-        WHERE LOWER(status) LIKE '%fail%' 
-           OR LOWER(status) LIKE '%declin%'
-           OR LOWER(status) LIKE '%cancel%'
-           OR LOWER(status) LIKE '%dismiss%'
-           OR LOWER(status) LIKE '%reject%'
-           OR LOWER(tx_type) LIKE '%fail%'
-           OR LOWER(description) LIKE '%fail%'
-           OR LOWER(description) LIKE '%declin%'
-           OR LOWER(description) LIKE '%dismiss%'
-           OR LOWER(description) LIKE '%cancel%'
-           OR LOWER(description) LIKE '%reject%'
-           OR LOWER(payment_method) LIKE '%fail%'
-           OR reference_utr LIKE 'DISMISS-%'
-           OR reference_utr LIKE 'FAIL-%'
-        RETURNING id
-      `);
-      return res.json({ ok: true, deletedCount: delRes.rowCount });
+      const deletedCount = await archiveAndDeleteFailedTx(SALES_FAILED_TX_FILTER, txSnapshot);
+      return res.json({ ok: true, deletedCount });
     }
 
     if (Array.isArray(ids) && ids.length > 0) {
-      await archiveFailedTransactions({
-        whereClause: `wt.id = ANY($1) OR wt.reference_utr = ANY($1)`,
-        params: [ids],
-        txSnapshot,
-      });
-
-      const delRes = await query(
-        `DELETE FROM wallet_transactions WHERE id = ANY($1) OR reference_utr = ANY($1) RETURNING id`,
-        [ids]
-      );
-      return res.json({ ok: true, deletedCount: delRes.rowCount });
+      const cleanIds = ids.map(asScalarString);
+      if (cleanIds.some((v) => v === null)) {
+        return res.status(400).json({ ok: false, error: 'Invalid transaction ids' });
+      }
+      const deletedCount = await archiveAndDeleteFailedTx(txIdsOrUtrsFilter(cleanIds), txSnapshot);
+      return res.json({ ok: true, deletedCount });
     }
 
     if (id) {
-      await archiveFailedTransactions({
-        whereClause: `wt.id = $1 OR wt.reference_utr = $1`,
-        params: [id],
-        txSnapshot,
-      });
-
-      const delRes = await query(
-        `DELETE FROM wallet_transactions WHERE id = $1 OR reference_utr = $1 RETURNING id`,
-        [id]
-      );
-      return res.json({ ok: true, deletedCount: delRes.rowCount });
+      const cleanId = asScalarString(id);
+      if (cleanId === null) {
+        return res.status(400).json({ ok: false, error: 'Invalid transaction id' });
+      }
+      const deletedCount = await archiveAndDeleteFailedTx(txIdOrUtrFilter(cleanId), txSnapshot);
+      return res.json({ ok: true, deletedCount });
     }
 
-    await archiveFailedTransactions({
-      whereClause: `wt.reference_utr LIKE 'DISMISS-%'`,
-      txSnapshot,
-    });
-
-    const delRes = await query(`
-      DELETE FROM wallet_transactions 
-      WHERE reference_utr LIKE 'DISMISS-%'
-      RETURNING id
-    `);
-    res.json({ ok: true, deletedCount: delRes.rowCount });
+    const deletedCount = await archiveAndDeleteFailedTx(DISMISSED_TX_FILTER, txSnapshot);
+    res.json({ ok: true, deletedCount });
   } catch (err) {
     console.error('[DELETE /api/sales/failed-transactions]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
 
 app.put('/api/customers/:id/profile', async (req, res) => {
   try {
@@ -2980,17 +2407,13 @@ app.put('/api/customers/:id/profile', async (req, res) => {
     } = req.body || {};
 
     const cleanPhone = String(phone || rawId).replace(/\D/g, '').slice(-10);
-    const lookupRes = await query(
-      'SELECT id, phone, username FROM customers WHERE id = $1 OR phone = $2 LIMIT 1',
-      [rawId, cleanPhone]
-    );
+    const custRow = await findCustomerByIdOrPhone(rawId, cleanPhone);
 
-    if (lookupRes.rowCount === 0) {
+    if (!custRow) {
       return res.status(404).json({ ok: false, error: 'Customer record not found' });
     }
 
-    const custRow = lookupRes.rows[0];
-    const custId = custRow.id;
+    const custId = custRow._id;
     const cleanU = (custRow.username || '').replace(/^@/, '').trim();
     const fallbackU = cleanU ? cleanU.charAt(0).toUpperCase() + cleanU.slice(1) : 'Client Member';
     const isGeneric = (str) =>
@@ -3002,39 +2425,21 @@ app.put('/api/customers/:id/profile', async (req, res) => {
     const personName = !isGeneric(contactPerson || contact) ? (contactPerson || contact).trim() : orgName;
     const siteUrl = (website || domain || '').trim();
 
-    await query(
-      `UPDATE customers SET
-        company_name = $1,
-        category = $2,
-        industry = $3,
-        website = $4,
-        contact_person = $5,
-        email = $6,
-        personal_email = $7,
-        city = $8,
-        state = $9,
-        country = $10,
-        profile_status = 'complete',
-        kyc_percent = 100,
-        verified = TRUE,
-        completed_at = COALESCE(completed_at, NOW()),
-        updated_at = NOW()
-      WHERE id = $11`,
-      [orgName, category, industry, siteUrl, personName, email, personalEmail, city, state, country, custId]
-    );
+    await applyCustomerProfile(custId, custRow, {
+      orgName,
+      category,
+      industry,
+      website: siteUrl,
+      personName,
+      email,
+      personalEmail,
+      city,
+      state,
+      country,
+    });
 
-    await query(
-      `UPDATE pending_verifications SET
-        company_name = $1,
-        contact_person = $2,
-        profile_status = 'complete',
-        queue_type = CASE WHEN payment_status IN ('paid', 'verified') THEN 'Completed' ELSE 'Payment Pending' END
-      WHERE customer_id = $3`,
-      [orgName, personName, custId]
-    );
-
-    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [custId]);
-    res.json({ ok: true, customer: mapCustomerRow(viewRes.rows[0]) });
+    const viewRow = await getCustomerViewRowById(custId);
+    res.json({ ok: true, customer: mapCustomerRow(viewRow) });
   } catch (err) {
     console.error('[PUT /api/customers/:id/profile]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -3045,14 +2450,10 @@ const handleUpdateCustomerRecord = async (req, res) => {
   try {
     const rawId = req.params.id;
     const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
-    const lookupRes = await query(
-      'SELECT * FROM customers WHERE id = $1 OR phone = $2 LIMIT 1',
-      [rawId, cleanPhone]
-    );
-    if (lookupRes.rowCount === 0) {
+    const cust = await findCustomerByIdOrPhone(rawId, cleanPhone);
+    if (!cust) {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
     }
-    const cust = lookupRes.rows[0];
     const rawUpdates = req.body || {};
     const updates = {
       ...rawUpdates,
@@ -3060,27 +2461,25 @@ const handleUpdateCustomerRecord = async (req, res) => {
     };
 
     const nextStatus = updates.status || cust.status;
-    const nextProfile = updates.profileStatus || updates.profile_status || cust.profile_status;
-    const nextPayment = updates.paymentStatus || updates.payment_status || cust.payment_status;
-    const nextKyc = updates.kycPercent !== undefined ? Number(updates.kycPercent) : Number(cust.kyc_percent);
-    const nextCompany = updates.companyName || updates.name || cust.company_name;
+    const nextProfile = updates.profileStatus || updates.profile_status || cust.profileStatus;
+    const nextPayment = updates.paymentStatus || updates.payment_status || cust.paymentStatus;
+    const nextKyc = updates.kycPercent !== undefined ? Number(updates.kycPercent) : Number(cust.kycPercent);
+    const nextCompany = updates.companyName || updates.name || cust.companyName;
     const nextWebsite = updates.website ?? updates.domain ?? cust.website;
-    const nextPassword = (updates.password || updates.passwordPlain || updates.passwordHash || '').trim() || cust.password_hash;
+    const nextPassword = (updates.password || updates.passwordPlain || updates.passwordHash || '').trim() || cust.passwordHash;
+    // Legacy SQL evaluated `verified` against the row values from BEFORE this update; kept as-is.
+    const nextVerified = Number(cust.kycPercent) >= 100 || cust.profileStatus === 'complete';
 
-    await query(
-      `UPDATE customers SET
-        company_name = $1,
-        website = $2,
-        status = $3,
-        profile_status = $4,
-        payment_status = $5,
-        kyc_percent = $6,
-        verified = (kyc_percent >= 100 OR profile_status = 'complete'),
-        password_hash = $7,
-        updated_at = NOW()
-      WHERE id = $8`,
-      [nextCompany, nextWebsite, nextStatus, nextProfile, nextPayment, nextKyc, nextPassword, cust.id]
-    );
+    await applyCustomerRecordUpdate(cust._id, {
+      company: nextCompany,
+      website: nextWebsite,
+      status: nextStatus,
+      profile: nextProfile,
+      payment: nextPayment,
+      kyc: nextKyc,
+      verified: nextVerified,
+      password: nextPassword,
+    });
 
     if (
       updates.dailyAdSpend !== undefined ||
@@ -3089,35 +2488,40 @@ const handleUpdateCustomerRecord = async (req, res) => {
       updates.activeDays !== undefined ||
       updates.schedulePreset !== undefined
     ) {
-      const walRes = await query('SELECT * FROM wallets WHERE customer_id = $1', [cust.id]);
-      if (walRes.rowCount > 0) {
-        const w = walRes.rows[0];
+      const w = await Wallet.findOne({ customerId: cust._id }).lean();
+      if (w) {
         const walletCurrency = String(w.currency || 'INR').toUpperCase();
         const minimumDailySpend = walletCurrency === 'INR' ? 300 : walletCurrency === 'USD' ? 10 : null;
         if (minimumDailySpend === null) return res.status(409).json({ ok: false, error: 'Unsupported wallet currency.' });
-        const nextDaily = updates.dailyAdSpend !== undefined ? Math.max(minimumDailySpend, Number(updates.dailyAdSpend)) : Number(w.daily_ad_spend);
-        const nextActive = updates.adCampaignActive !== undefined ? Boolean(updates.adCampaignActive) : Boolean(w.ad_campaign_active);
-        const nextBal = updates.balance !== undefined ? Math.max(0, Number(updates.balance)) : Number(w.available_balance);
+        const nextDaily = updates.dailyAdSpend !== undefined ? Math.max(minimumDailySpend, Number(updates.dailyAdSpend)) : Number(w.dailyAdSpend);
+        const nextActive = updates.adCampaignActive !== undefined ? Boolean(updates.adCampaignActive) : Boolean(w.adCampaignActive);
+        // Only an explicit admin balance override is written; otherwise availableBalance is left untouched
+        const nextBal = updates.balance !== undefined ? Math.max(0, Number(updates.balance)) : undefined;
+        if (!Number.isFinite(nextDaily) || (nextBal !== undefined && !Number.isFinite(nextBal))) {
+          throw new Error('Invalid numeric value for wallet settings.');
+        }
 
         // Security / Financial Safety Rule: Enforce that booked days cannot be removed via direct API call
         const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
         const todayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
         const isDeductedToday = Boolean(
-          w.last_deducted_at &&
-          new Date(w.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+          w.lastDeductedAt &&
+          new Date(w.lastDeductedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
           kolkataNow.toLocaleDateString('en-CA')
         );
 
+        const toList = (v) => (Array.isArray(v) ? v : String(v || '').split(',')).map((s) => String(s).trim()).filter(Boolean);
+        const storedDays = toList(w.activeDays).map((d) => d.toUpperCase());
         let finalDaysArray = updates.activeDays !== undefined
           ? (Array.isArray(updates.activeDays)
             ? updates.activeDays.map(d => String(d).trim().toUpperCase()).filter(Boolean)
             : String(updates.activeDays).split(',').map(d => d.trim().toUpperCase()).filter(Boolean))
-          : (w.active_days ? w.active_days.split(',').map(d => d.trim().toUpperCase()).filter(Boolean) : [todayCode]);
+          : (storedDays.length > 0 ? storedDays : [todayCode]);
         if (finalDaysArray.length === 5 && finalDaysArray.includes('MON') && finalDaysArray.includes('TUE') && finalDaysArray.includes('WED') && finalDaysArray.includes('THU') && finalDaysArray.includes('FRI')) {
           finalDaysArray = [todayCode];
         }
 
-        const bookedDatesList = (w.booked_dates || '').split(',').map((s) => s.trim()).filter(Boolean);
+        const bookedDatesList = toList(w.bookedDates);
         if (isDeductedToday) {
           bookedDatesList.push(kolkataNow.toLocaleDateString('en-CA'));
         }
@@ -3141,19 +2545,21 @@ const handleUpdateCustomerRecord = async (req, res) => {
           }
         }
 
-        const nextDays = finalDaysArray.join(',');
-        const nextPreset = updates.schedulePreset || w.schedule_preset || 'weekdays';
-        await query(
-          `UPDATE wallets SET daily_ad_spend = $1::NUMERIC, ad_campaign_active = $2::BOOLEAN, available_balance = $3::NUMERIC, active_days = $4::VARCHAR, schedule_preset = $5::VARCHAR, updated_at = NOW() WHERE customer_id = $6`,
-          [nextDaily, nextActive, nextBal, String(nextDays), String(nextPreset), cust.id]
-        );
+        const nextPreset = updates.schedulePreset || w.schedulePreset || 'weekdays';
+        await applyWalletSettings(cust._id, {
+          dailyAdSpend: nextDaily,
+          adCampaignActive: nextActive,
+          activeDays: finalDaysArray,
+          schedulePreset: String(nextPreset),
+          balance: nextBal,
+        });
       }
     }
 
-    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
+    const viewRow = await getCustomerViewRowById(cust._id);
     res.json({
       ok: true,
-      customer: mapCustomerRow(viewRes.rows[0], nextPassword),
+      customer: mapCustomerRow(viewRow, nextPassword),
       loginPassword: nextPassword,
     });
   } catch (err) {
@@ -3168,65 +2574,37 @@ app.delete('/api/customers/:identifier', async (req, res) => {
   try {
     const rawId = String(req.params.identifier || '').trim();
     const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
-    const lookupRes = await query(
-      `SELECT id, username, phone, email, company_name, contact_person
-       FROM customers
-       WHERE id = $1 
-          OR (phone = $2 AND $2 <> '')
-          OR LOWER(username) = LOWER($1)
-          OR id = 'cust_reg_' || $2
-       LIMIT 1`,
-      [rawId, cleanPhone]
-    );
-    if (lookupRes.rowCount === 0) {
+    const identFilter = customerIdentifierFilter(rawId);
+    if (cleanPhone) identFilter.$or.push({ _id: `cust_reg_${cleanPhone}` });
+    const found = await Customer.findOne(identFilter)
+      .select('_id username phone email companyName contactPerson')
+      .lean();
+    if (!found) {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
     }
-    const cust = lookupRes.rows[0];
+    const cust = {
+      id: found._id,
+      username: found.username,
+      phone: found.phone,
+      email: found.email,
+      company_name: found.companyName,
+      contact_person: found.contactPerson,
+    };
     const custId = cust.id;
     const custPhone = cust.phone;
 
-    await withTransaction(async (txQuery) => {
-      await txQuery(`DELETE FROM marketing_audit_events WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM marketing_campaigns WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM marketing_posts WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM marketing_ideas WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM pending_verifications WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM wallet_transactions WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM payment_records WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM tax_invoices WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM lead_followups WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM lead_assignments WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM leads WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM support_query_messages WHERE query_id IN (SELECT id FROM support_queries WHERE customer_id = $1)`, [custId]);
-      await txQuery(`DELETE FROM support_queries WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM sales_tasks WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM refund_requests WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM topup_requests WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM account_status_history WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM customer_group_memberships WHERE customer_id = $1`, [custId]);
-      await txQuery(`DELETE FROM wallets WHERE customer_id = $1`, [custId]);
+    await deleteCustomerCascade(custId, custPhone);
 
-      if (custPhone) {
-        const altId = `cust_reg_${custPhone}`;
-        if (altId !== custId) {
-          await txQuery(`DELETE FROM wallets WHERE customer_id = $1`, [altId]);
-          await txQuery(`DELETE FROM customers WHERE id = $1`, [altId]);
-        }
-      }
-
-      await txQuery(`DELETE FROM customers WHERE id = $1`, [custId]);
-
-      try {
-        await txQuery(
-          `INSERT INTO superadmin_audit_logs (id, actor_id, actor_name, actor_role, action_type, target_type, target_id, reason, details)
-           VALUES ($1, 'api_admin', 'Admin API', 'Super Admin', 'CUSTOMER_DELETED', 'customer', $2, 'Customer deleted via admin API', $3)`,
-          [
-            `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-            custId,
-            JSON.stringify(cust),
-          ]
-        );
-      } catch (e) { }
+    // Audit trail (best effort, never blocks the delete response)
+    await logSuperAdminAudit({
+      actorId: 'api_admin',
+      actorName: 'Admin API',
+      actorRole: 'Super Admin',
+      actionType: 'CUSTOMER_DELETED',
+      targetType: 'customer',
+      targetId: custId,
+      reason: 'Customer deleted via admin API',
+      details: cust,
     });
 
     res.json({ ok: true, deleted: cust, deletedId: custId });
@@ -3235,9 +2613,22 @@ app.delete('/api/customers/:identifier', async (req, res) => {
   }
 });
 
+
 // =============================================================================
 // 4. WALLET TOP-UP, DAILY AD SPEND DEDUCTION & INVOICES (/api/wallets)
 // =============================================================================
+function customerSummaryFromDoc(c) {
+  if (!c) return null;
+  return {
+    id: c._id,
+    phone: c.phone,
+    username: c.username,
+    contact_person: c.contactPerson,
+    email: c.email,
+    company_name: c.companyName,
+  };
+}
+
 app.post('/api/payments/razorpay/order', async (req, res) => {
   try {
     if (!razorpayKeyId || !razorpayKeySecret) {
@@ -3245,12 +2636,8 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
     }
     const requestedCustomerId = String(req.body?.customerId || '');
     if (requestedCustomerId) {
-      const billing = await query(
-        `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
-         FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
-        [requestedCustomerId]
-      );
-      if (billing.rowCount && String(billing.rows[0].currency).toUpperCase() !== 'INR') {
+      const reqCurrency = await getBillingCurrency(requestedCustomerId);
+      if (reqCurrency && reqCurrency !== 'INR') {
         return res.status(400).json({ ok: false, error: 'Razorpay only supports INR wallets. Use the international USD gateway for this account.' });
       }
     }
@@ -3259,43 +2646,52 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Enter an amount from ₹300 to ₹10,00,000.' });
     }
     const cleanPhone = String(req.body?.phone || req.body?.customerId || '').replace(/\D/g, '').slice(-10);
-    let customer = await query(
-      `SELECT id, phone, username, contact_person, email, company_name FROM customers
-       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
-      [req.body?.customerId || '', cleanPhone, req.body?.username || '']
-    );
+    let custDoc = await findCustomerFlexible({
+      id: req.body?.customerId || '',
+      phone: cleanPhone,
+      username: req.body?.username || '',
+    });
 
-    if (!customer.rowCount) {
+    if (!custDoc) {
       const fallbackPhone = cleanPhone || '9999999999';
-      const newCustId = req.body?.customerId && !String(req.body.customerId).startsWith('rzp_') ? req.body.customerId : `cust_${Date.now()}`;
+      const newCustId = req.body?.customerId && !String(req.body.customerId).startsWith('rzp_') ? String(req.body.customerId) : `cust_${Date.now()}`;
       const newName = req.body?.contactPerson || req.body?.username || `Client ${fallbackPhone.slice(-4)}`;
-      await query(
-        `INSERT INTO customers (id, phone, username, contact_person, company_name, email, status, payment_status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'active', 'pending')
-         ON CONFLICT DO NOTHING`,
-        [newCustId, fallbackPhone, req.body?.username || fallbackPhone, newName, req.body?.companyName || newName, req.body?.email || `${fallbackPhone}@client.admafia.marketing`]
-      ).catch(() => { });
-      customer = await query(
-        `SELECT id, phone, username, contact_person, email, company_name FROM customers
-         WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
-        [newCustId, fallbackPhone, req.body?.username || '']
-      );
+      await Customer.updateOne(
+        { _id: newCustId },
+        {
+          $setOnInsert: {
+            phone: fallbackPhone,
+            username: req.body?.username || fallbackPhone,
+            contactPerson: newName,
+            companyName: req.body?.companyName || newName,
+            email: req.body?.email || `${fallbackPhone}@client.admafia.marketing`,
+            passwordHash: `$2b$12$${randomBytes(32).toString('hex')}!LOCKED`,
+            status: 'active',
+            paymentStatus: 'pending',
+            registeredAt: new Date(),
+          },
+        },
+        { upsert: true }
+      ).catch(() => {});
+      custDoc = await findCustomerFlexible({
+        id: newCustId,
+        phone: fallbackPhone,
+        username: req.body?.username || '',
+      });
     }
 
-    const cust = customer.rowCount ? customer.rows[0] : {
-      id: req.body?.customerId || `cust_${Date.now()}`,
-      phone: cleanPhone || '9999999999',
-      username: req.body?.username || 'client',
-      contact_person: req.body?.contactPerson || 'Client',
-      company_name: 'AdMafia Client',
-      email: `${cleanPhone || 'client'}@admafia.marketing`,
-    };
-    const billing = await query(
-      `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
-       FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
-      [cust.id]
-    );
-    if (billing.rowCount && String(billing.rows[0].currency).toUpperCase() !== 'INR') {
+    const cust = custDoc
+      ? customerSummaryFromDoc(custDoc)
+      : {
+          id: req.body?.customerId || `cust_${Date.now()}`,
+          phone: cleanPhone || '9999999999',
+          username: req.body?.username || 'client',
+          contact_person: req.body?.contactPerson || 'Client',
+          company_name: 'AdMafia Client',
+          email: `${cleanPhone || 'client'}@admafia.marketing`,
+        };
+    const billingCurrency = await getBillingCurrency(cust.id);
+    if (billingCurrency && billingCurrency !== 'INR') {
       return res.status(400).json({ ok: false, error: 'Razorpay only supports INR wallets. International wallet payments are not enabled.' });
     }
 
@@ -3355,40 +2751,45 @@ app.post('/api/payments/razorpay/payment-link', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Enter an amount from ₹300 to ₹10,00,000.' });
     }
     const cleanPhone = String(req.body?.phone || req.body?.customerId || '').replace(/\D/g, '').slice(-10);
-    let customer = await query(
-      `SELECT id, phone, username, contact_person, email, company_name FROM customers
-       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
-      [req.body?.customerId || '', cleanPhone, req.body?.username || '']
-    );
-    if (!customer.rowCount) {
-      if (cleanPhone || req.body?.username) {
-        const newCustId = req.body?.customerId && !String(req.body.customerId).startsWith('rzp_') ? req.body.customerId : `cust_${Date.now()}`;
-        const newPhone = cleanPhone || '9999999999';
-        const newName = req.body?.contactPerson || req.body?.username || `Client ${newPhone.slice(-4)}`;
-        await query(
-          `INSERT INTO customers (id, phone, username, contact_person, company_name, email, status, payment_status)
-           VALUES ($1, $2, $3, $4, $5, $6, 'active', 'pending')
-           ON CONFLICT DO NOTHING`,
-          [newCustId, newPhone, req.body?.username || newPhone, newName, req.body?.companyName || newName, req.body?.email || `${newPhone}@client.admafia.marketing`]
-        ).catch(() => { });
-        customer = await query(
-          `SELECT id, phone, username, contact_person, email, company_name FROM customers
-           WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
-          [newCustId, newPhone, req.body?.username || '']
-        );
-      }
+    let custDoc = await findCustomerFlexible({
+      id: req.body?.customerId || '',
+      phone: cleanPhone,
+      username: req.body?.username || '',
+    });
+    if (!custDoc && (cleanPhone || req.body?.username)) {
+      const newCustId = req.body?.customerId && !String(req.body.customerId).startsWith('rzp_') ? String(req.body.customerId) : `cust_${Date.now()}`;
+      const newPhone = cleanPhone || '9999999999';
+      const newName = req.body?.contactPerson || req.body?.username || `Client ${newPhone.slice(-4)}`;
+      await Customer.updateOne(
+        { _id: newCustId },
+        {
+          $setOnInsert: {
+            phone: newPhone,
+            username: req.body?.username || newPhone,
+            contactPerson: newName,
+            companyName: req.body?.companyName || newName,
+            email: req.body?.email || `${newPhone}@client.admafia.marketing`,
+            passwordHash: `$2b$12$${randomBytes(32).toString('hex')}!LOCKED`,
+            status: 'active',
+            paymentStatus: 'pending',
+            registeredAt: new Date(),
+          },
+        },
+        { upsert: true }
+      ).catch(() => {});
+      custDoc = await findCustomerFlexible({
+        id: newCustId,
+        phone: newPhone,
+        username: req.body?.username || '',
+      });
     }
-    if (!customer.rowCount) {
+    if (!custDoc) {
       return res.status(404).json({ ok: false, error: 'Customer account not found.' });
     }
-    const cust = customer.rows[0];
+    const cust = customerSummaryFromDoc(custDoc);
 
-    const billing = await query(
-      `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
-       FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
-      [cust.id]
-    );
-    if (billing.rowCount && String(billing.rows[0].currency).toUpperCase() !== 'INR') {
+    const billingCurrency = await getBillingCurrency(cust.id);
+    if (billingCurrency && billingCurrency !== 'INR') {
       return res.status(400).json({ ok: false, error: 'Razorpay only supports INR wallets. International wallet payments are not enabled.' });
     }
 
@@ -3451,7 +2852,7 @@ app.post('/api/payments/razorpay/payment-link', async (req, res) => {
   }
 });
 
-// Authoritative Atomic Wallet Crediting Engine
+// Authoritative Atomic Wallet Crediting Engine (MongoDB ACID Transaction + UTR Idempotency)
 export async function creditCustomerWallet({
   customerId,
   phone,
@@ -3462,247 +2863,42 @@ export async function creditCustomerWallet({
   description,
   currency,
 }) {
-  const cleanAmount = Number(amount || 0);
-  if (!Number.isFinite(cleanAmount) || cleanAmount <= 0) {
-    throw new Error('Valid wallet top-up amount is required.');
-  }
+  const cleanAmount = Math.round((Number(amount || 0) + Number.EPSILON) * 100) / 100;
+  const out = await creditWalletByUtr({
+    customerId,
+    phone,
+    username,
+    amount,
+    referenceUtr,
+    paymentMethod,
+    description,
+    currency,
+  });
 
-  const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
-  const utr = String(referenceUtr || `rzp_${Date.now()}`).trim();
+  const viewRow = await getCustomerViewRowById(out.customerId);
 
-  return await withTransaction(async (txQuery) => {
-    // 0. Concurrency Protection: Acquire PostgreSQL transaction-level advisory lock on this exact payment reference!
-    // This serializes concurrent /verify calls and webhook deliveries for the same payment ID.
-    await txQuery(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`credit_${utr}`]);
-
-    // 1. Resolve customer
-    let custRes = await txQuery(
-      `SELECT * FROM customers
-       WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3)
-       LIMIT 1`,
-      [customerId || '', cleanPhone, username || '']
-    );
-
-    if (custRes.rowCount === 0) {
-      const fallbackId = customerId || `cust_${cleanPhone || Date.now()}`;
-      const lockedCredentialHash = `$2b$12$${randomBytes(32).toString('hex')}!LOCKED`;
-      await txQuery(
-        `INSERT INTO customers (id, phone, username, contact_person, company_name, email, password_hash, status, payment_status, currency)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', 'paid', $8)
-         ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone, payment_status = 'paid'`,
-        [
-          fallbackId,
-          cleanPhone || '9999999999',
-          username || cleanPhone || fallbackId,
-          `Client ${cleanPhone || fallbackId}`,
-          `Business ${cleanPhone || fallbackId}`,
-          `${cleanPhone || fallbackId}@client.admafia.marketing`,
-          lockedCredentialHash,
-          currency || 'INR',
-        ]
-      );
-      custRes = await txQuery(`SELECT * FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`, [fallbackId, cleanPhone]);
-      try {
-        if (!isMongoConnected()) {
-          await initMongo().catch(() => {});
-        }
-        if (isMongoConnected()) {
-          await createOrUpdateCustomerMongo({
-            id: fallbackId,
-            phone: cleanPhone || '9999999999',
-            username: username || cleanPhone || fallbackId,
-            contactPerson: `Client ${cleanPhone || fallbackId}`,
-            companyName: `Business ${cleanPhone || fallbackId}`,
-            email: `${cleanPhone || fallbackId}@client.admafia.marketing`,
-            passwordHash: lockedCredentialHash,
-            currency: currency || 'INR',
-            paymentStatus: 'paid',
-          });
-        }
-      } catch (mFallbackErr) {
-        console.warn('[MongoDB Fallback Cust Reg Warning]:', mFallbackErr.message);
-      }
-    }
-
-    if (custRes.rowCount === 0) {
-      throw new Error(`Customer account not found for wallet credit (ID: ${customerId || 'N/A'}, Phone: ${cleanPhone || 'N/A'}).`);
-    }
-
-    const cust = custRes.rows[0];
-    const existingWallet = await txQuery(`SELECT currency FROM wallets WHERE customer_id = $1 LIMIT 1`, [cust.id]);
-    const custCurrency = String(existingWallet.rows[0]?.currency || cust.currency || currency || 'INR').toUpperCase();
-    const currencySymbol = custCurrency === 'USD' ? '$' : custCurrency === 'AED' ? 'AED ' : custCurrency === 'GBP' ? '£' : custCurrency === 'SAR' ? 'SAR ' : '₹';
-
-    if (custCurrency === 'INR' && cleanAmount < 300) {
-      throw new Error('Minimum wallet top-up amount is ₹300.');
-    } else if (custCurrency !== 'INR' && cleanAmount < 10) {
-      throw new Error(`Minimum wallet top-up amount is ${currencySymbol}10.`);
-    }
-
-    // 2. Check for duplicate credit idempotency using row lock
-    const existingTx = await txQuery(
-      `SELECT id, amount, balance_after, status, reference_utr
-       FROM wallet_transactions
-       WHERE reference_utr = $1 FOR UPDATE LIMIT 1`,
-      [utr]
-    );
-
-    if (existingTx.rowCount > 0 && String(existingTx.rows[0].status).includes('Verified')) {
-      const walRes = await txQuery('SELECT available_balance FROM wallets WHERE customer_id = $1 LIMIT 1', [cust.id]);
-      const viewRes = await txQuery('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
-      return {
-        ok: true,
-        alreadyCredited: true,
-        customerId: cust.id,
-        walletBalance: Number(walRes.rows[0]?.available_balance || 0),
-        customer: mapCustomerRow(viewRes.rows[0]),
-        transaction: mapWalletTxRow(existingTx.rows[0]),
-        message: 'Payment already credited idempotently.',
-      };
-    }
-
-    // 3. Upsert wallet balance atomically
-    const defaultDailyMin = custCurrency === 'INR' ? 300.00 : 10.00;
-    const walRes = await txQuery(
-      `INSERT INTO wallets (
-        id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active, currency
-      ) VALUES ($1, $2, $3, $4, $3, FALSE, $5)
-      ON CONFLICT (customer_id) DO UPDATE SET
-        available_balance = wallets.available_balance + EXCLUDED.available_balance,
-        total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
-        currency = COALESCE(wallets.currency, EXCLUDED.currency),
-        updated_at = NOW()
-      RETURNING *`,
-      [`wal_${Date.now()}`, cust.id, cleanAmount, defaultDailyMin, custCurrency]
-    );
-
-    const newBalance = Number(walRes.rows[0]?.available_balance || cleanAmount);
-    const walletId = walRes.rows[0]?.id || null;
-
-    // 4. Mark customer payment_status = 'paid'
-    await txQuery(
-      `UPDATE customers SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
-      [cust.id]
-    );
-
-    // 5. Insert or update wallet transaction with 'Verified ✓'
-    const txId = `tx_${Date.now()}`;
-    const txDesc = description || `Ad Wallet Balance Top-Up (${currencySymbol}${cleanAmount.toLocaleString()} Added)`;
-    const txInsert = await txQuery(
-      `INSERT INTO wallet_transactions (
-        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, currency
-      ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓', $9)
-      ON CONFLICT (reference_utr) DO UPDATE SET
-        balance_after = EXCLUDED.balance_after,
-        status = 'Verified ✓',
-        description = EXCLUDED.description,
-        payment_method = EXCLUDED.payment_method
-      RETURNING *`,
-      [txId, cust.id, walletId, cleanAmount, newBalance, utr, txDesc, paymentMethod, custCurrency]
-    );
-
-    // 6. Insert payment_records for Sales Desk (/sales#payments)
-    const payId = `pay_${Date.now()}_${randomBytes(3).toString('hex')}`;
-    const receiptNo = `RCP-${new Date().getFullYear()}-${Date.now()}-${randomBytes(3).toString('hex').toUpperCase()}`;
-    const payInsert = await txQuery(
-      `INSERT INTO payment_records (
-        id, receipt_number, customer_id, company_name, contact_person, phone, city,
-        tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, notes, currency
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'topup', $8, 0, $8, $9, $10, 'paid', $11, $12)
-      ON CONFLICT (receipt_number) DO UPDATE SET total_amount = EXCLUDED.total_amount
-      RETURNING *`,
-      [
-        payId,
-        receiptNo,
-        cust.id,
-        cust.company_name,
-        cust.contact_person,
-        cust.phone,
-        cust.city || cust.country || 'India',
-        cleanAmount,
-        paymentMethod,
-        utr,
-        `Wallet Top-Up (+${currencySymbol}${cleanAmount.toLocaleString()})`,
-        custCurrency,
-      ]
-    );
-
-    // 7. Insert tax invoice with SAC code breakdown
-    const invId = `inv_${Date.now()}_${randomBytes(3).toString('hex')}`;
-    const invoiceNo = `INV-${new Date().getFullYear()}-${Date.now()}-${randomBytes(3).toString('hex').toUpperCase()}`;
-    const taxRate = custCurrency === 'INR' ? 1.18 : 1.0;
-    const baseAmt = Math.round(cleanAmount / taxRate);
-    const totalTax = cleanAmount - baseAmt;
-    const cgstAmt = Math.round(totalTax / 2);
-    const sgstAmt = totalTax - cgstAmt;
-
-    const invInsert = await txQuery(
-      `INSERT INTO tax_invoices (
-        id, invoice_no, customer_id, payment_record_id, particulars, sac_code,
-        base_amount, cgst_amount, sgst_amount, total_amount, payment_mode, status, currency
-      ) VALUES ($1, $2, $3, $4, $5, '998311', $6, $7, $8, $9, $10, 'Paid', $11)
-      ON CONFLICT (invoice_no) DO UPDATE SET total_amount = EXCLUDED.total_amount
-      RETURNING *`,
-      [
-        invId,
-        invoiceNo,
-        cust.id,
-        payId,
-        'Meta Ads Campaign Ad Spend Budget Credit',
-        baseAmt,
-        cgstAmt,
-        sgstAmt,
-        cleanAmount,
-        `${paymentMethod} (Ref: ${utr})`,
-        custCurrency,
-      ]
-    );
-
-    // 8. Sync Pending Verifications (Sales Desk 02)
-    await txQuery(
-      `UPDATE pending_verifications SET
-        amount = $1,
-        utr_number = $2,
-        payment_status = 'paid',
-        queue_type = CASE WHEN profile_status = 'complete' THEN 'Completed' ELSE 'Profile Only Incomplete' END,
-        verified_at = NOW()
-      WHERE customer_id = $3`,
-      [cleanAmount, utr, cust.id]
-    );
-
-    const viewRes = await txQuery('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
-
-    // Real-Time Authoritative MongoDB Write
-    try {
-      if (!isMongoConnected()) {
-        await initMongo().catch(() => {});
-      }
-      if (isMongoConnected()) {
-        await creditWalletAtomic({
-          customerId: cust.id,
-          amount: cleanAmount,
-          referenceUtr: utr,
-          paymentMethod,
-          description: txDesc,
-          receiptNumber: receiptNo,
-        });
-        console.log(`[MongoDB Real-Time] Credited ₹${cleanAmount} to customer ${cust.id} (UTR: ${utr}) saved to MongoDB`);
-      }
-    } catch (mErr) {
-      console.warn('[MongoDB Real-Time Sync Warning]:', mErr.message);
-    }
-
+  if (out.alreadyCredited) {
     return {
       ok: true,
-      alreadyCredited: false,
-      walletBalance: newBalance,
-      customer: mapCustomerRow(viewRes.rows[0]),
-      transaction: mapWalletTxRow(txInsert.rows[0]),
-      paymentRecord: payInsert.rowCount ? mapPaymentRecordRow(payInsert.rows[0]) : null,
-      invoice: invInsert.rowCount ? mapInvoiceRow(invInsert.rows[0]) : null,
-      message: `₹${cleanAmount.toLocaleString('en-IN')} successfully credited to wallet.`,
+      alreadyCredited: true,
+      customerId: out.customerId,
+      walletBalance: out.walletBalance,
+      customer: viewRow ? mapCustomerRow(viewRow) : null,
+      transaction: out.transaction ? mapWalletTxRow(walletTxToRow(out.transaction)) : null,
+      message: 'Payment already credited idempotently.',
     };
-  });
+  }
+
+  return {
+    ok: true,
+    alreadyCredited: false,
+    walletBalance: out.walletBalance,
+    customer: viewRow ? mapCustomerRow(viewRow) : null,
+    transaction: out.transaction ? mapWalletTxRow(walletTxToRow(out.transaction)) : null,
+    paymentRecord: out.paymentRecord ? mapPaymentRecordRow(paymentToRow(out.paymentRecord)) : null,
+    invoice: out.invoice ? mapInvoiceRow(invoiceToRow(out.invoice)) : null,
+    message: `₹${cleanAmount.toLocaleString('en-IN')} successfully credited to wallet.`,
+  };
 }
 
 app.get('/api/payments/razorpay/callback', async (req, res) => {
@@ -3754,18 +2950,11 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
         } catch (e) { }
       }
       if (customerId) {
-        await query(
-          `INSERT INTO wallet_transactions (
-            id, customer_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-          ) VALUES ($1, $2, 'Credit', 0, 0, $3, $4, 'Razorpay Secure (Failed)', 'Failed ✕')
-          ON CONFLICT (reference_utr) DO NOTHING`,
-          [
-            `tx_fail_${Date.now()}`,
-            customerId,
-            paymentId || `FAIL_${Date.now()}`,
-            `Online recharge ${failReason.toLowerCase()}`,
-          ]
-        ).catch(() => { });
+        await insertCallbackFailureRow({
+          customerId,
+          referenceUtr: paymentId || `FAIL_${Date.now()}`,
+          description: `Online recharge ${failReason.toLowerCase()}`,
+        }).catch(() => {});
       }
       return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&reason=${encodeURIComponent(failReason)}#app/wallet`);
     }
@@ -3805,28 +2994,15 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
       } catch (e) { }
     }
 
-    let targetCustId = null;
-    const custRes = await query(
-      `SELECT id FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`,
-      [customerId || '', custPhone]
-    );
+    const existingCust = await findCustomerFlexible({ id: customerId || '', phone: custPhone });
+    const targetCustId = existingCust ? existingCust._id : (customerId || `cust_${custPhone || Date.now()}`);
 
-    if (custRes.rowCount > 0) {
-      targetCustId = custRes.rows[0].id;
-    } else {
-      targetCustId = customerId || `cust_${custPhone || Date.now()}`;
-    }
-
-    const billingRes = await query(
-      `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
-       FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
-      [targetCustId]
-    );
-    if (billingRes.rowCount && String(billingRes.rows[0].currency).toUpperCase() !== 'INR') {
+    const billingCurrency = await getBillingCurrency(targetCustId);
+    if (billingCurrency && billingCurrency !== 'INR') {
       return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${encodeURIComponent(paymentId)}&reason=Razorpay+supports+INR+wallets+only#app/wallet`);
     }
 
-    // Credit the wallet idempotently via atomic database transaction
+    // Credit the wallet idempotently via atomic MongoDB transaction
     await creditCustomerWallet({
       customerId: targetCustId,
       amount: cleanAmount,
@@ -3935,16 +3111,12 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
     const cleanPhone = String(phone || customerId || payment.contact || '').replace(/\D/g, '').slice(-10);
     const targetCustId = customerId || payment.notes?.customer_id || `cust_${cleanPhone || Date.now()}`;
 
-    const billingRes = await query(
-      `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
-       FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
-      [targetCustId]
-    );
-    if (billingRes.rowCount && String(billingRes.rows[0].currency).toUpperCase() !== 'INR') {
+    const billingCurrency = await getBillingCurrency(targetCustId);
+    if (billingCurrency && billingCurrency !== 'INR') {
       return res.status(400).json({ ok: false, error: 'Razorpay cannot credit a non-INR wallet.' });
     }
 
-    // 5. Credit wallet via atomic idempotent PostgreSQL transaction
+    // 5. Credit wallet via atomic idempotent MongoDB transaction
     const result = await creditCustomerWallet({
       customerId: targetCustId,
       phone: cleanPhone,
@@ -4038,10 +3210,10 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
           // Fallback Customer Resolution if notes were truncated or omitted
           if (!customerId && !cleanPhone && payment?.email) {
             try {
-              const custByEmail = await query('SELECT id, phone FROM customers WHERE email = $1 LIMIT 1', [payment.email]);
-              if (custByEmail.rowCount > 0) {
-                customerId = custByEmail.rows[0].id;
-                cleanPhone = custByEmail.rows[0].phone;
+              const custByEmail = await findCustomerByEmailExact(payment.email);
+              if (custByEmail) {
+                customerId = custByEmail._id;
+                cleanPhone = custByEmail.phone;
               }
             } catch (lookupErr) {
               console.warn('[Razorpay Webhook] Email lookup error:', lookupErr.message);
@@ -4050,12 +3222,9 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
 
           if (payment?.order_id && (!customerId || !cleanPhone)) {
             try {
-              const custByOrder = await query(
-                `SELECT customer_id FROM payment_records WHERE order_id = $1 OR utr_reference = $1 LIMIT 1`,
-                [payment.order_id]
-              );
-              if (custByOrder.rowCount > 0 && custByOrder.rows[0].customer_id) {
-                customerId = custByOrder.rows[0].customer_id;
+              const custByOrder = await findPaymentCustomerByOrder(payment.order_id);
+              if (custByOrder?.customerId) {
+                customerId = custByOrder.customerId;
               }
             } catch { }
           }
@@ -4114,89 +3283,18 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
 
           if (refundId && refundAmt > 0) {
             console.log(`[Razorpay Webhook] Processing refund: ${refundId} for payment: ${paymentId}, amount: ₹${refundAmt}`);
-            await withTransaction(async (txQuery) => {
-              await txQuery(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`refund_${refundId}`]);
-
-              const existingRef = await txQuery(
-                `SELECT id FROM wallet_transactions WHERE reference_utr = $1 LIMIT 1`,
-                [refundId]
-              );
-              if (existingRef.rowCount > 0) {
-                console.log(`[Razorpay Webhook] Refund ${refundId} already recorded.`);
-                return;
-              }
-
-              const origTx = await txQuery(
-                `SELECT customer_id, wallet_id FROM wallet_transactions WHERE reference_utr = $1 LIMIT 1`,
-                [paymentId]
-              );
-              let targetCustId = origTx.rows[0]?.customer_id || payment?.notes?.customer_id;
-              let targetWalletId = origTx.rows[0]?.wallet_id;
-
-              if (!targetCustId && payment?.contact) {
-                const cleanP = String(payment.contact).replace(/\D/g, '').slice(-10);
-                const cRes = await txQuery(`SELECT id FROM customers WHERE phone = $1 LIMIT 1`, [cleanP]);
-                targetCustId = cRes.rows[0]?.id;
-              }
-
-              if (targetCustId) {
-                const walRes = await txQuery(
-                  `UPDATE wallets SET
-                    available_balance = GREATEST(0, available_balance - $1::NUMERIC),
-                    total_lifetime_paid = GREATEST(0, total_lifetime_paid - $1::NUMERIC),
-                    updated_at = NOW()
-                   WHERE customer_id = $2
-                   RETURNING id, available_balance`,
-                  [refundAmt, targetCustId]
-                );
-                const updatedBal = Number(walRes.rows[0]?.available_balance || 0);
-                const walId = walRes.rows[0]?.id || targetWalletId;
-
-                await txQuery(
-                  `INSERT INTO wallet_transactions (
-                    id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-                  ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Razorpay Online Refund', 'Refunded ✓')
-                  ON CONFLICT (reference_utr) DO NOTHING`,
-                  [
-                    `tx_rfnd_${Date.now()}_${randomBytes(3).toString('hex')}`,
-                    targetCustId,
-                    walId,
-                    refundAmt,
-                    updatedBal,
-                    refundId,
-                    `Online refund processed via Razorpay (Ref: ${paymentId})`,
-                  ]
-                );
-
-                await txQuery(
-                  `INSERT INTO refund_requests (
-                    id, customer_id, wallet_id, original_tx_ref, amount, reason, status, provider_ref, reviewed_by, reviewed_at
-                  ) VALUES ($1, $2, $3, $4, $5, $6, 'Completed', $7, 'Razorpay Webhook (Automated)', NOW())
-                  ON CONFLICT (id) DO NOTHING`,
-                  [
-                    `rfnd_req_${Date.now()}_${randomBytes(3).toString('hex')}`,
-                    targetCustId,
-                    walId,
-                    paymentId,
-                    refundAmt,
-                    `Razorpay automated webhook refund (${refund.notes?.reason || 'Customer requested / Bank reversal'})`,
-                    refundId,
-                  ]
-                );
-
-                await txQuery(
-                  `UPDATE payment_records SET status = 'refunded', notes = notes || ' • Refunded via Razorpay (' || $1 || ')' WHERE utr_reference = $2`,
-                  [refundId, paymentId]
-                );
-
-                await txQuery(
-                  `UPDATE tax_invoices SET status = 'Refunded' WHERE particulars ILIKE '%' || $1 || '%' OR payment_mode ILIKE '%' || $1 || '%'`,
-                  [paymentId]
-                );
-
-                console.log(`[Razorpay Webhook] Refund ${refundId} completed successfully for customer ${targetCustId}.`);
-              }
+            const refundOutcome = await processRazorpayRefund({
+              refund,
+              payment,
+              refundId,
+              paymentId,
+              refundAmt,
             });
+            if (refundOutcome.status === 'already') {
+              console.log(`[Razorpay Webhook] Refund ${refundId} already recorded.`);
+            } else if (refundOutcome.status === 'refunded') {
+              console.log(`[Razorpay Webhook] Refund ${refundId} completed successfully for customer ${refundOutcome.customerId}.`);
+            }
           }
         } else if (event === 'payment.failed') {
           const payment = req.body?.payload?.payment?.entity;
@@ -4204,44 +3302,29 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
           const cleanPhone = String(payment?.contact || '').replace(/\D/g, '').slice(-10);
 
           if (!customerId && cleanPhone) {
-            const custLookup = await query(
-              `SELECT id FROM customers WHERE phone = $1 OR RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = $1 LIMIT 1`,
-              [cleanPhone]
-            );
-            if (custLookup.rows[0]) customerId = custLookup.rows[0].id;
+            const custLookup = await findCustomerByPhoneDigits(cleanPhone);
+            if (custLookup) customerId = custLookup._id;
           }
           if (!customerId && payment?.email) {
-            const emailLookup = await query(
-              `SELECT id FROM customers WHERE LOWER(email) = LOWER($1) LIMIT 1`,
-              [payment.email.trim()]
-            );
-            if (emailLookup.rows[0]) customerId = emailLookup.rows[0].id;
+            const emailLookup = await findCustomerByEmailCi(payment.email);
+            if (emailLookup) customerId = emailLookup._id;
           }
 
           if (customerId && payment?.id) {
             const failAmount = Number(payment.amount || 0) / 100;
-            const walRes = await query('SELECT id, available_balance FROM wallets WHERE customer_id = $1 LIMIT 1', [customerId]);
-            const walletId = walRes.rows[0]?.id || `wal_${customerId}`;
-            const currentBal = Number(walRes.rows[0]?.available_balance || 0);
+            const walDoc = await Wallet.findOne({ customerId }, { _id: 1, availableBalance: 1 }).lean();
+            const walletId = walDoc?._id || `wal_${customerId}`;
+            const currentBal = Number(walDoc?.availableBalance || 0);
 
-            await query(
-              `INSERT INTO wallet_transactions (
-                id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
-              ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Payment Declined ✕', NOW())
-              ON CONFLICT (reference_utr) DO UPDATE SET 
-                status = 'Payment Declined ✕',
-                description = EXCLUDED.description`,
-              [
-                `tx_fail_${payment.id}`,
-                customerId,
-                walletId,
-                failAmount > 0 ? failAmount : 300,
-                currentBal,
-                payment.id,
-                `Online recharge failed: ${payment.error_description || payment.error_reason || 'Payment declined by bank'}`,
-                payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Gateway',
-              ]
-            ).catch((err) => console.error('[Razorpay Webhook payment.failed]', err.message));
+            await upsertDeclinedTransaction({
+              customerId,
+              walletId,
+              amount: failAmount > 0 ? failAmount : 300,
+              balanceAfter: currentBal,
+              referenceUtr: payment.id,
+              description: `Online recharge failed: ${payment.error_description || payment.error_reason || 'Payment declined by bank'}`,
+              paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Gateway',
+            }).catch((err) => console.error('[Razorpay Webhook payment.failed]', err.message));
           }
         }
       } catch (bgErr) {
@@ -4270,69 +3353,10 @@ app.post('/api/wallets/topup', async (req, res) => {
 // Record failed / declined payment attempts into customer wallet transaction ledger
 app.post('/api/wallets/failed-transaction', async (req, res) => {
   try {
-    const { customerId, phone, username, companyName, company, amount, referenceUtr, description, paymentMethod, failureReason } = req.body || {};
-    const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
-
-    let custRes = await query(
-      `SELECT * FROM customers 
-       WHERE id = $1 
-          OR (phone IS NOT NULL AND phone != '' AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = $2)
-          OR (username IS NOT NULL AND username != '' AND LOWER(username) = LOWER($3))
-       LIMIT 1`,
-      [customerId || '', cleanPhone || '9999999999', username || '']
-    );
-
-    let cust = custRes.rows[0];
-    if (!cust) {
-      const newCustId = customerId || (cleanPhone ? `cust_${cleanPhone}` : `cust_${Date.now()}`);
-      const newUsername = username || (cleanPhone ? `user_${cleanPhone}` : `client_${Date.now().toString().slice(-4)}`);
-      const newComp = companyName || company || 'Client Account';
-      const insCust = await query(`
-        INSERT INTO customers (id, username, company_name, contact_person, phone, password_hash, registered_at)
-        VALUES ($1, $2, $3, $4, $5, 'Client@AutoInit2026', NOW())
-        ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone
-        RETURNING *
-      `, [newCustId, newUsername, newComp, newUsername, cleanPhone || '9999999999']);
-      cust = insCust.rows[0];
-    }
-
-    const walRes = await query('SELECT id, available_balance FROM wallets WHERE customer_id = $1 LIMIT 1', [cust.id]);
-    let walletId = walRes.rows[0]?.id;
-    let currentBal = Number(walRes.rows[0]?.available_balance || 0);
-
-    if (!walletId) {
-      const newWalId = `wal_${cust.id}`;
-      const walIns = await query(`
-        INSERT INTO wallets (id, customer_id, available_balance)
-        VALUES ($1, $2, 0)
-        ON CONFLICT (customer_id) DO UPDATE SET customer_id = EXCLUDED.customer_id
-        RETURNING id, available_balance
-      `, [newWalId, cust.id]);
-      walletId = walIns.rows[0]?.id || newWalId;
-      currentBal = 0;
-    }
-
-    const cleanAmount = Number(amount || 0);
-    const txId = `tx_fail_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const utr = (referenceUtr || `FAIL-${Date.now().toString().slice(-6)}`).trim();
-    const reasonText = failureReason || 'Payment declined by bank or cancelled';
-    const txDesc = description || `Wallet recharge attempt failed: ${reasonText}`;
-    const meth = paymentMethod || 'Razorpay Gateway';
-
-    const txInsert = await query(
-      `INSERT INTO wallet_transactions (
-        id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
-      ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Payment Declined ✕', NOW())
-      ON CONFLICT (reference_utr) DO UPDATE SET 
-        status = 'Payment Declined ✕',
-        description = EXCLUDED.description
-      RETURNING *`,
-      [txId, cust.id, walletId, cleanAmount > 0 ? cleanAmount : 300, currentBal, utr, txDesc, meth]
-    );
-
+    const txDoc = await recordFailedTransaction(req.body || {});
     res.json({
       ok: true,
-      transaction: mapWalletTxRow(txInsert.rows[0]),
+      transaction: txDoc ? mapWalletTxRow(walletTxToRow(txDoc)) : null,
     });
   } catch (err) {
     console.error('[POST /api/wallets/failed-transaction]', err);
@@ -4345,160 +3369,29 @@ app.post('/api/wallets/deduct', async (req, res) => {
     const { customerId, phone, username, amount, activeDays, force, manual } = req.body || {};
     const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
 
-    const custRes = await query(
-      `SELECT * FROM customers WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
-      [customerId || '', cleanPhone, username || '']
-    );
-    if (custRes.rowCount === 0) {
+    const cust = await findCustomerFlexible({
+      id: customerId || '',
+      phone: cleanPhone,
+      username: username || '',
+    });
+    if (!cust) {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
     }
-    const cust = custRes.rows[0];
 
-    const result = await withTransaction(async (txQuery) => {
-      const walRes = await txQuery('SELECT * FROM wallets WHERE customer_id = $1 FOR UPDATE', [cust.id]);
-      if (walRes.rowCount === 0) {
-        throw new Error('Wallet not found');
-      }
-      const wallet = walRes.rows[0];
-      const walletCurrency = String(wallet.currency || 'INR').toUpperCase();
-      const currencySymbol = walletCurrency === 'USD' ? '$' : '₹';
-      const minimumDailySpend = walletCurrency === 'INR' ? 300 : walletCurrency === 'USD' ? 10 : null;
-      if (minimumDailySpend === null || String(cust.currency || walletCurrency).toUpperCase() !== walletCurrency) {
-        throw Object.assign(new Error('Unsupported or mismatched customer and wallet currency.'), { statusCode: 409 });
-      }
-      const requestedSpend = amount === undefined || amount === null || amount === '' ? Number(wallet?.daily_ad_spend || minimumDailySpend) : Number(amount);
-      if (!Number.isFinite(requestedSpend) || requestedSpend < minimumDailySpend) {
-        throw Object.assign(new Error(`Daily spend minimum is ${walletCurrency === 'INR' ? '₹300' : '$10'}.`), { statusCode: 400 });
-      }
-      const spendAmt = requestedSpend;
-      const currentBal = Number(wallet?.available_balance || 0);
-
-      const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-      const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
-      const kolkataTodayStr = kolkataNow.toLocaleDateString('en-CA');
-
-      // Financial Safety & Idempotency: Check if ad spend was already deducted for today in Asia/Kolkata
-      const isAlreadyDeductedToday = Boolean(
-        wallet?.last_deducted_at &&
-        new Date(wallet.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === kolkataTodayStr
-      );
-
-      const bookedDatesSet = new Set(
-        (wallet?.booked_dates || '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-      );
-      bookedDatesSet.add(kolkataTodayStr);
-      const nextBookedDates = Array.from(bookedDatesSet).join(',');
-
-      let finalActiveDays = wallet?.active_days || todayDayCode;
-      const daySet = new Set(
-        (Array.isArray(activeDays) && activeDays.length > 0 ? activeDays : finalActiveDays.split(','))
-          .map((d) => String(d).trim().toUpperCase())
-          .filter(Boolean)
-      );
-      daySet.add(todayDayCode);
-      finalActiveDays = Array.from(daySet).join(',');
-
-      if (isAlreadyDeductedToday && !force && !manual) {
-        // Idempotent: Do not double-deduct wallet balance!
-        await txQuery(
-          `UPDATE wallets SET
-            daily_ad_spend = $1::NUMERIC,
-            ad_campaign_active = TRUE,
-            active_days = $2::VARCHAR,
-            booked_dates = $4::TEXT,
-            updated_at = NOW()
-          WHERE customer_id = $3`,
-          [spendAmt, finalActiveDays, cust.id, nextBookedDates]
-        );
-
-        return {
-          alreadyDeducted: true,
-          balance: currentBal,
-          walletBalance: currentBal,
-          deducted: 0,
-          dailyAdSpend: spendAmt,
-          activeDays: Array.from(daySet),
-          isDeductedToday: true,
-          lastDeductedAt: wallet.last_deducted_at,
-          message: "Today's ad budget is already booked and running. No duplicate deduction made.",
-        };
-      }
-
-      if (currentBal < spendAmt) {
-        const err = new Error(`Insufficient wallet balance (${currencySymbol}${currentBal}) for ${currencySymbol}${spendAmt} daily ad spend.`);
-        err.statusCode = 400;
-        throw err;
-      }
-
-      const nextBal = currentBal - spendAmt;
-
-      await txQuery(
-        `UPDATE wallets SET
-          available_balance = $1::NUMERIC,
-          daily_ad_spend = $2::NUMERIC,
-          total_ad_spent = total_ad_spent + $2::NUMERIC,
-          ad_campaign_active = TRUE,
-          active_days = $4::VARCHAR,
-          last_deducted_at = NOW(),
-          booked_dates = $5::TEXT,
-          updated_at = NOW()
-        WHERE customer_id = $3`,
-        [nextBal, spendAmt, cust.id, String(finalActiveDays), nextBookedDates]
-      );
-
-      // Also activate or update marketing campaigns if existing
-      await txQuery(
-        `UPDATE marketing_campaigns SET
-          status = 'Running',
-          external_platform_status = 'Active',
-          daily_budget = $1,
-          last_action = 'Campaign Live: Daily Spend Deducted',
-          last_actor = 'Customer Self-Service Portal',
-          last_action_at = NOW(),
-          updated_at = NOW()
-        WHERE customer_id = $2`,
-        [spendAmt, cust.id]
-      ).catch(() => { });
-
-      const txId = `tx_deb_${Date.now()}`;
-      const refUtr = `AUTO-AD-${Date.now()}`;
-      const txInsert = await txQuery(
-        `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, currency
-        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓', $8)
-        RETURNING *`,
-        [
-          txId,
-          cust.id,
-          wallet.id,
-          spendAmt,
-          nextBal,
-          refUtr,
-          `Daily Meta Ads Campaign Spend Deduction (-${currencySymbol}${spendAmt}/day)`,
-          walletCurrency,
-        ]
-      );
-
-      return {
-        alreadyDeducted: false,
-        balance: nextBal,
-        walletBalance: nextBal,
-        deducted: spendAmt,
-        dailyAdSpend: spendAmt,
-        activeDays: Array.from(daySet),
-        isDeductedToday: true,
-        transaction: mapWalletTxRow(txInsert.rows[0]),
-      };
+    const outcome = await deductWalletForDay({
+      cust,
+      amount,
+      activeDays,
+      force,
+      manual,
     });
 
-    const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
+    const viewRow = await getCustomerViewRowById(cust._id);
     res.json({
       ok: true,
-      ...result,
-      customer: mapCustomerRow(viewRes.rows[0]),
+      ...outcome.result,
+      ...(outcome.txDoc ? { transaction: mapWalletTxRow(walletTxToRow(outcome.txDoc)) } : {}),
+      customer: viewRow ? mapCustomerRow(viewRow) : null,
     });
   } catch (err) {
     const status = err.statusCode || (err.message && err.message.includes('Insufficient wallet balance') ? 400 : 500);
@@ -4511,22 +3404,8 @@ app.post('/api/wallets/deduct', async (req, res) => {
 // =============================================================================
 app.get('/api/leads', async (req, res) => {
   try {
-    const { customerId, phone, username } = req.query;
-    if (customerId || phone || username) {
-      const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
-      const result = await query(
-        `SELECT * FROM leads
-         WHERE customer_id = $1
-            OR ($2 <> '' AND customer_phone = $2)
-            OR ($3 <> '' AND LOWER(customer_username) = LOWER($3))
-         ORDER BY created_at DESC`,
-        [customerId || '', cleanPhone, username || '']
-      );
-      return res.json({ ok: true, leads: result.rows.map(mapLeadRow) });
-    }
-
-    const allRes = await query('SELECT * FROM leads ORDER BY created_at DESC');
-    res.json({ ok: true, leads: allRes.rows.map(mapLeadRow) });
+    const rows = await listLeadRows(req.query || {});
+    res.json({ ok: true, leads: rows.map(mapLeadRow) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -4534,22 +3413,7 @@ app.get('/api/leads', async (req, res) => {
 
 app.post('/api/leads', async (req, res) => {
   try {
-    const {
-      customerId,
-      customerPhone,
-      customerUsername,
-      company,
-      assignedCompany,
-      phone,
-      name,
-      city = '',
-      requirement = 'Inbound Meta Ads Campaign Enquiry',
-      budget = '₹1.5L – ₹3.5L',
-      source = 'Direct Intake',
-      priority = 'Urgent',
-      notes = '',
-    } = req.body || {};
-
+    const { phone, name } = req.body || {};
     const buyerDigits = String(phone || name || '').replace(/\D/g, '').slice(-10);
     if (buyerDigits.length !== 10 || !['6', '7', '8', '9'].includes(buyerDigits[0])) {
       return res.status(400).json({
@@ -4558,63 +3422,15 @@ app.post('/api/leads', async (req, res) => {
       });
     }
 
-    const targetCompany = (company || assignedCompany || '').trim();
-    const cleanCustPhone = String(customerPhone || '').replace(/\D/g, '').slice(-10);
-
-    // Match the registered customer in PostgreSQL
-    const custRes = await query(
-      `SELECT * FROM customers
-       WHERE id = $1
-          OR ($2 <> '' AND phone = $2)
-          OR ($3 <> '' AND LOWER(username) = LOWER($3))
-          OR ($4 <> '' AND LOWER(company_name) = LOWER($4))
-       ORDER BY registered_at DESC
-       LIMIT 1`,
-      [customerId || '', cleanCustPhone, customerUsername || '', targetCompany]
-    );
-
-    if (custRes.rowCount === 0) {
+    const out = await createDirectLeadRow(req.body || {});
+    if (out.notFound) {
       return res.status(404).json({
         ok: false,
-        error: `No registered customer account found matching "${targetCompany}". Register the customer first.`,
+        error: `No registered customer account found matching "${out.targetCompany}". Register the customer first.`,
       });
     }
 
-    const cust = custRes.rows[0];
-    const leadId = req.body.id || `lead_${Date.now()}`;
-    const displayPhone = `+91 ${buyerDigits}`;
-
-    const insertRes = await query(
-      `INSERT INTO leads (
-        id, customer_id, customer_phone, customer_username, company_name,
-        buyer_phone, display_phone, buyer_name, buyer_email, city,
-        requirement, budget, source, priority, status, is_hot, is_read, notes
-      ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, 'new', TRUE, FALSE, $15
-      )
-      RETURNING *`,
-      [
-        leadId,
-        cust.id,
-        cust.phone,
-        cust.username,
-        cust.company_name,
-        buyerDigits,
-        displayPhone,
-        name || displayPhone,
-        `lead_${buyerDigits.slice(-4)}@example.com`,
-        city || cust.city || '',
-        requirement,
-        budget,
-        source,
-        priority,
-        notes || `Direct intake for ${cust.company_name}`,
-      ]
-    );
-
-    res.status(201).json({ ok: true, lead: mapLeadRow(insertRes.rows[0]) });
+    res.status(201).json({ ok: true, lead: mapLeadRow(out.row) });
   } catch (err) {
     console.error('[POST /api/leads]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -4623,52 +3439,11 @@ app.post('/api/leads', async (req, res) => {
 
 app.patch('/api/leads/:id', async (req, res) => {
   try {
-    const leadId = req.params.id;
-    const { status, read, is_read, notes } = req.body || {};
-    let existing = await query('SELECT * FROM leads WHERE id = $1', [leadId]);
-    if (existing.rowCount === 0) {
-      const cleanDigits = String(leadId).replace(/\D/g, '').slice(-10);
-      if (cleanDigits.length === 10) {
-        existing = await query('SELECT * FROM leads WHERE buyer_phone = $1 ORDER BY created_at DESC LIMIT 1', [cleanDigits]);
-      }
-    }
-    if (existing.rowCount === 0) {
+    const updatedRow = await updateLeadAndSyncAssignment(req.params.id, req.body || {});
+    if (!updatedRow) {
       return res.status(404).json({ ok: false, error: 'Lead not found' });
     }
-    const row = existing.rows[0];
-    const targetLeadId = row.id;
-    const nextStatus = status !== undefined ? status : row.status;
-    const nextRead = read !== undefined ? Boolean(read) : is_read !== undefined ? Boolean(is_read) : Boolean(row.is_read);
-    const nextNotes = notes !== undefined ? notes : row.notes;
-
-    const updated = await query(
-      `UPDATE leads SET status = $1, is_read = $2, notes = $3, updated_at = NOW() WHERE id = $4 RETURNING *`,
-      [nextStatus, nextRead, nextNotes, targetLeadId]
-    );
-
-    // Sync corresponding lead_assignments record if distributed
-    let interest = null;
-    if (nextStatus === 'Interested') interest = 'Interested';
-    else if (nextStatus === 'In Follow-up' || nextStatus === 'Callback') interest = 'In Follow-up';
-    else if (nextStatus === 'Converted' || nextStatus === 'Won') interest = 'Converted';
-    else if (nextStatus === 'Dropped' || nextStatus === 'Not Interested') interest = 'Not Interested';
-
-    try {
-      await query(
-        `UPDATE lead_assignments 
-         SET status = $1,
-             is_read = $2,
-             response_notes = $3,
-             response_interest = COALESCE($4, response_interest),
-             responded_at = NOW()
-         WHERE customer_lead_id = $5 OR (master_lead_id = $6 AND customer_id = $7)`,
-        [nextStatus, nextRead, nextNotes, interest, targetLeadId, row.master_lead_id || '', row.customer_id || '']
-      );
-    } catch (assignErr) {
-      console.warn('[lead_assignments sync warning]', assignErr.message);
-    }
-
-    res.json({ ok: true, lead: mapLeadRow(updated.rows[0]) });
+    res.json({ ok: true, lead: mapLeadRow(updatedRow) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -4679,8 +3454,8 @@ app.patch('/api/leads/:id', async (req, res) => {
 // =============================================================================
 app.get('/api/payments', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM payment_records ORDER BY paid_at DESC');
-    res.json({ ok: true, payments: result.rows.map(mapPaymentRecordRow) });
+    const rows = await listPaymentRecordRows();
+    res.json({ ok: true, payments: rows.map(mapPaymentRecordRow) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -4692,117 +3467,8 @@ app.delete('/api/payments/:id', async (req, res) => {
     const rawId = decodeURIComponent(req.params.id || '').trim();
     if (!rawId) return res.status(400).json({ ok: false, error: 'Payment ID or Receipt Number required' });
 
-    // 1. Support batch purging of test entries
-    if (rawId === 'test-entries' || rawId === 'testing-data') {
-      const testUtrs = ['aaggg', 'aa', 'pay_TvCjRvjJKpHawP', 'pay_TvCfjhW56ixevu'];
-      const testReceipts = ['REC_1793882500916_D467', 'REC_1793881526162_E051', 'RCP-2026-5814', 'RCP-2026-9969'];
-      const testPayIds = ['pay_1793882500916_18d1ec', 'pay_1793881526162_89c397', 'pay_1793600155814', 'pay_1793600029969'];
-      const testTxIds = ['tx_sales_1793882500877_e9eea9', 'tx_sales_1793881526137_245853', 'tx_1793600155807', 'tx_1793600029957', 'tx_deb_1793600430780_cz2cl5'];
-
-      await withTransaction(async (txQuery) => {
-        await txQuery(
-          `DELETE FROM payment_records 
-           WHERE receipt_number = ANY($1::text[]) 
-              OR utr_reference = ANY($2::text[])
-              OR id = ANY($3::text[])`,
-          [testReceipts, testUtrs, testPayIds]
-        );
-
-        await txQuery(
-          `DELETE FROM wallet_transactions 
-           WHERE reference_utr = ANY($1::text[])
-              OR id = ANY($2::text[])`,
-          [testUtrs, testTxIds]
-        );
-
-        await txQuery(
-          `DELETE FROM tax_invoices 
-           WHERE invoice_number = ANY($1::text[]) 
-              OR utr = ANY($2::text[])`,
-          [testReceipts, testUtrs]
-        );
-
-        await txQuery(
-          `UPDATE wallets 
-           SET available_balance = 0, total_lifetime_paid = 0 
-           WHERE customer_id IN (
-             SELECT id FROM customers WHERE phone IN ('7383198428', '8200792130')
-           )`
-        );
-
-        await txQuery(
-          `UPDATE customers 
-           SET payment_status = 'pending', amount_paid = 0 
-           WHERE phone IN ('7383198428', '8200792130')`
-        );
-      });
-
-      return res.json({ ok: true, deleted: true, purgedTestEntries: true });
-    }
-
-    // 2. Individual payment record deletion
-    const findRes = await query(
-      `SELECT * FROM payment_records 
-       WHERE id = $1 
-          OR receipt_number = $1 
-          OR utr_reference = $1
-       LIMIT 1`,
-      [rawId]
-    );
-
-    if (findRes.rowCount === 0) {
-      // Check wallet_transactions
-      const delWtOnly = await query(
-        `DELETE FROM wallet_transactions 
-         WHERE id = $1 
-            OR reference_utr = $1 
-         RETURNING *`,
-        [rawId]
-      );
-      if (delWtOnly.rowCount > 0) {
-        return res.json({ ok: true, deleted: true, from: 'wallet_transactions', count: delWtOnly.rowCount });
-      }
-      return res.status(404).json({ ok: false, error: 'Payment record not found' });
-    }
-
-    const payRow = findRes.rows[0];
-    const receiptNo = payRow.receipt_number;
-    const utrRef = payRow.utr_reference;
-    const custId = payRow.customer_id;
-    const payAmt = Number(payRow.amount || 0);
-
-    await withTransaction(async (txQuery) => {
-      // 1. Delete payment_records row
-      await txQuery(`DELETE FROM payment_records WHERE id = $1`, [payRow.id]);
-
-      // 2. Delete wallet_transactions credit
-      await txQuery(
-        `DELETE FROM wallet_transactions 
-         WHERE (reference_utr = $1 OR reference_utr = $2 OR id = $3)
-           AND (customer_id = $4 OR customer_id = $5)`,
-        [utrRef, receiptNo, payRow.id, custId, payRow.phone]
-      );
-
-      // 3. Delete tax_invoices
-      await txQuery(
-        `DELETE FROM tax_invoices 
-         WHERE (invoice_number = $1 OR payment_record_id = $2 OR utr = $3)`,
-        [receiptNo, payRow.id, utrRef]
-      );
-
-      // 4. Adjust wallet balance
-      if (custId && payAmt > 0) {
-        await txQuery(
-          `UPDATE wallets 
-           SET available_balance = GREATEST(0, available_balance - $1),
-               total_lifetime_paid = GREATEST(0, total_lifetime_paid - $1)
-           WHERE customer_id = $2`,
-          [payAmt, custId]
-        );
-      }
-    });
-
-    res.json({ ok: true, deleted: true, receiptNumber: receiptNo, utr: utrRef });
+    const out = await deletePaymentOrTestEntries(rawId);
+    return res.status(out.status).json(out.body);
   } catch (err) {
     console.error('[DELETE /api/payments/:id]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -4811,13 +3477,8 @@ app.delete('/api/payments/:id', async (req, res) => {
 
 app.get('/api/invoices', async (req, res) => {
   try {
-    const { customerId } = req.query;
-    if (customerId) {
-      const result = await query('SELECT * FROM tax_invoices WHERE customer_id = $1 ORDER BY created_at DESC', [customerId]);
-      return res.json({ ok: true, invoices: result.rows.map(mapInvoiceRow) });
-    }
-    const result = await query('SELECT * FROM tax_invoices ORDER BY created_at DESC');
-    res.json({ ok: true, invoices: result.rows.map(mapInvoiceRow) });
+    const rows = await listTaxInvoiceRows(req.query?.customerId);
+    res.json({ ok: true, invoices: rows.map(mapInvoiceRow) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -4825,8 +3486,8 @@ app.get('/api/invoices', async (req, res) => {
 
 app.get('/api/verifications', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM pending_verifications ORDER BY submitted_at DESC');
-    const verifications = result.rows.map((r) => ({
+    const rows = await listPendingVerificationRows();
+    const verifications = rows.map((r) => ({
       ...r,
       customerId: r.customer_id,
       company: r.company_name,
@@ -4861,16 +3522,8 @@ app.get('/api/verifications', async (req, res) => {
 
 app.get('/api/queries', async (req, res) => {
   try {
-    const { customerId } = req.query;
-    let sql = 'SELECT * FROM support_queries';
-    const params = [];
-    if (customerId) {
-      sql += ' WHERE customer_id = $1';
-      params.push(customerId);
-    }
-    sql += ' ORDER BY created_at DESC';
-    const result = await query(sql, params);
-    res.json({ ok: true, queries: result.rows.map(mapQueryRow) });
+    const rows = await listSupportQueryRows(req.query?.customerId);
+    res.json({ ok: true, queries: rows.map(mapQueryRow) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -4878,46 +3531,8 @@ app.get('/api/queries', async (req, res) => {
 
 app.post('/api/queries', async (req, res) => {
   try {
-    const {
-      customerId = null,
-      company = 'Client Account',
-      companyName,
-      contactName = '',
-      contactEmail = '',
-      contactPhone = '',
-      category = 'Campaign Delivery & Pacing',
-      subject = 'Customer Support Inquiry',
-      priority = 'Normal',
-      internalNotes = '',
-      status = 'open',
-    } = req.body || {};
-
-    const id = `qry_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
-    const comp = companyName || company || 'Client Account';
-    const cleanPhone = String(contactPhone).replace(/\D/g, '').slice(-10);
-
-    const result = await query(
-      `INSERT INTO support_queries (
-        id, customer_id, company_name, contact_name, contact_email, contact_phone,
-        category, subject, priority, internal_notes, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
-      RETURNING *`,
-      [
-        id,
-        customerId || null,
-        comp,
-        contactName || '',
-        contactEmail || '',
-        cleanPhone || '',
-        category,
-        subject,
-        priority,
-        internalNotes || '',
-        status.toLowerCase(),
-      ]
-    );
-
-    res.status(201).json({ ok: true, query: mapQueryRow(result.rows[0]) });
+    const row = await createSupportQueryRow(req.body || {});
+    res.status(201).json({ ok: true, query: mapQueryRow(row) });
   } catch (err) {
     console.error('[POST /api/queries]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -4926,41 +3541,11 @@ app.post('/api/queries', async (req, res) => {
 
 app.patch('/api/queries/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const { status, internalNotes, assignedAdmin } = req.body || {};
-    const updates = [];
-    const params = [id];
-    let idx = 2;
-
-    if (status) {
-      updates.push(`status = $${idx++}`);
-      params.push(status.toLowerCase());
-      if (status.toLowerCase() === 'resolved') {
-        updates.push(`resolved_at = NOW()`);
-      } else {
-        updates.push(`resolved_at = NULL`);
-      }
-    }
-    if (internalNotes !== undefined) {
-      updates.push(`internal_notes = $${idx++}`);
-      params.push(internalNotes);
-    }
-    if (assignedAdmin !== undefined) {
-      updates.push(`assigned_admin = $${idx++}`);
-      params.push(assignedAdmin);
-    }
-
-    if (updates.length === 0) {
-      const existing = await query('SELECT * FROM support_queries WHERE id = $1', [id]);
-      return res.json({ ok: true, query: mapQueryRow(existing.rows[0]) });
-    }
-
-    const sql = `UPDATE support_queries SET ${updates.join(', ')} WHERE id = $1 RETURNING *`;
-    const result = await query(sql, params);
-    if (result.rowCount === 0) {
+    const out = await updateSupportQueryRow(req.params.id, req.body || {});
+    if (out.notFound) {
       return res.status(404).json({ ok: false, error: 'Query not found' });
     }
-    res.json({ ok: true, query: mapQueryRow(result.rows[0]) });
+    res.json({ ok: true, query: mapQueryRow(out.row) });
   } catch (err) {
     console.error('[PATCH /api/queries/:id]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -4969,9 +3554,8 @@ app.patch('/api/queries/:id', async (req, res) => {
 
 app.delete('/api/queries/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const result = await query('DELETE FROM support_queries WHERE id = $1 RETURNING id', [id]);
-    res.json({ ok: true, deletedCount: result.rowCount });
+    const deletedCount = await deleteSupportQueryById(req.params.id);
+    res.json({ ok: true, deletedCount });
   } catch (err) {
     console.error('[DELETE /api/queries/:id]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -4980,25 +3564,8 @@ app.delete('/api/queries/:id', async (req, res) => {
 
 app.post('/api/tasks', async (req, res) => {
   try {
-    const {
-      customerId = null,
-      company = 'Client Account',
-      contact = '',
-      phone = '9876543210',
-      taskType = 'Follow-up Call',
-      priority = 'High',
-      dueStatus = 'today',
-      dueTime = 'Today, 04:00 PM',
-      notes = '',
-    } = req.body || {};
-    const id = `tsk_${Date.now()}`;
-    const cleanPhone = String(phone).replace(/\D/g, '').slice(-10).padEnd(10, '0');
-    const result = await query(
-      `INSERT INTO sales_tasks (id, customer_id, company_name, contact_person, phone, task_type, priority, due_status, due_time, notes, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending') RETURNING *`,
-      [id, customerId, company, contact || company, cleanPhone, taskType, priority, dueStatus, dueTime, notes]
-    );
-    res.status(201).json({ ok: true, task: result.rows[0] });
+    const task = await createSalesTaskRow(req.body || {});
+    res.status(201).json({ ok: true, task });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -5011,7 +3578,7 @@ app.post('/api/tasks', async (req, res) => {
 // List all Customer Groups with dynamic counts
 app.get('/api/groups', async (req, res) => {
   try {
-    const groups = await getGroupEligibilityCounts(query);
+    const groups = await getGroupEligibilityCounts();
     res.json({ ok: true, groups: groups.map(mapGroupRow) });
   } catch (err) {
     console.error('[GET /api/groups]', err);
@@ -5022,7 +3589,7 @@ app.get('/api/groups', async (req, res) => {
 // List all categories and customer groups with live eligible customer counts
 app.get('/api/categories', async (req, res) => {
   try {
-    const { categories, groups } = await getCategoryEligibilityCounts(query);
+    const { categories, groups } = await getCategoryEligibilityCounts();
     res.json({
       ok: true,
       categories,
@@ -5037,15 +3604,15 @@ app.get('/api/categories', async (req, res) => {
 // Preview eligible recipients by category or group
 app.get('/api/categories/preview', async (req, res) => {
   try {
-    const targetCat = (req.query.category || '').trim();
-    const targetGroupId = (req.query.groupId || '').trim();
-    const masterLeadId = (req.query.masterLeadId || '').trim() || null;
+    const targetCat = String(req.query.category || '').trim();
+    const targetGroupId = String(req.query.groupId || '').trim();
+    const masterLeadId = String(req.query.masterLeadId || '').trim() || null;
 
     if (!targetCat && !targetGroupId) {
       return res.status(400).json({ ok: false, error: 'Category or groupId parameter is required' });
     }
 
-    const evalData = await getEvaluatedRecipients(query, {
+    const evalData = await getEvaluatedRecipients({
       category: targetCat,
       groupId: targetGroupId,
       masterLeadId,
@@ -5071,22 +3638,14 @@ app.get('/api/categories/preview', async (req, res) => {
 // Create a new Customer Group
 app.post('/api/groups', async (req, res) => {
   try {
-    const { name, category = 'Other', icon = '🏢', description = '', status = 'active' } = req.body || {};
-    if (!name || !name.trim()) {
+    const { name } = req.body || {};
+    if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ ok: false, error: 'Group name is required' });
     }
-    const cleanName = name.trim();
-    const id = req.body.id || `grp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const result = await query(
-      `INSERT INTO customer_groups (id, name, category, icon, description, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-       RETURNING *`,
-      [id, cleanName, category || 'Other', icon || '🏢', description || '', status || 'active']
-    );
-    const row = result.rows[0];
-    res.status(201).json({ ok: true, group: mapGroupRow({ ...row, customer_count: 0, leads_received: 0, leads_distributed: 0 }) });
+    const row = await createCustomerGroupRow(req.body || {});
+    res.status(201).json({ ok: true, group: mapGroupRow(row) });
   } catch (err) {
-    if (err.message && (err.message.includes('unique') || err.message.includes('duplicate'))) {
+    if (err?.code === 11000 || (err.message && (err.message.includes('unique') || err.message.includes('duplicate')))) {
       return res.status(409).json({ ok: false, error: 'A customer group with this name already exists.' });
     }
     res.status(500).json({ ok: false, error: err.message });
@@ -5096,37 +3655,13 @@ app.post('/api/groups', async (req, res) => {
 // Update an existing Customer Group
 app.put('/api/groups/:id', async (req, res) => {
   try {
-    const groupId = req.params.id;
-    const { name, category, icon, description, status } = req.body || {};
-    const existing = await query('SELECT * FROM customer_groups WHERE id = $1', [groupId]);
-    if (existing.rowCount === 0) {
+    const row = await updateCustomerGroupRow(req.params.id, req.body || {});
+    if (!row) {
       return res.status(404).json({ ok: false, error: 'Customer group not found' });
     }
-    const curr = existing.rows[0];
-    const nextName = name !== undefined ? name.trim() : curr.name;
-    const nextCategory = category !== undefined ? category : curr.category;
-    const nextIcon = icon !== undefined ? icon : curr.icon;
-    const nextDesc = description !== undefined ? description : curr.description;
-    const nextStatus = status !== undefined ? status : curr.status;
-
-    const result = await query(
-      `UPDATE customer_groups
-       SET name = $1, category = $2, icon = $3, description = $4, status = $5, updated_at = NOW()
-       WHERE id = $6
-       RETURNING *`,
-      [nextName, nextCategory, nextIcon, nextDesc, nextStatus, groupId]
-    );
-
-    const counts = await query(`
-      SELECT 
-        (SELECT COUNT(*) FROM customer_group_memberships WHERE group_id = $1) AS customer_count,
-        (SELECT COUNT(*) FROM master_leads WHERE group_id = $1) AS leads_received,
-        (SELECT COUNT(*) FROM lead_assignments WHERE group_id = $1) AS leads_distributed
-    `, [groupId]);
-
-    res.json({ ok: true, group: mapGroupRow({ ...result.rows[0], ...counts.rows[0] }) });
+    res.json({ ok: true, group: mapGroupRow(row) });
   } catch (err) {
-    if (err.message && (err.message.includes('unique') || err.message.includes('duplicate'))) {
+    if (err?.code === 11000 || (err.message && (err.message.includes('unique') || err.message.includes('duplicate')))) {
       return res.status(409).json({ ok: false, error: 'A customer group with this name already exists.' });
     }
     res.status(500).json({ ok: false, error: err.message });
@@ -5136,8 +3671,7 @@ app.put('/api/groups/:id', async (req, res) => {
 // Delete a Customer Group
 app.delete('/api/groups/:id', async (req, res) => {
   try {
-    const groupId = req.params.id;
-    await query('DELETE FROM customer_groups WHERE id = $1', [groupId]);
+    await deleteCustomerGroupCascade(req.params.id);
     res.json({ ok: true, message: 'Group deleted successfully' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -5147,39 +3681,8 @@ app.delete('/api/groups/:id', async (req, res) => {
 // List members of a Customer Group
 app.get('/api/groups/:id/members', async (req, res) => {
   try {
-    const groupId = req.params.id;
-    const membersRes = await query(
-      `SELECT 
-         c.id, c.username, c.company_name, c.contact_person, c.phone, c.email,
-         c.category, c.city, c.state, c.status, c.profile_status, c.payment_status,
-         COALESCE(w.available_balance, 0) AS balance,
-         cgm.assigned_at
-       FROM customer_group_memberships cgm
-       JOIN customers c ON c.id = cgm.customer_id
-       LEFT JOIN wallets w ON w.customer_id = c.id
-       WHERE cgm.group_id = $1
-       ORDER BY cgm.assigned_at DESC`,
-      [groupId]
-    );
-
-    res.json({
-      ok: true,
-      members: membersRes.rows.map((r) => ({
-        id: r.id,
-        customerId: r.id,
-        username: r.username,
-        companyName: r.company_name,
-        contactPerson: r.contact_person,
-        phone: (r.phone || '').trim(),
-        email: r.email || '',
-        category: r.category || 'Other',
-        city: r.city || '',
-        state: r.state || '',
-        status: r.status,
-        balance: Number(r.balance || 0),
-        assignedAt: r.assigned_at,
-      })),
-    });
+    const members = await listGroupMembers(req.params.id);
+    res.json({ ok: true, members });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -5188,46 +3691,21 @@ app.get('/api/groups/:id/members', async (req, res) => {
 // Assign customers to a Customer Group (Batch assignment)
 app.post('/api/groups/:id/members', async (req, res) => {
   try {
-    const groupId = req.params.id;
     const { customerIds = [] } = req.body || {};
     if (!Array.isArray(customerIds) || customerIds.length === 0) {
       return res.status(400).json({ ok: false, error: 'customerIds array is required' });
     }
 
-    // Verify group exists
-    const grpRes = await query('SELECT * FROM customer_groups WHERE id = $1', [groupId]);
-    if (grpRes.rowCount === 0) {
+    const out = await assignGroupMembers(req.params.id, customerIds);
+    if (!out) {
       return res.status(404).json({ ok: false, error: 'Customer group not found' });
     }
 
-    let assignedCount = 0;
-    for (const cId of customerIds) {
-      const memId = `cgm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const insRes = await query(
-        `INSERT INTO customer_group_memberships (id, group_id, customer_id, assigned_at)
-         VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (group_id, customer_id) DO NOTHING`,
-        [memId, groupId, cId]
-      );
-      if (insRes.rowCount > 0) assignedCount++;
-      if (grpRes.rows[0].category) {
-        await query('UPDATE customers SET group_id = $1, category = $2 WHERE id = $3', [groupId, grpRes.rows[0].category, cId]);
-      }
-    }
-
-    const updatedMembers = await query(
-      `SELECT c.id, c.company_name, c.phone, c.status
-       FROM customer_group_memberships cgm
-       JOIN customers c ON c.id = cgm.customer_id
-       WHERE cgm.group_id = $1`,
-      [groupId]
-    );
-
     res.json({
       ok: true,
-      message: `Successfully assigned ${assignedCount} customer(s) to ${grpRes.rows[0].name}.`,
-      assignedCount,
-      totalGroupMembers: updatedMembers.rowCount,
+      message: `Successfully assigned ${out.assignedCount} customer(s) to ${out.groupName}.`,
+      assignedCount: out.assignedCount,
+      totalGroupMembers: out.totalGroupMembers,
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -5237,11 +3715,7 @@ app.post('/api/groups/:id/members', async (req, res) => {
 // Remove customer from a Customer Group
 app.delete('/api/groups/:id/members/:customerId', async (req, res) => {
   try {
-    const { id: groupId, customerId } = req.params;
-    await query(
-      'DELETE FROM customer_group_memberships WHERE group_id = $1 AND customer_id = $2',
-      [groupId, customerId]
-    );
+    await removeGroupMember(req.params.id, req.params.customerId);
     res.json({ ok: true, message: 'Customer removed from group successfully' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -5252,14 +3726,13 @@ app.delete('/api/groups/:id/members/:customerId', async (req, res) => {
 app.get('/api/groups/:id/preview-recipients', async (req, res) => {
   try {
     const groupId = req.params.id;
-    const masterLeadId = (req.query.masterLeadId || '').trim() || null;
-    const grpRes = await query('SELECT * FROM customer_groups WHERE id = $1', [groupId]);
-    if (grpRes.rowCount === 0) {
+    const masterLeadId = String(req.query.masterLeadId || '').trim() || null;
+    const group = await findGroupById(groupId);
+    if (!group) {
       return res.status(404).json({ ok: false, error: 'Customer group not found' });
     }
-    const group = grpRes.rows[0];
 
-    const evalData = await getEvaluatedRecipients(query, {
+    const evalData = await getEvaluatedRecipients({
       groupId,
       category: group.category || group.name,
       masterLeadId,
@@ -5305,8 +3778,8 @@ app.post('/api/leads/distribute', async (req, res) => {
       id,
     } = req.body || {};
 
-    const targetCat = (category || targetCategory || '').trim();
-    const targetGroupId = (groupId || '').trim();
+    const targetCat = String(category || targetCategory || '').trim();
+    const targetGroupId = String(groupId || '').trim();
 
     if (!targetCat && !targetGroupId) {
       return res.status(400).json({ ok: false, error: 'Target category or customer group is required.' });
@@ -5322,35 +3795,20 @@ app.post('/api/leads/distribute', async (req, res) => {
     }
 
     // Resolve target group and final category name
-    let matchedGroup = null;
-    if (targetGroupId) {
-      const grpRes = await query('SELECT * FROM customer_groups WHERE id = $1', [targetGroupId]);
-      if (grpRes.rowCount > 0) {
-        matchedGroup = grpRes.rows[0];
-      }
-    }
-    if (!matchedGroup && targetCat) {
-      const grpRes = await query(
-        'SELECT * FROM customer_groups WHERE LOWER(category) = LOWER($1) OR LOWER(name) = LOWER($1) LIMIT 1',
-        [targetCat]
-      );
-      if (grpRes.rowCount > 0) {
-        matchedGroup = grpRes.rows[0];
-      }
-    }
+    const matchedGroup = await resolveDistributionGroup({ targetGroupId, targetCat });
 
     const finalCategory = targetCat || (matchedGroup ? (matchedGroup.category || matchedGroup.name) : 'Other');
     const finalGroupId = matchedGroup ? matchedGroup.id : (targetGroupId || null);
     const finalGroupName = matchedGroup ? matchedGroup.name : finalCategory;
 
-    const leadTitle = (title || '').trim() || `${finalCategory} Buyer Requirement`;
-    const reqText = (requirement || description || '').trim() || `Inbound customer requirement for ${finalCategory} products and commercial services.`;
-    const bName = (buyerName || '').trim() || 'Verified Buyer';
+    const leadTitle = String(title || '').trim() || `${finalCategory} Buyer Requirement`;
+    const reqText = String(requirement || description || '').trim() || `Inbound customer requirement for ${finalCategory} products and commercial services.`;
+    const bName = String(buyerName || '').trim() || 'Verified Buyer';
     const masterLeadId = id || `mlead_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const displayPhone = `+91 ${cleanBuyerDigits}`;
 
     // Preliminary authoritative evaluation before opening transaction
-    const initialEval = await getEvaluatedRecipients(query, {
+    const initialEval = await getEvaluatedRecipients({
       groupId: finalGroupId,
       category: finalCategory,
       masterLeadId,
@@ -5367,141 +3825,32 @@ app.post('/api/leads/distribute', async (req, res) => {
       });
     }
 
-    // Execute atomic transaction for lead creation & assignments (NO wallet deductions whatsoever)
-    const result = await withTransaction(async (txQuery) => {
-      // Re-evaluate within transaction isolation to prevent race conditions
-      const txEvalData = await getEvaluatedRecipients(txQuery, {
-        groupId: finalGroupId,
-        category: finalCategory,
-        masterLeadId,
-      });
-
-      if (txEvalData.eligibleCount === 0) {
-        const err = new Error('No Eligible Customers');
-        err.statusCode = 400;
-        err.skippedCount = txEvalData.excludedCount;
-        err.skippedBreakdown = txEvalData.skippedBreakdown;
-        throw err;
-      }
-
-      // 1. Insert Master Lead
-      const mLeadInsert = await txQuery(
-        `INSERT INTO master_leads (
-           id, title, description, category, group_id, buyer_name, buyer_phone,
-           buyer_email, city, requirement, budget, location, priority, source,
-           deadline_date, created_by, created_at, updated_at
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7,
-           $8, $9, $10, $11, $12, $13, $14,
-           $15, 'Admin Operations', NOW(), NOW()
-         )
-         ON CONFLICT (id) DO UPDATE SET
-           title = EXCLUDED.title,
-           requirement = EXCLUDED.requirement,
-           updated_at = NOW()
-         RETURNING *`,
-        [
-          masterLeadId,
-          leadTitle,
-          description || reqText,
-          finalCategory,
-          finalGroupId,
-          bName || displayPhone,
-          cleanBuyerDigits,
-          buyerEmail || `lead_${cleanBuyerDigits.slice(-4)}@example.com`,
-          city || location || '',
-          reqText,
-          budget || '₹1.5L – ₹3.5L',
-          location || city || '',
-          priority || 'Normal',
-          source || 'Category Lead Distribution',
-          deadlineDate || null,
-        ]
-      );
-
-      const savedMasterLead = mLeadInsert.rows[0];
-      const createdAssignments = [];
-
-      // 2. Dispatch ONLY to strictly eligible customers
-      for (const cust of txEvalData.eligible) {
-        const custLeadId = `lead_${masterLeadId}_${cust.customerId}`.slice(0, 64);
-        const assignId = `asgn_${masterLeadId}_${cust.customerId}`.slice(0, 64);
-
-        // Insert / update customer-specific lead so it displays in their individual CRM /app/lead
-        await txQuery(
-          `INSERT INTO leads (
-             id, customer_id, master_lead_id, customer_phone, customer_username,
-             company_name, category, buyer_phone, display_phone, buyer_name, buyer_email,
-             city, requirement, budget, source, priority, status, is_hot, is_read, notes,
-             created_at, updated_at
-           ) VALUES (
-             $1, $2, $3, $4, $5,
-             $6, $7, $8, $9, $10, $11,
-             $12, $13, $14, $15, $16, 'new', TRUE, FALSE, $17,
-             NOW(), NOW()
-           )
-           ON CONFLICT (id) DO UPDATE SET updated_at = NOW()`,
-          [
-            custLeadId,
-            cust.customerId,
-            masterLeadId,
-            cust.phone,
-            cust.username || cust.phone,
-            cust.companyName,
-            finalCategory,
-            cleanBuyerDigits,
-            displayPhone,
-            bName || displayPhone,
-            buyerEmail || `lead_${cleanBuyerDigits.slice(-4)}@example.com`,
-            city || cust.city || '',
-            reqText,
-            budget || '₹1.5L – ₹3.5L',
-            source || 'Category Lead Distribution',
-            priority || 'Normal',
-            description || `Category lead dispatched for ${finalGroupName}`,
-          ]
-        );
-
-        // Insert / update assignment record with idempotency
-        await txQuery(
-          `INSERT INTO lead_assignments (
-             id, master_lead_id, customer_id, group_id, customer_lead_id,
-             status, response_interest, response_notes, is_read, notification_status,
-             assigned_at
-           ) VALUES (
-             $1, $2, $3, $4, $5,
-             'new', 'Pending', '', FALSE, 'Delivered',
-             NOW()
-           )
-           ON CONFLICT (master_lead_id, customer_id) DO UPDATE SET assigned_at = NOW()`,
-          [assignId, masterLeadId, cust.customerId, finalGroupId, custLeadId]
-        );
-
-        createdAssignments.push({
-          id: assignId,
-          customerId: cust.customerId,
-          companyName: cust.companyName,
-          contactPerson: cust.contactPerson,
-          phone: cust.phone,
-          status: 'new',
-          responseInterest: 'Pending',
-          notificationStatus: 'Delivered',
-        });
-      }
-
-      return {
-        masterLead: savedMasterLead,
-        assignments: createdAssignments,
-        excludedCount: txEvalData.excludedCount,
-        skippedBreakdown: txEvalData.skippedBreakdown,
-      };
+    // Execute atomic MongoDB transaction for lead creation & assignments (NO wallet deductions whatsoever)
+    const result = await distributeMasterLeadAtomic({
+      masterLeadId,
+      leadTitle,
+      description,
+      finalCategory,
+      finalGroupId,
+      finalGroupName,
+      bName,
+      cleanBuyerDigits,
+      displayPhone,
+      buyerEmail,
+      city,
+      reqText,
+      budget,
+      location,
+      priority,
+      source,
+      deadlineDate,
     });
 
     res.status(201).json({
       ok: true,
       message: `Lead "${leadTitle}" successfully distributed to ${result.assignments.length} eligible customer(s) in "${finalCategory}".`,
       masterLead: mapMasterLeadRow({
-        ...result.masterLead,
+        ...result.masterLeadRow,
         group_name: finalGroupName,
         recipients_count: result.assignments.length,
         interested_count: 0,
@@ -5530,44 +3879,8 @@ app.post('/api/leads/distribute', async (req, res) => {
 // Lead Distribution History & Tracking
 app.get('/api/leads/distribution-history', async (req, res) => {
   try {
-    const result = await query(`
-      SELECT 
-        ml.*,
-        cg.name AS group_name,
-        cg.icon AS group_icon,
-        (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id) AS recipients_count,
-        (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id AND la.response_interest = 'Interested') AS interested_count,
-        (SELECT COUNT(*) FROM lead_assignments la WHERE la.master_lead_id = ml.id AND la.status IN ('Converted', 'Won')) AS converted_count
-      FROM master_leads ml
-      LEFT JOIN customer_groups cg ON cg.id = ml.group_id
-      ORDER BY ml.created_at DESC
-    `);
-
-    res.json({
-      ok: true,
-      history: result.rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        description: r.description,
-        category: r.category,
-        groupId: r.group_id,
-        groupName: r.group_name || 'All Groups',
-        groupIcon: r.group_icon || '🏢',
-        buyerName: r.buyer_name,
-        buyerPhone: r.buyer_phone,
-        displayPhone: `+91 ${r.buyer_phone}`,
-        city: r.city,
-        priority: r.priority,
-        source: r.source,
-        budget: r.budget,
-        requirement: r.requirement,
-        createdBy: r.created_by,
-        totalRecipients: Number(r.recipients_count || 0),
-        interestedCount: Number(r.interested_count || 0),
-        convertedCount: Number(r.converted_count || 0),
-        createdAt: r.created_at,
-      })),
-    });
+    const history = await listDistributionHistory();
+    res.json({ ok: true, history });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -5576,50 +3889,14 @@ app.get('/api/leads/distribution-history', async (req, res) => {
 // Inspect a specific distribution's recipient-level status
 app.get('/api/leads/distribution-history/:id', async (req, res) => {
   try {
-    const masterLeadId = req.params.id;
-    const mLeadRes = await query(
-      `SELECT ml.*, cg.name AS group_name
-       FROM master_leads ml
-       LEFT JOIN customer_groups cg ON cg.id = ml.group_id
-       WHERE ml.id = $1`,
-      [masterLeadId]
-    );
-
-    if (mLeadRes.rowCount === 0) {
+    const detail = await getDistributionDetail(req.params.id);
+    if (!detail) {
       return res.status(404).json({ ok: false, error: 'Master lead distribution not found' });
     }
-
-    const assignmentsRes = await query(
-      `SELECT 
-         la.*,
-         c.company_name, c.contact_person, c.phone AS customer_phone, c.email AS customer_email,
-         c.city AS customer_city, c.status AS customer_status
-       FROM lead_assignments la
-       JOIN customers c ON c.id = la.customer_id
-       WHERE la.master_lead_id = $1
-       ORDER BY la.assigned_at ASC`,
-      [masterLeadId]
-    );
-
     res.json({
       ok: true,
-      distribution: mapMasterLeadRow(mLeadRes.rows[0]),
-      recipients: assignmentsRes.rows.map((r) => ({
-        id: r.id,
-        customerId: r.customer_id,
-        companyName: r.company_name,
-        contactPerson: r.contact_person,
-        phone: (r.customer_phone || '').trim(),
-        email: r.customer_email || '',
-        city: r.customer_city || '',
-        status: r.status,
-        responseInterest: r.response_interest,
-        responseNotes: r.response_notes,
-        isRead: Boolean(r.is_read),
-        notificationStatus: r.notification_status,
-        assignedAt: r.assigned_at,
-        respondedAt: r.responded_at,
-      })),
+      distribution: mapMasterLeadRow(detail.masterLeadRow),
+      recipients: detail.recipients,
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -5629,38 +3906,11 @@ app.get('/api/leads/distribution-history/:id', async (req, res) => {
 // Update recipient status / response (from customer or admin)
 app.patch('/api/lead-assignments/:id', async (req, res) => {
   try {
-    const assignmentId = req.params.id;
-    const { status, responseInterest, responseNotes, isRead } = req.body || {};
-
-    const existing = await query('SELECT * FROM lead_assignments WHERE id = $1', [assignmentId]);
-    if (existing.rowCount === 0) {
+    const updated = await updateLeadAssignmentAndSync(req.params.id, req.body || {});
+    if (!updated) {
       return res.status(404).json({ ok: false, error: 'Lead assignment not found' });
     }
-    const curr = existing.rows[0];
-
-    const nextStatus = status !== undefined ? status : curr.status;
-    const nextInterest = responseInterest !== undefined ? responseInterest : curr.response_interest;
-    const nextNotes = responseNotes !== undefined ? responseNotes : curr.response_notes;
-    const nextRead = isRead !== undefined ? Boolean(isRead) : curr.is_read;
-
-    const updated = await query(
-      `UPDATE lead_assignments
-       SET status = $1, response_interest = $2, response_notes = $3, is_read = $4,
-           responded_at = CASE WHEN $2 <> 'Pending' THEN NOW() ELSE responded_at END
-       WHERE id = $5
-       RETURNING *`,
-      [nextStatus, nextInterest, nextNotes, nextRead, assignmentId]
-    );
-
-    // Also sync the customer's corresponding leads record
-    if (curr.customer_lead_id) {
-      await query(
-        `UPDATE leads SET status = $1, is_read = $2, notes = $3, updated_at = NOW() WHERE id = $4`,
-        [nextStatus, nextRead, nextNotes, curr.customer_lead_id]
-      );
-    }
-
-    res.json({ ok: true, assignment: updated.rows[0] });
+    res.json({ ok: true, assignment: updated });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -5758,67 +4008,41 @@ if (fs.existsSync(frontendDistPath)) {
 }
 
 app.listen(PORT, () => {
-  databaseReady = initDatabase();
+  // MongoDB is the ONLY database: connect first, then seed baseline data and start background jobs.
+  databaseReady = initMongo().then((mStatus) => {
+    if (!mStatus.connected) {
+      throw new Error(mStatus.lastError || 'MongoDB is not connected');
+    }
+    return mStatus;
+  });
   databaseReady
     .then((info) => {
-      console.log(`🚀 Growthline CRM Backend API listening on http://localhost:${PORT} (DB mode: ${info.mode})`);
+      console.log(`🚀 Growthline CRM Backend API listening on http://localhost:${PORT} (DB: MongoDB "${info.database}" @ ${info.host}:${info.port})`);
 
-      // Clean up dismissed test failed transactions
-      query(`
-        DELETE FROM wallet_transactions 
-        WHERE reference_utr LIKE 'DISMISS-%' 
-           OR id IN ('tx_fail_1793614599726_c2mx', 'tx_fail_1793614589017_m0gm', 'tx_fail_1793626722094_be89')
-      `).then((delRes) => {
-        if (delRes.rowCount > 0) {
-          console.log(`[DB Cleanup] Purged ${delRes.rowCount} dismissed test failed transactions.`);
-        }
-      }).catch((err) => console.warn('[DB Cleanup Warning]', err.message));
+      // Seed default department admin accounts + two-rule country pricing (idempotent upserts)
+      seedBaselineData()
+        .then((seeded) => {
+          console.log(`[Mongo Bootstrap] Baseline data verified (${seeded.systemUsers} system users, ${seeded.countryPricing} country pricing rules).`);
+          for (const w of seeded.warnings) console.warn('[Mongo Bootstrap Warning]', w);
+        })
+        .catch((err) => console.warn('[Mongo Bootstrap Warning]', err.message));
 
-      // Purge test payments & test wallet entries requested by admin
-      const testUtrs = ['aaggg', 'aa', 'pay_TvCjRvjJKpHawP', 'pay_TvCfjhW56ixevu'];
-      const testReceipts = ['REC_1793882500916_D467', 'REC_1793881526162_E051', 'RCP-2026-5814', 'RCP-2026-9969'];
-      const testPayIds = ['pay_1793882500916_18d1ec', 'pay_1793881526162_89c397', 'pay_1793600155814', 'pay_1793600029969'];
-      const testTxIds = ['tx_sales_1793882500877_e9eea9', 'tx_sales_1793881526137_245853', 'tx_1793600155807', 'tx_1793600029957', 'tx_deb_1793600430780_cz2cl5'];
-
-      query(
-        `DELETE FROM payment_records 
-         WHERE receipt_number = ANY($1::text[]) 
-            OR utr_reference = ANY($2::text[]) 
-            OR id = ANY($3::text[])`,
-        [testReceipts, testUtrs, testPayIds]
-      ).catch(() => { });
-
-      query(
-        `DELETE FROM wallet_transactions 
-         WHERE reference_utr = ANY($1::text[]) 
-            OR id = ANY($2::text[])`,
-        [testUtrs, testTxIds]
-      ).catch(() => { });
+      // Clean up dismissed test failed transactions & admin-requested test payment/ledger entries
+      purgeLegacyTestLedgerRows()
+        .then((purged) => {
+          if (purged.dismissedPurged > 0) {
+            console.log(`[DB Cleanup] Purged ${purged.dismissedPurged} dismissed test failed transactions.`);
+          }
+        })
+        .catch((err) => console.warn('[DB Cleanup Warning]', err.message));
 
       // Purge specified test accounts (@abc, @xxx) requested by admin
       purgeSpecifiedTestUsers().catch((err) => console.warn('[Purge Test Users Warning]', err.message));
 
-      // Run daily ad spend pacing evaluation 3s after startup, then every 30 minutes
-      // Initialize MongoDB for Creative Content & Telemetry
-      initMongo()
-        .then((mStatus) => {
-          if (mStatus.connected) {
-            migrateHistoricalMarketingData()
-              .then((etlRes) => {
-                if (etlRes.ok) {
-                  console.log(`[MongoDB ETL] Auto-sync verified (${etlRes.synced?.posts || 0} posts, ${etlRes.synced?.revisions || 0} revisions, ${etlRes.synced?.auditEvents || 0} audit events)`);
-                }
-              })
-              .catch((etlErr) => console.warn('[MongoDB ETL Warning]:', etlErr.message));
-          }
-          // Start background transactional outbox relay worker
-          startOutboxWorker(2500);
-        })
-        .catch((mErr) => {
-          console.warn('[MongoDB Warning]:', mErr.message);
-          startOutboxWorker(5000);
-        });
+      // Start background transactional outbox relay worker
+      startOutboxWorker(2500);
 
+      // Run daily ad spend pacing evaluation 3s after startup, then every 30 minutes
       setTimeout(() => {
         processDailyAdSpendPacing()
           .then((res) => console.log(`[Daily Ad Spend Pacing] Initial run completed (${res.processedCount || 0} deducted, ${res.autoPausedCount || 0} paused)`))
@@ -5836,7 +4060,7 @@ app.listen(PORT, () => {
       }, 30 * 60 * 1000);
     })
     .catch((err) => {
-      console.error('Failed to initialize PostgreSQL database:', err);
+      console.error('Failed to initialize MongoDB database:', err);
     });
 });
 

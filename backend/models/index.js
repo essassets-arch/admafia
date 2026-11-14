@@ -16,6 +16,7 @@ export {
   SalesTask,
   SupportQuery
 } from './Leads.js';
+export { PendingVerification } from './PendingVerification.js';
 export { MarketingPost } from './MarketingPost.js';
 export { MarketingIdea } from './MarketingIdea.js';
 export { SuperAdminAuditLog, MarketingAuditEvent } from './TelemetryAudit.js';

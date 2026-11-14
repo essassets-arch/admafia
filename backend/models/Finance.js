@@ -14,6 +14,7 @@ const WalletSchema = new mongoose.Schema({
   schedulePreset: { type: String, default: 'custom' },
   lastDeductedAt: { type: Date, default: null },
   bookedDates: [{ type: String }],
+  marketingCode: { type: String, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 }, {
@@ -27,9 +28,9 @@ export const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', WalletS
 const WalletTransactionSchema = new mongoose.Schema({
   _id: { type: String, required: true },
   customerId: { type: String, required: true, index: true },
-  walletId: { type: String, required: true, index: true },
+  walletId: { type: String, default: '', index: true },
   txType: { type: String, enum: ['Credit', 'Debit'], required: true, index: true },
-  amount: { type: Number, required: true, min: 0.01 },
+  amount: { type: Number, required: true, min: 0 },
   balanceAfter: { type: Number, required: true, min: 0 },
   referenceUtr: { type: String, required: true }, // Bank UTR or Payment ID (Idempotency Key)
   description: { type: String, required: true },
@@ -61,6 +62,15 @@ const PaymentRecordSchema = new mongoose.Schema({
   referenceUtr: { type: String, default: null, index: true },
   receiptNumber: { type: String, default: null },
   notes: { type: String, default: '' },
+  // Legacy payment_records columns (additive; used by sales desk payment listings)
+  companyName: { type: String, default: '' },
+  contactPerson: { type: String, default: '' },
+  phone: { type: String, default: '' },
+  city: { type: String, default: '' },
+  txType: { type: String, default: 'topup' },
+  gstAmount: { type: Number, default: 0 },
+  totalAmount: { type: Number, default: null },
+  daysOverdue: { type: Number, default: 0 },
   status: { type: String, default: 'Verified ✓', index: true },
   createdAt: { type: Date, default: Date.now, index: true }
 }, {
@@ -76,6 +86,9 @@ const TaxInvoiceSchema = new mongoose.Schema({
   customerId: { type: String, required: true, index: true },
   paymentRecordId: { type: String, default: null, index: true },
   invoiceNumber: { type: String, required: true, unique: true, index: true },
+  particulars: { type: String, default: 'Meta Ads Campaign Ad Spend Budget Credit' },
+  paymentMode: { type: String, default: '' },
+  status: { type: String, default: 'Paid' },
   invoiceDate: { type: Date, default: Date.now },
   sacCode: { type: String, default: '998311' },
   baseAmount: { type: Number, required: true },
@@ -97,13 +110,25 @@ export const TaxInvoice = mongoose.models.TaxInvoice || mongoose.model('TaxInvoi
 const RefundRequestSchema = new mongoose.Schema({
   _id: { type: String, required: true },
   customerId: { type: String, required: true, index: true },
-  walletId: { type: String, required: true },
+  walletId: { type: String, default: '' },
   amount: { type: Number, required: true },
   reason: { type: String, required: true },
-  status: { type: String, enum: ['pending', 'approved', 'rejected', 'processed'], default: 'pending', index: true },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected', 'processed',
+      'Pending', 'Under Review', 'Approved', 'Rejected', 'Processing', 'Completed', 'Failed'],
+    default: 'Pending',
+    index: true
+  },
   reviewedBy: { type: String, default: null },
   reviewedAt: { type: Date, default: null },
   payoutUtr: { type: String, default: null },
+  // Legacy refund_requests columns (additive)
+  originalTxRef: { type: String, default: '' },
+  supportingInfo: { type: String, default: '' },
+  rejectionReason: { type: String, default: null },
+  reviewNotes: { type: String, default: null },
+  providerRef: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
 }, {
   collection: 'refund_requests',
@@ -116,18 +141,33 @@ export const RefundRequest = mongoose.models.RefundRequest || mongoose.model('Re
 const TopupRequestSchema = new mongoose.Schema({
   _id: { type: String, required: true },
   customerId: { type: String, required: true, index: true },
-  walletId: { type: String, required: true },
+  walletId: { type: String, default: '' },
   amount: { type: Number, required: true },
   referenceUtr: { type: String, required: true },
   proofUrl: { type: String, default: '' },
-  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending', index: true },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected', 'Pending', 'Approved', 'Rejected', 'Processing'],
+    default: 'Pending',
+    index: true
+  },
   approvedBy: { type: String, default: null },
   approvedAt: { type: Date, default: null },
+  // Legacy topup_requests columns (additive)
+  paymentMethod: { type: String, default: 'Razorpay Secure (UPI/Card)' },
+  evidenceUrl: { type: String, default: '' },
+  notes: { type: String, default: '' },
+  processedBy: { type: String, default: null },
+  processedAt: { type: Date, default: null },
+  rejectionReason: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
 }, {
   collection: 'topup_requests',
   timestamps: true
 });
+
+// UTR idempotency guard (legacy SQL: reference_utr UNIQUE)
+TopupRequestSchema.index({ referenceUtr: 1 }, { unique: true });
 
 export const TopupRequest = mongoose.models.TopupRequest || mongoose.model('TopupRequest', TopupRequestSchema);
 
@@ -140,7 +180,23 @@ const DeletedFailedTransactionSchema = new mongoose.Schema({
   amount: { type: Number },
   reason: { type: String },
   purgedBy: { type: String },
-  purgedAt: { type: Date, default: Date.now }
+  purgedAt: { type: Date, default: Date.now },
+  // Legacy deleted_failed_transactions columns (additive; as mapped by the PG->Mongo migration)
+  originalId: { type: String, default: null },
+  customerName: { type: String, default: '' },
+  companyName: { type: String, default: '' },
+  contactPerson: { type: String, default: '' },
+  phone: { type: String, default: '' },
+  email: { type: String, default: '' },
+  city: { type: String, default: '' },
+  state: { type: String, default: '' },
+  category: { type: String, default: '' },
+  description: { type: String, default: '' },
+  paymentMethod: { type: String, default: '' },
+  failureReason: { type: String, default: '' },
+  originalCreatedAt: { type: Date, default: null },
+  deletedAt: { type: Date, default: Date.now },
+  deletedBy: { type: String, default: 'Sales Admin' }
 }, {
   collection: 'deleted_failed_transactions',
   timestamps: true

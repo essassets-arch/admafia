@@ -2,14 +2,25 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { query, withTransaction } from '../db.js';
 import {
-  syncPostToMongo,
-  syncRevisionToMongo,
-  syncReviewToMongo,
-  recordTelemetryEvent
-} from '../services/marketingStorage.js';
-import { recordOutboxEvent } from '../services/outboxWorker.js';
+  Customer,
+  Wallet,
+  WalletTransaction,
+  Lead,
+  MarketingPost,
+  MarketingIdea,
+  MarketingCampaign,
+  MarketingAuditEvent,
+} from '../models/index.js';
+import { withMongoTransaction, genId } from '../repositories/tx.js';
+import {
+  ciRegex,
+  ciExact,
+  istDateString,
+  isDeductedToday,
+  deductDailySpendAtomic,
+  HttpError,
+} from '../repositories/marketingRepo.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,191 +76,349 @@ export function resolveActiveDays(rawDays) {
   return list.length > 0 ? list : [todayDayCode];
 }
 
-// -----------------------------------------------------------------------------
-// Auto-recovery: Ensure marketing schema tables exist
-// -----------------------------------------------------------------------------
+/**
+ * Legacy export kept for backwards compatibility. Schema (collections, indexes, defaults)
+ * is now fully managed by the Mongoose models, so there is nothing to create here.
+ */
 export async function ensureMarketingTables() {
-  const statements = [
-    `CREATE TABLE IF NOT EXISTS marketing_ideas (
-      id VARCHAR(64) PRIMARY KEY,
-      customer_id VARCHAR(64) NOT NULL,
-      title VARCHAR(255) NOT NULL,
-      objective VARCHAR(100) NOT NULL DEFAULT 'lead_generation',
-      concept TEXT NOT NULL,
-      target_audience TEXT DEFAULT '',
-      caption_suggestions TEXT DEFAULT '',
-      call_to_action VARCHAR(255) DEFAULT '',
-      hashtags TEXT DEFAULT '',
-      creative_brief TEXT DEFAULT '',
-      platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
-      language VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
-      campaign_period VARCHAR(100) DEFAULT '',
-      constraints TEXT DEFAULT '',
-      status VARCHAR(32) NOT NULL DEFAULT 'Saved',
-      created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Executive',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_marketing_ideas_customer ON marketing_ideas(customer_id, status)`,
-    `CREATE TABLE IF NOT EXISTS marketing_posts (
-      id VARCHAR(64) PRIMARY KEY,
-      customer_id VARCHAR(64) NOT NULL,
-      idea_id VARCHAR(64),
-      title VARCHAR(255) NOT NULL,
-      platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
-      caption TEXT NOT NULL,
-      hashtags TEXT DEFAULT '',
-      call_to_action VARCHAR(255) DEFAULT '',
-      media_url TEXT DEFAULT '',
-      media_type VARCHAR(64) DEFAULT 'image',
-      language VARCHAR(64) NOT NULL DEFAULT 'English / Hinglish',
-      campaign_association VARCHAR(255) DEFAULT '',
-      intended_publish_at TIMESTAMPTZ,
-      status VARCHAR(40) NOT NULL DEFAULT 'Draft',
-      submitted_by VARCHAR(140),
-      submitted_at TIMESTAMPTZ,
-      revision_number INT NOT NULL DEFAULT 1,
-      creative_format VARCHAR(64) DEFAULT 'Instagram / Facebook Post',
-      designer_notes TEXT DEFAULT '',
-      designer_name VARCHAR(140) DEFAULT 'Graphics Designer',
-      creative_instructions TEXT DEFAULT '',
-      priority VARCHAR(40) DEFAULT 'Normal',
-      is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-      deleted_at TIMESTAMPTZ,
-      deleted_by VARCHAR(140),
-      created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Content Team',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_marketing_posts_customer ON marketing_posts(customer_id, status)`,
-    `CREATE TABLE IF NOT EXISTS marketing_campaigns (
-      id VARCHAR(64) PRIMARY KEY,
-      customer_id VARCHAR(64) NOT NULL,
-      name VARCHAR(255) NOT NULL,
-      objective VARCHAR(100) NOT NULL,
-      post_id VARCHAR(64),
-      platform VARCHAR(64) NOT NULL DEFAULT 'Meta Ads (Facebook & Instagram)',
-      target_audience TEXT DEFAULT '',
-      start_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      end_date TIMESTAMPTZ,
-      daily_budget NUMERIC(10, 2) NOT NULL DEFAULT 300.00,
-      total_budget NUMERIC(12, 2) DEFAULT 0.00,
-      schedule_settings TEXT DEFAULT '{}',
-      status VARCHAR(40) NOT NULL DEFAULT 'Draft',
-      external_platform_status VARCHAR(64) NOT NULL DEFAULT 'Not Connected',
-      external_campaign_id VARCHAR(120),
-      created_by VARCHAR(140) NOT NULL DEFAULT 'Marketing Manager',
-      last_action VARCHAR(100) DEFAULT 'Created',
-      last_actor VARCHAR(140) DEFAULT 'Marketing Manager',
-      last_action_at TIMESTAMPTZ DEFAULT NOW(),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )`,
-    `ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_objective_check`,
-    `ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_status_check`,
-    `ALTER TABLE marketing_posts DROP CONSTRAINT IF EXISTS marketing_posts_status_check`,
-    `ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_status_check`,
-    `ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_daily_budget_check`,
-    `ALTER TABLE customers ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL`,
-    `ALTER TABLE marketing_campaigns ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL`,
-    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS marketing_code VARCHAR(120) DEFAULT NULL`,
-  ];
-
-  for (const stmt of statements) {
-    try {
-      await query(stmt);
-    } catch (e) {}
-  }
+  return true;
 }
 
-let marketingTablesEnsured = false;
-marketingRouter.use(async (req, res, next) => {
-  if (!marketingTablesEnsured) {
-    marketingTablesEnsured = true;
-    ensureMarketingTables().catch(() => {});
+// -----------------------------------------------------------------------------
+// Small shared helpers
+// -----------------------------------------------------------------------------
+const hasMetaAccessToken = () => Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
+
+function sendRouteError(res, err, tag) {
+  if (err && err.statusCode) {
+    return res.status(err.statusCode).json({ ok: false, error: err.message });
   }
-  next();
-});
+  console.error(tag, err);
+  return res.status(500).json({ ok: false, error: err.message });
+}
+
+/** Keep only values that are not null/undefined (SQL COALESCE($n, column) semantics). */
+function coalesceSet(values) {
+  const out = {};
+  for (const [k, v] of Object.entries(values)) {
+    if (v !== null && v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
+function latestRevision(post) {
+  const revs = Array.isArray(post?.revisions) ? post.revisions : [];
+  let best = null;
+  for (const r of revs) {
+    if (!best || Number(r.revisionNumber) >= Number(best.revisionNumber)) best = r;
+  }
+  return best;
+}
+
+/** media_url equivalent: post-level URL, falling back to the latest revision artwork (migrated posts). */
+function effectiveMediaUrl(post) {
+  if (post?.mediaUrl && String(post.mediaUrl).trim()) return post.mediaUrl;
+  const rev = latestRevision(post);
+  return (rev && rev.artworkUrl) || post?.mediaUrl || '';
+}
+
+function postPlatform(post) {
+  return post.platform || post.targetPlatform || null;
+}
+
+function lastReview(post) {
+  const reviews = Array.isArray(post?.reviews) ? post.reviews : [];
+  let best = null;
+  for (const r of reviews) {
+    if (!best || new Date(r.reviewedAt || 0).getTime() >= new Date(best.reviewedAt || 0).getTime()) best = r;
+  }
+  return best;
+}
+
+function campaignName(c) {
+  return c.campaignName ?? c.name ?? null;
+}
+
+function campaignBudgetTotal(c) {
+  return c.totalBudget ?? c.totalSpend ?? 0;
+}
+
+/** Mongo idea document -> legacy SQL row shape (used by PATCH response). */
+function ideaRow(d) {
+  return {
+    id: d._id,
+    customer_id: d.customerId,
+    title: d.title,
+    objective: d.objective,
+    concept: d.concept,
+    target_audience: d.targetAudience,
+    caption_suggestions: d.captionSuggestions,
+    call_to_action: d.callToAction,
+    hashtags: d.hashtags,
+    creative_brief: d.creativeBrief,
+    platform: d.platform,
+    language: d.language,
+    campaign_period: d.campaignPeriod,
+    constraints: d.constraints,
+    status: d.status,
+    created_by: d.createdBy,
+    created_at: d.createdAt,
+    updated_at: d.updatedAt,
+  };
+}
+
+/** Mongo post document -> legacy SQL row shape (used by PATCH / submit responses). */
+function postRow(d) {
+  return {
+    id: d._id,
+    customer_id: d.customerId,
+    idea_id: d.ideaId ?? null,
+    title: d.title,
+    platform: postPlatform(d),
+    caption: d.caption,
+    hashtags: d.hashtags ?? '',
+    call_to_action: d.callToAction ?? '',
+    media_url: effectiveMediaUrl(d),
+    media_type: d.mediaType ?? 'image',
+    language: d.language ?? 'English / Hinglish',
+    campaign_association: d.campaignAssociation ?? '',
+    intended_publish_at: d.intendedPublishAt ?? null,
+    status: d.status,
+    submitted_by: d.submittedBy ?? null,
+    submitted_at: d.submittedAt ?? null,
+    revision_number: d.currentRevisionNumber ?? 1,
+    creative_format: d.creativeFormat ?? 'Instagram / Facebook Post',
+    designer_notes: d.designerNotes ?? '',
+    designer_name: d.designerName ?? 'Graphics Designer',
+    creative_instructions: d.creativeInstructions ?? '',
+    priority: d.priority ?? 'Normal',
+    is_deleted: Boolean(d.isDeleted),
+    deleted_at: d.deletedAt ?? null,
+    deleted_by: d.deletedBy ?? null,
+    created_by: d.createdBy ?? null,
+    created_at: d.createdAt,
+    updated_at: d.updatedAt,
+  };
+}
 
 // -----------------------------------------------------------------------------
 // Helper: Audit Logger
 // -----------------------------------------------------------------------------
 async function logAuditEvent(customerId, entityType, entityId, action, actor, details = {}, ip = '') {
   try {
-    const id = `audit_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    await query(
-      `INSERT INTO marketing_audit_events (id, customer_id, entity_type, entity_id, action, actor, details, ip_address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [id, customerId || null, entityType, entityId, action, actor || 'Marketing Operator', JSON.stringify(details), ip]
-    );
-    // Transactional outbox record
-    recordOutboxEvent(null, {
-      aggregateType: 'marketing_audit_event',
-      aggregateId: id,
-      eventType: 'AUDIT_RECORDED',
-      payload: {
-        id,
-        customerId,
-        action: `${entityType}_${action}`,
-        postId: entityType === 'post' ? entityId : null,
-        campaignId: entityType === 'campaign' ? entityId : null,
-        details,
-        timestamp: new Date()
-      }
-    }).catch(() => {});
+    const id = genId('audit');
+    const now = new Date();
+    await MarketingAuditEvent.create({
+      _id: id,
+      customerId: customerId || null,
+      eventType: `${entityType}_${action}`,
+      postId: entityType === 'post' ? entityId : null,
+      campaignId: entityType === 'campaign' ? entityId : null,
+      payload: details,
+      timestamp: now,
+      entityType,
+      entityId,
+      action,
+      actor: actor || 'Marketing Operator',
+      details,
+      ipAddress: ip,
+      createdAt: now,
+    });
   } catch (err) {
     console.error('[Marketing Audit Log Error]:', err.message);
   }
 }
 
 // -----------------------------------------------------------------------------
+// Customer row builder (shared by GET /customers and GET /customers/:id)
+// -----------------------------------------------------------------------------
+async function buildCustomerRows(customers) {
+  const ids = customers.map((c) => String(c._id));
+  if (ids.length === 0) return [];
+
+  const [wallets, leadAgg, postAgg, ideaAgg, campaigns] = await Promise.all([
+    Wallet.find({ customerId: { $in: ids } }).lean(),
+    Lead.aggregate([{ $match: { customerId: { $in: ids } } }, { $group: { _id: '$customerId', n: { $sum: 1 } } }]),
+    MarketingPost.aggregate([
+      { $match: { customerId: { $in: ids }, status: { $in: ['Approved', 'Draft', 'Pending Verification'] } } },
+      { $group: { _id: { c: '$customerId', s: '$status' }, n: { $sum: 1 } } },
+    ]),
+    MarketingIdea.aggregate([{ $match: { customerId: { $in: ids } } }, { $group: { _id: '$customerId', n: { $sum: 1 } } }]),
+    MarketingCampaign.find({ customerId: { $in: ids } }).sort({ createdAt: -1 }).lean(),
+  ]);
+
+  const walletBy = new Map(wallets.map((w) => [w.customerId, w]));
+  const leadsBy = new Map(leadAgg.map((x) => [x._id, x.n]));
+  const ideasBy = new Map(ideaAgg.map((x) => [x._id, x.n]));
+  const postsBy = new Map();
+  for (const x of postAgg) postsBy.set(`${x._id.c}|${x._id.s}`, x.n);
+  const campsBy = new Map();
+  for (const camp of campaigns) {
+    if (!campsBy.has(camp.customerId)) campsBy.set(camp.customerId, []);
+    campsBy.get(camp.customerId).push(camp); // already newest first
+  }
+
+  return customers.map((c) => {
+    const id = String(c._id);
+    const w = walletBy.get(id) || null;
+    const camps = campsBy.get(id) || [];
+    const latest = camps[0] || null;
+    const trimmedCode = c.marketingCode ? String(c.marketingCode).trim() : '';
+    const campCode = camps.find((x) => x.marketingCode && String(x.marketingCode).trim());
+    const campExt = camps.find((x) => x.externalCampaignId && String(x.externalCampaignId).trim());
+    const effective = trimmedCode || (campCode ? campCode.marketingCode : null) || (campExt ? campExt.externalCampaignId : null) || null;
+    const walletCurrency = (w && w.currency) || c.currency || 'INR';
+
+    return {
+      id,
+      username: c.username,
+      company_name: c.companyName,
+      contact_person: c.contactPerson,
+      phone: c.phone,
+      email: c.email,
+      personal_email: c.personalEmail,
+      category: c.category,
+      industry: c.industry,
+      website: c.website,
+      city: c.city,
+      state: c.state,
+      country: c.country,
+      status: c.status,
+      profile_status: c.profileStatus,
+      payment_status: c.paymentStatus,
+      kyc_percent: c.kycPercent,
+      verified: c.verified,
+      is_self_registered: c.isSelfRegistered,
+      registered_from: c.registeredFrom,
+      registered_at: c.registeredAt,
+      completed_at: c.completedAt,
+      updated_at: c.updatedAt,
+      available_balance: w ? w.availableBalance || 0 : 0,
+      daily_ad_spend: w && w.dailyAdSpend !== null && w.dailyAdSpend !== undefined
+        ? w.dailyAdSpend
+        : (walletCurrency === 'INR' ? 300 : 10),
+      total_paid: w ? w.totalLifetimePaid || 0 : 0,
+      ad_campaign_active: w ? Boolean(w.adCampaignActive) : false,
+      active_days: w && w.activeDays ? w.activeDays : '',
+      schedule_preset: (w && w.schedulePreset) || 'custom',
+      last_deducted_at: w ? w.lastDeductedAt || null : null,
+      total_leads_count: leadsBy.get(id) || 0,
+      approved_posts_count: postsBy.get(`${id}|Approved`) || 0,
+      draft_posts_count: postsBy.get(`${id}|Draft`) || 0,
+      pending_posts_count: postsBy.get(`${id}|Pending Verification`) || 0,
+      ideas_count: ideasBy.get(id) || 0,
+      active_campaign_name: latest ? campaignName(latest) : null,
+      campaign_status: latest ? latest.status : null,
+      external_platform_status: latest ? latest.externalPlatformStatus : null,
+      last_action: latest ? latest.lastAction : null,
+      last_actor: latest ? latest.lastActor : null,
+      marketing_code: c.marketingCode ?? null,
+      effective_marketing_code: effective,
+    };
+  });
+}
+
+function mapCustomerRow(r) {
+  return {
+    id: r.id,
+    customerId: r.id,
+    username: r.username,
+    name: r.company_name,
+    companyName: r.company_name,
+    owner: r.contact_person,
+    contactPerson: r.contact_person,
+    phone: (r.phone || '').trim(),
+    email: r.email,
+    personalEmail: r.personal_email,
+    category: r.category || 'Other',
+    industry: r.industry || 'General Business',
+    website: r.website || '',
+    city: r.city || '',
+    state: r.state || '',
+    country: r.country || 'India',
+    status: r.status,
+    profileStatus: r.profile_status,
+    paymentStatus: r.payment_status,
+    kycPercent: Number(r.kyc_percent || 100),
+    verified: r.verified !== false,
+    isSelfRegistered: Boolean(r.is_self_registered),
+    registeredFrom: r.registered_from || 'https://admafia.marketing/#register',
+    registeredAt: r.registered_at,
+    completedAt: r.completed_at,
+    updatedAt: r.updated_at,
+    availableBalance: Number(r.available_balance || 0),
+    dailyAdSpend: Number(r.daily_ad_spend || 300),
+    totalPaid: Number(r.total_paid || 0),
+    adCampaignActive: Boolean(r.ad_campaign_active),
+    activeDays: resolveActiveDays(r.active_days),
+    schedulePreset: r.schedule_preset || 'custom',
+    runwayDays: Math.floor(Number(r.available_balance || 0) / Math.max(Number(r.daily_ad_spend || 300), 1)),
+    totalLeadsCount: Number(r.total_leads_count || 0),
+    lastDeductedAt: r.last_deducted_at,
+    isDeductedToday: Boolean(
+      r.last_deducted_at &&
+      new Date(r.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
+      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    ),
+    isLowBalance: Number(r.available_balance || 0) < Number(r.daily_ad_spend || 300) || Number(r.available_balance || 0) <= 0,
+    approvedPostsCount: Number(r.approved_posts_count || 0),
+    draftPostsCount: Number(r.draft_posts_count || 0),
+    pendingPostsCount: Number(r.pending_posts_count || 0),
+    ideasCount: Number(r.ideas_count || 0),
+    campaignName: r.active_campaign_name || 'No Active Campaign',
+    campaignStatus: r.campaign_status || 'None',
+    externalPlatformStatus: r.external_platform_status || 'Not Connected',
+    lastAction: r.last_action || 'N/A',
+    lastActor: r.last_actor || 'N/A',
+    marketingCode: r.effective_marketing_code || r.marketing_code || '',
+    isCodeFilled: Boolean(r.effective_marketing_code || r.marketing_code),
+  };
+}
+
+const roundMoney = (n) => Math.round(Number(n || 0) * 100) / 100;
+
+// -----------------------------------------------------------------------------
 // 1. GET /api/marketing/summary (Executive Dashboard Counts & Aggregates)
 // -----------------------------------------------------------------------------
 marketingRouter.get('/summary', async (req, res) => {
   try {
-    const [custRes, ideasRes, postsRes, campRes] = await Promise.all([
-      query(`
-        SELECT 
-          COUNT(*)::INT AS completed_customers,
-          COALESCE(SUM(w.available_balance), 0)::NUMERIC AS total_wallet_balance
-        FROM customers c
-        LEFT JOIN wallets w ON w.customer_id = c.id
-        WHERE (c.profile_status = 'complete' OR c.kyc_percent = 100)
-      `),
-      query(`SELECT COUNT(*)::INT AS total_ideas FROM marketing_ideas`),
-      query(`
-        SELECT 
-          COUNT(*)::INT AS total_posts,
-          COUNT(*) FILTER (WHERE status = 'Pending Verification')::INT AS pending_posts,
-          COUNT(*) FILTER (WHERE status = 'Approved')::INT AS approved_posts,
-          COUNT(*) FILTER (WHERE status = 'Changes Requested')::INT AS changes_requested_posts
-        FROM marketing_posts
-      `),
-      query(`
-        SELECT 
-          COUNT(*)::INT AS total_campaigns,
-          COUNT(*) FILTER (WHERE status = 'Running')::INT AS active_campaigns
-        FROM marketing_campaigns
-      `),
-    ]);
+    const completeMatch = { $or: [{ profileStatus: 'complete' }, { kycPercent: 100 }] };
+    const [custAgg, totalIdeas, totalPosts, pendingPosts, approvedPosts, changesPosts, totalCampaigns, activeCampaigns] =
+      await Promise.all([
+        Customer.aggregate([
+          { $match: completeMatch },
+          { $lookup: { from: 'wallets', localField: '_id', foreignField: 'customerId', as: '_w' } },
+          {
+            $group: {
+              _id: null,
+              completed_customers: { $sum: 1 },
+              total_wallet_balance: { $sum: { $ifNull: [{ $arrayElemAt: ['$_w.availableBalance', 0] }, 0] } },
+            },
+          },
+        ]),
+        MarketingIdea.countDocuments({}),
+        MarketingPost.countDocuments({}),
+        MarketingPost.countDocuments({ status: 'Pending Verification' }),
+        MarketingPost.countDocuments({ status: 'Approved' }),
+        MarketingPost.countDocuments({ status: 'Changes Requested' }),
+        MarketingCampaign.countDocuments({}),
+        MarketingCampaign.countDocuments({ status: 'Running' }),
+      ]);
 
-    const custRow = custRes.rows[0] || {};
-    const postRow = postsRes.rows[0] || {};
-    const campRow = campRes.rows[0] || {};
-    const ideaRow = ideasRes.rows[0] || {};
+    const custRow = custAgg[0] || {};
 
     res.json({
       ok: true,
       summary: {
         completedCustomersCount: Number(custRow.completed_customers || 0),
-        totalWalletBalance: Number(custRow.total_wallet_balance || 0),
-        totalIdeasCount: Number(ideaRow.total_ideas || 0),
-        totalPostsCount: Number(postRow.total_posts || 0),
-        pendingVerificationPosts: Number(postRow.pending_posts || 0),
-        approvedPostsCount: Number(postRow.approved_posts || 0),
-        changesRequestedPosts: Number(postRow.changes_requested_posts || 0),
-        activeCampaignsCount: Number(campRow.active_campaigns || 0),
-        totalCampaignsCount: Number(campRow.total_campaigns || 0),
+        totalWalletBalance: roundMoney(custRow.total_wallet_balance || 0),
+        totalIdeasCount: Number(totalIdeas || 0),
+        totalPostsCount: Number(totalPosts || 0),
+        pendingVerificationPosts: Number(pendingPosts || 0),
+        approvedPostsCount: Number(approvedPosts || 0),
+        changesRequestedPosts: Number(changesPosts || 0),
+        activeCampaignsCount: Number(activeCampaigns || 0),
+        totalCampaignsCount: Number(totalCampaigns || 0),
         lastRefresh: new Date().toISOString(),
       },
     });
@@ -282,195 +451,83 @@ marketingRouter.get('/customers', async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     // Filters for Completed Registrations
-    const whereClauses = [
-      `(c.profile_status = 'complete' OR c.kyc_percent = 100)`
-    ];
-    const params = [];
+    const andClauses = [{ $or: [{ profileStatus: 'complete' }, { kycPercent: 100 }] }];
 
     if (q && q.trim()) {
-      params.push(`%${q.trim()}%`);
-      const pIdx = params.length;
-      whereClauses.push(`(
-        c.company_name ILIKE $${pIdx} OR 
-        c.contact_person ILIKE $${pIdx} OR 
-        c.phone ILIKE $${pIdx} OR 
-        c.email ILIKE $${pIdx} OR 
-        c.city ILIKE $${pIdx} OR 
-        c.category ILIKE $${pIdx}
-      )`);
+      const rx = ciRegex(q.trim());
+      andClauses.push({
+        $or: [
+          { companyName: rx },
+          { contactPerson: rx },
+          { phone: rx },
+          { email: rx },
+          { city: rx },
+          { category: rx },
+        ],
+      });
     }
 
-    if (category && category !== 'all') {
-      params.push(category);
-      whereClauses.push(`c.category = $${params.length}`);
-    }
-
-    if (status && status !== 'all') {
-      params.push(status);
-      whereClauses.push(`c.status = $${params.length}`);
-    }
-
-    if (walletMin !== undefined && walletMin !== '') {
-      params.push(Number(walletMin));
-      whereClauses.push(`COALESCE(w.available_balance, 0) >= $${params.length}`);
-    }
-
-    if (walletMax !== undefined && walletMax !== '') {
-      params.push(Number(walletMax));
-      whereClauses.push(`COALESCE(w.available_balance, 0) <= $${params.length}`);
-    }
+    if (category && category !== 'all') andClauses.push({ category });
+    if (status && status !== 'all') andClauses.push({ status });
 
     if (campaignStatus && campaignStatus !== 'all') {
       if (campaignStatus === 'Running') {
-        whereClauses.push(`EXISTS (SELECT 1 FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = 'Running')`);
+        const ids = await MarketingCampaign.distinct('customerId', { status: 'Running' });
+        andClauses.push({ _id: { $in: ids } });
       } else if (campaignStatus === 'None') {
-        whereClauses.push(`NOT EXISTS (SELECT 1 FROM marketing_campaigns mc WHERE mc.customer_id = c.id)`);
+        const ids = await MarketingCampaign.distinct('customerId', {});
+        andClauses.push({ _id: { $nin: ids } });
       } else {
-        params.push(campaignStatus);
-        whereClauses.push(`EXISTS (SELECT 1 FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = $${params.length})`);
+        const ids = await MarketingCampaign.distinct('customerId', { status: campaignStatus });
+        andClauses.push({ _id: { $in: ids } });
       }
     }
 
-    const whereSql = whereClauses.join(' AND ');
+    const basePipeline = [
+      { $match: { $and: andClauses } },
+      { $lookup: { from: 'wallets', localField: '_id', foreignField: 'customerId', as: '_w' } },
+      { $addFields: { _balance: { $ifNull: [{ $arrayElemAt: ['$_w.availableBalance', 0] }, 0] } } },
+    ];
+
+    const balanceMatch = {};
+    if (walletMin !== undefined && walletMin !== '' && Number.isFinite(Number(walletMin))) balanceMatch.$gte = Number(walletMin);
+    if (walletMax !== undefined && walletMax !== '' && Number.isFinite(Number(walletMax))) balanceMatch.$lte = Number(walletMax);
+    if (Object.keys(balanceMatch).length > 0) basePipeline.push({ $match: { _balance: balanceMatch } });
 
     // Sorting
-    let sortColumn = 'c.registered_at';
-    if (sortBy === 'balance' || sortBy === 'wallet') sortColumn = 'COALESCE(w.available_balance, 0)';
-    else if (sortBy === 'name') sortColumn = 'c.company_name';
-    else if (sortBy === 'city') sortColumn = 'c.city';
-    else if (sortBy === 'category') sortColumn = 'c.category';
+    let sortField = 'registeredAt';
+    if (sortBy === 'balance' || sortBy === 'wallet') sortField = '_balance';
+    else if (sortBy === 'name') sortField = 'companyName';
+    else if (sortBy === 'city') sortField = 'city';
+    else if (sortBy === 'category') sortField = 'category';
 
-    const orderDir = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    const orderDir = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
 
-    // Count and Aggregates query
-    const countSql = `
-      SELECT 
-        COUNT(*)::INT AS total,
-        COALESCE(SUM(w.available_balance), 0)::NUMERIC AS total_balance
-      FROM customers c
-      LEFT JOIN wallets w ON w.customer_id = c.id
-      WHERE ${whereSql}
-    `;
-    const countRes = await query(countSql, params);
-    const totalCount = Number(countRes.rows[0]?.total || 0);
-    const totalAvailableBalance = Number(countRes.rows[0]?.total_balance || 0);
+    const [countAgg, pageDocs] = await Promise.all([
+      Customer.aggregate([
+        ...basePipeline,
+        { $group: { _id: null, total: { $sum: 1 }, total_balance: { $sum: '$_balance' } } },
+      ]),
+      Customer.aggregate(
+        [
+          ...basePipeline,
+          { $sort: { [sortField]: orderDir, _id: 1 } },
+          { $skip: offset },
+          { $limit: limitNum },
+          { $project: { _w: 0, _balance: 0 } },
+        ],
+        { collation: { locale: 'en' } }
+      ),
+    ]);
 
-    // Data query
-    const dataSql = `
-      SELECT 
-        c.id,
-        c.username,
-        c.company_name AS name,
-        c.company_name,
-        c.contact_person AS owner_name,
-        c.contact_person,
-        c.phone,
-        c.email,
-        c.personal_email,
-        c.category,
-        c.industry,
-        c.website,
-        c.city,
-        c.state,
-        c.country,
-        c.status,
-        c.profile_status,
-        c.payment_status,
-        c.kyc_percent,
-        c.verified,
-        c.is_self_registered,
-        c.registered_from,
-        c.registered_at,
-        c.completed_at,
-        c.updated_at,
-        COALESCE(w.available_balance, 0)::NUMERIC AS available_balance,
-        COALESCE(w.daily_ad_spend, CASE WHEN COALESCE(w.currency, c.currency, 'INR') = 'INR' THEN 300 ELSE 10 END)::NUMERIC AS daily_ad_spend,
-        COALESCE(w.total_lifetime_paid, 0)::NUMERIC AS total_paid,
-        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-        COALESCE(w.active_days, '') AS active_days,
-        COALESCE(w.schedule_preset, 'custom') AS schedule_preset,
-        w.last_deducted_at,
-        (SELECT COUNT(*)::INT FROM leads l WHERE l.customer_id = c.id) AS total_leads_count,
-        (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Approved') AS approved_posts_count,
-        (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Draft') AS draft_posts_count,
-        (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Pending Verification') AS pending_posts_count,
-        (SELECT COUNT(*)::INT FROM marketing_ideas mi WHERE mi.customer_id = c.id) AS ideas_count,
-        (SELECT mc.name FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS active_campaign_name,
-        (SELECT mc.status FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS campaign_status,
-        (SELECT mc.external_platform_status FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS external_platform_status,
-        (SELECT mc.last_action FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_action,
-        (SELECT mc.last_actor FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_actor,
-        c.marketing_code,
-        COALESCE(
-          NULLIF(TRIM(c.marketing_code), ''),
-          (SELECT mc.marketing_code FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.marketing_code IS NOT NULL AND TRIM(mc.marketing_code) != '' ORDER BY mc.created_at DESC LIMIT 1),
-          (SELECT mc.external_campaign_id FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.external_campaign_id IS NOT NULL AND TRIM(mc.external_campaign_id) != '' ORDER BY mc.created_at DESC LIMIT 1)
-        ) AS effective_marketing_code
-      FROM customers c
-      LEFT JOIN wallets w ON w.customer_id = c.id
-      WHERE ${whereSql}
-      ORDER BY ${sortColumn} ${orderDir}
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-    `;
+    const totalCount = Number(countAgg[0]?.total || 0);
+    const totalAvailableBalance = roundMoney(countAgg[0]?.total_balance || 0);
 
-    const dataRes = await query(dataSql, [...params, limitNum, offset]);
+    const rows = await buildCustomerRows(pageDocs);
 
     res.json({
       ok: true,
-      customers: dataRes.rows.map((r) => ({
-        id: r.id,
-        customerId: r.id,
-        username: r.username,
-        name: r.company_name,
-        companyName: r.company_name,
-        owner: r.contact_person,
-        contactPerson: r.contact_person,
-        phone: (r.phone || '').trim(),
-        email: r.email,
-        personalEmail: r.personal_email,
-        category: r.category || 'Other',
-        industry: r.industry || 'General Business',
-        website: r.website || '',
-        city: r.city || '',
-        state: r.state || '',
-        country: r.country || 'India',
-        status: r.status,
-        profileStatus: r.profile_status,
-        paymentStatus: r.payment_status,
-        kycPercent: Number(r.kyc_percent || 100),
-        verified: r.verified !== false,
-        isSelfRegistered: Boolean(r.is_self_registered),
-        registeredFrom: r.registered_from || 'https://admafia.marketing/#register',
-        registeredAt: r.registered_at,
-        completedAt: r.completed_at,
-        updatedAt: r.updated_at,
-        availableBalance: Number(r.available_balance || 0),
-        dailyAdSpend: Number(r.daily_ad_spend || 300),
-        totalPaid: Number(r.total_paid || 0),
-        adCampaignActive: Boolean(r.ad_campaign_active),
-        activeDays: resolveActiveDays(r.active_days),
-        schedulePreset: r.schedule_preset || 'custom',
-        runwayDays: Math.floor(Number(r.available_balance || 0) / Math.max(Number(r.daily_ad_spend || 300), 1)),
-        totalLeadsCount: Number(r.total_leads_count || 0),
-        lastDeductedAt: r.last_deducted_at,
-        isDeductedToday: Boolean(
-          r.last_deducted_at &&
-          new Date(r.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-          new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-        ),
-        isLowBalance: Number(r.available_balance || 0) < Number(r.daily_ad_spend || 300) || Number(r.available_balance || 0) <= 0,
-        approvedPostsCount: Number(r.approved_posts_count || 0),
-        draftPostsCount: Number(r.draft_posts_count || 0),
-        pendingPostsCount: Number(r.pending_posts_count || 0),
-        ideasCount: Number(r.ideas_count || 0),
-        campaignName: r.active_campaign_name || 'No Active Campaign',
-        campaignStatus: r.campaign_status || 'None',
-        externalPlatformStatus: r.external_platform_status || 'Not Connected',
-        lastAction: r.last_action || 'N/A',
-        lastActor: r.last_actor || 'N/A',
-        marketingCode: r.effective_marketing_code || r.marketing_code || '',
-        isCodeFilled: Boolean(r.effective_marketing_code || r.marketing_code),
-      })),
+      customers: rows.map(mapCustomerRow),
       pagination: {
         total: totalCount,
         page: pageNum,
@@ -495,99 +552,16 @@ marketingRouter.get('/customers', async (req, res) => {
 marketingRouter.get('/customers/:id', async (req, res) => {
   try {
     const custId = req.params.id;
-    const result = await query(
-      `SELECT 
-        c.*,
-        COALESCE(w.available_balance, 0)::NUMERIC AS available_balance,
-        COALESCE(w.daily_ad_spend, CASE WHEN COALESCE(w.currency, c.currency, 'INR') = 'INR' THEN 300 ELSE 10 END)::NUMERIC AS daily_ad_spend,
-        COALESCE(w.total_lifetime_paid, 0)::NUMERIC AS total_paid,
-        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-        COALESCE(w.active_days, '') AS active_days,
-        COALESCE(w.schedule_preset, 'custom') AS schedule_preset,
-        w.last_deducted_at,
-        (SELECT COUNT(*)::INT FROM leads l WHERE l.customer_id = c.id) AS total_leads_count,
-        (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Approved') AS approved_posts_count,
-        (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Draft') AS draft_posts_count,
-        (SELECT COUNT(*)::INT FROM marketing_posts mp WHERE mp.customer_id = c.id AND mp.status = 'Pending Verification') AS pending_posts_count,
-        (SELECT COUNT(*)::INT FROM marketing_ideas mi WHERE mi.customer_id = c.id) AS ideas_count,
-        (SELECT mc.name FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS active_campaign_name,
-        (SELECT mc.status FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS campaign_status,
-        (SELECT mc.external_platform_status FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS external_platform_status,
-        (SELECT mc.last_action FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_action,
-        (SELECT mc.last_actor FROM marketing_campaigns mc WHERE mc.customer_id = c.id ORDER BY mc.created_at DESC LIMIT 1) AS last_actor,
-        c.marketing_code,
-        COALESCE(
-          NULLIF(TRIM(c.marketing_code), ''),
-          (SELECT mc.marketing_code FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.marketing_code IS NOT NULL AND TRIM(mc.marketing_code) != '' ORDER BY mc.created_at DESC LIMIT 1),
-          (SELECT mc.external_campaign_id FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.external_campaign_id IS NOT NULL AND TRIM(mc.external_campaign_id) != '' ORDER BY mc.created_at DESC LIMIT 1)
-        ) AS effective_marketing_code
-      FROM customers c
-      LEFT JOIN wallets w ON w.customer_id = c.id
-      WHERE c.id = $1`,
-      [custId]
-    );
+    const cust = await Customer.findById(custId).lean();
 
-    if (result.rowCount === 0) {
+    if (!cust) {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
     }
 
-    const c = result.rows[0];
+    const [row] = await buildCustomerRows([cust]);
     res.json({
       ok: true,
-      customer: {
-        id: c.id,
-        customerId: c.id,
-        username: c.username,
-        name: c.company_name,
-        companyName: c.company_name,
-        owner: c.contact_person,
-        contactPerson: c.contact_person,
-        phone: (c.phone || '').trim(),
-        email: c.email,
-        personalEmail: c.personal_email,
-        category: c.category || 'Other',
-        industry: c.industry || 'General Business',
-        website: c.website || '',
-        city: c.city || '',
-        state: c.state || '',
-        country: c.country || 'India',
-        status: c.status,
-        profileStatus: c.profile_status,
-        paymentStatus: c.payment_status,
-        kycPercent: Number(c.kyc_percent || 100),
-        verified: c.verified !== false,
-        isSelfRegistered: Boolean(c.is_self_registered),
-        registeredFrom: c.registered_from || 'https://admafia.marketing/#register',
-        registeredAt: c.registered_at,
-        completedAt: c.completed_at,
-        updatedAt: c.updated_at,
-        availableBalance: Number(c.available_balance || 0),
-        dailyAdSpend: Number(c.daily_ad_spend || 300),
-        totalPaid: Number(c.total_paid || 0),
-        adCampaignActive: Boolean(c.ad_campaign_active),
-        activeDays: resolveActiveDays(c.active_days),
-        schedulePreset: c.schedule_preset || 'custom',
-        runwayDays: Math.floor(Number(c.available_balance || 0) / Math.max(Number(c.daily_ad_spend || 300), 1)),
-        totalLeadsCount: Number(c.total_leads_count || 0),
-        lastDeductedAt: c.last_deducted_at,
-        isDeductedToday: Boolean(
-          c.last_deducted_at &&
-          new Date(c.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-          new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-        ),
-        isLowBalance: Number(c.available_balance || 0) < Number(c.daily_ad_spend || 300) || Number(c.available_balance || 0) <= 0,
-        approvedPostsCount: Number(c.approved_posts_count || 0),
-        draftPostsCount: Number(c.draft_posts_count || 0),
-        pendingPostsCount: Number(c.pending_posts_count || 0),
-        ideasCount: Number(c.ideas_count || 0),
-        campaignName: c.active_campaign_name || 'No Active Campaign',
-        campaignStatus: c.campaign_status || 'None',
-        externalPlatformStatus: c.external_platform_status || 'Not Connected',
-        lastAction: c.last_action || 'N/A',
-        lastActor: c.last_actor || 'N/A',
-        marketingCode: c.effective_marketing_code || c.marketing_code || '',
-        isCodeFilled: Boolean(c.effective_marketing_code || c.marketing_code),
-      },
+      customer: mapCustomerRow(row),
     });
   } catch (err) {
     console.error('[GET /api/marketing/customers/:id]', err);
@@ -601,47 +575,28 @@ marketingRouter.get('/customers/:id', async (req, res) => {
 marketingRouter.get('/customers/:id/wallet-transactions', async (req, res) => {
   try {
     const custId = req.params.id;
-    const txRes = await query(
-      `SELECT 
-        id,
-        tx_type,
-        amount::NUMERIC AS amount,
-        balance_after::NUMERIC AS balance_after,
-        reference_utr,
-        description,
-        payment_method,
-        status,
-        created_at
-      FROM wallet_transactions
-      WHERE customer_id = $1
-      ORDER BY created_at DESC
-      LIMIT 100`,
-      [custId]
-    );
+    const [txs, wallet] = await Promise.all([
+      WalletTransaction.find({ customerId: custId }).sort({ createdAt: -1 }).limit(100).lean(),
+      Wallet.findOne({ customerId: custId }).lean(),
+    ]);
 
-    const walRes = await query(
-      `SELECT available_balance::NUMERIC AS available_balance, daily_ad_spend::NUMERIC AS daily_ad_spend, currency 
-       FROM wallets WHERE customer_id = $1`,
-      [custId]
-    );
-
-    const availableBalance = Number(walRes.rows[0]?.available_balance || 0);
-    const dailyAdSpend = Number(walRes.rows[0]?.daily_ad_spend || (walRes.rows[0]?.currency === 'USD' ? 10 : 300));
+    const availableBalance = Number(wallet?.availableBalance || 0);
+    const dailyAdSpend = Number(wallet?.dailyAdSpend || (wallet?.currency === 'USD' ? 10 : 300));
 
     res.json({
       ok: true,
       availableBalance,
       dailyAdSpend,
-      transactions: txRes.rows.map((t) => ({
-        id: t.id,
-        type: t.tx_type,
+      transactions: txs.map((t) => ({
+        id: t._id,
+        type: t.txType,
         amount: Number(t.amount || 0),
-        balanceAfter: Number(t.balance_after || 0),
-        utr: t.reference_utr,
+        balanceAfter: Number(t.balanceAfter || 0),
+        utr: t.referenceUtr,
         description: t.description,
-        method: t.payment_method,
+        method: t.paymentMethod,
         status: t.status,
-        createdAt: t.created_at,
+        createdAt: t.createdAt,
       })),
       lastSync: new Date().toISOString(),
     });
@@ -657,79 +612,65 @@ marketingRouter.get('/customers/:id/wallet-transactions', async (req, res) => {
 marketingRouter.get('/ideas', async (req, res) => {
   try {
     const { customerId, status, objective } = req.query;
-    const where = [];
-    const params = [];
+    const filter = {};
 
     if (customerId) {
       const cleanPhone = String(customerId).replace(/\D/g, '').slice(-10);
-      params.push(customerId);
-      const p1 = `$${params.length}`;
-      params.push(cleanPhone);
-      const p2 = `$${params.length}`;
-      where.push(`(mi.customer_id = ${p1} OR c.id = ${p1} OR (${p2} <> '' AND c.phone = ${p2}))`);
-    }
-
-    if (status && status !== 'all') {
-      params.push(status);
-      where.push(`mi.status = $${params.length}`);
-    }
-
-    if (objective && objective !== 'all') {
-      params.push(objective);
-      where.push(`mi.objective = $${params.length}`);
-    }
-
-    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
-
-    const sql = `
-      SELECT 
-        mi.*,
-        c.company_name,
-        c.contact_person,
-        c.category AS customer_category,
-        c.city AS customer_city
-      FROM marketing_ideas mi
-      LEFT JOIN customers c ON c.id = mi.customer_id OR (c.phone <> '' AND c.phone = mi.customer_id)
-      ${whereSql}
-      ORDER BY mi.created_at DESC
-    `;
-
-    let result;
-    try {
-      result = await query(sql, params);
-    } catch (dbErr) {
-      if (dbErr && dbErr.message && (dbErr.message.includes('marketing_ideas') || dbErr.message.includes('does not exist'))) {
-        console.warn('[Auto-recovering marketing_ideas table on the fly...]');
-        await ensureMarketingTables();
-        result = await query(sql, params);
-      } else {
-        throw dbErr;
+      // Ideas may reference the customer by id OR by phone number (legacy rows).
+      const idCandidates = new Set([String(customerId)]);
+      const custOr = [{ _id: String(customerId) }];
+      if (cleanPhone) custOr.push({ phone: cleanPhone });
+      const matched = await Customer.find({ $or: custOr }, { _id: 1, phone: 1 }).lean();
+      for (const m of matched) {
+        idCandidates.add(String(m._id));
+        if (m.phone) idCandidates.add(String(m.phone));
       }
+      filter.customerId = { $in: Array.from(idCandidates) };
     }
+
+    if (status && status !== 'all') filter.status = status;
+    if (objective && objective !== 'all') filter.objective = objective;
+
+    const ideas = await MarketingIdea.find(filter).sort({ createdAt: -1 }).lean();
+
+    // LEFT JOIN customers ON c.id = idea.customer_id OR (c.phone <> '' AND c.phone = idea.customer_id)
+    const refs = Array.from(new Set(ideas.map((i) => String(i.customerId))));
+    const custDocs = refs.length
+      ? await Customer.find(
+          { $or: [{ _id: { $in: refs } }, { phone: { $in: refs, $ne: '' } }] },
+          { _id: 1, phone: 1, companyName: 1 }
+        ).lean()
+      : [];
+    const byId = new Map(custDocs.map((c) => [String(c._id), c]));
+    const byPhone = new Map();
+    for (const c of custDocs) if (c.phone && !byPhone.has(c.phone)) byPhone.set(c.phone, c);
 
     res.json({
       ok: true,
-      ideas: (result.rows || []).map((r) => ({
-        id: r.id,
-        customerId: r.customer_id,
-        companyName: r.company_name || 'Client Workspace',
-        title: r.title,
-        objective: formatMarketingObjective(r.objective),
-        concept: r.concept,
-        targetAudience: r.target_audience || '',
-        captionSuggestions: r.caption_suggestions || '',
-        callToAction: r.call_to_action || '',
-        hashtags: r.hashtags || '',
-        creativeBrief: r.creative_brief || '',
-        platform: r.platform,
-        language: r.language,
-        campaignPeriod: r.campaign_period || '',
-        constraints: r.constraints || '',
-        status: r.status,
-        createdBy: r.created_by,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      })),
+      ideas: ideas.map((r) => {
+        const c = byId.get(String(r.customerId)) || byPhone.get(String(r.customerId)) || null;
+        return {
+          id: r._id,
+          customerId: r.customerId,
+          companyName: (c && c.companyName) || 'Client Workspace',
+          title: r.title,
+          objective: formatMarketingObjective(r.objective),
+          concept: r.concept,
+          targetAudience: r.targetAudience || '',
+          captionSuggestions: r.captionSuggestions || '',
+          callToAction: r.callToAction || '',
+          hashtags: r.hashtags || '',
+          creativeBrief: r.creativeBrief || '',
+          platform: r.platform,
+          language: r.language,
+          campaignPeriod: r.campaignPeriod || '',
+          constraints: r.constraints || '',
+          status: r.status,
+          createdBy: r.createdBy,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        };
+      }),
     });
   } catch (err) {
     console.error('[GET /api/marketing/ideas]', err);
@@ -761,62 +702,40 @@ marketingRouter.post('/ideas', async (req, res) => {
     if (!title || !title.trim()) return res.status(400).json({ ok: false, error: 'Idea title is required.' });
     if (!concept || !concept.trim()) return res.status(400).json({ ok: false, error: 'Concept / brief is required.' });
 
-    // Normalize objective to strictly match check constraint (e.g. 'lead_generation')
+    // Normalize objective (e.g. 'lead_generation')
     const finalObjective = normalizeMarketingObjective(objective);
 
     // Verify customer exists by id, phone, or username
     const cleanPhone = String(customerId).replace(/\D/g, '').slice(-10);
-    const custCheck = await query(
-      `SELECT id, company_name FROM customers WHERE id = $1 OR ($2 <> '' AND phone = $2) OR LOWER(username) = LOWER($1) LIMIT 1`,
-      [customerId, cleanPhone]
-    );
-    if (custCheck.rowCount === 0) {
+    const custOr = [{ _id: String(customerId) }, { username: ciExact(String(customerId)) }];
+    if (cleanPhone) custOr.push({ phone: cleanPhone });
+    const custCheck = await Customer.findOne({ $or: custOr }, { _id: 1, companyName: 1 }).lean();
+    if (!custCheck) {
       return res.status(404).json({ ok: false, error: 'Selected customer was not found.' });
     }
 
-    const verifiedCustId = custCheck.rows[0].id;
-    const id = `idea_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const verifiedCustId = String(custCheck._id);
+    const id = genId('idea');
 
-    // Drop constraint if present so flexible objectives are allowed
-    await query('ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_objective_check').catch(() => {});
-
-    const insertSql = `INSERT INTO marketing_ideas (
-      id, customer_id, title, objective, concept, target_audience,
-      caption_suggestions, call_to_action, hashtags, creative_brief,
-      platform, language, campaign_period, constraints, status, created_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`;
-
-    const insertParams = [
-      id,
-      verifiedCustId,
-      title.trim(),
-      finalObjective,
-      concept.trim(),
+    // save() with validation off: status / objective are free-form strings (no CHECK constraints in the original schema)
+    await new MarketingIdea({
+      _id: id,
+      customerId: verifiedCustId,
+      title: title.trim(),
+      objective: finalObjective,
+      concept: concept.trim(),
       targetAudience,
-      captionSuggestions || concept.trim(),
-      callToAction || 'Enquire Now',
+      captionSuggestions: captionSuggestions || concept.trim(),
+      callToAction: callToAction || 'Enquire Now',
       hashtags,
       creativeBrief,
-      platform || 'Instagram & Facebook (Meta Ads)',
-      language || 'English / Hinglish',
+      platform: platform || 'Instagram & Facebook (Meta Ads)',
+      language: language || 'English / Hinglish',
       campaignPeriod,
       constraints,
       status,
       createdBy,
-    ];
-
-    try {
-      await query(insertSql, insertParams);
-    } catch (insertErr) {
-      if (insertErr && insertErr.message && (insertErr.message.includes('check constraint') || insertErr.message.includes('marketing_ideas') || insertErr.message.includes('does not exist'))) {
-        await query('ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_objective_check').catch(() => {});
-        await query('ALTER TABLE marketing_ideas DROP CONSTRAINT IF EXISTS marketing_ideas_status_check').catch(() => {});
-        await ensureMarketingTables();
-        await query(insertSql, insertParams);
-      } else {
-        throw insertErr;
-      }
-    }
+    }).save({ validateBeforeSave: false });
 
     await logAuditEvent(verifiedCustId, 'idea', id, 'Created Idea', createdBy, { title, objective: finalObjective });
 
@@ -858,51 +777,37 @@ marketingRouter.patch('/ideas/:id', async (req, res) => {
       actor = 'Marketing Operator',
     } = req.body || {};
 
-    const existing = await query(`SELECT * FROM marketing_ideas WHERE id = $1`, [ideaId]);
-    if (existing.rowCount === 0) {
+    const current = await MarketingIdea.findById(ideaId).lean();
+    if (!current) {
       return res.status(404).json({ ok: false, error: 'Marketing idea not found.' });
     }
-    const current = existing.rows[0];
 
-    const updated = await query(
-      `UPDATE marketing_ideas SET
-        title = COALESCE($1, title),
-        objective = COALESCE($2, objective),
-        concept = COALESCE($3, concept),
-        target_audience = COALESCE($4, target_audience),
-        caption_suggestions = COALESCE($5, caption_suggestions),
-        call_to_action = COALESCE($6, call_to_action),
-        hashtags = COALESCE($7, hashtags),
-        creative_brief = COALESCE($8, creative_brief),
-        platform = COALESCE($9, platform),
-        language = COALESCE($10, language),
-        campaign_period = COALESCE($11, campaign_period),
-        constraints = COALESCE($12, constraints),
-        status = COALESCE($13, status),
-        updated_at = NOW()
-      WHERE id = $14
-      RETURNING *`,
-      [
-        title !== undefined ? title.trim() : null,
-        objective || null,
-        concept !== undefined ? concept.trim() : null,
-        targetAudience !== undefined ? targetAudience : null,
-        captionSuggestions !== undefined ? captionSuggestions : null,
-        callToAction !== undefined ? callToAction : null,
-        hashtags !== undefined ? hashtags : null,
-        creativeBrief !== undefined ? creativeBrief : null,
-        platform || null,
-        language || null,
-        campaignPeriod !== undefined ? campaignPeriod : null,
-        constraints !== undefined ? constraints : null,
-        status || null,
-        ideaId,
-      ]
-    );
+    const set = coalesceSet({
+      title: title !== undefined ? title.trim() : null,
+      objective: objective || null,
+      concept: concept !== undefined ? concept.trim() : null,
+      targetAudience: targetAudience !== undefined ? targetAudience : null,
+      captionSuggestions: captionSuggestions !== undefined ? captionSuggestions : null,
+      callToAction: callToAction !== undefined ? callToAction : null,
+      hashtags: hashtags !== undefined ? hashtags : null,
+      creativeBrief: creativeBrief !== undefined ? creativeBrief : null,
+      platform: platform || null,
+      language: language || null,
+      campaignPeriod: campaignPeriod !== undefined ? campaignPeriod : null,
+      constraints: constraints !== undefined ? constraints : null,
+      status: status || null,
+    });
+    set.updatedAt = new Date();
 
-    await logAuditEvent(current.customer_id, 'idea', ideaId, 'Updated Idea', actor, { title, status });
+    const updated = await MarketingIdea.findOneAndUpdate(
+      { _id: ideaId },
+      { $set: set },
+      { new: true, runValidators: false }
+    ).lean();
 
-    res.json({ ok: true, idea: updated.rows[0] });
+    await logAuditEvent(current.customerId, 'idea', ideaId, 'Updated Idea', actor, { title, status });
+
+    res.json({ ok: true, idea: ideaRow(updated || current) });
   } catch (err) {
     console.error('[PATCH /api/marketing/ideas/:id]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -912,14 +817,13 @@ marketingRouter.patch('/ideas/:id', async (req, res) => {
 marketingRouter.delete('/ideas/:id', async (req, res) => {
   try {
     const ideaId = req.params.id;
-    const existing = await query(`SELECT * FROM marketing_ideas WHERE id = $1`, [ideaId]);
-    if (existing.rowCount === 0) {
+    const current = await MarketingIdea.findById(ideaId).lean();
+    if (!current) {
       return res.status(404).json({ ok: false, error: 'Idea not found.' });
     }
-    const current = existing.rows[0];
 
-    await query(`UPDATE marketing_ideas SET status = 'Archived', updated_at = NOW() WHERE id = $1`, [ideaId]);
-    await logAuditEvent(current.customer_id, 'idea', ideaId, 'Archived Idea', 'Marketing Manager');
+    await MarketingIdea.updateOne({ _id: ideaId }, { $set: { status: 'Archived', updatedAt: new Date() } });
+    await logAuditEvent(current.customerId, 'idea', ideaId, 'Archived Idea', 'Marketing Manager');
 
     res.json({ ok: true, message: 'Idea archived successfully.' });
   } catch (err) {
@@ -934,82 +838,72 @@ marketingRouter.delete('/ideas/:id', async (req, res) => {
 marketingRouter.get('/posts', async (req, res) => {
   try {
     const { customerId, ideaId, status, search } = req.query;
-    const where = ['mp.is_deleted = FALSE'];
-    const params = [];
+    const filter = { isDeleted: { $ne: true } };
 
-    if (customerId) {
-      params.push(customerId);
-      where.push(`mp.customer_id = $${params.length}`);
-    }
-
-    if (ideaId) {
-      params.push(ideaId);
-      where.push(`mp.idea_id = $${params.length}`);
-    }
-
-    if (status && status !== 'all') {
-      params.push(status);
-      where.push(`mp.status = $${params.length}`);
-    }
+    if (customerId) filter.customerId = customerId;
+    if (ideaId) filter.ideaId = ideaId;
+    if (status && status !== 'all') filter.status = status;
 
     if (search && search.trim()) {
-      params.push(`%${search.trim()}%`);
-      const pIdx = params.length;
-      where.push(`(mp.title ILIKE $${pIdx} OR mp.caption ILIKE $${pIdx} OR c.company_name ILIKE $${pIdx} OR mp.id ILIKE $${pIdx})`);
+      const rx = ciRegex(search.trim());
+      const matchedCust = await Customer.find({ companyName: rx }, { _id: 1 }).lean();
+      filter.$or = [
+        { title: rx },
+        { caption: rx },
+        { _id: rx },
+        { customerId: { $in: matchedCust.map((c) => String(c._id)) } },
+      ];
     }
 
-    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const posts = await MarketingPost.find(filter).sort({ createdAt: -1 }).lean();
 
-    const sql = `
-      SELECT 
-        mp.*,
-        c.company_name,
-        c.contact_person,
-        c.category AS customer_category,
-        c.city AS customer_city,
-        mi.title AS idea_title,
-        mi.objective AS idea_objective,
-        (SELECT mr.remarks FROM marketing_post_reviews mr WHERE mr.post_id = mp.id ORDER BY mr.created_at DESC LIMIT 1) AS last_review_remarks,
-        (SELECT mr.reviewer_name FROM marketing_post_reviews mr WHERE mr.post_id = mp.id ORDER BY mr.created_at DESC LIMIT 1) AS last_reviewer
-      FROM marketing_posts mp
-      JOIN customers c ON c.id = mp.customer_id
-      LEFT JOIN marketing_ideas mi ON mi.id = mp.idea_id
-      ${whereSql}
-      ORDER BY mp.created_at DESC
-    `;
+    const custIds = Array.from(new Set(posts.map((p) => p.customerId)));
+    const ideaIds = Array.from(new Set(posts.map((p) => p.ideaId).filter(Boolean)));
+    const [custDocs, ideaDocs] = await Promise.all([
+      custIds.length ? Customer.find({ _id: { $in: custIds } }, { companyName: 1, contactPerson: 1, category: 1, city: 1 }).lean() : [],
+      ideaIds.length ? MarketingIdea.find({ _id: { $in: ideaIds } }, { title: 1, objective: 1 }).lean() : [],
+    ]);
+    const custBy = new Map(custDocs.map((c) => [String(c._id), c]));
+    const ideaBy = new Map(ideaDocs.map((i) => [String(i._id), i]));
 
-    const result = await query(sql, params);
     res.json({
       ok: true,
-      posts: result.rows.map((r) => ({
-        id: r.id,
-        customerId: r.customer_id,
-        companyName: r.company_name,
-        contactPerson: r.contact_person,
-        customerCategory: r.customer_category,
-        customerCity: r.customer_city,
-        ideaId: r.idea_id,
-        ideaTitle: r.idea_title || 'Direct Marketing Post',
-        ideaObjective: r.idea_objective,
-        title: r.title,
-        platform: r.platform,
-        caption: r.caption,
-        hashtags: r.hashtags,
-        callToAction: r.call_to_action,
-        mediaUrl: r.media_url,
-        mediaType: r.media_type,
-        language: r.language,
-        campaignAssociation: r.campaign_association,
-        intendedPublishAt: r.intended_publish_at,
-        status: r.status,
-        submittedBy: r.submitted_by,
-        submittedAt: r.submitted_at,
-        revisionNumber: r.revision_number,
-        lastReviewRemarks: r.last_review_remarks,
-        lastReviewer: r.last_reviewer,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      })),
+      posts: posts
+        .filter((p) => custBy.has(p.customerId)) // INNER JOIN customers
+        .map((r) => {
+          const c = custBy.get(r.customerId);
+          const idea = r.ideaId ? ideaBy.get(String(r.ideaId)) : null;
+          const lastRev = lastReview(r);
+          return {
+            id: r._id,
+            customerId: r.customerId,
+            companyName: c.companyName,
+            contactPerson: c.contactPerson,
+            customerCategory: c.category,
+            customerCity: c.city,
+            ideaId: r.ideaId ?? null,
+            ideaTitle: (idea && idea.title) || 'Direct Marketing Post',
+            ideaObjective: idea ? idea.objective : null,
+            title: r.title,
+            platform: postPlatform(r),
+            caption: r.caption,
+            hashtags: r.hashtags,
+            callToAction: r.callToAction,
+            mediaUrl: effectiveMediaUrl(r),
+            mediaType: r.mediaType,
+            language: r.language,
+            campaignAssociation: r.campaignAssociation,
+            intendedPublishAt: r.intendedPublishAt ?? null,
+            status: r.status,
+            submittedBy: r.submittedBy ?? null,
+            submittedAt: r.submittedAt ?? null,
+            revisionNumber: r.currentRevisionNumber,
+            lastReviewRemarks: lastRev ? (lastRev.remarks ?? lastRev.notes ?? null) : null,
+            lastReviewer: lastRev ? (lastRev.reviewerName ?? lastRev.reviewerId ?? null) : null,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+          };
+        }),
     });
   } catch (err) {
     console.error('[GET /api/marketing/posts]', err);
@@ -1041,18 +935,18 @@ marketingRouter.post('/posts', async (req, res) => {
     if (!caption || !caption.trim()) return res.status(400).json({ ok: false, error: 'Caption / post content is required.' });
 
     // Customer check
-    const custRes = await query(`SELECT id, company_name FROM customers WHERE id = $1`, [customerId]);
-    if (custRes.rowCount === 0) {
+    const custExists = await Customer.exists({ _id: String(customerId) });
+    if (!custExists) {
       return res.status(404).json({ ok: false, error: 'Customer does not exist.' });
     }
 
     // Cross-customer idea prevention: If ideaId is provided, verify it belongs strictly to this customer!
     if (ideaId) {
-      const ideaRes = await query(`SELECT id, customer_id FROM marketing_ideas WHERE id = $1`, [ideaId]);
-      if (ideaRes.rowCount === 0) {
+      const idea = await MarketingIdea.findById(String(ideaId), { customerId: 1 }).lean();
+      if (!idea) {
         return res.status(404).json({ ok: false, error: 'Specified idea does not exist.' });
       }
-      if (ideaRes.rows[0].customer_id !== customerId) {
+      if (idea.customerId !== customerId) {
         return res.status(400).json({
           ok: false,
           error: 'Cross-Customer Security Violation: The selected idea does not belong to this customer.',
@@ -1060,65 +954,33 @@ marketingRouter.post('/posts', async (req, res) => {
       }
     }
 
-    const postId = `mp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const postId = genId('mp');
     const finalStatus = status === 'Pending Verification' ? 'Pending Verification' : 'Draft';
     const subTime = finalStatus === 'Pending Verification' ? new Date() : null;
 
-    await query(
-      `INSERT INTO marketing_posts (
-        id, customer_id, idea_id, title, platform, caption,
-        hashtags, call_to_action, media_url, media_type, language,
-        campaign_association, intended_publish_at, status, submitted_by,
-        submitted_at, revision_number, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17)`,
-      [
-        postId,
-        customerId,
-        ideaId || null,
-        title.trim(),
-        platform,
-        caption.trim(),
-        hashtags,
-        callToAction,
-        mediaUrl,
-        mediaType,
-        language,
-        campaignAssociation,
-        intendedPublishAt ? new Date(intendedPublishAt) : null,
-        finalStatus,
-        submittedBy,
-        subTime,
-        submittedBy,
-      ]
-    );
-
-    await logAuditEvent(customerId, 'post', postId, finalStatus === 'Pending Verification' ? 'Submitted Post for Verification' : 'Saved Post Draft', submittedBy, { title, finalStatus });
-
-    syncPostToMongo({
-      id: postId,
-      customer_id: customerId,
+    await MarketingPost.create({
+      _id: postId,
+      customerId,
+      ideaId: ideaId || null,
       title: title.trim(),
       platform,
+      targetPlatform: platform,
       caption: caption.trim(),
+      hashtags,
+      callToAction,
+      mediaUrl,
+      mediaType,
+      language,
+      campaignAssociation,
+      intendedPublishAt: intendedPublishAt ? new Date(intendedPublishAt) : null,
       status: finalStatus,
-      revision_number: 1,
-      created_at: new Date()
-    }).catch(() => {});
+      submittedBy,
+      submittedAt: subTime,
+      currentRevisionNumber: 1,
+      createdBy: submittedBy,
+    });
 
-    recordOutboxEvent(null, {
-      aggregateType: 'marketing_post',
-      aggregateId: postId,
-      eventType: 'POST_CREATED',
-      payload: {
-        customer_id: customerId,
-        title: title.trim(),
-        platform,
-        caption: caption.trim(),
-        status: finalStatus,
-        revision_number: 1,
-        created_at: new Date()
-      }
-    }).catch(() => {});
+    await logAuditEvent(customerId, 'post', postId, finalStatus === 'Pending Verification' ? 'Submitted Post for Verification' : 'Saved Post Draft', submittedBy, { title, finalStatus });
 
     res.status(201).json({
       ok: true,
@@ -1133,8 +995,8 @@ marketingRouter.post('/posts', async (req, res) => {
         submittedBy,
         submittedAt: subTime,
       },
-      message: finalStatus === 'Pending Verification' 
-        ? 'Post submitted to Verification Review Queue successfully.' 
+      message: finalStatus === 'Pending Verification'
+        ? 'Post submitted to Verification Review Queue successfully.'
         : 'Post draft saved successfully.',
     });
   } catch (err) {
@@ -1161,55 +1023,43 @@ marketingRouter.patch('/posts/:id', async (req, res) => {
       actor = 'Marketing Editor',
     } = req.body || {};
 
-    const existing = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [postId]);
-    if (existing.rowCount === 0) {
+    const current = await MarketingPost.findById(postId).lean();
+    if (!current) {
       return res.status(404).json({ ok: false, error: 'Post not found.' });
     }
-    const current = existing.rows[0];
 
     // If changes were requested, editing increments the revision number
-    let nextRev = current.revision_number;
+    let nextRev = Number(current.currentRevisionNumber || 1);
     if (current.status === 'Changes Requested') {
       nextRev += 1;
     }
 
-    const updated = await query(
-      `UPDATE marketing_posts SET
-        title = COALESCE($1, title),
-        platform = COALESCE($2, platform),
-        caption = COALESCE($3, caption),
-        hashtags = COALESCE($4, hashtags),
-        call_to_action = COALESCE($5, call_to_action),
-        media_url = COALESCE($6, media_url),
-        media_type = COALESCE($7, media_type),
-        language = COALESCE($8, language),
-        campaign_association = COALESCE($9, campaign_association),
-        intended_publish_at = COALESCE($10, intended_publish_at),
-        status = COALESCE($11, status),
-        revision_number = $12,
-        updated_at = NOW()
-      WHERE id = $13
-      RETURNING *`,
-      [
-        title !== undefined ? title.trim() : null,
-        platform || null,
-        caption !== undefined ? caption.trim() : null,
-        hashtags !== undefined ? hashtags : null,
-        callToAction !== undefined ? callToAction : null,
-        mediaUrl !== undefined ? mediaUrl : null,
-        mediaType || null,
-        language || null,
-        campaignAssociation !== undefined ? campaignAssociation : null,
-        intendedPublishAt ? new Date(intendedPublishAt) : null,
-        status || null,
-        nextRev,
-        postId,
-      ]
-    );
+    const set = coalesceSet({
+      title: title !== undefined ? title.trim() : null,
+      platform: platform || null,
+      targetPlatform: platform || null,
+      caption: caption !== undefined ? caption.trim() : null,
+      hashtags: hashtags !== undefined ? hashtags : null,
+      callToAction: callToAction !== undefined ? callToAction : null,
+      mediaUrl: mediaUrl !== undefined ? mediaUrl : null,
+      mediaType: mediaType || null,
+      language: language || null,
+      campaignAssociation: campaignAssociation !== undefined ? campaignAssociation : null,
+      intendedPublishAt: intendedPublishAt ? new Date(intendedPublishAt) : null,
+      status: status || null,
+    });
+    set.currentRevisionNumber = nextRev;
+    set.updatedAt = new Date();
 
-    await logAuditEvent(current.customer_id, 'post', postId, 'Updated Post', actor, { title, status, revision: nextRev });
+    const updated = await MarketingPost.findOneAndUpdate(
+      { _id: postId },
+      { $set: set },
+      { new: true, runValidators: false }
+    ).lean();
 
-    res.json({ ok: true, post: updated.rows[0] });
+    await logAuditEvent(current.customerId, 'post', postId, 'Updated Post', actor, { title, status, revision: nextRev });
+
+    res.json({ ok: true, post: postRow(updated || current) });
   } catch (err) {
     console.error('[PATCH /api/marketing/posts/:id]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -1224,31 +1074,24 @@ marketingRouter.post('/posts/:id/submit', async (req, res) => {
     const postId = req.params.id;
     const { submitter = 'Marketing Creator' } = req.body || {};
 
-    const existing = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [postId]);
-    if (existing.rowCount === 0) {
+    const now = new Date();
+    const updated = await MarketingPost.findOneAndUpdate(
+      { _id: postId },
+      { $set: { status: 'Pending Verification', submittedBy: submitter, submittedAt: now, updatedAt: now } },
+      { new: true }
+    ).lean();
+    if (!updated) {
       return res.status(404).json({ ok: false, error: 'Post not found.' });
     }
-    const current = existing.rows[0];
 
-    const updated = await query(
-      `UPDATE marketing_posts SET
-        status = 'Pending Verification',
-        submitted_by = $1,
-        submitted_at = NOW(),
-        updated_at = NOW()
-      WHERE id = $2
-      RETURNING *`,
-      [submitter, postId]
-    );
-
-    await logAuditEvent(current.customer_id, 'post', postId, 'Submitted for Verification', submitter, {
-      revision: current.revision_number,
+    await logAuditEvent(updated.customerId, 'post', postId, 'Submitted for Verification', submitter, {
+      revision: updated.currentRevisionNumber,
     });
 
     res.json({
       ok: true,
       message: 'Post submitted to review queue for verification.',
-      post: updated.rows[0],
+      post: postRow(updated),
     });
   } catch (err) {
     console.error('[POST /api/marketing/posts/:id/submit]', err);
@@ -1264,39 +1107,31 @@ marketingRouter.delete('/posts/:id', async (req, res) => {
     const postId = req.params.id;
     const { actor = 'Marketing Manager' } = req.body || {};
 
-    const postRes = await query(`SELECT * FROM marketing_posts WHERE id = $1`, [postId]);
-    if (postRes.rowCount === 0 || postRes.rows[0].is_deleted) {
+    const post = await MarketingPost.findById(postId).lean();
+    if (!post || post.isDeleted) {
       return res.status(404).json({ ok: false, error: 'Post not found or already archived.' });
     }
-    const post = postRes.rows[0];
 
     // Prevent archiving if active in running campaign
-    const campRes = await query(
-      `SELECT id, name, status FROM marketing_campaigns WHERE post_id = $1 AND status = 'Running'`,
-      [postId]
-    );
-    if (campRes.rowCount > 0) {
+    const runningCamp = await MarketingCampaign.findOne({ postId, status: 'Running' }).lean();
+    if (runningCamp) {
       return res.status(400).json({
         ok: false,
-        error: `Cannot archive post: It is currently active in a running marketing campaign ("${campRes.rows[0].name}"). Stop the campaign first.`,
+        error: `Cannot archive post: It is currently active in a running marketing campaign ("${campaignName(runningCamp)}"). Stop the campaign first.`,
       });
     }
 
     // Enterprise Soft Deletion: Preserves all past revisions, reviews, and audit history permanently
-    await query(
-      `UPDATE marketing_posts SET
-        is_deleted = TRUE,
-        deleted_at = NOW(),
-        deleted_by = $1,
-        updated_at = NOW()
-      WHERE id = $2`,
-      [actor, postId]
+    const now = new Date();
+    await MarketingPost.updateOne(
+      { _id: postId },
+      { $set: { isDeleted: true, deletedAt: now, deletedBy: actor, updatedAt: now } }
     );
 
-    await logAuditEvent(post.customer_id, 'post_archived', postId, `Archived post "${post.title}"`, actor, {
+    await logAuditEvent(post.customerId, 'post_archived', postId, `Archived post "${post.title}"`, actor, {
       postId,
       title: post.title,
-      revision: post.revision_number,
+      revision: post.currentRevisionNumber,
     });
 
     res.json({
@@ -1347,107 +1182,88 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
       });
     }
 
-    let reviewResult;
-
-    await withTransaction(async (txQuery) => {
-      // 1. Atomic row-level lock on the post record in PostgreSQL (prevents concurrent race conditions)
-      const postRes = await txQuery(
-        `SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE FOR UPDATE`,
-        [postId]
-      );
-      if (postRes.rowCount === 0) {
-        const err = new Error('Post not found or already archived.');
-        err.statusCode = 404;
-        throw err;
+    const reviewResult = await withMongoTransaction(async (session) => {
+      const post = await MarketingPost.findOne({ _id: postId, isDeleted: { $ne: true } }).session(session).lean();
+      if (!post) {
+        throw new HttpError(404, 'Post not found or already archived.');
       }
-      const post = postRes.rows[0];
-      const currentRev = Number(post.revision_number || 1);
+      const currentRev = Number(post.currentRevisionNumber || 1);
+
+      const staleError = (latestRev) => new HttpError(
+        409,
+        `Concurrent Review Conflict: You are reviewing Revision #${expectedRevisionNumber}, but the artwork has already been updated to Revision #${latestRev}. Please refresh and audit the latest uploaded creative.`,
+        { currentRevision: latestRev, expectedRevision: Number(expectedRevisionNumber) }
+      );
 
       // Concurrency / Stale Revision Guard: Ensure the reviewer is reviewing the exact latest revision
       if (expectedRevisionNumber !== undefined && expectedRevisionNumber !== null && Number(expectedRevisionNumber) !== currentRev) {
-        const err = new Error(
-          `Concurrent Review Conflict: You are reviewing Revision #${expectedRevisionNumber}, but the artwork has already been updated to Revision #${currentRev}. Please refresh and audit the latest uploaded creative.`
-        );
-        err.statusCode = 409;
-        err.currentRevision = currentRev;
-        err.expectedRevision = Number(expectedRevisionNumber);
-        throw err;
+        throw staleError(currentRev);
       }
 
-      // Separation of Duties check: Creator cannot approve their own post if required
-      if (decision === 'Approved' && post.submitted_by && post.submitted_by.toLowerCase() === reviewerName.toLowerCase() && reviewerName.toLowerCase() !== 'admin') {
-        // Allowed for small teams, but logged in audit
+      const reviewId = genId('rev');
+      const now = new Date();
+
+      // Atomic conditional update: only applies if the revision being reviewed is still the current one
+      // (replaces SELECT ... FOR UPDATE row lock). Appends the review, syncs the specific revision, sets post status.
+      const revisionFilter = post.currentRevisionNumber === undefined || post.currentRevisionNumber === null
+        ? { currentRevisionNumber: null }
+        : { currentRevisionNumber: post.currentRevisionNumber };
+
+      // Sync the specific revision subdocument (only possible when the revisions array exists on the document)
+      const hasRevisionsArray = Array.isArray(post.revisions);
+      const revisionSet = hasRevisionsArray
+        ? {
+            'revisions.$[rev].status': decision,
+            'revisions.$[rev].reviewerName': reviewerName,
+            'revisions.$[rev].reviewRemarks': remarks,
+            'revisions.$[rev].rejectionReason': rejectionReason,
+            'revisions.$[rev].correctionInstructions': correctionInstructions,
+            'revisions.$[rev].reviewedAt': now,
+          }
+        : {};
+
+      const upd = await MarketingPost.updateOne(
+        { _id: postId, isDeleted: { $ne: true }, ...revisionFilter },
+        {
+          $set: {
+            status: decision,
+            updatedAt: now,
+            ...revisionSet,
+          },
+          $push: {
+            reviews: {
+              revisionNumber: currentRev,
+              action: decision,
+              decision,
+              reviewId,
+              reviewerId: reviewerName,
+              reviewerName,
+              reviewerRole,
+              remarks,
+              rejectionReason,
+              correctionInstructions,
+              notes: remarks || rejectionReason || correctionInstructions || '',
+              reviewedAt: now,
+            },
+          },
+        },
+        hasRevisionsArray
+          ? { session, arrayFilters: [{ 'rev.revisionNumber': currentRev }] }
+          : { session }
+      );
+
+      if (upd.matchedCount === 0) {
+        const fresh = await MarketingPost.findOne({ _id: postId, isDeleted: { $ne: true } }).session(session).lean();
+        if (!fresh) throw new HttpError(404, 'Post not found or already archived.');
+        throw staleError(Number(fresh.currentRevisionNumber || 1));
       }
 
-      const reviewId = `rev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-
-      // 2. Insert Review record with explicit revision_number
-      await txQuery(
-        `INSERT INTO marketing_post_reviews (
-          id, post_id, revision_number, reviewer_name, reviewer_role, decision, remarks,
-          rejection_reason, correction_instructions
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          reviewId,
-          postId,
-          currentRev,
-          reviewerName,
-          reviewerRole,
-          decision,
-          remarks,
-          rejectionReason,
-          correctionInstructions,
-        ]
-      );
-
-      // 3. Synchronize the specific revision record in marketing_post_revisions
-      await txQuery(
-        `UPDATE marketing_post_revisions SET
-          review_status = $1,
-          reviewer_name = $2,
-          review_remarks = $3,
-          rejection_reason = $4,
-          correction_instructions = $5,
-          reviewed_at = NOW()
-        WHERE post_id = $6 AND revision_number = $7`,
-        [
-          decision,
-          reviewerName,
-          remarks,
-          rejectionReason,
-          correctionInstructions,
-          postId,
-          currentRev,
-        ]
-      );
-
-      // 4. Update post status
-      await txQuery(
-        `UPDATE marketing_posts SET status = $1, updated_at = NOW() WHERE id = $2`,
-        [decision, postId]
-      );
-
-      // 5. Atomically enqueue review into transactional outbox
-      await recordOutboxEvent(txQuery, {
-        aggregateType: 'marketing_post',
-        aggregateId: postId,
-        eventType: 'REVIEW_RECORDED',
-        payload: {
-          revision_number: currentRev,
-          decision,
-          reviewer_name: reviewerName,
-          remarks,
-          rejection_reason: rejectionReason,
-          created_at: new Date()
-        }
-      });
-
-      reviewResult = {
+      return {
         decision,
         reviewId,
         postId,
         revisionNumber: currentRev,
-        customerId: post.customer_id,
+        customerId: post.customerId,
         title: post.title,
       };
     });
@@ -1460,15 +1276,6 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
       rejectionReason,
       correctionInstructions,
     });
-
-    syncReviewToMongo(reviewResult.postId, {
-      revision_number: reviewResult.revisionNumber,
-      decision: reviewResult.decision,
-      reviewer_name: reviewerName,
-      remarks,
-      rejection_reason: rejectionReason,
-      created_at: new Date()
-    }).catch(() => {});
 
     res.json({
       ok: true,
@@ -1498,21 +1305,44 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
 marketingRouter.get('/posts/:id/history', async (req, res) => {
   try {
     const postId = req.params.id;
-    const [revRes, auditRes] = await Promise.all([
-      query(
-        `SELECT * FROM marketing_post_reviews WHERE post_id = $1 ORDER BY created_at DESC`,
-        [postId]
-      ),
-      query(
-        `SELECT * FROM marketing_audit_events WHERE entity_id = $1 ORDER BY created_at DESC`,
-        [postId]
-      ),
+    const [post, auditDocs] = await Promise.all([
+      MarketingPost.findById(postId, { reviews: 1 }).lean(),
+      MarketingAuditEvent.find({ $or: [{ entityId: postId }, { postId }] }).sort({ createdAt: -1, timestamp: -1 }).lean(),
     ]);
+
+    const reviews = (post?.reviews || [])
+      .map((rv, idx) => ({
+        id: rv.reviewId || `rev_${postId}_${rv.revisionNumber}_${idx}`,
+        post_id: postId,
+        revision_number: rv.revisionNumber,
+        reviewer_name: rv.reviewerName ?? rv.reviewerId ?? null,
+        reviewer_role: rv.reviewerRole ?? 'Marketing Reviewer',
+        decision: rv.decision ?? rv.action,
+        remarks: rv.remarks ?? rv.notes ?? '',
+        rejection_reason: rv.rejectionReason ?? '',
+        correction_instructions: rv.correctionInstructions ?? '',
+        created_at: rv.reviewedAt,
+        _idx: idx,
+      }))
+      .sort((a, b) => (new Date(b.created_at || 0) - new Date(a.created_at || 0)) || (b._idx - a._idx))
+      .map(({ _idx, ...rest }) => rest);
+
+    const auditEvents = auditDocs.map((e) => ({
+      id: e._id,
+      customer_id: e.customerId ?? null,
+      entity_type: e.entityType ?? null,
+      entity_id: e.entityId ?? e.postId ?? null,
+      action: e.action ?? e.eventType ?? null,
+      actor: e.actor ?? null,
+      details: e.details ?? e.payload ?? {},
+      ip_address: e.ipAddress ?? '',
+      created_at: e.createdAt ?? e.timestamp,
+    }));
 
     res.json({
       ok: true,
-      reviews: revRes.rows,
-      auditEvents: auditRes.rows,
+      reviews,
+      auditEvents,
     });
   } catch (err) {
     console.error('[GET /api/marketing/posts/:id/history]', err);
@@ -1615,71 +1445,65 @@ marketingRouter.post('/media/upload', async (req, res) => {
 marketingRouter.get('/campaigns', async (req, res) => {
   try {
     const { customerId, status } = req.query;
-    const where = ['(mp.is_deleted IS NULL OR mp.is_deleted = FALSE)'];
-    const params = [];
+    const filter = {};
+    if (customerId) filter.customerId = customerId;
+    if (status && status !== 'all') filter.status = status;
 
-    if (customerId) {
-      params.push(customerId);
-      where.push(`mc.customer_id = $${params.length}`);
-    }
+    const campaigns = await MarketingCampaign.find(filter).sort({ createdAt: -1 }).lean();
 
-    if (status && status !== 'all') {
-      params.push(status);
-      where.push(`mc.status = $${params.length}`);
-    }
+    const custIds = Array.from(new Set(campaigns.map((c) => c.customerId)));
+    const postIds = Array.from(new Set(campaigns.map((c) => c.postId).filter(Boolean)));
+    const [custDocs, walletDocs, postDocs] = await Promise.all([
+      custIds.length ? Customer.find({ _id: { $in: custIds } }, { companyName: 1, contactPerson: 1, category: 1 }).lean() : [],
+      custIds.length ? Wallet.find({ customerId: { $in: custIds } }, { customerId: 1, availableBalance: 1 }).lean() : [],
+      postIds.length ? MarketingPost.find({ _id: { $in: postIds } }).lean() : [],
+    ]);
+    const custBy = new Map(custDocs.map((c) => [String(c._id), c]));
+    const walletBy = new Map(walletDocs.map((w) => [w.customerId, w]));
+    const postBy = new Map(postDocs.map((p) => [String(p._id), p]));
 
-    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
-
-    const sql = `
-      SELECT 
-        mc.*,
-        c.company_name,
-        c.contact_person,
-        c.category AS customer_category,
-        COALESCE(w.available_balance, 0)::NUMERIC AS wallet_balance,
-        COALESCE(mp.title, 'Main Campaign Creative') AS post_title,
-        mp.media_url AS post_media_url,
-        COALESCE(mp.platform, mc.platform) AS post_platform,
-        mp.caption AS post_caption
-      FROM marketing_campaigns mc
-      JOIN customers c ON c.id = mc.customer_id
-      LEFT JOIN wallets w ON w.customer_id = c.id
-      LEFT JOIN marketing_posts mp ON mp.id = mc.post_id
-      ${whereSql}
-      ORDER BY mc.created_at DESC
-    `;
-
-    const result = await query(sql, params);
     res.json({
       ok: true,
-      campaigns: result.rows.map((r) => ({
-        id: r.id,
-        customerId: r.customer_id,
-        companyName: r.company_name,
-        contactPerson: r.contact_person,
-        customerCategory: r.customer_category,
-        walletBalance: Number(r.wallet_balance || 0),
-        postId: r.post_id,
-        postTitle: r.post_title,
-        postMediaUrl: r.post_media_url,
-        postCaption: r.post_caption,
-        name: r.name,
-        objective: r.objective,
-        platform: r.platform,
-        targetAudience: r.target_audience,
-        startDate: r.start_date,
-        endDate: r.end_date,
-        dailyBudget: Number(r.daily_budget || 300),
-        totalBudget: Number(r.total_budget || 0),
-        status: r.status,
-        externalPlatformStatus: r.external_platform_status,
-        externalCampaignId: r.external_campaign_id,
-        lastAction: r.last_action,
-        lastActor: r.last_actor,
-        lastActionAt: r.last_action_at,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      })),
+      campaigns: campaigns
+        .filter((r) => {
+          // INNER JOIN customers; LEFT JOIN posts with (mp.is_deleted IS NULL OR FALSE)
+          if (!custBy.has(r.customerId)) return false;
+          const mp = r.postId ? postBy.get(String(r.postId)) : null;
+          return !(mp && mp.isDeleted);
+        })
+        .map((r) => {
+          const c = custBy.get(r.customerId);
+          const w = walletBy.get(r.customerId);
+          const mp = r.postId ? postBy.get(String(r.postId)) : null;
+          return {
+            id: r._id,
+            customerId: r.customerId,
+            companyName: c.companyName,
+            contactPerson: c.contactPerson,
+            customerCategory: c.category,
+            walletBalance: Number(w?.availableBalance || 0),
+            postId: r.postId ?? null,
+            postTitle: (mp && mp.title) || 'Main Campaign Creative',
+            postMediaUrl: mp ? effectiveMediaUrl(mp) : null,
+            postCaption: mp ? mp.caption : null,
+            name: campaignName(r),
+            objective: r.objective,
+            platform: r.platform,
+            targetAudience: r.targetAudience,
+            startDate: r.startDate,
+            endDate: r.endDate,
+            dailyBudget: Number(r.dailyBudget || 300),
+            totalBudget: Number(campaignBudgetTotal(r) || 0),
+            status: r.status,
+            externalPlatformStatus: r.externalPlatformStatus,
+            externalCampaignId: r.externalCampaignId,
+            lastAction: r.lastAction,
+            lastActor: r.lastActor,
+            lastActionAt: r.lastActionAt,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+          };
+        }),
     });
   } catch (err) {
     console.error('[GET /api/marketing/campaigns]', err);
@@ -1708,11 +1532,11 @@ marketingRouter.post('/campaigns', async (req, res) => {
     if (!customerId) return res.status(400).json({ ok: false, error: 'Customer is required.' });
     if (!name || !name.trim()) return res.status(400).json({ ok: false, error: 'Campaign name is required.' });
     // 1. Verify customer exists and registration is complete
-    const custRes = await query(`SELECT * FROM customers WHERE id = $1`, [customerId]);
-    if (custRes.rowCount === 0) {
+    const customer = await Customer.findById(String(customerId)).lean();
+    if (!customer) {
       return res.status(404).json({ ok: false, error: 'Customer not found.' });
     }
-    const savedCurrency = String(custRes.rows[0].currency || 'INR').toUpperCase();
+    const savedCurrency = String(customer.currency || 'INR').toUpperCase();
     const minimumDailyBudget = savedCurrency === 'INR' ? 300 : savedCurrency === 'USD' ? 10 : null;
     if (minimumDailyBudget === null) {
       return res.status(409).json({ ok: false, error: 'This wallet currency is unsupported for campaign spending.' });
@@ -1726,14 +1550,19 @@ marketingRouter.post('/campaigns', async (req, res) => {
     let effectivePostId = postId;
     if (!effectivePostId) {
       // Find latest verified and approved post for this customer with valid artwork
-      const existingApproved = await query(
-        `SELECT id, revision_number FROM marketing_posts 
-         WHERE customer_id = $1 AND status = 'Approved' AND media_url IS NOT NULL AND media_url != '' AND is_deleted = FALSE 
-         ORDER BY updated_at DESC LIMIT 1`,
-        [customerId]
-      );
-      if (existingApproved.rowCount > 0) {
-        effectivePostId = existingApproved.rows[0].id;
+      const existingApproved = await MarketingPost.findOne({
+        customerId,
+        status: 'Approved',
+        isDeleted: { $ne: true },
+        $or: [
+          { mediaUrl: { $nin: [null, ''] } },
+          { revisions: { $elemMatch: { artworkUrl: { $nin: [null, ''] } } } },
+        ],
+      })
+        .sort({ updatedAt: -1 })
+        .lean();
+      if (existingApproved) {
+        effectivePostId = existingApproved._id;
       } else {
         return res.status(400).json({
           ok: false,
@@ -1742,155 +1571,121 @@ marketingRouter.post('/campaigns', async (req, res) => {
       }
     }
 
-    let campaignResult;
-
-    await withTransaction(async (txQuery) => {
-      // 1. Exclusive row-level lock on the post in PostgreSQL (prevents race condition with concurrent reuploads)
-      const postRes = await txQuery(
-        `SELECT * FROM marketing_posts WHERE id = $1 AND is_deleted = FALSE FOR UPDATE`,
-        [effectivePostId]
-      );
-      if (postRes.rowCount === 0) {
-        const err = new Error('Selected creative post not found or archived.');
-        err.statusCode = 404;
-        throw err;
+    const campaignResult = await withMongoTransaction(async (session) => {
+      // 1. Load the creative post inside the transaction (post-level conflicts surface as write conflicts)
+      const post = await MarketingPost.findOne({ _id: String(effectivePostId), isDeleted: { $ne: true } }).session(session).lean();
+      if (!post) {
+        throw new HttpError(404, 'Selected creative post not found or archived.');
       }
-      const post = postRes.rows[0];
 
-      if (post.customer_id !== customerId) {
-        const err = new Error('Cross-Customer Security Violation: The selected creative post does not belong to this customer.');
-        err.statusCode = 400;
-        throw err;
+      if (post.customerId !== customerId) {
+        throw new HttpError(400, 'Cross-Customer Security Violation: The selected creative post does not belong to this customer.');
       }
 
       if (post.status !== 'Approved') {
-        const err = new Error(`Only verified and Approved posts can be deployed into marketing campaigns. Current post status: ${post.status}`);
-        err.statusCode = 400;
-        throw err;
+        throw new HttpError(400, `Only verified and Approved posts can be deployed into marketing campaigns. Current post status: ${post.status}`);
       }
 
-      if (!post.media_url || !post.media_url.trim()) {
-        const err = new Error('Cannot deploy campaign: The selected post does not have uploaded creative artwork.');
-        err.statusCode = 400;
-        throw err;
+      const mediaUrlEffective = effectiveMediaUrl(post);
+      if (!mediaUrlEffective || !String(mediaUrlEffective).trim()) {
+        throw new HttpError(400, 'Cannot deploy campaign: The selected post does not have uploaded creative artwork.');
       }
 
-      // 2. Revision-level verification inside transaction lock
-      const latestRevRes = await txQuery(
-        `SELECT revision_number, review_status FROM marketing_post_revisions WHERE post_id = $1 ORDER BY revision_number DESC LIMIT 1`,
-        [effectivePostId]
-      );
-      if (latestRevRes.rowCount > 0 && latestRevRes.rows[0].review_status !== 'Approved') {
-        const err = new Error(
-          `Campaign Creative Ineligible: The latest revision (Rev #${latestRevRes.rows[0].revision_number}) is in '${latestRevRes.rows[0].review_status}' status. Only posts whose latest revision is Approved can be deployed.`
+      // 2. Revision-level verification
+      const latestRev = latestRevision(post);
+      if (latestRev && latestRev.status !== 'Approved') {
+        throw new HttpError(
+          400,
+          `Campaign Creative Ineligible: The latest revision (Rev #${latestRev.revisionNumber}) is in '${latestRev.status}' status. Only posts whose latest revision is Approved can be deployed.`
         );
-        err.statusCode = 400;
-        throw err;
       }
 
-      // 3. Verify Customer Wallet Balance from authoritative wallets table with row lock
-      const walRes = await txQuery(`SELECT * FROM wallets WHERE customer_id = $1 FOR UPDATE`, [customerId]);
-      const walRow = walRes.rows[0];
-      const balance = Number(walRow?.available_balance || 0);
-      if (String(walRow?.currency || savedCurrency).toUpperCase() !== savedCurrency) {
-        const err = new Error('Customer and wallet currencies do not match. Campaign spending is blocked for safety.');
-        err.statusCode = 409;
-        throw err;
+      // 3. Verify Customer Wallet Balance from authoritative wallets collection
+      const wallet = await Wallet.findOne({ customerId }).session(session).lean();
+      const balance = Number(wallet?.availableBalance || 0);
+      if (String(wallet?.currency || savedCurrency).toUpperCase() !== savedCurrency) {
+        throw new HttpError(409, 'Customer and wallet currencies do not match. Campaign spending is blocked for safety.');
       }
       const currencySymbol = savedCurrency === 'INR' ? '₹' : '$';
 
       if (balance < resolvedDailyBudget) {
-        const err = new Error(
+        throw new HttpError(
+          400,
           `Insufficient Wallet Balance: Customer available balance (${currencySymbol}${balance.toLocaleString('en-US')}) is less than campaign daily budget requirement (${currencySymbol}${resolvedDailyBudget.toLocaleString('en-US')}). Please top up wallet first.`
         );
-        err.statusCode = 400;
-        throw err;
       }
 
       // 4. External integration check: Meta Ads integration status
-      const hasMetaToken = Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
+      const hasMetaToken = hasMetaAccessToken();
       const externalStatus = hasMetaToken ? 'Pending Authorization' : 'Not Connected';
 
-      const campaignId = `camp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const campaignId = genId('camp');
       const finalStart = startDate ? new Date(startDate) : new Date();
+      const now = new Date();
 
-      await txQuery(
-        `INSERT INTO marketing_campaigns (
-          id, customer_id, name, objective, post_id, platform,
-          target_audience, start_date, end_date, daily_budget, total_budget,
-          schedule_settings, status, external_platform_status, created_by, currency,
-          last_action, last_actor, last_action_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'Created', $15, NOW())`,
-        [
-          campaignId,
+      await MarketingCampaign.create(
+        [{
+          _id: campaignId,
           customerId,
-          name.trim(),
-          objective || 'Lead Generation',
-          effectivePostId,
+          campaignName: name.trim(),
+          objective: objective || 'Lead Generation',
+          postId: String(effectivePostId),
           platform,
           targetAudience,
-          finalStart,
-          endDate ? new Date(endDate) : null,
-          resolvedDailyBudget,
-          Number(totalBudget || 0),
-          JSON.stringify(scheduleSettings),
+          startDate: finalStart,
+          endDate: endDate ? new Date(endDate) : null,
+          dailyBudget: resolvedDailyBudget,
+          totalBudget: Number(totalBudget || 0),
+          totalSpend: Number(totalBudget || 0), // legacy migration mapping: total_budget -> totalSpend
+          scheduleSettings,
           status,
-          externalStatus,
-          actor,
-          savedCurrency,
-        ]
+          externalPlatformStatus: externalStatus,
+          createdBy: actor,
+          currency: savedCurrency,
+          lastAction: 'Created',
+          lastActor: actor,
+          lastActionAt: now,
+        }],
+        { session }
       );
 
       let newBalanceAfterStart = balance;
       if (status === 'Running') {
-        const isAlreadyDeductedToday = walRow?.last_deducted_at &&
-          new Date(walRow.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-          new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const isAlreadyDeductedToday = isDeductedToday(wallet?.lastDeductedAt);
 
         if (!isAlreadyDeductedToday) {
           const spendAmt = resolvedDailyBudget;
-          newBalanceAfterStart = balance - spendAmt;
-          await txQuery(
-            `UPDATE wallets SET
-              available_balance = $1,
-              total_ad_spent = total_ad_spent + $2,
-              ad_campaign_active = TRUE,
-              last_deducted_at = NOW(),
-              updated_at = NOW()
-            WHERE customer_id = $3`,
-            [newBalanceAfterStart, spendAmt, customerId]
-          );
-
-          const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-          const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
-          await txQuery(
-            `INSERT INTO wallet_transactions (
-              id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-            ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
-            [
-              txId,
-              customerId,
-              walRow.id,
-              spendAmt,
-              newBalanceAfterStart,
-              refUtr,
-              `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${spendAmt}/day)`,
-            ]
-          );
+          const result = await deductDailySpendAtomic(session, {
+            walletId: wallet._id,
+            customerId,
+            spend: spendAmt,
+            description: `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${spendAmt}/day)`,
+            refPrefix: 'SYS-DAILY-MKT',
+            now,
+          });
+          if (result.status === 'deducted') {
+            newBalanceAfterStart = result.wallet.availableBalance;
+          } else if (result.status === 'insufficient') {
+            const curBal = Number(result.wallet?.availableBalance || 0);
+            throw new HttpError(
+              400,
+              `Insufficient Wallet Balance: Customer available balance (${currencySymbol}${curBal.toLocaleString('en-US')}) is less than campaign daily budget requirement (${currencySymbol}${resolvedDailyBudget.toLocaleString('en-US')}). Please top up wallet first.`
+            );
+          } else if (result.status === 'already') {
+            newBalanceAfterStart = Number(result.wallet?.availableBalance || 0);
+            await Wallet.updateOne({ customerId }, { $set: { adCampaignActive: true, updatedAt: now } }, { session });
+          }
         } else {
-          await txQuery(
-            `UPDATE wallets SET ad_campaign_active = TRUE, updated_at = NOW() WHERE customer_id = $1`,
-            [customerId]
-          );
+          await Wallet.updateOne({ customerId }, { $set: { adCampaignActive: true, updatedAt: now } }, { session });
         }
       }
 
-      campaignResult = {
+      return {
         campaignId,
         customerId,
         name: name.trim(),
         status,
-        effectivePostId,
+        effectivePostId: String(effectivePostId),
         dailyBudget: resolvedDailyBudget,
         externalStatus,
         newBalanceAfterStart,
@@ -1923,11 +1718,7 @@ marketingRouter.post('/campaigns', async (req, res) => {
         : 'Marketing campaign created. Notice: External Meta Ads platform is not connected, campaign managed internally.',
     });
   } catch (err) {
-    if (err.statusCode) {
-      return res.status(err.statusCode).json({ ok: false, error: err.message });
-    }
-    console.error('[POST /api/marketing/campaigns]', err);
-    res.status(500).json({ ok: false, error: err.message });
+    sendRouteError(res, err, '[POST /api/marketing/campaigns]');
   }
 });
 
@@ -1940,125 +1731,109 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     const { actor = 'Marketing Manager', marketingCode, campaignCode, code } = req.body || {};
     const finalCode = String(marketingCode || campaignCode || code || '').trim().toUpperCase();
 
-    const campRes = await query(`SELECT * FROM marketing_campaigns WHERE id = $1`, [campaignId]);
-    if (campRes.rowCount === 0) {
+    const camp = await MarketingCampaign.findById(campaignId).lean();
+    if (!camp) {
       return res.status(404).json({ ok: false, error: 'Campaign not found.' });
     }
-    const camp = campRes.rows[0];
 
     // Revalidate Post approval if post is linked
-    if (camp.post_id) {
-      const postRes = await query(`SELECT status FROM marketing_posts WHERE id = $1`, [camp.post_id]);
-      if (postRes.rowCount > 0 && postRes.rows[0].status !== 'Approved') {
-        await query(`UPDATE marketing_posts SET status = 'Approved', updated_at = NOW() WHERE id = $1`, [camp.post_id]);
+    if (camp.postId) {
+      await MarketingPost.updateOne(
+        { _id: camp.postId, status: { $ne: 'Approved' } },
+        { $set: { status: 'Approved', updatedAt: new Date() } }
+      );
+    }
+
+    const outcome = await withMongoTransaction(async (session) => {
+      // Revalidate Customer Wallet Balance
+      const wallet = await Wallet.findOne({ customerId: camp.customerId }).session(session).lean();
+      if (!wallet) {
+        throw new HttpError(400, 'Customer wallet not found.');
       }
-    }
+      const balance = Number(wallet.availableBalance || 0);
+      const currency = String(wallet.currency || 'INR').toUpperCase();
+      const minimumDailySpend = currency === 'INR' ? 300 : currency === 'USD' ? 10 : null;
+      if (minimumDailySpend === null || String(camp.currency || currency).toUpperCase() !== currency) {
+        throw new HttpError(409, 'Campaign and wallet currencies are unsupported or mismatched.');
+      }
+      const dailySpend = Number(camp.dailyBudget || wallet.dailyAdSpend || minimumDailySpend);
+      if (!Number.isFinite(dailySpend) || dailySpend < minimumDailySpend) {
+        throw new HttpError(400, `Campaign daily spend minimum is ${currency === 'INR' ? '₹300' : '$10'}.`);
+      }
 
-    // Revalidate Customer Wallet Balance
-    const walRes = await query(`SELECT * FROM wallets WHERE customer_id = $1`, [camp.customer_id]);
-    if (walRes.rowCount === 0) {
-      return res.status(400).json({ ok: false, error: 'Customer wallet not found.' });
-    }
-    const wallet = walRes.rows[0];
-    const balance = Number(wallet.available_balance || 0);
-    const currency = String(wallet.currency || 'INR').toUpperCase();
-    const minimumDailySpend = currency === 'INR' ? 300 : currency === 'USD' ? 10 : null;
-    if (minimumDailySpend === null || String(camp.currency || currency).toUpperCase() !== currency) {
-      return res.status(409).json({ ok: false, error: 'Campaign and wallet currencies are unsupported or mismatched.' });
-    }
-    const dailySpend = Number(camp.daily_budget || wallet.daily_ad_spend || minimumDailySpend);
-    if (!Number.isFinite(dailySpend) || dailySpend < minimumDailySpend) {
-      return res.status(400).json({ ok: false, error: `Campaign daily spend minimum is ${currency === 'INR' ? '₹300' : '$10'}.` });
-    }
+      const now = new Date();
+      // Per-day service check: Has this customer already been deducted for today's service?
+      let isAlreadyDeductedToday = isDeductedToday(wallet.lastDeductedAt, now);
 
-    // Per-day service check: Has this customer already been deducted for today's service?
-    const isAlreadyDeductedToday = Boolean(
-      wallet.last_deducted_at &&
-      new Date(wallet.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    );
+      let newBal = balance;
+      let deductedAmount = 0;
 
-    let newBal = balance;
-    let deductedAmount = 0;
+      const insufficient = (bal) => new HttpError(
+        400,
+        `Cannot start campaign: Customer wallet balance (₹${bal}) is below required daily budget for per-day service (₹${dailySpend}/day). Please top up wallet first.`
+      );
 
-    if (!isAlreadyDeductedToday) {
-      if (balance < dailySpend) {
-        return res.status(400).json({
-          ok: false,
-          error: `Cannot start campaign: Customer wallet balance (₹${balance}) is below required daily budget for per-day service (₹${dailySpend}/day). Please top up wallet first.`,
+      if (!isAlreadyDeductedToday) {
+        if (balance < dailySpend) throw insufficient(balance);
+
+        // Cut / deduct price from wallet balance for today's per-day service (atomic conditional $inc + ledger row)
+        const result = await deductDailySpendAtomic(session, {
+          walletId: wallet._id,
+          customerId: camp.customerId,
+          spend: dailySpend,
+          description: `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${dailySpend}/day)`,
+          refPrefix: 'SYS-DAILY-MKT',
+          marketingCode: finalCode,
+          now,
         });
+        if (result.status === 'deducted') {
+          newBal = result.wallet.availableBalance;
+          deductedAmount = dailySpend;
+        } else if (result.status === 'insufficient') {
+          throw insufficient(Number(result.wallet?.availableBalance || 0));
+        } else if (result.status === 'already') {
+          // Settled concurrently by another request: resume without double charging
+          isAlreadyDeductedToday = true;
+          newBal = Number(result.wallet?.availableBalance || 0);
+        } else {
+          throw new HttpError(400, 'Customer wallet not found.');
+        }
       }
 
-      // Cut / deduct price from wallet balance for today's per-day service
-      newBal = balance - dailySpend;
-      deductedAmount = dailySpend;
+      if (isAlreadyDeductedToday) {
+        // Already deducted today: simply resume campaign without double charging
+        const set = { adCampaignActive: true, updatedAt: now };
+        if (finalCode) set.marketingCode = finalCode;
+        await Wallet.updateOne({ customerId: camp.customerId }, { $set: set }, { session });
+      }
 
-      await query(
-        `UPDATE wallets SET
-          available_balance = $1,
-          total_ad_spent = total_ad_spent + $2,
-          ad_campaign_active = TRUE,
-          marketing_code = COALESCE(NULLIF($4, ''), marketing_code),
-          last_deducted_at = NOW(),
-          updated_at = NOW()
-        WHERE customer_id = $3`,
-        [newBal, dailySpend, camp.customer_id, finalCode]
-      );
+      if (finalCode) {
+        await Customer.updateOne({ _id: camp.customerId }, { $set: { marketingCode: finalCode, updatedAt: now } }, { session });
+      }
 
-      const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
-      await query(
-        `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
-        [
-          txId,
-          camp.customer_id,
-          wallet.id,
-          dailySpend,
-          newBal,
-          refUtr,
-          `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${dailySpend}/day)`,
-        ]
-      );
-    } else {
-      // Already deducted today: simply resume campaign without double charging
-      await query(
-        `UPDATE wallets SET 
-           ad_campaign_active = TRUE, 
-           marketing_code = COALESCE(NULLIF($2, ''), marketing_code),
-           updated_at = NOW() 
-         WHERE customer_id = $1`,
-        [camp.customer_id, finalCode]
-      );
-    }
+      // Check external platform status
+      const extStatus = hasMetaAccessToken() ? 'Live' : 'Not Connected';
 
-    if (finalCode) {
-      await query(
-        `UPDATE customers SET marketing_code = $1, updated_at = NOW() WHERE id = $2`,
-        [finalCode, camp.customer_id]
-      );
-    }
+      const campSet = {
+        status: 'Running',
+        externalPlatformStatus: extStatus,
+        lastAction: 'Started Marketing',
+        lastActor: actor,
+        lastActionAt: now,
+        updatedAt: now,
+      };
+      if (finalCode) {
+        campSet.marketingCode = finalCode;
+        campSet.externalCampaignId = finalCode;
+      }
+      await MarketingCampaign.updateOne({ _id: campaignId }, { $set: campSet }, { session });
 
-    // Check external platform status
-    const hasMetaToken = Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
-    const extStatus = hasMetaToken ? 'Live' : 'Not Connected';
+      return { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus };
+    });
 
-    await query(
-      `UPDATE marketing_campaigns SET
-        status = 'Running',
-        external_platform_status = $1,
-        marketing_code = COALESCE(NULLIF($2, ''), marketing_code),
-        external_campaign_id = COALESCE(NULLIF($2, ''), external_campaign_id),
-        last_action = 'Started Marketing',
-        last_actor = $3,
-        last_action_at = NOW(),
-        updated_at = NOW()
-      WHERE id = $4`,
-      [extStatus, finalCode, actor, campaignId]
-    );
+    const { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus } = outcome;
 
-    await logAuditEvent(camp.customer_id, 'campaign', campaignId, `Started Marketing Campaign with Code [${finalCode || 'N/A'}] (Per-Day Service: ₹${dailySpend}/d)`, actor, {
+    await logAuditEvent(camp.customerId, 'campaign', campaignId, `Started Marketing Campaign with Code [${finalCode || 'N/A'}] (Per-Day Service: ₹${dailySpend}/d)`, actor, {
       marketingCode: finalCode,
       dailyBudget: dailySpend,
       deductedAmount,
@@ -2070,8 +1845,8 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     res.json({
       ok: true,
       status: 'Running',
-      marketingCode: finalCode || camp.marketing_code || camp.external_campaign_id || '',
-      isCodeFilled: Boolean(finalCode || camp.marketing_code || camp.external_campaign_id),
+      marketingCode: finalCode || camp.marketingCode || camp.externalCampaignId || '',
+      isCodeFilled: Boolean(finalCode || camp.marketingCode || camp.externalCampaignId),
       deductedAmount,
       isAlreadyDeductedToday,
       newBalance: newBal,
@@ -2081,8 +1856,7 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
         : `Marketing campaign started! ₹${dailySpend} daily ad budget deducted from customer wallet for per-day service (New Balance: ₹${newBal}).`,
     });
   } catch (err) {
-    console.error('[POST /api/marketing/campaigns/:id/start]', err);
-    res.status(500).json({ ok: false, error: err.message });
+    sendRouteError(res, err, '[POST /api/marketing/campaigns/:id/start]');
   }
 });
 
@@ -2096,144 +1870,140 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
     const finalCode = String(marketingCode || campaignCode || code || '').trim().toUpperCase();
 
     // 1. Verify customer exists
-    const custRes = await query(`SELECT * FROM customers WHERE id = $1`, [custId]);
-    if (custRes.rowCount === 0) {
+    const cust = await Customer.findById(custId).lean();
+    if (!cust) {
       return res.status(404).json({ ok: false, error: 'Customer not found.' });
     }
-    const cust = custRes.rows[0];
 
-    // 2. Fetch or initialize wallet
-    let walRes = await query(`SELECT * FROM wallets WHERE customer_id = $1`, [custId]);
-    if (walRes.rowCount === 0) {
-      await query(
-        `INSERT INTO wallets (id, customer_id, available_balance, daily_ad_spend, ad_campaign_active, currency)
-         SELECT $1, $2, 0, CASE WHEN UPPER(COALESCE(c.currency, 'INR')) = 'INR' THEN 300 ELSE 10 END, FALSE, UPPER(COALESCE(c.currency, 'INR'))
-         FROM customers c WHERE c.id = $2 ON CONFLICT (customer_id) DO NOTHING`,
-        [`wal_${custId}`, custId]
-      );
-      walRes = await query(`SELECT * FROM wallets WHERE customer_id = $1`, [custId]);
+    // 2. Fetch or initialize wallet (idempotent upsert; INSERT ... ON CONFLICT DO NOTHING equivalent)
+    let existingWallet = await Wallet.findOne({ customerId: custId }).lean();
+    if (!existingWallet) {
+      const initCurrency = String(cust.currency || 'INR').toUpperCase();
+      try {
+        await Wallet.updateOne(
+          { customerId: custId },
+          {
+            $setOnInsert: {
+              _id: `wal_${custId}`,
+              availableBalance: 0,
+              dailyAdSpend: initCurrency === 'INR' ? 300 : 10,
+              adCampaignActive: false,
+              currency: initCurrency,
+            },
+          },
+          { upsert: true }
+        );
+      } catch (e) {
+        if (e?.code !== 11000) throw e; // another request created it concurrently
+      }
     }
-    const wallet = walRes.rows[0];
-    const balance = Number(wallet.available_balance || 0);
-    const currency = String(wallet.currency || 'INR').toUpperCase();
-    const minimumDailySpend = currency === 'INR' ? 300 : currency === 'USD' ? 10 : null;
-    if (minimumDailySpend === null) return res.status(409).json({ ok: false, error: 'Unsupported wallet currency.' });
-    const dailySpend = Number(wallet.daily_ad_spend || minimumDailySpend);
-    if (!Number.isFinite(dailySpend) || dailySpend < minimumDailySpend || String(cust.currency || currency).toUpperCase() !== currency) {
-      return res.status(409).json({ ok: false, error: 'Daily spend does not match the saved customer wallet currency.' });
-    }
 
-    // Per-day service check: Has this customer already been deducted for today's service?
-    const isAlreadyDeductedToday = Boolean(
-      wallet.last_deducted_at &&
-      new Date(wallet.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    );
-
-    let newBal = balance;
-    let deductedAmount = 0;
-
-    if (!isAlreadyDeductedToday) {
-      if (balance < dailySpend) {
-        return res.status(400).json({
-          ok: false,
-          error: `Cannot start marketing: Customer wallet balance (₹${balance}) is below required daily budget for per-day service (₹${dailySpend}/day). Please top up wallet first.`,
-        });
+    const outcome = await withMongoTransaction(async (session) => {
+      const wallet = await Wallet.findOne({ customerId: custId }).session(session).lean();
+      if (!wallet) throw new HttpError(400, 'Customer wallet not found.');
+      const balance = Number(wallet.availableBalance || 0);
+      const currency = String(wallet.currency || 'INR').toUpperCase();
+      const minimumDailySpend = currency === 'INR' ? 300 : currency === 'USD' ? 10 : null;
+      if (minimumDailySpend === null) throw new HttpError(409, 'Unsupported wallet currency.');
+      const dailySpend = Number(wallet.dailyAdSpend || minimumDailySpend);
+      if (!Number.isFinite(dailySpend) || dailySpend < minimumDailySpend || String(cust.currency || currency).toUpperCase() !== currency) {
+        throw new HttpError(409, 'Daily spend does not match the saved customer wallet currency.');
       }
 
-      newBal = balance - dailySpend;
-      deductedAmount = dailySpend;
+      const now = new Date();
+      // Per-day service check: Has this customer already been deducted for today's service?
+      let isAlreadyDeductedToday = isDeductedToday(wallet.lastDeductedAt, now);
 
-      await query(
-        `UPDATE wallets SET
-          available_balance = $1,
-          total_ad_spent = total_ad_spent + $2,
-          ad_campaign_active = TRUE,
-          marketing_code = COALESCE(NULLIF($4, ''), marketing_code),
-          last_deducted_at = NOW(),
-          updated_at = NOW()
-        WHERE customer_id = $3`,
-        [newBal, dailySpend, custId, finalCode]
+      let newBal = balance;
+      let deductedAmount = 0;
+
+      const insufficient = (bal) => new HttpError(
+        400,
+        `Cannot start marketing: Customer wallet balance (₹${bal}) is below required daily budget for per-day service (₹${dailySpend}/day). Please top up wallet first.`
       );
 
-      const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      const refUtr = `SYS-DAILY-MKT-${Date.now().toString().slice(-6)}`;
-      await query(
-        `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
-        [
-          txId,
-          custId,
-          wallet.id,
-          dailySpend,
-          newBal,
-          refUtr,
-          `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${dailySpend}/day)`,
-        ]
-      );
-    } else {
-      await query(
-        `UPDATE wallets SET 
-           ad_campaign_active = TRUE, 
-           marketing_code = COALESCE(NULLIF($2, ''), marketing_code),
-           updated_at = NOW() 
-         WHERE customer_id = $1`,
-        [custId, finalCode]
-      );
-    }
+      if (!isAlreadyDeductedToday) {
+        if (balance < dailySpend) throw insufficient(balance);
 
-    // Save code to customer record
-    if (finalCode) {
-      await query(
-        `UPDATE customers SET marketing_code = $1, updated_at = NOW() WHERE id = $2`,
-        [finalCode, custId]
-      );
-    }
+        const result = await deductDailySpendAtomic(session, {
+          walletId: wallet._id,
+          customerId: custId,
+          spend: dailySpend,
+          description: `Daily Meta Ad Spend - Per-Day Service Deduction (-₹${dailySpend}/day)`,
+          refPrefix: 'SYS-DAILY-MKT',
+          marketingCode: finalCode,
+          now,
+        });
+        if (result.status === 'deducted') {
+          newBal = result.wallet.availableBalance;
+          deductedAmount = dailySpend;
+        } else if (result.status === 'insufficient') {
+          throw insufficient(Number(result.wallet?.availableBalance || 0));
+        } else if (result.status === 'already') {
+          isAlreadyDeductedToday = true;
+          newBal = Number(result.wallet?.availableBalance || 0);
+        } else {
+          throw new HttpError(400, 'Customer wallet not found.');
+        }
+      }
 
-    // Find or create marketing campaign for this customer
-    const campRes = await query(
-      `SELECT * FROM marketing_campaigns WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 1`,
-      [custId]
-    );
+      if (isAlreadyDeductedToday) {
+        const set = { adCampaignActive: true, updatedAt: now };
+        if (finalCode) set.marketingCode = finalCode;
+        await Wallet.updateOne({ customerId: custId }, { $set: set }, { session });
+      }
 
-    const hasMetaToken = Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
-    const extStatus = hasMetaToken ? 'Live' : 'Not Connected';
+      // Save code to customer record
+      if (finalCode) {
+        await Customer.updateOne({ _id: custId }, { $set: { marketingCode: finalCode, updatedAt: now } }, { session });
+      }
 
-    if (campRes.rowCount > 0) {
-      const camp = campRes.rows[0];
-      await query(
-        `UPDATE marketing_campaigns SET
-          status = 'Running',
-          external_platform_status = $1,
-          marketing_code = COALESCE(NULLIF($2, ''), marketing_code),
-          external_campaign_id = COALESCE(NULLIF($2, ''), external_campaign_id),
-          last_action = 'Started Marketing',
-          last_actor = $3,
-          last_action_at = NOW(),
-          updated_at = NOW()
-        WHERE id = $4`,
-        [extStatus, finalCode, actor, camp.id]
-      );
-    } else {
-      const campId = `camp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      await query(
-        `INSERT INTO marketing_campaigns (
-          id, customer_id, name, objective, platform, daily_budget, status,
-          external_platform_status, external_campaign_id, marketing_code, created_by,
-          last_action, last_actor, last_action_at
-        ) VALUES ($1, $2, $3, 'Lead Generation', 'Meta Ads (Facebook & Instagram)', $4, 'Running', $5, $6, $6, $7, 'Started Marketing', $7, NOW())`,
-        [
-          campId,
-          custId,
-          `${cust.company_name || 'Client'} - Meta Inbound Ads`,
-          dailySpend,
-          extStatus,
-          finalCode,
-          actor,
-        ]
-      );
-    }
+      // Find or create marketing campaign for this customer
+      const latestCamp = await MarketingCampaign.findOne({ customerId: custId }).sort({ createdAt: -1 }).session(session).lean();
+
+      const extStatus = hasMetaAccessToken() ? 'Live' : 'Not Connected';
+
+      if (latestCamp) {
+        const campSet = {
+          status: 'Running',
+          externalPlatformStatus: extStatus,
+          lastAction: 'Started Marketing',
+          lastActor: actor,
+          lastActionAt: now,
+          updatedAt: now,
+        };
+        if (finalCode) {
+          campSet.marketingCode = finalCode;
+          campSet.externalCampaignId = finalCode;
+        }
+        await MarketingCampaign.updateOne({ _id: latestCamp._id }, { $set: campSet }, { session });
+      } else {
+        await MarketingCampaign.create(
+          [{
+            _id: genId('camp'),
+            customerId: custId,
+            campaignName: `${cust.companyName || 'Client'} - Meta Inbound Ads`,
+            objective: 'Lead Generation',
+            platform: 'Meta Ads (Facebook & Instagram)',
+            dailyBudget: dailySpend,
+            status: 'Running',
+            externalPlatformStatus: extStatus,
+            externalCampaignId: finalCode,
+            marketingCode: finalCode,
+            createdBy: actor,
+            currency: currency,
+            lastAction: 'Started Marketing',
+            lastActor: actor,
+            lastActionAt: now,
+          }],
+          { session }
+        );
+      }
+
+      return { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus };
+    });
+
+    const { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus } = outcome;
 
     await logAuditEvent(custId, 'campaign', custId, `Started Marketing with Code [${finalCode || 'N/A'}] (Per-Day Service: ₹${dailySpend}/d)`, actor, {
       marketingCode: finalCode,
@@ -2258,8 +2028,7 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
         : `Marketing started live! ₹${dailySpend} daily ad budget deducted from customer wallet (New Balance: ₹${newBal}).`,
     });
   } catch (err) {
-    console.error('[POST /api/marketing/customers/:id/start-marketing]', err);
-    res.status(500).json({ ok: false, error: err.message });
+    sendRouteError(res, err, '[POST /api/marketing/customers/:id/start-marketing]');
   }
 });
 
@@ -2271,23 +2040,15 @@ marketingRouter.patch('/customers/:id/code', async (req, res) => {
     const custId = req.params.id;
     const { code = '', marketingCode = '' } = req.body || {};
     const finalCode = String(code || marketingCode || '').trim().toUpperCase();
+    const now = new Date();
 
-    await query(
-      `UPDATE customers SET marketing_code = $1, updated_at = NOW() WHERE id = $2`,
-      [finalCode || null, custId]
-    );
-    await query(
-      `UPDATE marketing_campaigns SET 
-         marketing_code = $1, 
-         external_campaign_id = COALESCE(NULLIF($1, ''), external_campaign_id),
-         updated_at = NOW() 
-       WHERE customer_id = $2`,
-      [finalCode || null, custId]
-    );
-    await query(
-      `UPDATE wallets SET marketing_code = $1, updated_at = NOW() WHERE customer_id = $2`,
-      [finalCode || null, custId]
-    );
+    await Customer.updateOne({ _id: custId }, { $set: { marketingCode: finalCode || null, updatedAt: now } });
+
+    const campSet = { marketingCode: finalCode || null, updatedAt: now };
+    if (finalCode) campSet.externalCampaignId = finalCode;
+    await MarketingCampaign.updateMany({ customerId: custId }, { $set: campSet });
+
+    await Wallet.updateOne({ customerId: custId }, { $set: { marketingCode: finalCode || null, updatedAt: now } });
 
     res.json({
       ok: true,
@@ -2309,37 +2070,35 @@ marketingRouter.post('/campaigns/:id/stop', async (req, res) => {
     const campaignId = req.params.id;
     const { actor = 'Marketing Manager', reason = 'Manual Stop by Operator' } = req.body || {};
 
-    const campRes = await query(`SELECT * FROM marketing_campaigns WHERE id = $1`, [campaignId]);
-    if (campRes.rowCount === 0) {
+    const camp = await MarketingCampaign.findById(campaignId).lean();
+    if (!camp) {
       return res.status(404).json({ ok: false, error: 'Campaign not found.' });
     }
-    const camp = campRes.rows[0];
 
-    const hasMetaToken = Boolean(process.env.META_ACCESS_TOKEN && process.env.META_ACCESS_TOKEN.length > 20);
-    const extStatus = hasMetaToken ? 'Paused' : 'Not Connected';
+    const extStatus = hasMetaAccessToken() ? 'Paused' : 'Not Connected';
+    const now = new Date();
 
-    await query(
-      `UPDATE marketing_campaigns SET
-        status = 'Stopped',
-        external_platform_status = $1,
-        last_action = 'Stopped Marketing',
-        last_actor = $2,
-        last_action_at = NOW(),
-        updated_at = NOW()
-      WHERE id = $3`,
-      [extStatus, actor, campaignId]
+    await MarketingCampaign.updateOne(
+      { _id: campaignId },
+      {
+        $set: {
+          status: 'Stopped',
+          externalPlatformStatus: extStatus,
+          lastAction: 'Stopped Marketing',
+          lastActor: actor,
+          lastActionAt: now,
+          updatedAt: now,
+        },
+      }
     );
 
     // Check if customer has any other active campaigns
-    const otherActive = await query(
-      `SELECT COUNT(*)::INT AS active_cnt FROM marketing_campaigns WHERE customer_id = $1 AND status = 'Running'`,
-      [camp.customer_id]
-    );
-    if (Number(otherActive.rows[0]?.active_cnt || 0) === 0) {
-      await query(`UPDATE wallets SET ad_campaign_active = FALSE, updated_at = NOW() WHERE customer_id = $1`, [camp.customer_id]);
+    const activeCnt = await MarketingCampaign.countDocuments({ customerId: camp.customerId, status: 'Running' });
+    if (Number(activeCnt || 0) === 0) {
+      await Wallet.updateOne({ customerId: camp.customerId }, { $set: { adCampaignActive: false, updatedAt: now } });
     }
 
-    await logAuditEvent(camp.customer_id, 'campaign', campaignId, 'Stopped Marketing Campaign', actor, {
+    await logAuditEvent(camp.customerId, 'campaign', campaignId, 'Stopped Marketing Campaign', actor, {
       reason,
       externalPlatformStatus: extStatus,
     });
@@ -2364,32 +2123,35 @@ marketingRouter.put('/customers/:id/pacing', async (req, res) => {
     const custId = req.params.id;
     const { dailyAdSpend, activeDays, schedulePreset = 'custom', actor = 'Marketing Operations' } = req.body || {};
 
-    const walRes = await query('SELECT * FROM wallets WHERE customer_id = $1', [custId]);
-    if (walRes.rowCount === 0) {
+    const w = await Wallet.findOne({ customerId: custId }).lean();
+    if (!w) {
       return res.status(404).json({ ok: false, error: 'Customer wallet not found.' });
     }
-    const w = walRes.rows[0];
 
     const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
     const walletCurrency = String(w.currency || 'INR').toUpperCase();
     const minDaily = walletCurrency === 'INR' ? 300 : walletCurrency === 'USD' ? 10 : null;
     if (minDaily === null) return res.status(409).json({ ok: false, error: 'Unsupported wallet currency.' });
-    const nextDaily = dailyAdSpend !== undefined ? Math.max(minDaily, Number(dailyAdSpend)) : Number(w.daily_ad_spend);
+    const nextDaily = dailyAdSpend !== undefined ? Math.max(minDaily, Number(dailyAdSpend)) : Number(w.dailyAdSpend);
+    const existingDays = Array.isArray(w.activeDays) ? w.activeDays.join(',') : String(w.activeDays || '');
     const nextDays = activeDays !== undefined
       ? (Array.isArray(activeDays) ? activeDays.join(',') : String(activeDays))
-      : (w.active_days || todayDayCode);
-    const nextPreset = schedulePreset || w.schedule_preset || 'custom';
+      : (existingDays || todayDayCode);
+    const nextPreset = schedulePreset || w.schedulePreset || 'custom';
 
-    await query(
-      `UPDATE wallets SET daily_ad_spend = $1, active_days = $2, schedule_preset = $3, updated_at = NOW() WHERE customer_id = $4`,
-      [nextDaily, nextDays, nextPreset, custId]
+    const now = new Date();
+    const nextDaysList = nextDays.split(',').map((s) => s.trim()).filter(Boolean);
+
+    await Wallet.updateOne(
+      { customerId: custId },
+      { $set: { dailyAdSpend: nextDaily, activeDays: nextDaysList, schedulePreset: nextPreset, updatedAt: now } }
     );
 
     // Also update daily_budget on active campaign if exists
-    await query(
-      `UPDATE marketing_campaigns SET daily_budget = $1, updated_at = NOW() WHERE customer_id = $2 AND status = 'Running'`,
-      [nextDaily, custId]
+    await MarketingCampaign.updateMany(
+      { customerId: custId, status: 'Running' },
+      { $set: { dailyBudget: nextDaily, updatedAt: now } }
     );
 
     await logAuditEvent(custId, 'wallet', custId, 'Updated Marketing Pacing & Schedule', actor, {
@@ -2420,32 +2182,31 @@ export async function processDailyAdSpendPacing() {
   try {
     const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
-    const todayDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const todayDateStr = istDateString();
 
     // Find all customers with active campaigns or ad_campaign_active = true
-    const activeCustomers = await query(`
-      SELECT 
-        c.id, c.company_name,
-        w.id AS wallet_id,
-        COALESCE(w.available_balance, 0)::NUMERIC AS balance,
-        COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
-        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-        COALESCE(w.active_days, '') AS active_days,
-        COALESCE(w.booked_dates, '') AS booked_dates,
-        w.last_deducted_at,
-        (SELECT mc.id FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = 'Running' LIMIT 1) AS running_camp_id
-      FROM customers c
-      JOIN wallets w ON w.customer_id = c.id
-      WHERE w.ad_campaign_active = TRUE 
-         OR EXISTS (SELECT 1 FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = 'Running')
-    `);
+    const runningCamps = await MarketingCampaign.find({ status: 'Running' }, { customerId: 1 }).lean();
+    const runningCampBy = new Map();
+    for (const rc of runningCamps) if (!runningCampBy.has(rc.customerId)) runningCampBy.set(rc.customerId, rc._id);
+
+    const wallets = await Wallet.find({
+      $or: [{ adCampaignActive: true }, { customerId: { $in: Array.from(runningCampBy.keys()) } }],
+    }).lean();
+
+    const custDocs = wallets.length
+      ? await Customer.find({ _id: { $in: wallets.map((w) => w.customerId) } }, { companyName: 1 }).lean()
+      : [];
+    const custBy = new Map(custDocs.map((c) => [String(c._id), c]));
 
     let processedCount = 0;
     let autoPausedCount = 0;
     const details = [];
 
-    for (const cust of activeCustomers.rows) {
-      const activeDays = resolveActiveDays(cust.active_days);
+    for (const w of wallets) {
+      const cust = custBy.get(w.customerId);
+      if (!cust) continue; // INNER JOIN customers
+
+      const activeDays = resolveActiveDays(w.activeDays || '');
 
       // 1. Is today an active day in the customer's weekly schedule?
       if (!activeDays.includes(todayDayCode)) {
@@ -2453,92 +2214,71 @@ export async function processDailyAdSpendPacing() {
       }
 
       // 2. Was today's per-day service already deducted earlier today?
-      const alreadyDeducted = cust.last_deducted_at &&
-        new Date(cust.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === todayDateStr;
-
+      const alreadyDeducted = w.lastDeductedAt && istDateString(w.lastDeductedAt) === todayDateStr;
       if (alreadyDeducted) {
         continue; // Already settled for today
       }
 
-      const balance = Number(cust.balance || 0);
-      const spend = Number(cust.daily_ad_spend || 300);
+      const balance = Number(w.availableBalance || 0);
+      const spend = Number(w.dailyAdSpend || 300);
+      const companyName = cust.companyName;
+      const runningCampId = runningCampBy.get(w.customerId);
 
+      let result = { status: 'insufficient', wallet: w };
       // 3. Check customer balance
       if (balance >= spend) {
-        const newBal = balance - spend;
-        const bSet = new Set(
-          (cust.booked_dates || '')
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-        );
-        bSet.add(todayDateStr);
-        const nextBookedDates = Array.from(bSet).join(',');
-
-        await query(
-          `UPDATE wallets SET
-            available_balance = $1,
-            total_ad_spent = total_ad_spent + $2,
-            ad_campaign_active = TRUE,
-            last_deducted_at = NOW(),
-            booked_dates = $4,
-            updated_at = NOW()
-          WHERE customer_id = $3`,
-          [newBal, spend, cust.id, nextBookedDates]
-        );
-
-        const txId = `tx_deb_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        const refUtr = `SYS-DAILY-${Date.now().toString().slice(-6)}`;
-        await query(
-          `INSERT INTO wallet_transactions (
-            id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-          ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')`,
-          [
-            txId,
-            cust.id,
-            cust.wallet_id,
+        result = await withMongoTransaction((session) =>
+          deductDailySpendAtomic(session, {
+            walletId: w._id,
+            customerId: w.customerId,
             spend,
-            newBal,
-            refUtr,
-            `Daily Meta Ad Spend - Per-Day Service (${todayDayCode}) (-₹${spend})`,
-          ]
+            description: `Daily Meta Ad Spend - Per-Day Service (${todayDayCode}) (-₹${spend})`,
+            refPrefix: 'SYS-DAILY',
+            bookedDate: todayDateStr,
+          })
         );
+      }
 
-        await logAuditEvent(cust.id, 'wallet', cust.wallet_id, `Per-Day Service Deducted: ₹${spend}`, 'System Daily Pacing Engine', {
+      if (result.status === 'deducted') {
+        const newBal = result.wallet.availableBalance;
+        await logAuditEvent(w.customerId, 'wallet', w._id, `Per-Day Service Deducted: ₹${spend}`, 'System Daily Pacing Engine', {
           day: todayDayCode,
           deducted: spend,
           newBalance: newBal,
         });
 
         processedCount++;
-        details.push({ customerId: cust.id, name: cust.company_name, action: 'deducted', amount: spend, newBal });
+        details.push({ customerId: w.customerId, name: companyName, action: 'deducted', amount: spend, newBal });
+      } else if (result.status === 'already' || result.status === 'missing') {
+        continue; // settled concurrently by another run
       } else {
         // 4. Low/exhausted balance: Auto-pause campaign and set marketing to OFF!
-        await query(
-          `UPDATE wallets SET ad_campaign_active = FALSE, updated_at = NOW() WHERE customer_id = $1`,
-          [cust.id]
+        const now = new Date();
+        await Wallet.updateOne({ customerId: w.customerId }, { $set: { adCampaignActive: false, updatedAt: now } });
+
+        await MarketingCampaign.updateMany(
+          { customerId: w.customerId, status: 'Running' },
+          {
+            $set: {
+              status: 'Stopped',
+              externalPlatformStatus: 'Paused',
+              lastAction: 'Auto-Paused: Low Balance',
+              lastActor: 'System Daily Pacing Engine',
+              lastActionAt: now,
+              updatedAt: now,
+            },
+          }
         );
 
-        await query(
-          `UPDATE marketing_campaigns SET
-            status = 'Stopped',
-            external_platform_status = 'Paused',
-            last_action = 'Auto-Paused: Low Balance',
-            last_actor = 'System Daily Pacing Engine',
-            last_action_at = NOW(),
-            updated_at = NOW()
-          WHERE customer_id = $1 AND status = 'Running'`,
-          [cust.id]
-        );
-
-        await logAuditEvent(cust.id, 'campaign', cust.running_camp_id || cust.id, 'Auto-Paused Marketing: Low Balance', 'System Daily Pacing Engine', {
-          balance,
+        const lowBalance = Number(result.wallet?.availableBalance ?? balance);
+        await logAuditEvent(w.customerId, 'campaign', runningCampId || w.customerId, 'Auto-Paused Marketing: Low Balance', 'System Daily Pacing Engine', {
+          balance: lowBalance,
           requiredSpend: spend,
           reason: 'Customer balance too low for per-day service',
         });
 
         autoPausedCount++;
-        details.push({ customerId: cust.id, name: cust.company_name, action: 'auto_paused_low_balance', balance, required: spend });
+        details.push({ customerId: w.customerId, name: companyName, action: 'auto_paused_low_balance', balance: lowBalance, required: spend });
       }
     }
 

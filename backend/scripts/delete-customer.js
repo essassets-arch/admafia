@@ -1,4 +1,33 @@
-import { initDatabase, query, withTransaction } from '../db.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import { initMongo } from '../mongo.js';
+import {
+  Customer,
+  CustomerGroup,
+  Wallet,
+  WalletTransaction,
+  PaymentRecord,
+  TaxInvoice,
+  PendingVerification,
+  MarketingCampaign,
+  MarketingPost,
+  MarketingIdea,
+  MarketingAuditEvent,
+  Lead,
+  LeadAssignment,
+  SupportQuery,
+  SalesTask,
+  RefundRequest,
+  TopupRequest,
+  SuperAdminAuditLog,
+} from '../models/index.js';
+import { deleteCustomerCascade } from '../repositories/salesLedgerRepo.js';
+import { ciExact } from '../repositories/tx.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 // Predefined test accounts from test runs & audit
 const KNOWN_TEST_TARGETS = [
@@ -9,34 +38,35 @@ const KNOWN_TEST_TARGETS = [
 ];
 
 async function listCustomers() {
-  console.log('\n=== CURRENT REGISTERED CUSTOMERS IN DATABASE ===');
-  const res = await query(
-    `SELECT c.id, c.username, c.phone, c.email, c.company_name, c.registered_at,
-            COALESCE(w.available_balance, 0) AS balance,
-            COALESCE(w.ad_campaign_active, false) AS campaign_active
-     FROM customers c
-     LEFT JOIN wallets w ON w.customer_id = c.id
-     ORDER BY c.registered_at DESC`
-  );
+  console.log('\n=== CURRENT REGISTERED CUSTOMERS IN MONGODB ===');
+  const [customers, wallets] = await Promise.all([
+    Customer.find({}).sort({ registeredAt: -1 }).lean(),
+    Wallet.find({}).lean(),
+  ]);
 
-  if (res.rows.length === 0) {
+  if (customers.length === 0) {
     console.log('No customers found in the database.');
     return;
   }
 
+  const walletByCust = new Map(wallets.map((w) => [w.customerId, w]));
+
   console.table(
-    res.rows.map((r) => ({
-      ID: r.id,
-      Username: r.username,
-      Phone: r.phone,
-      Email: r.email,
-      Company: r.company_name,
-      Balance: `₹${Number(r.balance).toLocaleString('en-IN')}`,
-      Campaign: r.campaign_active ? 'LIVE' : 'OFF',
-      Registered: r.registered_at ? new Date(r.registered_at).toLocaleString('en-IN') : 'N/A',
-    }))
+    customers.map((c) => {
+      const w = walletByCust.get(c._id);
+      return {
+        ID: c._id,
+        Username: c.username,
+        Phone: c.phone,
+        Email: c.email,
+        Company: c.companyName,
+        Balance: `₹${Number(w?.availableBalance || 0).toLocaleString('en-IN')}`,
+        Campaign: w?.adCampaignActive ? 'LIVE' : 'OFF',
+        Registered: c.registeredAt ? new Date(c.registeredAt).toLocaleString('en-IN') : 'N/A',
+      };
+    })
   );
-  console.log(`Total: ${res.rows.length} customer(s)\n`);
+  console.log(`Total: ${customers.length} customer(s)\n`);
 }
 
 async function deleteCustomerByIdentifier(identifier) {
@@ -44,127 +74,122 @@ async function deleteCustomerByIdentifier(identifier) {
   if (!raw) return { success: false, error: 'Empty identifier provided' };
 
   const cleanPhone = raw.replace(/\D/g, '').slice(-10);
+  const orConditions = [{ _id: raw }, { username: ciExact(raw) }];
+  if (cleanPhone) {
+    orConditions.push({ phone: cleanPhone }, { _id: `cust_reg_${cleanPhone}` });
+  }
 
-  // 1. Locate the customer
-  const custRes = await query(
-    `SELECT id, username, phone, email, company_name, contact_person
-     FROM customers
-     WHERE id = $1 
-        OR (phone = $2 AND $2 <> '')
-        OR LOWER(username) = LOWER($1)
-        OR id = 'cust_reg_' || $2
-     LIMIT 1`,
-    [raw, cleanPhone]
-  );
-
-  if (custRes.rowCount === 0) {
+  const custDoc = await Customer.findOne({ $or: orConditions }).lean();
+  if (!custDoc) {
     return { success: false, notFound: true, identifier: raw };
   }
 
-  const cust = custRes.rows[0];
-  const custId = cust.id;
-  const custPhone = cust.phone;
+  const custId = custDoc._id;
+  const custPhone = custDoc.phone;
+  const cust = {
+    id: custDoc._id,
+    username: custDoc.username,
+    phone: custDoc.phone,
+    email: custDoc.email,
+    company_name: custDoc.companyName,
+    contact_person: custDoc.contactPerson,
+  };
 
-  // 2. Cascade delete in a safe transaction
-  return await withTransaction(async (txQuery) => {
-    // Collect counts of related entities for reporting
-    const counts = {};
+  // Collect counts of related entities for reporting prior to cascade deletion
+  const [
+    walletsCount,
+    txCount,
+    leadsCount,
+    leadAssignCount,
+    leadsWithFollowups,
+    payCount,
+    invCount,
+    verCount,
+    campCount,
+    postCount,
+    ideaCount,
+    mktAuditCount,
+    sqCount,
+    taskCount,
+    refCount,
+    topupCount,
+    grpCount,
+  ] = await Promise.all([
+    Wallet.countDocuments({ customerId: custId }),
+    WalletTransaction.countDocuments({ customerId: custId }),
+    Lead.countDocuments({ customerId: custId }),
+    LeadAssignment.countDocuments({ customerId: custId }),
+    Lead.find({ customerId: custId }, { followups: 1 }).lean(),
+    PaymentRecord.countDocuments({ customerId: custId }),
+    TaxInvoice.countDocuments({ customerId: custId }),
+    PendingVerification.countDocuments({ customerId: custId }),
+    MarketingCampaign.countDocuments({ customerId: custId }),
+    MarketingPost.countDocuments({ customerId: custId }),
+    MarketingIdea.countDocuments({ customerId: custId }),
+    MarketingAuditEvent.countDocuments({ customerId: custId }),
+    SupportQuery.countDocuments({ customerId: custId }),
+    SalesTask.countDocuments({ customerId: custId }),
+    RefundRequest.countDocuments({ customerId: custId }),
+    TopupRequest.countDocuments({ customerId: custId }),
+    CustomerGroup.countDocuments({ members: custId }),
+  ]);
 
-    const countQueries = [
-      ['wallets', 'SELECT COUNT(*) FROM wallets WHERE customer_id = $1'],
-      ['wallet_transactions', 'SELECT COUNT(*) FROM wallet_transactions WHERE customer_id = $1'],
-      ['leads', 'SELECT COUNT(*) FROM leads WHERE customer_id = $1'],
-      ['lead_assignments', 'SELECT COUNT(*) FROM lead_assignments WHERE customer_id = $1'],
-      ['lead_followups', 'SELECT COUNT(*) FROM lead_followups WHERE customer_id = $1'],
-      ['payment_records', 'SELECT COUNT(*) FROM payment_records WHERE customer_id = $1'],
-      ['tax_invoices', 'SELECT COUNT(*) FROM tax_invoices WHERE customer_id = $1'],
-      ['pending_verifications', 'SELECT COUNT(*) FROM pending_verifications WHERE customer_id = $1'],
-      ['marketing_campaigns', 'SELECT COUNT(*) FROM marketing_campaigns WHERE customer_id = $1'],
-      ['marketing_posts', 'SELECT COUNT(*) FROM marketing_posts WHERE customer_id = $1'],
-      ['marketing_ideas', 'SELECT COUNT(*) FROM marketing_ideas WHERE customer_id = $1'],
-      ['marketing_audit_events', 'SELECT COUNT(*) FROM marketing_audit_events WHERE customer_id = $1'],
-      ['support_queries', 'SELECT COUNT(*) FROM support_queries WHERE customer_id = $1'],
-      ['sales_tasks', 'SELECT COUNT(*) FROM sales_tasks WHERE customer_id = $1'],
-      ['refund_requests', 'SELECT COUNT(*) FROM refund_requests WHERE customer_id = $1'],
-      ['topup_requests', 'SELECT COUNT(*) FROM topup_requests WHERE customer_id = $1'],
-      ['account_status_history', 'SELECT COUNT(*) FROM account_status_history WHERE customer_id = $1'],
-      ['customer_group_memberships', 'SELECT COUNT(*) FROM customer_group_memberships WHERE customer_id = $1'],
-    ];
+  const counts = {
+    wallets: walletsCount,
+    wallet_transactions: txCount,
+    leads: leadsCount,
+    lead_assignments: leadAssignCount,
+    lead_followups: leadsWithFollowups.reduce((acc, l) => acc + (l.followups?.length || 0), 0),
+    payment_records: payCount,
+    tax_invoices: invCount,
+    pending_verifications: verCount,
+    marketing_campaigns: campCount,
+    marketing_posts: postCount,
+    marketing_ideas: ideaCount,
+    marketing_audit_events: mktAuditCount,
+    support_queries: sqCount,
+    sales_tasks: taskCount,
+    refund_requests: refCount,
+    topup_requests: topupCount,
+    account_status_history: custDoc.statusHistory?.length || 0,
+    customer_group_memberships: Math.max(grpCount, custDoc.groupMemberships?.length || 0),
+  };
 
-    for (const [key, sql] of countQueries) {
-      try {
-        const res = await txQuery(sql, [custId]);
-        counts[key] = parseInt(res.rows[0].count, 10) || 0;
-      } catch (e) {
-        counts[key] = 0;
-      }
-    }
+  await deleteCustomerCascade(custId, custPhone);
 
-    // Explicit cascading cleanup for tables with or without ON DELETE CASCADE
-    await txQuery(`DELETE FROM marketing_audit_events WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM marketing_campaigns WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM marketing_posts WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM marketing_ideas WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM pending_verifications WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM wallet_transactions WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM payment_records WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM tax_invoices WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM lead_followups WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM lead_assignments WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM leads WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM support_query_messages WHERE query_id IN (SELECT id FROM support_queries WHERE customer_id = $1)`, [custId]);
-    await txQuery(`DELETE FROM support_queries WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM sales_tasks WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM refund_requests WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM topup_requests WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM account_status_history WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM customer_group_memberships WHERE customer_id = $1`, [custId]);
-    await txQuery(`DELETE FROM wallets WHERE customer_id = $1`, [custId]);
+  try {
+    await SuperAdminAuditLog.create({
+      _id: `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      actorId: 'cli_admin',
+      actorName: 'Admin CLI',
+      actorRole: 'Super Admin',
+      actionType: 'CUSTOMER_DELETED',
+      targetType: 'customer',
+      targetId: custId,
+      reason: 'Manual customer deletion via CLI script',
+      details: { cust, deletedCounts: counts },
+      createdAt: new Date(),
+    });
+  } catch {
+    // Non-fatal
+  }
 
-    // Also remove by phone if registered under cust_reg_<phone> in case of detached records
-    if (custPhone) {
-      const altId = `cust_reg_${custPhone}`;
-      if (altId !== custId) {
-        await txQuery(`DELETE FROM wallets WHERE customer_id = $1`, [altId]);
-        await txQuery(`DELETE FROM customers WHERE id = $1`, [altId]);
-      }
-    }
-
-    // Delete primary customer record
-    await txQuery(`DELETE FROM customers WHERE id = $1`, [custId]);
-
-    // Log admin audit
-    try {
-      await txQuery(
-        `INSERT INTO superadmin_audit_logs (id, actor_id, actor_name, actor_role, action_type, target_type, target_id, reason, details)
-         VALUES ($1, 'cli_admin', 'Admin CLI', 'Super Admin', 'CUSTOMER_DELETED', 'customer', $2, 'Manual customer deletion via CLI script', $3)`,
-        [
-          `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          custId,
-          JSON.stringify({ cust, deletedCounts: counts }),
-        ]
-      );
-    } catch (e) {
-      // Non-fatal if audit table is absent
-    }
-
-    return {
-      success: true,
-      customer: cust,
-      counts,
-    };
-  });
+  return {
+    success: true,
+    customer: cust,
+    counts,
+  };
 }
 
 async function main() {
   const args = process.argv.slice(2);
 
-  await initDatabase();
+  await initMongo();
 
   if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
     console.log(`
-AdMafia Customer Data Deletion Utility
-======================================
+AdMafia Customer Data Deletion Utility (MongoDB)
+================================================
 Usage:
   node backend/scripts/delete-customer.js <phone|username|customer_id>
   node backend/scripts/delete-customer.js --list
@@ -183,13 +208,15 @@ Examples:
        - 9724916167 (@harsh)
 
   node backend/scripts/delete-customer.js --list
-    -> Shows all registered customers currently in the database.
+    -> Shows all registered customers currently in MongoDB.
 `);
+    await mongoose.disconnect();
     process.exit(0);
   }
 
   if (args.includes('--list') || args.includes('-l')) {
     await listCustomers();
+    await mongoose.disconnect();
     process.exit(0);
   }
 
@@ -204,6 +231,7 @@ Examples:
 
   if (targets.length === 0) {
     console.error('No target phone numbers or identifiers provided.');
+    await mongoose.disconnect();
     process.exit(1);
   }
 
@@ -246,10 +274,16 @@ Examples:
   console.log(`\nSummary: Successfully deleted ${totalDeleted} / ${targets.length} target(s).\n`);
 
   await listCustomers();
+  await mongoose.disconnect();
   process.exit(0);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error('Fatal script error:', err);
+  try {
+    await mongoose.disconnect();
+  } catch {
+    // ignore
+  }
   process.exit(1);
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ADMAFIA MARKETING CRM — FULL DOCKER COMPOSE DEPLOYMENT SCRIPT
+# ADMAFIA MARKETING CRM — FULL DOCKER COMPOSE DEPLOYMENT SCRIPT (100% MONGODB)
 # Usage on VPS:
 #   chmod +x deploy-docker.sh
 #   ./deploy-docker.sh [DOMAIN]
@@ -11,7 +11,7 @@ DOMAIN="${1:-admafia.marketing}"
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "======================================================================"
-echo "🚀 Launching AdMafia CRM Docker Stack (Postgres + Backend + Frontend + pgAdmin)..."
+echo "🚀 Launching AdMafia CRM Docker Stack (MongoDB 7.0 + Backend + Frontend)..."
 echo "📂 App Directory: $APP_DIR"
 echo "🌐 Domain:        $DOMAIN"
 echo "======================================================================"
@@ -84,20 +84,20 @@ if [ ! -f "$APP_DIR/backend/.env" ] \
   exit 1
 fi
 
-# 2. Stop host PM2 process if running to free port 5050/5000
+# 2. Stop host PM2 & legacy PostgreSQL service if running
 pm2 delete admafia 2>/dev/null || true
 pm2 save 2>/dev/null || true
-
-# 3. Stop host postgresql service if running to free port 5432 for the Docker container
 systemctl stop postgresql 2>/dev/null || true
 systemctl disable postgresql 2>/dev/null || true
 
-# 4. Build and start all 4 Docker containers
+# 3. Build and start MongoDB + Backend + Frontend Docker containers
 echo "📦 Building & starting containers..."
+docker compose up -d mongo
 docker compose build --no-cache frontend backend
-docker compose up -d
+docker compose up -d --remove-orphans
+docker rm -f admafia-db admafia-pgadmin 2>/dev/null || true
 
-# 5. Configure Host Nginx Reverse Proxy for https://admafia.marketing
+# 4. Configure Host Nginx Reverse Proxy for https://admafia.marketing
 echo "⚙️ Configuring Host Nginx reverse proxy..."
 
 if [ -f "/etc/letsencrypt/live/admafia.marketing/fullchain.pem" ]; then
@@ -106,23 +106,6 @@ server {
     server_name admafia.marketing www.admafia.marketing;
 
     client_max_body_size 50M;
-
-    # pgAdmin 4 Web DB Browser
-    location = /dbadmin {
-        return 301 /dbadmin/;
-    }
-
-    location /dbadmin/ {
-        proxy_pass http://127.0.0.1:5055;
-        proxy_http_version 1.1;
-        proxy_set_header X-Script-Name /dbadmin;
-        proxy_set_header X-Scheme $scheme;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
-    }
 
     # Backend REST API
     location /api/ {
@@ -217,17 +200,13 @@ systemctl reload nginx
 
 echo ""
 echo "======================================================================"
-echo "🎉 ALL DOCKER SERVICES ARE UP & RUNNING!"
+echo "🎉 ALL DOCKER SERVICES ARE UP & RUNNING (100% MONGODB)!"
 echo "======================================================================"
 docker compose ps
 echo ""
-echo "🌐 Main Website:       https://admafia.marketing/"
+echo "🌐 Main Website:        https://admafia.marketing/"
 echo "🔐 Customer Login:      https://admafia.marketing/#login"
 echo "📝 Customer Register:   https://admafia.marketing/#register"
 echo "📊 Customer Workspace:  https://admafia.marketing/portal"
 echo "💼 Sales Desk:          https://admafia.marketing/sales"
-echo "🗄️  pgAdmin 4 Web DB:   https://admafia.marketing/dbadmin/browser/"
-echo "   - Email:             admin@admafia.marketing"
-echo "   - Password:          AdMafiaAdmin2026!"
-echo "   - DB Password:       AdMafiaStrongPass2026!"
 echo "======================================================================"

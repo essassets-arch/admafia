@@ -1,22 +1,17 @@
 /**
- * AdMafia Marketing CRM — Master Customer Lead Distribution Eligibility Service
- * 
- * Enforces authoritative, persistent PostgreSQL backend validation before counting
- * or distributing master leads to customer accounts.
- * 
- * Strict Eligibility Criteria:
- * 1. Account status is 'active' (not 'suspended' or 'inactive').
- * 2. Profile/KYC is complete (profile_status = 'complete' OR kyc_percent >= 100)
- *    AND payment is confirmed/verified (payment_status = 'paid' OR verified = true).
- * 3. Valid wallet associated with the customer account.
- * 4. Configured daily advertising spend satisfies the minimum ₹300.
- * 5. Available wallet balance is sufficient to fund the daily advertising spend
- *    (balance >= daily_ad_spend, or today's spend has already been successfully deducted/booked).
- * 6. Marketing is enabled (ad_campaign_active = true) AND the campaign can actually run
- *    today in Asia/Kolkata timezone (scheduled day or booked day).
- * 7. Customer matches the target group or category.
- * 8. Customer has not already received this master lead (deduplication).
+ * AdMafia Marketing CRM — Master Customer Lead Distribution Eligibility Service (MongoDB)
+ *
+ * Enforces authoritative backend validation before counting or distributing
+ * master leads to customer accounts.
  */
+
+import {
+  Customer,
+  CustomerGroup,
+  Wallet,
+  MasterLead,
+  LeadAssignment,
+} from '../models/index.js';
 
 export function getKolkataDayInfo() {
   const kolkataStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
@@ -78,9 +73,10 @@ export function evaluateCustomerEligibility(row, options = {}) {
 
   // 5. Available Wallet Balance Sufficiency
   const balance = Number(row.available_balance ?? row.walletBalance ?? row.balance ?? 0);
-  
-  // Check if today was already deducted or booked in PostgreSQL
-  const bookedDatesStr = String(row.booked_dates || '');
+
+  const bookedDatesStr = Array.isArray(row.booked_dates)
+    ? row.booked_dates.join(',')
+    : String(row.booked_dates || '');
   let isTodayBooked = bookedDatesStr.includes(todayIso);
 
   let isDeductedToday = isTodayBooked || Boolean(row.is_deducted_today || row.isDeductedToday);
@@ -162,6 +158,7 @@ export function evaluateCustomerEligibility(row, options = {}) {
 
   return {
     customerId: row.id || row.customer_id,
+    username: row.username || '',
     companyName: row.company_name || row.name,
     contactPerson: row.contact_person || row.contact,
     phone: (row.phone || '').trim(),
@@ -177,67 +174,116 @@ export function evaluateCustomerEligibility(row, options = {}) {
   };
 }
 
-/**
- * Unified recipient evaluator across groups and categories.
- * Queries PostgreSQL candidate pool and partitions into eligible and excluded.
- */
-export async function getEvaluatedRecipients(dbQuery, { groupId = '', category = '', masterLeadId = null } = {}) {
-  const dayInfo = getKolkataDayInfo();
+function resolveOptions(firstArg, secondArg) {
+  if (secondArg && typeof secondArg === 'object') return secondArg;
+  if (firstArg && typeof firstArg === 'object') return firstArg;
+  return {};
+}
 
-  // 1. Fetch existing recipients for this master lead to enforce strict deduplication
-  let existingRecipientIds = new Set();
-  if (masterLeadId) {
-    const existingRes = await dbQuery(
-      'SELECT customer_id FROM lead_assignments WHERE master_lead_id = $1',
-      [masterLeadId]
-    );
-    existingRecipientIds = new Set(existingRes.rows.map((r) => r.customer_id));
+/**
+ * Unified recipient evaluator across groups and categories (MongoDB).
+ * Accepts either `({ groupId, category, masterLeadId, session })` or legacy `(_, opts)`.
+ */
+export async function getEvaluatedRecipients(firstArg = {}, secondArg = null) {
+  const { groupId = '', category = '', masterLeadId = null, session = null } = resolveOptions(firstArg, secondArg);
+  const dayInfo = getKolkataDayInfo();
+  const cleanGroupId = String(groupId || '').trim();
+  const cleanCategory = String(category || '').trim();
+  const catLower = cleanCategory.toLowerCase();
+
+  const [existingDocs, customers, wallets, groups] = await Promise.all([
+    masterLeadId
+      ? LeadAssignment.find({ masterLeadId }, { customerId: 1 }).session(session).lean()
+      : Promise.resolve([]),
+    Customer.find({}).sort({ companyName: 1 }).session(session).lean(),
+    Wallet.find({}).session(session).lean(),
+    CustomerGroup.find({}).session(session).lean(),
+  ]);
+
+  const existingRecipientIds = new Set(existingDocs.map((r) => r.customerId));
+  const walletByCust = new Map(wallets.map((w) => [w.customerId, w]));
+  const groupById = new Map(groups.map((g) => [g._id, g]));
+
+  // Build reverse index from CustomerGroup.members[] -> Set<groupId> per customer
+  const extraGroupsByCust = new Map();
+  for (const g of groups) {
+    for (const cid of g.members || []) {
+      if (!extraGroupsByCust.has(cid)) extraGroupsByCust.set(cid, new Set());
+      extraGroupsByCust.get(cid).add(g._id);
+    }
   }
 
-  // 2. Query Candidate Pool with full relation joins
-  const sql = `
-    SELECT DISTINCT
-      c.id, c.username, c.phone, c.email, c.company_name, c.contact_person,
-      c.category, c.industry, c.city, c.state, c.status, c.profile_status,
-      c.payment_status, c.kyc_percent, c.verified, c.group_id,
-      w.id AS wallet_id,
-      COALESCE(w.available_balance, 0) AS available_balance,
-      COALESCE(w.daily_ad_spend, 300) AS daily_ad_spend,
-      COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-      COALESCE(w.active_days, '') AS active_days,
-      w.last_deducted_at,
-      COALESCE(w.booked_dates, '') AS booked_dates,
-      cgm.group_id AS member_group_id,
-      cg.id AS cg_id, cg.name AS cg_name, cg.category AS cg_category
-    FROM customers c
-    LEFT JOIN wallets w ON w.customer_id = c.id
-    LEFT JOIN customer_group_memberships cgm ON cgm.customer_id = c.id
-    LEFT JOIN customer_groups cg ON (cg.id = cgm.group_id OR cg.id = c.group_id)
-    WHERE (
-      ( $1 = '' AND $2 = '' )
-      OR ( $1 <> '' AND (
-        cgm.group_id = $1
-        OR c.group_id = $1
-        OR cg.id = $1
-      ) )
-      OR ( $2 <> '' AND (
-        LOWER(c.category) = LOWER($2)
-        OR LOWER(c.industry) = LOWER($2)
-        OR LOWER(cg.category) = LOWER($2)
-        OR LOWER(cg.name) = LOWER($2)
-      ) )
-    )
-    ORDER BY c.company_name ASC
-  `;
-
-  const res = await dbQuery(sql, [groupId || '', category || '']);
-
-  // Deduplicate rows in case of multi-group memberships
-  const seenCustomers = new Map();
-  for (const row of res.rows) {
-    if (!seenCustomers.has(row.id)) {
-      seenCustomers.set(row.id, row);
+  const candidateRows = [];
+  for (const c of customers) {
+    const memberGroupIds = new Set(extraGroupsByCust.get(c._id) || []);
+    if (c.groupId) memberGroupIds.add(c.groupId);
+    for (const gm of c.groupMemberships || []) {
+      if (gm?.groupId) memberGroupIds.add(gm.groupId);
     }
+    const custGroups = Array.from(memberGroupIds).map((gid) => groupById.get(gid)).filter(Boolean);
+
+    // Filter candidate pool identically to the legacy SQL WHERE clause
+    let inPool = !cleanGroupId && !cleanCategory;
+    if (!inPool && cleanGroupId && memberGroupIds.has(cleanGroupId)) {
+      inPool = true;
+    }
+    if (!inPool && catLower) {
+      if (
+        String(c.category || '').toLowerCase() === catLower ||
+        String(c.industry || '').toLowerCase() === catLower ||
+        custGroups.some(
+          (g) =>
+            String(g.category || '').toLowerCase() === catLower ||
+            String(g.name || '').toLowerCase() === catLower
+        )
+      ) {
+        inPool = true;
+      }
+    }
+    if (!inPool) continue;
+
+    const matchedCg =
+      custGroups.find(
+        (g) =>
+          (cleanGroupId && g._id === cleanGroupId) ||
+          (catLower &&
+            (String(g.category || '').toLowerCase() === catLower ||
+              String(g.name || '').toLowerCase() === catLower))
+      ) ||
+      custGroups[0] ||
+      null;
+
+    const w = walletByCust.get(c._id);
+    candidateRows.push({
+      id: c._id,
+      username: c.username,
+      phone: c.phone,
+      email: c.email,
+      company_name: c.companyName,
+      contact_person: c.contactPerson,
+      category: c.category,
+      industry: c.industry,
+      city: c.city,
+      state: c.state,
+      currency: w?.currency || c.currency || 'INR',
+      status: c.status,
+      profile_status: c.profileStatus,
+      payment_status: c.paymentStatus,
+      kyc_percent: c.kycPercent,
+      verified: c.verified,
+      group_id: c.groupId,
+      wallet_id: w?._id || null,
+      available_balance: Number(w?.availableBalance ?? 0),
+      daily_ad_spend: Number(w?.dailyAdSpend ?? 300),
+      ad_campaign_active: Boolean(w?.adCampaignActive),
+      active_days: Array.isArray(w?.activeDays) ? w.activeDays.join(',') : (w?.activeDays || ''),
+      last_deducted_at: w?.lastDeductedAt ?? null,
+      booked_dates: Array.isArray(w?.bookedDates) ? w.bookedDates.join(',') : (w?.bookedDates || ''),
+      member_group_id: matchedCg?._id || (cleanGroupId && memberGroupIds.has(cleanGroupId) ? cleanGroupId : null),
+      cg_id: matchedCg?._id || null,
+      cg_name: matchedCg?.name || null,
+      cg_category: matchedCg?.category || null,
+    });
   }
 
   const eligible = [];
@@ -252,16 +298,17 @@ export async function getEvaluatedRecipients(dbQuery, { groupId = '', category =
     missingWallet: 0,
   };
 
-  for (const row of seenCustomers.values()) {
+  for (const row of candidateRows) {
     const evalResult = evaluateCustomerEligibility(row, {
       ...dayInfo,
-      targetGroupId: groupId,
-      targetCategory: category,
+      targetGroupId: cleanGroupId,
+      targetCategory: cleanCategory,
       existingRecipientIds,
     });
 
     const recipientObj = {
       customerId: row.id,
+      username: row.username || '',
       companyName: row.company_name,
       contactPerson: row.contact_person,
       phone: (row.phone || '').trim(),
@@ -298,7 +345,7 @@ export async function getEvaluatedRecipients(dbQuery, { groupId = '', category =
     excluded,
     eligibleCount: eligible.length,
     excludedCount: excluded.length,
-    totalCandidates: seenCustomers.size,
+    totalCandidates: candidateRows.length,
     skippedBreakdown,
   };
 }
@@ -306,31 +353,51 @@ export async function getEvaluatedRecipients(dbQuery, { groupId = '', category =
 /**
  * Calculates authoritative eligible customer counts for all customer groups.
  */
-export async function getGroupEligibilityCounts(dbQuery) {
-  const groupsRes = await dbQuery(`
-    SELECT cg.*,
-      (SELECT COUNT(*) FROM master_leads ml WHERE ml.group_id = cg.id OR LOWER(ml.category) = LOWER(cg.category) OR LOWER(ml.category) = LOWER(cg.name)) AS leads_received,
-      (SELECT COUNT(*) FROM lead_assignments la WHERE la.group_id = cg.id) AS leads_distributed
-    FROM customer_groups cg
-    ORDER BY cg.created_at ASC
-  `);
+export async function getGroupEligibilityCounts() {
+  const [groupDocs, masterLeads, assignAgg] = await Promise.all([
+    CustomerGroup.find({}).sort({ createdAt: 1 }).lean(),
+    MasterLead.find({}, { groupId: 1, category: 1 }).lean(),
+    LeadAssignment.aggregate([
+      { $match: { groupId: { $ne: null } } },
+      { $group: { _id: '$groupId', n: { $sum: 1 } } },
+    ]),
+  ]);
 
+  const assignCountByGroup = new Map(assignAgg.map((a) => [a._id, a.n]));
   const groups = [];
-  for (const g of groupsRes.rows) {
-    const evalData = await getEvaluatedRecipients(dbQuery, {
-      groupId: g.id,
+
+  for (const g of groupDocs) {
+    const gCatLower = String(g.category || '').toLowerCase();
+    const gNameLower = String(g.name || '').toLowerCase();
+    const leadsReceived = masterLeads.filter((ml) => {
+      const mlCat = String(ml.category || '').toLowerCase();
+      return (
+        ml.groupId === g._id ||
+        (mlCat && (mlCat === gCatLower || mlCat === gNameLower))
+      );
+    }).length;
+
+    const evalData = await getEvaluatedRecipients({
+      groupId: g._id,
       category: g.category || g.name,
     });
 
     groups.push({
-      ...g,
+      id: g._id,
+      name: g.name,
+      category: g.category,
+      icon: g.icon,
+      description: g.description,
+      status: g.status,
+      created_at: g.createdAt,
+      updated_at: g.updatedAt,
       customer_count: evalData.eligibleCount,
       eligible_count: evalData.eligibleCount,
       total_members: evalData.totalCandidates,
       excluded_count: evalData.excludedCount,
       skipped_breakdown: evalData.skippedBreakdown,
-      leads_received: Number(g.leads_received || 0),
-      leads_distributed: Number(g.leads_distributed || 0),
+      leads_received: leadsReceived,
+      leads_distributed: Number(assignCountByGroup.get(g._id) || 0),
     });
   }
 
@@ -340,12 +407,11 @@ export async function getGroupEligibilityCounts(dbQuery) {
 /**
  * Calculates authoritative eligible customer counts for all categories.
  */
-export async function getCategoryEligibilityCounts(dbQuery) {
-  const groups = await getGroupEligibilityCounts(dbQuery);
-
-  const custCatRes = await dbQuery(`
-    SELECT DISTINCT category FROM customers WHERE category IS NOT NULL AND category != ''
-  `);
+export async function getCategoryEligibilityCounts() {
+  const [groups, distinctCategories] = await Promise.all([
+    getGroupEligibilityCounts(),
+    Customer.distinct('category', { category: { $nin: [null, ''] } }),
+  ]);
 
   const categoryMap = new Map();
 
@@ -369,22 +435,20 @@ export async function getCategoryEligibilityCounts(dbQuery) {
     }
   }
 
-  for (const row of custCatRes.rows) {
-    const cat = row.category;
-    if (!categoryMap.has(cat)) {
-      const evalData = await getEvaluatedRecipients(dbQuery, { category: cat });
-      categoryMap.set(cat, {
-        category: cat,
-        name: cat,
-        groupId: null,
-        icon: '🏢',
-        description: `${cat} Industry Segment`,
-        eligibleCount: evalData.eligibleCount,
-        totalMembers: evalData.totalCandidates,
-        leadsReceived: 0,
-        leadsDistributed: 0,
-      });
-    }
+  for (const cat of distinctCategories) {
+    if (!cat || categoryMap.has(cat)) continue;
+    const evalData = await getEvaluatedRecipients({ category: cat });
+    categoryMap.set(cat, {
+      category: cat,
+      name: cat,
+      groupId: null,
+      icon: '🏢',
+      description: `${cat} Industry Segment`,
+      eligibleCount: evalData.eligibleCount,
+      totalMembers: evalData.totalCandidates,
+      leadsReceived: 0,
+      leadsDistributed: 0,
+    });
   }
 
   return {

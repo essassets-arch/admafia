@@ -18,15 +18,16 @@ cd "$APP_DIR"
 git fetch origin main 2>/dev/null || true
 git reset --hard origin/main 2>/dev/null || true
 
-# 2. Stop conflicting PM2 / host postgresql to free ports
+# 2. Stop conflicting PM2 / host postgresql
 pm2 delete admafia 2>/dev/null || true
 pm2 save 2>/dev/null || true
 systemctl stop postgresql 2>/dev/null || true
 systemctl disable postgresql 2>/dev/null || true
 
-# 3. Build & start Docker containers
+# 3. Build & start Docker containers (mongo + backend + frontend)
 echo "📦 Starting AdMafia Docker Stack..."
 docker compose down --remove-orphans 2>/dev/null || true
+docker rm -f admafia-db admafia-pgadmin 2>/dev/null || true
 docker compose up -d --build
 
 # Wait for frontend container on 5050 to become ready
@@ -44,23 +45,6 @@ server {
     server_name admafia.marketing www.admafia.marketing;
 
     client_max_body_size 50M;
-
-    # pgAdmin 4 Web DB Browser
-    location = /dbadmin {
-        return 301 /dbadmin/;
-    }
-
-    location /dbadmin/ {
-        proxy_pass http://127.0.0.1:5055;
-        proxy_http_version 1.1;
-        proxy_set_header X-Script-Name /dbadmin;
-        proxy_set_header X-Scheme $scheme;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_redirect off;
-    }
 
     # Backend REST API
     location /api/ {
@@ -154,10 +138,8 @@ echo ""
 echo "======================================================================"
 echo "🎉 AdMafia Marketing CRM is now LIVE on HTTPS!"
 echo "======================================================================"
-echo "🌐 Website:            https://admafia.marketing/"
+echo "🌐 Website:             https://admafia.marketing/"
 echo "📊 Customer Portal:     https://admafia.marketing/app/lead#app/dashboard"
 echo "💼 Sales Desk:          https://admafia.marketing/sales"
 echo "🔐 Admin Gateway:       https://admafia.marketing/admin/login"
-echo "🗄️  pgAdmin Database:   https://admafia.marketing/dbadmin/browser/"
 echo "======================================================================"
-

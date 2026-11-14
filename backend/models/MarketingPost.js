@@ -11,12 +11,21 @@ const ArtworkRevisionSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Pending Verification', 'Approved', 'Rejected'],
+    enum: ['Pending Verification', 'Approved', 'Rejected', 'Changes Requested'],
     default: 'Pending Verification'
   },
   rejectionReason: { type: String, default: null },
   uploadedBy: { type: String, default: 'customer' },
-  uploadedAt: { type: Date, default: Date.now }
+  uploadedAt: { type: Date, default: Date.now },
+  revisionId: { type: String, default: null },
+  mediaType: { type: String, default: 'image' },
+  creativeFormat: { type: String, default: 'Instagram / Facebook Post' },
+  designerNotes: { type: String, default: '' },
+  designerName: { type: String, default: '' },
+  reviewerName: { type: String, default: null },
+  reviewRemarks: { type: String, default: '' },
+  correctionInstructions: { type: String, default: '' },
+  reviewedAt: { type: Date, default: null }
 }, { _id: false });
 
 const ArtworkReviewSchema = new mongoose.Schema({
@@ -24,7 +33,14 @@ const ArtworkReviewSchema = new mongoose.Schema({
   action: { type: String, enum: ['Approved', 'Rejected', 'Changes Requested'], required: true },
   reviewerId: { type: String, required: true },
   notes: { type: String, default: '' },
-  reviewedAt: { type: Date, default: Date.now }
+  reviewedAt: { type: Date, default: Date.now },
+  reviewId: { type: String, default: null },
+  decision: { type: String, default: null },
+  reviewerName: { type: String, default: null },
+  reviewerRole: { type: String, default: 'Marketing Reviewer' },
+  remarks: { type: String, default: '' },
+  rejectionReason: { type: String, default: '' },
+  correctionInstructions: { type: String, default: '' }
 }, { _id: false });
 
 const MarketingPostSchema = new mongoose.Schema({
@@ -49,7 +65,25 @@ const MarketingPostSchema = new mongoose.Schema({
   isDeleted: { type: Boolean, default: false, index: true },
   deletedAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  updatedAt: { type: Date, default: Date.now },
+  ideaId: { type: String, default: null },
+  platform: { type: String, default: null },
+  hashtags: { type: String, default: '' },
+  callToAction: { type: String, default: '' },
+  mediaUrl: { type: String, default: '' },
+  mediaType: { type: String, default: 'image' },
+  language: { type: String, default: 'English / Hinglish' },
+  campaignAssociation: { type: String, default: '' },
+  intendedPublishAt: { type: Date, default: null },
+  submittedBy: { type: String, default: null },
+  submittedAt: { type: Date, default: null },
+  creativeFormat: { type: String, default: 'Instagram / Facebook Post' },
+  designerNotes: { type: String, default: '' },
+  designerName: { type: String, default: 'Graphics Designer' },
+  creativeInstructions: { type: String, default: '' },
+  priority: { type: String, default: 'Normal' },
+  deletedBy: { type: String, default: null },
+  createdBy: { type: String, default: 'Marketing Content Team' }
 }, {
   collection: 'marketing_posts',
   timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' }

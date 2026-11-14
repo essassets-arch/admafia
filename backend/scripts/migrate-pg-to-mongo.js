@@ -2,7 +2,6 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { initDatabase, query } from '../db.js';
 import mongoose from 'mongoose';
 import {
   Customer,
@@ -20,6 +19,7 @@ import {
   LeadAssignment,
   SalesTask,
   SupportQuery,
+  PendingVerification,
   MarketingPost,
   MarketingIdea,
   SuperAdminAuditLog,
@@ -34,41 +34,73 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
-const CHECKPOINT_FILE = path.join(__dirname, 'migration_checkpoint.json');
 const REPORT_FILE = path.join(__dirname, 'migration_reconciliation_report.json');
 
-function saveCheckpoint(data) {
-  fs.writeFileSync(CHECKPOINT_FILE, JSON.stringify(data, null, 2), 'utf8');
+async function createReadOnlyPgPool() {
+  let pgMod;
+  try {
+    pgMod = await import('pg');
+  } catch {
+    throw new Error(
+      'PostgreSQL has already been decommissioned (`pg` driver removed). This pre-cutover ETL script is only needed while a legacy PostgreSQL source is active.'
+    );
+  }
+  const Pool = pgMod.default?.Pool || pgMod.Pool;
+  const poolConfig = process.env.DATABASE_URL
+    ? { connectionString: process.env.DATABASE_URL }
+    : {
+        host: process.env.PGHOST || 'db',
+        port: Number(process.env.PGPORT || 5432),
+        user: process.env.PGUSER || 'admafia_user',
+        password: process.env.PGPASSWORD || 'AdMafiaStrongPass2026!',
+        database: process.env.PGDATABASE || 'admafia_crm',
+      };
+  const pool = new Pool({ ...poolConfig, connectionTimeoutMillis: 8000 });
+  await pool.query('SELECT 1');
+  return pool;
 }
 
-function loadCheckpoint() {
-  if (fs.existsSync(CHECKPOINT_FILE)) {
-    try {
-      return JSON.parse(fs.readFileSync(CHECKPOINT_FILE, 'utf8'));
-    } catch (e) {
-      return {};
+async function safeQuery(pool, sql, params = []) {
+  try {
+    return await pool.query(sql, params);
+  } catch (err) {
+    // Undefined table (42P01) on older schemas returns empty rowset gracefully
+    if (err && err.code === '42P01') {
+      return { rows: [], rowCount: 0 };
     }
+    throw err;
   }
-  return {};
+}
+
+function parseJsonSafe(val, fallback) {
+  if (val == null) return fallback;
+  if (typeof val === 'object') return val;
+  try {
+    return JSON.parse(val);
+  } catch {
+    return fallback;
+  }
 }
 
 export async function runFullMigration() {
   console.log('======================================================================');
-  console.log('🔄 ADMAFIA CRM: FULL POSTGRESQL TO MONGODB REPEATABLE ETL MIGRATION');
+  console.log('🔄 ADMAFIA CRM: FINAL POSTGRESQL → MONGODB PARITY SYNC & RECONCILIATION');
   console.log('======================================================================\n');
 
   // 1. Initialize PostgreSQL connection (Read-Only)
   console.log('🔌 Step 1: Connecting to PostgreSQL Source Database...');
-  await initDatabase();
+  const pgPool = await createReadOnlyPgPool();
+  const query = (sql, params) => safeQuery(pgPool, sql, params);
   console.log('✓ PostgreSQL connected.\n');
 
   // 2. Initialize MongoDB connection
   console.log('🔌 Step 2: Connecting to MongoDB Target Database...');
   let mongoUri = process.env.MONGO_URI;
   if (!mongoUri || mongoUri.includes('admafia_mongo:')) {
-    mongoUri = (process.env.PGHOST === 'db' || process.env.DATABASE_URL?.includes('@db:'))
-      ? 'mongodb://mongo:27017/admafia_crm?directConnection=true'
-      : 'mongodb://127.0.0.1:27017/admafia_crm?directConnection=true';
+    mongoUri =
+      process.env.PGHOST === 'db' || process.env.DATABASE_URL?.includes('@db:')
+        ? 'mongodb://mongo:27017/admafia_crm?directConnection=true'
+        : 'mongodb://127.0.0.1:27017/admafia_crm?directConnection=true';
   }
   if (!mongoUri.includes('directConnection=')) {
     mongoUri += (mongoUri.includes('?') ? '&' : '?') + 'directConnection=true';
@@ -88,13 +120,12 @@ export async function runFullMigration() {
     console.log(`✓ MongoDB connected at ${fallbackUri}.\n`);
   }
 
-  const checkpoint = loadCheckpoint();
   const report = {
     startedAt: new Date().toISOString(),
     entities: {},
     financialReconciliation: {},
     status: 'IN_PROGRESS',
-    quarantined: []
+    quarantined: [],
   };
 
   try {
@@ -126,9 +157,10 @@ export async function runFullMigration() {
             flagEmoji: r.flag_emoji || '🇮🇳',
             isActive: Boolean(r.is_active),
             isDefault: Boolean(r.is_default),
+            effectiveDate: r.effective_date ? new Date(r.effective_date) : new Date(),
             createdAt: r.created_at ? new Date(r.created_at) : new Date(),
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
-          }
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -138,12 +170,21 @@ export async function runFullMigration() {
     console.log(`  ✓ Migrated ${cpCount}/${cpRows.rowCount} country pricing tiers.`);
 
     // -------------------------------------------------------------------------
-    // ENTITY 2: Customer Groups
+    // ENTITY 2: Customer Groups (with bidirectional members[])
     // -------------------------------------------------------------------------
     console.log('📦 Migrating: customer_groups...');
     const cgRows = await query('SELECT * FROM customer_groups');
     let cgCount = 0;
     for (const r of cgRows.rows) {
+      const grpMemRes = await query('SELECT customer_id FROM customer_group_memberships WHERE group_id = $1', [r.id]);
+      const directCustRes = await query('SELECT id FROM customers WHERE group_id = $1', [r.id]);
+      const memberIds = Array.from(
+        new Set([
+          ...grpMemRes.rows.map((m) => m.customer_id),
+          ...directCustRes.rows.map((c) => c.id),
+        ])
+      );
+
       await CustomerGroup.findByIdAndUpdate(
         r.id,
         {
@@ -154,9 +195,10 @@ export async function runFullMigration() {
             icon: r.icon || '🏢',
             description: r.description || '',
             status: r.status || 'active',
+            members: memberIds,
             createdAt: r.created_at ? new Date(r.created_at) : new Date(),
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
-          }
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -166,14 +208,20 @@ export async function runFullMigration() {
     console.log(`  ✓ Migrated ${cgCount}/${cgRows.rowCount} customer groups.`);
 
     // -------------------------------------------------------------------------
-    // ENTITY 3: Customers & Memberships
+    // ENTITY 3: Customers & Memberships & Status History
     // -------------------------------------------------------------------------
     console.log('📦 Migrating: customers & memberships...');
     const custRows = await query('SELECT * FROM customers ORDER BY registered_at ASC');
     let custCount = 0;
     for (const r of custRows.rows) {
-      const memRes = await query('SELECT group_id, assigned_at FROM customer_group_memberships WHERE customer_id = $1', [r.id]);
-      const statusRes = await query('SELECT previous_status AS old_status, new_status, reason, changed_by, created_at AS changed_at FROM account_status_history WHERE customer_id = $1', [r.id]);
+      const memRes = await query(
+        'SELECT group_id, assigned_at FROM customer_group_memberships WHERE customer_id = $1',
+        [r.id]
+      );
+      const statusRes = await query(
+        'SELECT previous_status AS old_status, new_status, reason, changed_by, created_at AS changed_at FROM account_status_history WHERE customer_id = $1 ORDER BY created_at ASC',
+        [r.id]
+      );
 
       await Customer.findByIdAndUpdate(
         r.id,
@@ -184,7 +232,7 @@ export async function runFullMigration() {
             phone: r.phone,
             email: r.email || '',
             personalEmail: r.personal_email || '',
-            passwordHash: r.password_hash,
+            passwordHash: r.password_hash || 'Client@2026',
             companyName: r.company_name,
             category: r.category || 'IT & Software',
             industry: r.industry || 'Other',
@@ -196,25 +244,29 @@ export async function runFullMigration() {
             countryCode: r.country_code || 'IN',
             currency: r.currency || 'INR',
             groupId: r.group_id || null,
-            groupMemberships: memRes.rows.map(m => ({ groupId: m.group_id, assignedAt: new Date(m.assigned_at) })),
+            groupMemberships: memRes.rows.map((m) => ({
+              groupId: m.group_id,
+              assignedAt: m.assigned_at ? new Date(m.assigned_at) : new Date(),
+            })),
             status: r.status || 'active',
             profileStatus: r.profile_status || 'complete',
             paymentStatus: r.payment_status || 'pending',
-            kycPercent: Number(r.kyc_percent || 100),
+            kycPercent: Number(r.kyc_percent ?? 100),
             verified: Boolean(r.verified),
             isSelfRegistered: Boolean(r.is_self_registered),
             registeredFrom: r.registered_from || 'http://localhost:5173/#register',
-            statusHistory: statusRes.rows.map(s => ({
+            marketingCode: r.marketing_code || null,
+            statusHistory: statusRes.rows.map((s) => ({
               oldStatus: s.old_status,
               newStatus: s.new_status,
               reason: s.reason,
               changedBy: s.changed_by,
-              changedAt: new Date(s.changed_at)
+              changedAt: s.changed_at ? new Date(s.changed_at) : new Date(),
             })),
             registeredAt: r.registered_at ? new Date(r.registered_at) : new Date(),
             completedAt: r.completed_at ? new Date(r.completed_at) : null,
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
-          }
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -242,12 +294,14 @@ export async function runFullMigration() {
             phone: r.phone || '',
             passwordHash: r.password_hash,
             role: r.role || 'sales',
-            permissions: typeof r.permissions === 'string' ? JSON.parse(r.permissions) : (r.permissions || []),
+            department: r.department || '',
+            createdBy: r.created_by || 'system',
+            permissions: parseJsonSafe(r.permissions, []),
             status: r.status || 'active',
             lastLoginAt: r.last_login_at ? new Date(r.last_login_at) : null,
             createdAt: r.created_at ? new Date(r.created_at) : new Date(),
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
-          }
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -275,13 +329,24 @@ export async function runFullMigration() {
             totalLifetimePaid: Number(r.total_lifetime_paid || 0),
             totalAdSpent: Number(r.total_ad_spent || 0),
             adCampaignActive: Boolean(r.ad_campaign_active),
-            activeDays: r.active_days ? r.active_days.split(',').map(s => s.trim()) : [],
+            activeDays: r.active_days
+              ? String(r.active_days)
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : [],
             schedulePreset: r.schedule_preset || 'custom',
             lastDeductedAt: r.last_deducted_at ? new Date(r.last_deducted_at) : null,
-            bookedDates: r.booked_dates ? r.booked_dates.split(',').map(s => s.trim()) : [],
+            bookedDates: r.booked_dates
+              ? String(r.booked_dates)
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : [],
+            marketingCode: r.marketing_code || null,
             createdAt: r.created_at ? new Date(r.created_at) : new Date(),
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
-          }
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -303,7 +368,7 @@ export async function runFullMigration() {
           $set: {
             _id: r.id,
             customerId: r.customer_id,
-            walletId: r.wallet_id,
+            walletId: r.wallet_id || '',
             txType: r.tx_type,
             amount: Number(r.amount),
             balanceAfter: Number(r.balance_after),
@@ -312,8 +377,8 @@ export async function runFullMigration() {
             paymentMethod: r.payment_method || 'Razorpay Secure (UPI/Card)',
             status: r.status || 'Verified ✓',
             currency: r.currency || 'INR',
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -323,7 +388,7 @@ export async function runFullMigration() {
     console.log(`  ✓ Migrated ${txCount}/${txRows.rowCount} ledger transactions.`);
 
     // -------------------------------------------------------------------------
-    // ENTITY 7: Payment Records
+    // ENTITY 7: Payment Records (+ Credit Transaction Parity Reconciliation)
     // -------------------------------------------------------------------------
     console.log('📦 Migrating: payment_records...');
     const payRows = await query('SELECT * FROM payment_records ORDER BY paid_at ASC');
@@ -345,10 +410,18 @@ export async function runFullMigration() {
             referenceUtr: r.utr_reference,
             receiptNumber: r.receipt_number,
             notes: r.notes || '',
-            status: r.status || 'Verified ✓',
+            companyName: r.company_name || '',
+            contactPerson: r.contact_person || '',
+            phone: r.phone || '',
+            city: r.city || 'India',
+            txType: r.tx_type || 'topup',
+            gstAmount: Number(r.gst_amount || 0),
+            totalAmount: r.total_amount != null ? Number(r.total_amount) : Number(r.amount),
+            daysOverdue: Number(r.days_overdue || 0),
+            status: r.status || 'paid',
             createdAt: r.paid_at ? new Date(r.paid_at) : new Date(),
-            updatedAt: r.paid_at ? new Date(r.paid_at) : new Date()
-          }
+            updatedAt: r.paid_at ? new Date(r.paid_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -360,10 +433,7 @@ export async function runFullMigration() {
       if (tx.tx_type === 'Credit') {
         const ref = tx.reference_utr || tx.id;
         const existing = await PaymentRecord.findOne({
-          $or: [
-            { referenceUtr: ref },
-            { _id: `pay_tx_${tx.id}` }
-          ]
+          $or: [{ referenceUtr: ref }, { _id: `pay_tx_${tx.id}` }],
         });
         if (!existing) {
           const fallbackPayId = `pay_tx_${tx.id}`;
@@ -375,15 +445,17 @@ export async function runFullMigration() {
                 customerId: tx.customer_id,
                 walletId: tx.wallet_id,
                 amount: Number(tx.amount),
+                totalAmount: Number(tx.amount),
                 currency: tx.currency || 'INR',
                 paymentMethod: tx.payment_method || 'Direct Secure Payment',
                 referenceUtr: ref,
                 receiptNumber: `REC-${String(ref).slice(-6)}`,
                 notes: tx.description || 'Wallet Credit',
-                status: 'Verified ✓',
+                txType: 'topup',
+                status: 'paid',
                 createdAt: tx.created_at ? new Date(tx.created_at) : new Date(),
-                updatedAt: tx.created_at ? new Date(tx.created_at) : new Date()
-              }
+                updatedAt: tx.created_at ? new Date(tx.created_at) : new Date(),
+              },
             },
             { upsert: true }
           );
@@ -408,8 +480,11 @@ export async function runFullMigration() {
           $set: {
             _id: r.id,
             customerId: r.customer_id,
-            paymentRecordId: r.payment_record_id,
+            paymentRecordId: r.payment_record_id || null,
             invoiceNumber: r.invoice_no,
+            particulars: r.particulars || 'Meta Ads Campaign Ad Spend Budget Credit',
+            paymentMode: r.payment_mode || '',
+            status: r.status || 'Paid',
             invoiceDate: r.issued_date ? new Date(r.issued_date) : new Date(),
             sacCode: r.sac_code || '998311',
             baseAmount: Number(r.base_amount),
@@ -419,8 +494,8 @@ export async function runFullMigration() {
             totalAmount: Number(r.total_amount),
             currency: r.currency || 'INR',
             pdfUrl: '',
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -430,18 +505,26 @@ export async function runFullMigration() {
     console.log(`  ✓ Migrated ${invCount}/${invRows.rowCount} GST tax invoices.`);
 
     // -------------------------------------------------------------------------
-    // ENTITY 9: Master Leads & Customer Leads
+    // ENTITY 9: Master Leads, Dispatched Customer Leads & Lead Assignments
     // -------------------------------------------------------------------------
-    console.log('📦 Migrating: master_leads & leads...');
+    console.log('📦 Migrating: master_leads, leads & lead_assignments...');
     const mlRows = await query('SELECT * FROM master_leads ORDER BY created_at ASC');
     let mlCount = 0;
     for (const r of mlRows.rows) {
+      const dispatchCountRes = await query('SELECT COUNT(*) AS cnt FROM lead_assignments WHERE master_lead_id = $1', [
+        r.id,
+      ]);
+      const dispatchedCnt = parseInt(dispatchCountRes.rows[0]?.cnt || '0', 10) || 0;
+
       await MasterLead.findByIdAndUpdate(
         r.id,
         {
           $set: {
             _id: r.id,
             leadNumber: `ML-${r.id}`,
+            title: r.title || '',
+            description: r.description || '',
+            groupId: r.group_id || null,
             fullName: r.buyer_name,
             phone: r.buyer_phone,
             email: r.buyer_email || '',
@@ -449,14 +532,18 @@ export async function runFullMigration() {
             subCategory: '',
             city: r.city || '',
             state: r.location || '',
+            location: r.location || '',
             country: 'India',
-            source: r.source || 'Meta Ads',
+            priority: r.priority || 'Urgent',
+            source: r.source || 'Direct Intake',
             requirement: r.requirement || '',
             budget: r.budget || '',
-            status: 'Unassigned',
-            totalDispatched: 0,
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            deadlineDate: r.deadline_date ? new Date(r.deadline_date) : null,
+            createdBy: r.created_by || 'Admin Operations',
+            status: dispatchedCnt > 0 ? 'Dispatched' : 'Unassigned',
+            totalDispatched: dispatchedCnt,
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -467,40 +554,81 @@ export async function runFullMigration() {
     const lRows = await query('SELECT * FROM leads ORDER BY created_at ASC');
     let lCount = 0;
     for (const r of lRows.rows) {
-      const followRes = await query('SELECT notes AS note, status AS stage, scheduled_date, scheduled_time, channel, created_at FROM lead_followups WHERE lead_id = $1', [r.id]);
+      const followRes = await query(
+        'SELECT notes AS note, status AS stage, scheduled_date, scheduled_time, channel, created_at FROM lead_followups WHERE lead_id = $1 ORDER BY created_at ASC',
+        [r.id]
+      );
       await Lead.findByIdAndUpdate(
         r.id,
         {
           $set: {
             _id: r.id,
-            masterLeadId: r.master_lead_id || `standalone_${r.id}`,
+            masterLeadId: r.master_lead_id || null,
             customerId: r.customer_id,
+            customerPhone: r.customer_phone || '',
+            customerUsername: r.customer_username || '',
+            companyName: r.company_name || '',
             fullName: r.buyer_name,
             phone: r.buyer_phone,
+            displayPhone: r.display_phone || `+91 ${r.buyer_phone}`,
             email: r.buyer_email || '',
             category: r.category || 'IT & Software',
             city: r.city || '',
             state: '',
-            status: r.status || 'New',
+            requirement: r.requirement || '',
+            budget: r.budget || '',
+            source: r.source || 'Direct Intake',
+            priority: r.priority || 'Urgent',
+            status: r.status || 'new',
+            isHot: r.is_hot !== undefined ? Boolean(r.is_hot) : true,
             isRead: Boolean(r.is_read),
             assignedAt: r.created_at ? new Date(r.created_at) : new Date(),
             lastContactedAt: null,
             notes: r.notes || '',
-            followups: followRes.rows.map(f => ({
+            followups: followRes.rows.map((f) => ({
               note: f.note || `${f.channel} on ${f.scheduled_date} ${f.scheduled_time}`,
               stage: f.stage || 'In Follow-up',
               createdBy: 'Customer',
-              createdAt: new Date(f.created_at)
+              createdAt: f.created_at ? new Date(f.created_at) : new Date(),
             })),
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
-          }
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+          },
         },
         { upsert: true }
       );
       lCount++;
     }
     report.entities.leads = { pgCount: lRows.rowCount, mongoCount: lCount, status: 'RECONCILED' };
-    console.log(`  ✓ Migrated ${mlCount} master leads and ${lCount} dispatched leads.`);
+
+    const laRows = await query('SELECT * FROM lead_assignments ORDER BY assigned_at ASC');
+    let laCount = 0;
+    for (const r of laRows.rows) {
+      await LeadAssignment.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            masterLeadId: r.master_lead_id,
+            customerId: r.customer_id,
+            customerLeadId: r.customer_lead_id || null,
+            groupId: r.group_id || null,
+            status: r.status || 'new',
+            responseStatus: r.response_interest || 'Pending',
+            responseNotes: r.response_notes || '',
+            isRead: Boolean(r.is_read),
+            notificationStatus: r.notification_status || 'Delivered',
+            respondedAt: r.responded_at ? new Date(r.responded_at) : null,
+            assignedAt: r.assigned_at ? new Date(r.assigned_at) : new Date(),
+          },
+        },
+        { upsert: true }
+      );
+      laCount++;
+    }
+    report.entities.lead_assignments = { pgCount: laRows.rowCount, mongoCount: laCount, status: 'RECONCILED' };
+    console.log(
+      `  ✓ Migrated ${mlCount} master leads, ${lCount} dispatched leads, and ${laCount} lead assignments.`
+    );
 
     // -------------------------------------------------------------------------
     // ENTITY 10: Marketing Campaigns
@@ -518,17 +646,27 @@ export async function runFullMigration() {
             postId: r.post_id || null,
             campaignName: r.name,
             objective: r.objective || 'lead_generation',
-            platform: r.platform || 'Meta Ads',
+            platform: r.platform || 'Meta Ads (Facebook & Instagram)',
             targetAudience: r.target_audience || '',
             dailyBudget: Number(r.daily_budget || 300),
             totalSpend: Number(r.total_budget || 0),
-            status: r.status || 'Active',
+            totalBudget: Number(r.total_budget || 0),
+            currency: r.currency || 'INR',
+            scheduleSettings: parseJsonSafe(r.schedule_settings, {}),
+            status: r.status || 'Draft',
+            externalPlatformStatus: r.external_platform_status || 'Not Connected',
+            externalCampaignId: r.external_campaign_id || null,
+            marketingCode: r.marketing_code || null,
+            createdBy: r.created_by || 'Marketing Manager',
+            lastAction: r.last_action || 'Created',
+            lastActor: r.last_actor || 'Marketing Manager',
+            lastActionAt: r.last_action_at ? new Date(r.last_action_at) : new Date(),
             activeDays: [],
             startDate: r.start_date ? new Date(r.start_date) : new Date(),
             endDate: r.end_date ? new Date(r.end_date) : null,
             createdAt: r.created_at ? new Date(r.created_at) : new Date(),
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
-          }
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -544,8 +682,14 @@ export async function runFullMigration() {
     const postRows = await query('SELECT * FROM marketing_posts ORDER BY created_at ASC');
     let postCount = 0;
     for (const r of postRows.rows) {
-      const revRes = await query('SELECT * FROM marketing_post_revisions WHERE post_id = $1 ORDER BY revision_number ASC', [r.id]);
-      const reviewRes = await query('SELECT * FROM marketing_post_reviews WHERE post_id = $1 ORDER BY created_at ASC', [r.id]);
+      const revRes = await query(
+        'SELECT * FROM marketing_post_revisions WHERE post_id = $1 ORDER BY revision_number ASC',
+        [r.id]
+      );
+      const reviewRes = await query(
+        'SELECT * FROM marketing_post_reviews WHERE post_id = $1 ORDER BY created_at ASC',
+        [r.id]
+      );
 
       await MarketingPost.findByIdAndUpdate(
         r.id,
@@ -553,33 +697,68 @@ export async function runFullMigration() {
           $set: {
             _id: r.id,
             customerId: r.customer_id,
+            ideaId: r.idea_id || null,
             title: r.title || 'Untitled Post',
             caption: r.caption || '',
-            targetPlatform: r.platform || 'All',
+            platform: r.platform || 'Meta Ads (Facebook & Instagram)',
+            targetPlatform: r.platform || 'Meta Ads (Facebook & Instagram)',
+            hashtags: r.hashtags || '',
+            callToAction: r.call_to_action || '',
+            mediaUrl: r.media_url || '',
+            mediaType: r.media_type || 'image',
+            language: r.language || 'English / Hinglish',
+            campaignAssociation: r.campaign_association || '',
+            intendedPublishAt: r.intended_publish_at ? new Date(r.intended_publish_at) : null,
+            submittedBy: r.submitted_by || null,
+            submittedAt: r.submitted_at ? new Date(r.submitted_at) : null,
+            creativeFormat: r.creative_format || 'Instagram / Facebook Post',
+            designerNotes: r.designer_notes || '',
+            designerName: r.designer_name || 'Graphics Designer',
+            creativeInstructions: r.creative_instructions || '',
+            priority: r.priority || 'Normal',
             category: 'General',
             status: r.status || 'Pending Verification',
             currentRevisionNumber: Number(r.revision_number || 1),
-            revisions: revRes.rows.map(rev => ({
+            revisions: revRes.rows.map((rev) => ({
+              revisionId: rev.id,
               revisionNumber: Number(rev.revision_number || 1),
               artworkUrl: rev.media_url || '',
-              fileSize: 0,
+              mediaType: rev.media_type || 'image',
               mimeType: rev.media_type || 'image/png',
-              status: rev.review_status || 'Pending Verification',
-              rejectionReason: rev.rejection_reason || null,
+              fileSize: 0,
+              creativeFormat: rev.creative_format || 'Instagram / Facebook Post',
+              designerNotes: rev.designer_notes || '',
               designerName: rev.uploaded_by || 'Graphics Designer',
-              uploadedAt: rev.uploaded_at ? new Date(rev.uploaded_at) : new Date()
+              uploadedBy: rev.uploaded_by || 'Graphics Designer',
+              uploadedAt: rev.uploaded_at ? new Date(rev.uploaded_at) : new Date(),
+              status: rev.review_status || 'Pending Verification',
+              reviewerName: rev.reviewer_name || null,
+              reviewRemarks: rev.review_remarks || '',
+              rejectionReason: rev.rejection_reason || null,
+              correctionInstructions: rev.correction_instructions || '',
+              reviewedAt: rev.reviewed_at ? new Date(rev.reviewed_at) : null,
             })),
-            reviews: reviewRes.rows.map(rv => ({
+            reviews: reviewRes.rows.map((rv) => ({
+              reviewId: rv.id,
               revisionNumber: Number(rv.revision_number || 1),
               action: rv.decision || 'Approved',
-              reviewerName: rv.reviewer_name || 'auditor',
+              decision: rv.decision || 'Approved',
+              reviewerId: rv.reviewer_name || 'Marketing Reviewer',
+              reviewerName: rv.reviewer_name || 'Marketing Reviewer',
+              reviewerRole: rv.reviewer_role || 'Marketing Reviewer',
+              remarks: rv.remarks || '',
+              rejectionReason: rv.rejection_reason || '',
+              correctionInstructions: rv.correction_instructions || '',
               notes: rv.remarks || rv.rejection_reason || '',
-              reviewedAt: rv.created_at ? new Date(rv.created_at) : new Date()
+              reviewedAt: rv.created_at ? new Date(rv.created_at) : new Date(),
             })),
             isDeleted: Boolean(r.is_deleted),
+            deletedAt: r.deleted_at ? new Date(r.deleted_at) : null,
+            deletedBy: r.deleted_by || null,
+            createdBy: r.created_by || 'Marketing Content Team',
             createdAt: r.created_at ? new Date(r.created_at) : new Date(),
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
-          }
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -616,8 +795,8 @@ export async function runFullMigration() {
             status: r.status || 'Saved',
             createdBy: r.created_by || 'Marketing Executive',
             createdAt: r.created_at ? new Date(r.created_at) : new Date(),
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
-          }
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -638,16 +817,22 @@ export async function runFullMigration() {
         {
           $set: {
             _id: r.id,
-            customerId: r.customer_id,
+            customerId: r.customer_id || null,
             assignedTo: 'Sales Executive',
             taskType: r.task_type || 'Call',
-            title: `${r.task_type} for ${r.company_name}`,
+            companyName: r.company_name || '',
+            contactPerson: r.contact_person || '',
+            phone: r.phone || '',
+            priority: r.priority || 'High',
+            dueStatus: r.due_status || 'today',
+            dueTime: r.due_time || '',
+            title: `${r.task_type || 'Call'} for ${r.company_name || 'Customer'}`,
             notes: r.notes || '',
             dueAt: null,
             status: r.status === 'completed' ? 'completed' : 'pending',
             completedAt: r.status === 'completed' ? new Date() : null,
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -663,29 +848,44 @@ export async function runFullMigration() {
     const sqRows = await query('SELECT * FROM support_queries ORDER BY created_at ASC');
     let sqCount = 0;
     for (const r of sqRows.rows) {
-      const msgRes = await query('SELECT * FROM support_query_messages WHERE query_id = $1 ORDER BY created_at ASC', [r.id]);
+      const msgRes = await query(
+        'SELECT * FROM support_query_messages WHERE query_id = $1 ORDER BY created_at ASC',
+        [r.id]
+      );
       await SupportQuery.findByIdAndUpdate(
         r.id,
         {
           $set: {
             _id: r.id,
-            customerId: r.customer_id,
-            ticketNumber: `TICK-${r.id}`,
+            customerId: r.customer_id || null,
+            ticketNumber: `TKT-${r.id}`,
+            companyName: r.company_name || '',
+            contactName: r.contact_name || '',
+            contactEmail: r.contact_email || '',
+            contactPhone: r.contact_phone || '',
             subject: r.subject,
             category: r.category || 'Billing',
-            priority: (r.priority || 'Normal').toLowerCase() === 'urgent' ? 'urgent' : 'medium',
+            priority: r.priority || 'Normal',
             status: r.status || 'Open',
             assignedAgent: r.assigned_admin || null,
-            messages: msgRes.rows.map(m => ({
+            internalNotes: r.internal_notes || '',
+            lastRepliedAt: r.last_replied_at ? new Date(r.last_replied_at) : null,
+            lastRepliedBy: r.last_replied_by || '',
+            slaBreached: Boolean(r.sla_breached),
+            hoursOpen: Number(r.hours_open || 0),
+            messages: msgRes.rows.map((m) => ({
+              messageId: m.id,
               sender: m.sender_name,
-              senderRole: m.sender_type === 'admin' ? 'agent' : 'customer',
+              senderRole: m.sender_type === 'customer' ? 'customer' : 'agent',
+              senderType: m.sender_type || 'customer',
+              isInternalNote: Boolean(m.is_internal_note),
               message: m.message,
               attachments: [],
-              createdAt: m.created_at ? new Date(m.created_at) : new Date()
+              createdAt: m.created_at ? new Date(m.created_at) : new Date(),
             })),
             resolvedAt: r.resolved_at ? new Date(r.resolved_at) : null,
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -708,16 +908,18 @@ export async function runFullMigration() {
             _id: r.id,
             customerId: r.customer_id,
             walletId: r.wallet_id || '',
+            originalTxRef: r.original_tx_ref || '',
             amount: Number(r.amount),
-            currency: 'INR',
             reason: r.reason,
-            bankDetails: {},
+            supportingInfo: r.supporting_info || '',
             status: r.status || 'Pending',
             reviewedBy: r.reviewed_by || null,
             reviewedAt: r.reviewed_at ? new Date(r.reviewed_at) : null,
             rejectionReason: r.rejection_reason || null,
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            reviewNotes: r.review_notes || null,
+            providerRef: r.provider_ref || null,
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -741,16 +943,17 @@ export async function runFullMigration() {
             customerId: r.customer_id,
             walletId: r.wallet_id || '',
             amount: Number(r.amount),
-            currency: 'INR',
-            paymentMethod: r.payment_method || 'Razorpay',
+            paymentMethod: r.payment_method || 'Razorpay Secure (UPI/Card)',
             referenceUtr: r.reference_utr,
             evidenceUrl: r.payment_evidence_url || '',
+            proofUrl: r.payment_evidence_url || '',
+            notes: r.notes || '',
             status: r.status || 'Pending',
             processedBy: r.processed_by || null,
             processedAt: r.processed_at ? new Date(r.processed_at) : null,
             rejectionReason: r.rejection_reason || null,
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -772,6 +975,7 @@ export async function runFullMigration() {
           $set: {
             _id: r.id,
             originalId: r.original_id || r.id,
+            originalTxId: r.original_id || r.id,
             customerId: r.customer_id,
             customerName: r.customer_name || '',
             companyName: r.company_name || '',
@@ -788,8 +992,8 @@ export async function runFullMigration() {
             failureReason: r.failure_reason || '',
             originalCreatedAt: r.original_created_at ? new Date(r.original_created_at) : null,
             deletedAt: r.deleted_at ? new Date(r.deleted_at) : new Date(),
-            deletedBy: r.deleted_by || 'Sales Admin'
-          }
+            deletedBy: r.deleted_by || 'Sales Admin',
+          },
         },
         { upsert: true }
       );
@@ -817,10 +1021,10 @@ export async function runFullMigration() {
             targetType: r.target_type,
             targetId: r.target_id,
             reason: r.reason || '',
-            details: typeof r.details === 'string' ? JSON.parse(r.details || '{}') : (r.details || {}),
+            details: parseJsonSafe(r.details, {}),
             ipAddress: r.ip_address || '',
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -846,10 +1050,10 @@ export async function runFullMigration() {
             entityId: r.entity_id,
             action: r.action,
             actor: r.actor,
-            details: typeof r.details === 'string' ? JSON.parse(r.details || '{}') : (r.details || {}),
+            details: parseJsonSafe(r.details, {}),
             ipAddress: r.ip_address || '',
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -872,13 +1076,13 @@ export async function runFullMigration() {
             _id: r.id,
             countryCode: r.country_code,
             countryName: r.country_name,
-            oldPricing: typeof r.old_pricing === 'string' ? JSON.parse(r.old_pricing || '{}') : (r.old_pricing || {}),
-            newPricing: typeof r.new_pricing === 'string' ? JSON.parse(r.new_pricing || '{}') : (r.new_pricing || {}),
+            oldPricing: parseJsonSafe(r.old_pricing, {}),
+            newPricing: parseJsonSafe(r.new_pricing, {}),
             changedBy: r.changed_by || 'Super Admin',
             changeReason: r.change_reason || '',
             effectiveDate: r.effective_date ? new Date(r.effective_date) : new Date(),
-            createdAt: r.created_at ? new Date(r.created_at) : new Date()
-          }
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+          },
         },
         { upsert: true }
       );
@@ -888,16 +1092,58 @@ export async function runFullMigration() {
     console.log(`  ✓ Migrated ${cpAuditCount}/${cpAuditRows.rowCount} country pricing audit logs.`);
 
     // -------------------------------------------------------------------------
+    // ENTITY 21: Pending Verifications Queue (Sales Desk 02)
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: pending_verifications...');
+    const pvRows = await query('SELECT * FROM pending_verifications ORDER BY submitted_at ASC');
+    let pvCount = 0;
+    for (const r of pvRows.rows) {
+      await PendingVerification.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            customerId: r.customer_id,
+            companyName: r.company_name || '',
+            contactPerson: r.contact_person || '',
+            phone: r.phone || '',
+            packageTier: r.package_tier || 'Self-Registered (Wallet Top-Up)',
+            amount: Number(r.amount || 0),
+            dailyRate: Number(r.daily_rate || 300),
+            utrNumber: r.utr_number || 'Awaiting Payment',
+            paymentStatus: r.payment_status || 'pending',
+            profileStatus: r.profile_status || 'complete',
+            queueType: r.queue_type || 'Payment Pending',
+            submittedAt: r.submitted_at ? new Date(r.submitted_at) : new Date(),
+            verifiedAt: r.verified_at ? new Date(r.verified_at) : null,
+          },
+        },
+        { upsert: true }
+      );
+      pvCount++;
+    }
+    report.entities.pending_verifications = { pgCount: pvRows.rowCount, mongoCount: pvCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${pvCount}/${pvRows.rowCount} pending verifications.`);
+
+    // -------------------------------------------------------------------------
     // FINANCIAL RECONCILIATION AUDIT
     // -------------------------------------------------------------------------
     console.log('\n💳 Performing Financial Balance & Ledger Reconciliation...');
-    const pgWalletSum = await query('SELECT COALESCE(SUM(available_balance), 0) AS total_balance, COALESCE(SUM(total_lifetime_paid), 0) AS total_paid FROM wallets');
+    const pgWalletSum = await query(
+      'SELECT COALESCE(SUM(available_balance), 0) AS total_balance, COALESCE(SUM(total_lifetime_paid), 0) AS total_paid FROM wallets'
+    );
     const mongoWalletAgg = await Wallet.aggregate([
-      { $group: { _id: null, totalBalance: { $sum: '$availableBalance' }, totalPaid: { $sum: '$totalLifetimePaid' } } }
+      {
+        $group: {
+          _id: null,
+          totalBalance: { $sum: '$availableBalance' },
+          totalPaid: { $sum: '$totalLifetimePaid' },
+        },
+      },
     ]);
 
-    const pgBal = Number(pgWalletSum.rows[0].total_balance);
-    const pgPaid = Number(pgWalletSum.rows[0].total_paid);
+    const pgBal = Number(pgWalletSum.rows[0]?.total_balance || 0);
+    const pgPaid = Number(pgWalletSum.rows[0]?.total_paid || 0);
     const mBal = mongoWalletAgg[0]?.totalBalance || 0;
     const mPaid = mongoWalletAgg[0]?.totalPaid || 0;
 
@@ -911,7 +1157,7 @@ export async function runFullMigration() {
       pgLifetimePaidSum: pgPaid,
       mongoLifetimePaidSum: mPaid,
       lifetimePaidMatch: paidMatch,
-      reconciliationStatus: (balanceMatch && paidMatch) ? 'PERFECT_MATCH' : 'DISCREPANCY'
+      reconciliationStatus: balanceMatch && paidMatch ? 'PERFECT_MATCH' : 'DISCREPANCY',
     };
 
     console.log(`  • PG Wallet Total Balance:    ₹${pgBal.toFixed(2)}`);
@@ -932,6 +1178,17 @@ export async function runFullMigration() {
     fs.writeFileSync(REPORT_FILE, JSON.stringify(report, null, 2), 'utf8');
     console.error('❌ Migration failed:', err);
     throw err;
+  } finally {
+    try {
+      await pgPool.end();
+    } catch {
+      // ignore
+    }
+    try {
+      await mongoose.disconnect();
+    } catch {
+      // ignore
+    }
   }
 }
 

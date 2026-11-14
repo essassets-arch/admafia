@@ -1,7 +1,7 @@
 /**
  * AdMafia Super Admin Control Center - Authoritative Express Router
  * Module Path: /api/superadmin/*
- * Provides verified PostgreSQL endpoints for:
+ * Provides verified MongoDB (Mongoose) endpoints for:
  * 1. Super Admin Dashboard (live metrics, wallet liabilities, audit actions)
  * 2. Check Queries (ticket management, replies, internal notes, assignments)
  * 3. Manage Finance (account-wise balance, global ledger, CSV reports)
@@ -13,9 +13,210 @@
  */
 
 import express from 'express';
-import { query, withTransaction } from '../db.js';
+import {
+  Customer,
+  SystemUser,
+  Wallet,
+  WalletTransaction,
+  PaymentRecord,
+  RefundRequest,
+  TopupRequest,
+  SupportQuery,
+  MarketingCampaign,
+  Lead,
+  SuperAdminAuditLog,
+} from '../models/index.js';
+import { withMongoTransaction, genId } from '../repositories/tx.js';
+import {
+  HttpError,
+  ciContains,
+  ciExact,
+  ciAny,
+  round2,
+  num,
+  PAID_RECORD_STATUS,
+  parsePaging,
+  buildPagination,
+  isDuplicateKey,
+  withCompensation,
+  creditWalletLedger,
+  debitWalletForRefund,
+} from '../repositories/superadminRepo.js';
 
 export const superadminRouter = express.Router();
+
+// -----------------------------------------------------------------------------
+// Shared helpers (row mappers keep the legacy snake_case response shapes)
+// -----------------------------------------------------------------------------
+const FINAL_REFUND_RE = /^(completed|approved|rejected)$/i;
+const FINAL_TOPUP_RE = /^(approved|rejected)$/i;
+const SUPER_ADMIN_ROLE_RE = /^super[\s_-]?admin$/i;
+
+function sendError(res, err) {
+  if (err instanceof HttpError) {
+    return res.status(err.status).json({ ok: false, error: err.message });
+  }
+  return res.status(500).json({ ok: false, error: err.message });
+}
+
+/** Run an aggregation + $facet to get { total, rows } for a paginated list. */
+async function runPaged(Model, stages, sort, offset, limit) {
+  const [out] = await Model.aggregate([
+    ...stages,
+    {
+      $facet: {
+        total: [{ $count: 'n' }],
+        rows: [{ $sort: sort }, { $skip: offset }, { $limit: limit }],
+      },
+    },
+  ]).allowDiskUse(true);
+  return { total: out?.total?.[0]?.n || 0, rows: out?.rows || [] };
+}
+
+const lookupCustomer = (as = 'c') => [
+  { $lookup: { from: 'customers', localField: 'customerId', foreignField: '_id', as } },
+  { $unwind: `$${as}` }, // inner join semantics
+];
+
+const lookupWallet = (as = 'w') => [
+  { $lookup: { from: 'wallets', localField: 'customerId', foreignField: 'customerId', as } },
+  { $unwind: { path: `$${as}`, preserveNullAndEmptyArrays: true } },
+];
+
+function mapAudit(l) {
+  let details = l.details;
+  if (typeof details !== 'string') details = JSON.stringify(details ?? {});
+  return {
+    id: l._id,
+    actor_id: l.actorId ?? l.adminId ?? null,
+    actor_name: l.actorName ?? null,
+    actor_role: l.actorRole ?? 'Super Admin',
+    action_type: l.actionType ?? l.action ?? null,
+    target_type: l.targetType ?? l.targetEntity ?? null,
+    target_id: l.targetId ?? null,
+    reason: l.reason || null,
+    details,
+    ip_address: l.ipAddress || '',
+    created_at: l.createdAt ?? l.timestamp ?? null,
+  };
+}
+
+function mapWalletRow(w) {
+  if (!w) return null;
+  return {
+    id: w._id,
+    customer_id: w.customerId,
+    available_balance: num(w.availableBalance),
+    currency: w.currency || 'INR',
+    daily_ad_spend: num(w.dailyAdSpend ?? 300),
+    total_lifetime_paid: num(w.totalLifetimePaid),
+    total_ad_spent: num(w.totalAdSpent),
+    ad_campaign_active: Boolean(w.adCampaignActive),
+    active_days: Array.isArray(w.activeDays) ? w.activeDays.join(',') : w.activeDays || null,
+    schedule_preset: w.schedulePreset || 'custom',
+    last_deducted_at: w.lastDeductedAt ?? null,
+    booked_dates: Array.isArray(w.bookedDates) ? w.bookedDates.join(',') : w.bookedDates || null,
+    created_at: w.createdAt ?? null,
+    updated_at: w.updatedAt ?? null,
+  };
+}
+
+function mapTxRow(t, c) {
+  return {
+    id: t._id,
+    customer_id: t.customerId,
+    wallet_id: t.walletId,
+    company_name: c?.companyName,
+    phone: c?.phone,
+    email: c?.email,
+    tx_type: t.txType,
+    amount: num(t.amount),
+    balance_after: num(t.balanceAfter),
+    reference_utr: t.referenceUtr,
+    description: t.description,
+    payment_method: t.paymentMethod,
+    status: t.status,
+    currency: t.currency || 'INR',
+    created_at: t.createdAt,
+  };
+}
+
+function mapQueryRow(sq, c) {
+  return {
+    id: sq._id,
+    customer_id: sq.customerId ?? null,
+    company_name: sq.companyName || c?.companyName || '',
+    contact_name: sq.contactName || c?.contactPerson || '',
+    contact_email: sq.contactEmail || c?.email || '',
+    contact_phone: sq.contactPhone || c?.phone || '',
+    category: sq.category,
+    subject: sq.subject,
+    priority: sq.priority,
+    assigned_admin: sq.assignedAgent || '',
+    internal_notes: sq.internalNotes || '',
+    last_replied_at: sq.lastRepliedAt ?? null,
+    last_replied_by: sq.lastRepliedBy || '',
+    sla_breached: Boolean(sq.slaBreached),
+    hours_open: num(sq.hoursOpen),
+    status: sq.status,
+    created_at: sq.createdAt,
+    resolved_at: sq.resolvedAt ?? null,
+  };
+}
+
+function mapMessageRow(m, queryId) {
+  return {
+    id: m.messageId || String(m._id),
+    query_id: queryId,
+    sender_type: m.senderType || (m.senderRole === 'agent' ? 'admin' : m.senderRole || 'customer'),
+    sender_name: m.senderName || m.sender,
+    message: m.message,
+    is_internal_note: Boolean(m.isInternalNote),
+    created_at: m.createdAt,
+  };
+}
+
+function mapRefundBase(rf) {
+  return {
+    original_tx_ref: rf.originalTxRef || null,
+    amount: num(rf.amount),
+    reason: rf.reason,
+    status: rf.status,
+    rejection_reason: rf.rejectionReason ?? null,
+    review_notes: rf.reviewNotes ?? null,
+    reviewed_by: rf.reviewedBy ?? null,
+    reviewed_at: rf.reviewedAt ?? null,
+    provider_ref: rf.providerRef ?? rf.payoutUtr ?? null,
+  };
+}
+
+function mapTopupRow(tp, c, w) {
+  return {
+    id: tp._id,
+    customer_id: tp.customerId,
+    company_name: c?.companyName,
+    contact_person: c?.contactPerson,
+    phone: c?.phone,
+    email: c?.email,
+    available_balance: w ? num(w.availableBalance) : null,
+    amount: num(tp.amount),
+    payment_method: tp.paymentMethod || 'Razorpay Secure (UPI/Card)',
+    reference_utr: tp.referenceUtr,
+    payment_evidence_url: tp.evidenceUrl || tp.proofUrl || null,
+    notes: tp.notes || null,
+    status: tp.status,
+    rejection_reason: tp.rejectionReason ?? null,
+    processed_by: tp.processedBy ?? tp.approvedBy ?? null,
+    processed_at: tp.processedAt ?? tp.approvedAt ?? null,
+    created_at: tp.createdAt,
+    updated_at: tp.updatedAt ?? tp.createdAt,
+  };
+}
+
+async function sumRefunds(match) {
+  const r = await RefundRequest.aggregate([{ $match: match }, { $group: { _id: null, total: { $sum: '$amount' }, n: { $sum: 1 } } }]);
+  return { total: round2(r[0]?.total || 0), count: r[0]?.n || 0 };
+}
 
 // Helper to log administrative audit events
 export async function logSuperAdminAudit({
@@ -30,24 +231,33 @@ export async function logSuperAdminAudit({
   ipAddress = '',
 }) {
   try {
-    const auditId = `audit_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    await query(
-      `INSERT INTO superadmin_audit_logs (
-        id, actor_id, actor_name, actor_role, action_type, target_type, target_id, reason, details, ip_address, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
-      [
-        auditId,
-        actorId,
-        actorName,
-        actorRole,
-        actionType,
-        targetType,
-        targetId,
-        reason || null,
-        typeof details === 'string' ? details : JSON.stringify(details),
-        ipAddress || '127.0.0.1',
-      ]
-    );
+    let detailsObj = details;
+    if (typeof details === 'string') {
+      try {
+        detailsObj = JSON.parse(details);
+      } catch {
+        detailsObj = { raw: details };
+      }
+    }
+    const now = new Date();
+    await SuperAdminAuditLog.create({
+      _id: genId('audit'),
+      actorId,
+      actorName,
+      actorRole,
+      actionType,
+      targetType,
+      targetId,
+      reason: reason || '',
+      details: detailsObj ?? {},
+      ipAddress: ipAddress || '127.0.0.1',
+      // fields of the Mongo-native audit schema, kept in sync
+      action: actionType,
+      adminId: actorId,
+      targetEntity: targetType,
+      timestamp: now,
+      createdAt: now,
+    });
   } catch (err) {
     console.error('[logSuperAdminAudit] Failed to record audit log:', err.message);
   }
@@ -59,54 +269,67 @@ export async function logSuperAdminAudit({
 superadminRouter.get('/dashboard/summary', async (req, res) => {
   try {
     const [
-      bizCountRes,
-      userCountRes,
-      activeBizRes,
-      blockedBizRes,
-      queriesRes,
-      refundsRes,
-      topupsRes,
-      liabilityRes,
-      recentTxRes,
-      recentAuditRes,
+      totalBusinesses,
+      totalUsers,
+      activeAccounts,
+      blockedAccounts,
+      pendingQueries,
+      pendingRefunds,
+      pendingTopups,
+      liabilityAgg,
+      recentTx,
+      recentAudit,
     ] = await Promise.all([
-      query(`SELECT COUNT(*)::INT AS count FROM customers`),
-      query(`SELECT COUNT(*)::INT AS count FROM system_users`),
-      query(`SELECT COUNT(*)::INT AS count FROM customers WHERE status = 'active'`),
-      query(`SELECT COUNT(*)::INT AS count FROM customers WHERE status = 'suspended'`),
-      query(`SELECT COUNT(*)::INT AS count FROM support_queries WHERE status != 'resolved'`),
-      query(`SELECT COUNT(*)::INT AS count FROM refund_requests WHERE status = 'Pending'`),
-      query(`SELECT COUNT(*)::INT AS count FROM topup_requests WHERE status = 'Pending'`),
-      query(`SELECT COALESCE(SUM(available_balance), 0)::NUMERIC(12,2) AS total FROM wallets`),
-      query(
-        `SELECT wt.id, wt.customer_id, c.company_name, wt.tx_type, wt.amount, wt.reference_utr, wt.status, wt.created_at
-         FROM wallet_transactions wt
-         JOIN customers c ON c.id = wt.customer_id
-         ORDER BY wt.created_at DESC
-         LIMIT 8`
-      ),
-      query(
-        `SELECT id, actor_name, action_type, target_type, target_id, reason, created_at
-         FROM superadmin_audit_logs
-         ORDER BY created_at DESC
-         LIMIT 8`
-      ),
+      Customer.countDocuments({}),
+      SystemUser.countDocuments({}),
+      Customer.countDocuments({ status: 'active' }),
+      Customer.countDocuments({ status: 'suspended' }),
+      SupportQuery.countDocuments({ status: { $not: /^resolved$/i } }),
+      RefundRequest.countDocuments({ status: { $in: ciAny('Pending') } }),
+      TopupRequest.countDocuments({ status: { $in: ciAny('Pending') } }),
+      Wallet.aggregate([{ $group: { _id: null, total: { $sum: '$availableBalance' } } }]),
+      WalletTransaction.aggregate([
+        { $sort: { createdAt: -1 } },
+        ...lookupCustomer('c'),
+        { $limit: 8 },
+      ]),
+      SuperAdminAuditLog.find({}).sort({ createdAt: -1, timestamp: -1 }).limit(8).lean(),
     ]);
 
     res.json({
       ok: true,
       summary: {
-        totalBusinesses: bizCountRes.rows[0]?.count || 0,
-        totalUsers: userCountRes.rows[0]?.count || 0,
-        activeAccounts: activeBizRes.rows[0]?.count || 0,
-        blockedAccounts: blockedBizRes.rows[0]?.count || 0,
-        pendingQueries: queriesRes.rows[0]?.count || 0,
-        pendingRefunds: refundsRes.rows[0]?.count || 0,
-        pendingTopups: topupsRes.rows[0]?.count || 0,
-        totalWalletLiability: Number(liabilityRes.rows[0]?.total || 0),
+        totalBusinesses: totalBusinesses || 0,
+        totalUsers: totalUsers || 0,
+        activeAccounts: activeAccounts || 0,
+        blockedAccounts: blockedAccounts || 0,
+        pendingQueries: pendingQueries || 0,
+        pendingRefunds: pendingRefunds || 0,
+        pendingTopups: pendingTopups || 0,
+        totalWalletLiability: round2(liabilityAgg[0]?.total || 0),
       },
-      recentTransactions: recentTxRes.rows,
-      recentAuditActions: recentAuditRes.rows,
+      recentTransactions: recentTx.map((t) => ({
+        id: t._id,
+        customer_id: t.customerId,
+        company_name: t.c?.companyName,
+        tx_type: t.txType,
+        amount: num(t.amount),
+        reference_utr: t.referenceUtr,
+        status: t.status,
+        created_at: t.createdAt,
+      })),
+      recentAuditActions: recentAudit.map((l) => {
+        const a = mapAudit(l);
+        return {
+          id: a.id,
+          actor_name: a.actor_name,
+          action_type: a.action_type,
+          target_type: a.target_type,
+          target_id: a.target_id,
+          reason: a.reason,
+          created_at: a.created_at,
+        };
+      }),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/dashboard/summary]', err);
@@ -119,66 +342,56 @@ superadminRouter.get('/dashboard/summary', async (req, res) => {
 // =============================================================================
 superadminRouter.get('/queries', async (req, res) => {
   try {
-    const { status, priority, search, page = 1, limit = 20 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { status, priority, search } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query, 20);
 
-    const conditions = [];
-    const params = [];
+    const stages = [
+      ...[
+        { $lookup: { from: 'customers', localField: 'customerId', foreignField: '_id', as: 'c' } },
+        { $unwind: { path: '$c', preserveNullAndEmptyArrays: true } },
+        {
+          $addFields: {
+            _company: {
+              $cond: [
+                { $gt: [{ $strLenCP: { $ifNull: ['$companyName', ''] } }, 0] },
+                '$companyName',
+                { $ifNull: ['$c.companyName', ''] },
+              ],
+            },
+            _rank: {
+              $switch: {
+                branches: [
+                  { case: { $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'open'] }, then: 1 },
+                  { case: { $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'pending'] }, then: 2 },
+                ],
+                default: 3,
+              },
+            },
+          },
+        },
+      ],
+    ];
 
-    if (status && status !== 'all') {
-      params.push(status);
-      conditions.push(`sq.status = $${params.length}`);
-    }
-
-    if (priority && priority !== 'all') {
-      params.push(priority);
-      conditions.push(`sq.priority = $${params.length}`);
-    }
-
+    const match = {};
+    if (status && status !== 'all') match.status = ciExact(status);
+    if (priority && priority !== 'all') match.priority = ciExact(priority);
     if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      const idx = params.length;
-      conditions.push(
-        `(LOWER(sq.subject) LIKE $${idx} OR LOWER(sq.company_name) LIKE $${idx} OR LOWER(COALESCE(sq.category, '')) LIKE $${idx} OR LOWER(sq.id) LIKE $${idx})`
-      );
+      const rx = ciContains(search);
+      match.$or = [{ subject: rx }, { _company: rx }, { category: rx }, { _id: rx }];
     }
+    if (Object.keys(match).length) stages.push({ $match: match });
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const countRes = await query(
-      `SELECT COUNT(*)::INT AS total FROM support_queries sq ${whereClause}`,
-      params
-    );
-    const totalCount = countRes.rows[0]?.total || 0;
-
-    const listRes = await query(
-      `SELECT
-        sq.id, sq.customer_id, sq.company_name, sq.category, sq.subject, sq.priority,
-        sq.sla_breached, sq.hours_open, sq.status, sq.contact_name, sq.contact_email,
-        sq.contact_phone, sq.assigned_admin, sq.internal_notes, sq.last_replied_at,
-        sq.last_replied_by, sq.created_at, sq.resolved_at,
-        c.contact_person AS customer_contact, c.phone AS customer_phone
-       FROM support_queries sq
-       LEFT JOIN customers c ON c.id = sq.customer_id
-       ${whereClause}
-       ORDER BY
-         CASE WHEN sq.status = 'open' THEN 1 WHEN sq.status = 'pending' THEN 2 ELSE 3 END,
-         sq.created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limitNum, offset]
-    );
+    const { total, rows } = await runPaged(SupportQuery, stages, { _rank: 1, createdAt: -1 }, offset, limitNum);
 
     res.json({
       ok: true,
-      queries: listRes.rows,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(totalCount / limitNum) || 1,
-      },
+      queries: rows.map((sq) => ({
+        ...mapQueryRow(sq, sq.c),
+        company_name: sq._company,
+        customer_contact: sq.c?.contactPerson ?? null,
+        customer_phone: sq.c?.phone ?? null,
+      })),
+      pagination: buildPagination(total, pageNum, limitNum),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/queries]', err);
@@ -190,27 +403,26 @@ superadminRouter.get('/queries', async (req, res) => {
 superadminRouter.get('/queries/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const queryRes = await query(
-      `SELECT sq.*, c.contact_person AS customer_contact, c.phone AS customer_phone, c.email AS customer_email
-       FROM support_queries sq
-       LEFT JOIN customers c ON c.id = sq.customer_id
-       WHERE sq.id = $1`,
-      [id]
-    );
+    const sq = await SupportQuery.findById(id).lean();
 
-    if (queryRes.rowCount === 0) {
+    if (!sq) {
       return res.status(404).json({ ok: false, error: 'Support query not found.' });
     }
 
-    const messagesRes = await query(
-      `SELECT * FROM support_query_messages WHERE query_id = $1 ORDER BY created_at ASC`,
-      [id]
-    );
+    const c = sq.customerId ? await Customer.findById(sq.customerId).lean() : null;
+    const messages = (sq.messages || [])
+      .map((m) => mapMessageRow(m, id))
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
     res.json({
       ok: true,
-      query: queryRes.rows[0],
-      messages: messagesRes.rows,
+      query: {
+        ...mapQueryRow(sq, c),
+        customer_contact: c?.contactPerson ?? null,
+        customer_phone: c?.phone ?? null,
+        customer_email: c?.email ?? null,
+      },
+      messages,
     });
   } catch (err) {
     console.error('[GET /api/superadmin/queries/:id]', err);
@@ -228,29 +440,41 @@ superadminRouter.post('/queries/:id/reply', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Reply message cannot be empty.' });
     }
 
-    const checkRes = await query(`SELECT * FROM support_queries WHERE id = $1`, [id]);
-    if (checkRes.rowCount === 0) {
+    const exists = await SupportQuery.exists({ _id: id });
+    if (!exists) {
       return res.status(404).json({ ok: false, error: 'Query not found.' });
     }
 
-    const msgId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const msgId = genId('msg');
     const senderType = isInternalNote ? 'internal_note' : 'admin';
 
-    await withTransaction(async (tx) => {
-      await tx(
-        `INSERT INTO support_query_messages (id, query_id, sender_type, sender_name, message, is_internal_note, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-        [msgId, id, senderType, adminName, message.trim(), Boolean(isInternalNote)]
-      );
+    await withMongoTransaction(async (session) => {
+      const now = new Date();
+      const update = {
+        $push: {
+          messages: {
+            messageId: msgId,
+            sender: adminName,
+            senderName: adminName,
+            senderRole: 'agent',
+            senderType,
+            message: message.trim(),
+            isInternalNote: Boolean(isInternalNote),
+            attachments: [],
+            createdAt: now,
+          },
+        },
+      };
 
       // If not internal note, update query last_replied_at
       if (!isInternalNote) {
-        await tx(
-          `UPDATE support_queries
-           SET last_replied_at = NOW(), last_replied_by = $1, status = CASE WHEN status = 'open' THEN 'pending' ELSE status END
-           WHERE id = $2`,
-          [adminName, id]
-        );
+        update.$set = { lastRepliedAt: now, lastRepliedBy: adminName, updatedAt: now };
+      }
+      await SupportQuery.updateOne({ _id: id }, update, { session });
+
+      if (!isInternalNote) {
+        // status = CASE WHEN status = 'open' THEN 'pending' ELSE status END
+        await SupportQuery.updateOne({ _id: id, status: ciExact('open') }, { $set: { status: 'pending' } }, { session });
       }
     });
 
@@ -276,24 +500,21 @@ superadminRouter.patch('/queries/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status, assignedAdmin, internalNotes, adminName = 'Super Admin', adminId = 'superadmin' } = req.body || {};
 
-    const checkRes = await query(`SELECT * FROM support_queries WHERE id = $1`, [id]);
-    if (checkRes.rowCount === 0) {
+    const current = await SupportQuery.findById(id).lean();
+    if (!current) {
       return res.status(404).json({ ok: false, error: 'Query not found.' });
     }
 
-    const current = checkRes.rows[0];
     const newStatus = status || current.status;
     const isResolved = newStatus === 'resolved';
 
-    await query(
-      `UPDATE support_queries
-       SET status = $1,
-           assigned_admin = COALESCE($2, assigned_admin),
-           internal_notes = COALESCE($3, internal_notes),
-           resolved_at = CASE WHEN $4 = TRUE THEN NOW() ELSE resolved_at END
-       WHERE id = $5`,
-      [newStatus, assignedAdmin || null, internalNotes || null, isResolved, id]
-    );
+    const now = new Date();
+    const $set = { status: newStatus, updatedAt: now };
+    if (assignedAdmin) $set.assignedAgent = assignedAdmin; // COALESCE($2, assigned_admin)
+    if (internalNotes) $set.internalNotes = internalNotes; // COALESCE($3, internal_notes)
+    if (isResolved) $set.resolvedAt = now;
+
+    await SupportQuery.updateOne({ _id: id }, { $set });
 
     await logSuperAdminAudit({
       actorId: adminId,
@@ -331,39 +552,50 @@ superadminRouter.post('/queries', async (req, res) => {
 
     let customer = null;
     if (customerId) {
-      const cRes = await query(`SELECT * FROM customers WHERE id = $1`, [customerId]);
-      customer = cRes.rows[0] || null;
+      customer = await Customer.findById(customerId).lean();
     }
 
-    const resolvedCompanyName = companyName || customer?.company_name || 'Direct Business Enquiry';
-    const queryId = `query_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const resolvedCompanyName = companyName || customer?.companyName || 'Direct Business Enquiry';
+    const queryId = genId('query');
 
-    await withTransaction(async (tx) => {
-      await tx(
-        `INSERT INTO support_queries (
-          id, customer_id, company_name, category, subject, priority, status, contact_name, contact_email, contact_phone, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'open', $7, $8, $9, NOW())`,
-        [
-          queryId,
-          customerId || null,
-          resolvedCompanyName,
-          category,
-          subject.trim(),
-          priority,
-          customer?.contact_person || 'Administrator',
-          customer?.email || '',
-          customer?.phone || '',
-        ]
-      );
+    await withMongoTransaction(async (session) => {
+      const now = new Date();
+      const messages = [];
 
       if (message && message.trim()) {
-        const msgId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        await tx(
-          `INSERT INTO support_query_messages (id, query_id, sender_type, sender_name, message, is_internal_note, created_at)
-           VALUES ($1, $2, 'admin', $3, $4, FALSE, NOW())`,
-          [msgId, queryId, adminName, message.trim()]
-        );
+        messages.push({
+          messageId: genId('msg'),
+          sender: adminName,
+          senderName: adminName,
+          senderRole: 'agent',
+          senderType: 'admin',
+          message: message.trim(),
+          isInternalNote: false,
+          attachments: [],
+          createdAt: now,
+        });
       }
+
+      await SupportQuery.create(
+        [
+          {
+            _id: queryId,
+            customerId: customerId || null,
+            ticketNumber: `TICK-${queryId}`,
+            companyName: resolvedCompanyName,
+            category,
+            subject: subject.trim(),
+            priority,
+            status: 'open',
+            contactName: customer?.contactPerson || 'Administrator',
+            contactEmail: customer?.email || '',
+            contactPhone: customer?.phone || '',
+            messages,
+            createdAt: now,
+          },
+        ],
+        { session }
+      );
     });
 
     await logSuperAdminAudit({
@@ -387,38 +619,50 @@ superadminRouter.post('/queries', async (req, res) => {
 // =============================================================================
 superadminRouter.get('/finance/summary', async (req, res) => {
   try {
-    const [walletsRes, txRes, pendingRefundRes, pendingTopupRes] = await Promise.all([
-      query(
-        `SELECT
-          COALESCE(SUM(available_balance), 0)::NUMERIC(12,2) AS total_balance,
-          COALESCE(SUM(total_lifetime_paid), 0)::NUMERIC(12,2) AS total_lifetime_paid,
-          COALESCE(SUM(total_ad_spent), 0)::NUMERIC(12,2) AS total_ad_spent,
-          COUNT(*)::INT AS total_wallets
-         FROM wallets`
-      ),
-      query(
-        `SELECT
-          COUNT(*)::INT AS total_tx_count,
-          COALESCE(SUM(CASE WHEN tx_type = 'Credit' THEN amount ELSE 0 END), 0)::NUMERIC(12,2) AS total_credited,
-          COALESCE(SUM(CASE WHEN tx_type = 'Debit' THEN amount ELSE 0 END), 0)::NUMERIC(12,2) AS total_debited
-         FROM wallet_transactions`
-      ),
-      query(`SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) AS total FROM refund_requests WHERE status = 'Pending'`),
-      query(`SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) AS total FROM topup_requests WHERE status = 'Pending'`),
+    const [walletsAgg, txAgg, pendingRefund, pendingTopupAgg] = await Promise.all([
+      Wallet.aggregate([
+        {
+          $group: {
+            _id: null,
+            total_balance: { $sum: '$availableBalance' },
+            total_lifetime_paid: { $sum: '$totalLifetimePaid' },
+            total_ad_spent: { $sum: '$totalAdSpent' },
+            total_wallets: { $sum: 1 },
+          },
+        },
+      ]),
+      WalletTransaction.aggregate([
+        {
+          $group: {
+            _id: null,
+            total_tx_count: { $sum: 1 },
+            total_credited: { $sum: { $cond: [{ $eq: ['$txType', 'Credit'] }, '$amount', 0] } },
+            total_debited: { $sum: { $cond: [{ $eq: ['$txType', 'Debit'] }, '$amount', 0] } },
+          },
+        },
+      ]),
+      sumRefunds({ status: { $in: ciAny('Pending') } }),
+      TopupRequest.aggregate([
+        { $match: { status: { $in: ciAny('Pending') } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
     ]);
+
+    const w = walletsAgg[0] || {};
+    const t = txAgg[0] || {};
 
     res.json({
       ok: true,
       summary: {
-        totalWalletLiability: Number(walletsRes.rows[0]?.total_balance || 0),
-        totalLifetimePaid: Number(walletsRes.rows[0]?.total_lifetime_paid || 0),
-        totalCampaignSpent: Number(walletsRes.rows[0]?.total_ad_spent || 0),
-        totalWallets: walletsRes.rows[0]?.total_wallets || 0,
-        totalCredited: Number(txRes.rows[0]?.total_credited || 0),
-        totalDebited: Number(txRes.rows[0]?.total_debited || 0),
-        totalTxCount: txRes.rows[0]?.total_tx_count || 0,
-        pendingRefundsAmount: Number(pendingRefundRes.rows[0]?.total || 0),
-        pendingTopupsAmount: Number(pendingTopupRes.rows[0]?.total || 0),
+        totalWalletLiability: round2(w.total_balance),
+        totalLifetimePaid: round2(w.total_lifetime_paid),
+        totalCampaignSpent: round2(w.total_ad_spent),
+        totalWallets: w.total_wallets || 0,
+        totalCredited: round2(t.total_credited),
+        totalDebited: round2(t.total_debited),
+        totalTxCount: t.total_tx_count || 0,
+        pendingRefundsAmount: pendingRefund.total,
+        pendingTopupsAmount: round2(pendingTopupAgg[0]?.total),
       },
     });
   } catch (err) {
@@ -430,52 +674,58 @@ superadminRouter.get('/finance/summary', async (req, res) => {
 // Account-wise financial overview
 superadminRouter.get('/finance/accounts', async (req, res) => {
   try {
-    const { search, page = 1, limit = 25 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { search } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query, 25);
 
-    const params = [];
-    let whereClause = '';
-
+    const match = {};
     if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      whereClause = `WHERE LOWER(c.company_name) LIKE $1 OR LOWER(c.contact_person) LIKE $1 OR c.phone LIKE $1 OR LOWER(c.id) LIKE $1`;
+      const rx = ciContains(search);
+      match.$or = [{ companyName: rx }, { contactPerson: rx }, { phone: rx }, { _id: rx }];
     }
 
-    const countRes = await query(
-      `SELECT COUNT(*)::INT AS total FROM customers c ${whereClause}`,
-      params
-    );
-    const totalCount = countRes.rows[0]?.total || 0;
+    const stages = [
+      { $match: match },
+      { $lookup: { from: 'wallets', localField: '_id', foreignField: 'customerId', as: 'w' } },
+      { $unwind: { path: '$w', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'wallet_transactions',
+          localField: '_id',
+          foreignField: 'customerId',
+          pipeline: [{ $group: { _id: null, last: { $max: '$createdAt' } } }],
+          as: 'lt',
+        },
+      },
+    ];
 
-    const listRes = await query(
-      `SELECT
-        c.id, c.company_name, c.contact_person, c.phone, c.email, c.city, c.status,
-        w.id AS wallet_id,
-        COALESCE(w.available_balance, 0)::NUMERIC(12,2) AS available_balance,
-        COALESCE(w.total_lifetime_paid, 0)::NUMERIC(12,2) AS total_lifetime_paid,
-        COALESCE(w.total_ad_spent, 0)::NUMERIC(12,2) AS total_ad_spent,
-        COALESCE(w.daily_ad_spend, 300.00)::NUMERIC(10,2) AS daily_ad_spend,
-        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-        (SELECT MAX(created_at) FROM wallet_transactions WHERE customer_id = c.id) AS last_transaction_at
-       FROM customers c
-       LEFT JOIN wallets w ON w.customer_id = c.id
-       ${whereClause}
-       ORDER BY w.available_balance DESC NULLS LAST, c.registered_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limitNum, offset]
+    // available_balance DESC NULLS LAST, registered_at DESC
+    const { total, rows } = await runPaged(
+      Customer,
+      stages,
+      { 'w.availableBalance': -1, registeredAt: -1 },
+      offset,
+      limitNum
     );
 
     res.json({
       ok: true,
-      accounts: listRes.rows,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(totalCount / limitNum) || 1,
-      },
+      accounts: rows.map((c) => ({
+        id: c._id,
+        company_name: c.companyName,
+        contact_person: c.contactPerson,
+        phone: c.phone,
+        email: c.email,
+        city: c.city,
+        status: c.status,
+        wallet_id: c.w?._id ?? null,
+        available_balance: num(c.w?.availableBalance),
+        total_lifetime_paid: num(c.w?.totalLifetimePaid),
+        total_ad_spent: num(c.w?.totalAdSpent),
+        daily_ad_spend: num(c.w?.dailyAdSpend ?? 300),
+        ad_campaign_active: Boolean(c.w?.adCampaignActive),
+        last_transaction_at: c.lt?.[0]?.last ?? null,
+      })),
+      pagination: buildPagination(total, pageNum, limitNum),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/finance/accounts]', err);
@@ -483,73 +733,47 @@ superadminRouter.get('/finance/accounts', async (req, res) => {
   }
 });
 
+function parseDateParam(v, name) {
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`invalid input syntax for type timestamp with time zone: "${v}" (${name})`);
+  }
+  return d;
+}
+
 // Global transaction ledger
 superadminRouter.get('/finance/transactions', async (req, res) => {
   try {
-    const { txType, search, startDate, endDate, page = 1, limit = 25 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { txType, search, startDate, endDate } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query, 25);
 
-    const conditions = [];
-    const params = [];
-
-    if (txType && txType !== 'all') {
-      params.push(txType);
-      conditions.push(`wt.tx_type = $${params.length}`);
+    const pre = {};
+    if (txType && txType !== 'all') pre.txType = txType;
+    if (startDate || endDate) {
+      pre.createdAt = {};
+      if (startDate) pre.createdAt.$gte = parseDateParam(startDate, 'startDate');
+      if (endDate) pre.createdAt.$lte = parseDateParam(endDate, 'endDate');
     }
 
+    const stages = [{ $match: pre }, ...lookupCustomer('c')];
     if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      const idx = params.length;
-      conditions.push(
-        `(LOWER(c.company_name) LIKE $${idx} OR LOWER(wt.reference_utr) LIKE $${idx} OR LOWER(wt.description) LIKE $${idx} OR LOWER(wt.id) LIKE $${idx})`
-      );
+      const rx = ciContains(search);
+      stages.push({
+        $match: { $or: [{ 'c.companyName': rx }, { referenceUtr: rx }, { description: rx }, { _id: rx }] },
+      });
     }
 
-    if (startDate) {
-      params.push(startDate);
-      conditions.push(`wt.created_at >= $${params.length}::TIMESTAMPTZ`);
-    }
-
-    if (endDate) {
-      params.push(endDate);
-      conditions.push(`wt.created_at <= $${params.length}::TIMESTAMPTZ`);
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const countRes = await query(
-      `SELECT COUNT(*)::INT AS total
-       FROM wallet_transactions wt
-       JOIN customers c ON c.id = wt.customer_id
-       ${whereClause}`,
-      params
-    );
-    const totalCount = countRes.rows[0]?.total || 0;
-
-    const listRes = await query(
-      `SELECT
-        wt.id, wt.customer_id, c.company_name, c.phone, c.email,
-        wt.tx_type, wt.amount, wt.balance_after, wt.reference_utr,
-        wt.description, wt.payment_method, wt.status, wt.created_at
-       FROM wallet_transactions wt
-       JOIN customers c ON c.id = wt.customer_id
-       ${whereClause}
-       ORDER BY wt.created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limitNum, offset]
-    );
+    const { total, rows } = await runPaged(WalletTransaction, stages, { createdAt: -1 }, offset, limitNum);
 
     res.json({
       ok: true,
-      transactions: listRes.rows,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(totalCount / limitNum) || 1,
-      },
+      transactions: rows.map((t) => {
+        const r = mapTxRow(t, t.c);
+        delete r.wallet_id;
+        delete r.currency;
+        return r;
+      }),
+      pagination: buildPagination(total, pageNum, limitNum),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/finance/transactions]', err);
@@ -562,24 +786,34 @@ superadminRouter.get('/finance/accounts/:customerId/ledger', async (req, res) =>
   try {
     const { customerId } = req.params;
 
-    const [custRes, walletRes, txRes] = await Promise.all([
-      query(`SELECT id, company_name, contact_person, phone, email, status FROM customers WHERE id = $1`, [customerId]),
-      query(`SELECT * FROM wallets WHERE customer_id = $1`, [customerId]),
-      query(
-        `SELECT * FROM wallet_transactions WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 100`,
-        [customerId]
-      ),
+    const [cust, wallet, txs] = await Promise.all([
+      Customer.findById(customerId).lean(),
+      Wallet.findOne({ customerId }).lean(),
+      WalletTransaction.find({ customerId }).sort({ createdAt: -1 }).limit(100).lean(),
     ]);
 
-    if (custRes.rowCount === 0) {
+    if (!cust) {
       return res.status(404).json({ ok: false, error: 'Customer account not found.' });
     }
 
     res.json({
       ok: true,
-      customer: custRes.rows[0],
-      wallet: walletRes.rows[0] || null,
-      transactions: txRes.rows,
+      customer: {
+        id: cust._id,
+        company_name: cust.companyName,
+        contact_person: cust.contactPerson,
+        phone: cust.phone,
+        email: cust.email,
+        status: cust.status,
+      },
+      wallet: mapWalletRow(wallet),
+      transactions: txs.map((t) => {
+        const r = mapTxRow(t, null);
+        delete r.company_name;
+        delete r.phone;
+        delete r.email;
+        return r;
+      }),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/finance/accounts/:customerId/ledger]', err);
@@ -590,18 +824,29 @@ superadminRouter.get('/finance/accounts/:customerId/ledger', async (req, res) =>
 // CSV Export for transactions
 superadminRouter.get('/finance/export', async (req, res) => {
   try {
-    const listRes = await query(
-      `SELECT
-        wt.id, c.company_name, wt.customer_id, wt.tx_type, wt.amount, wt.balance_after,
-        wt.reference_utr, wt.payment_method, wt.status, wt.description, wt.created_at
-       FROM wallet_transactions wt
-       JOIN customers c ON c.id = wt.customer_id
-       ORDER BY wt.created_at DESC
-       LIMIT 1000`
-    );
+    const rows = await WalletTransaction.aggregate([
+      { $sort: { createdAt: -1 } },
+      ...lookupCustomer('c'),
+      { $limit: 1000 },
+    ]);
+
+    const money = (n) => num(n).toFixed(2);
 
     let csv = 'Transaction ID,Company Name,Customer ID,Type,Amount (INR),Balance After,Reference UTR,Payment Mode,Status,Description,Date\n';
-    listRes.rows.forEach((r) => {
+    rows.forEach((t) => {
+      const r = {
+        id: t._id,
+        company_name: t.c?.companyName,
+        customer_id: t.customerId,
+        tx_type: t.txType,
+        amount: money(t.amount),
+        balance_after: money(t.balanceAfter),
+        reference_utr: t.referenceUtr,
+        payment_method: t.paymentMethod,
+        status: t.status,
+        description: t.description,
+        created_at: t.createdAt,
+      };
       csv += `"${r.id}","${(r.company_name || '').replace(/"/g, '""')}","${r.customer_id}","${r.tx_type}","${r.amount}","${r.balance_after}","${r.reference_utr || ''}","${r.payment_method}","${r.status}","${(r.description || '').replace(/"/g, '""')}","${r.created_at}"\n`;
     });
 
@@ -618,105 +863,148 @@ superadminRouter.get('/finance/export', async (req, res) => {
 // 4. CHECK REFUNDS (/api/superadmin/refunds/*)
 // =============================================================================
 
+// Pipeline stages that attach wallet + "has paid record" + "has verified credit tx" flags to customers
+function paidCustomerStages({ includeVerifiedCredit }) {
+  const stages = [
+    { $lookup: { from: 'wallets', localField: '_id', foreignField: 'customerId', as: 'wallet' } },
+    { $unwind: { path: '$wallet', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'payment_records',
+        localField: '_id',
+        foreignField: 'customerId',
+        pipeline: [{ $match: { status: { $in: PAID_RECORD_STATUS } } }, { $limit: 1 }, { $project: { _id: 1 } }],
+        as: 'paidPr',
+      },
+    },
+  ];
+  const or = [{ paymentStatus: 'paid' }, { 'wallet.totalLifetimePaid': { $gt: 0 } }, { 'paidPr.0': { $exists: true } }];
+  if (includeVerifiedCredit) {
+    stages.push({
+      $lookup: {
+        from: 'wallet_transactions',
+        localField: '_id',
+        foreignField: 'customerId',
+        pipeline: [{ $match: { txType: 'Credit', status: 'Verified ✓' } }, { $limit: 1 }, { $project: { _id: 1 } }],
+        as: 'verCredit',
+      },
+    });
+    or.push({ 'verCredit.0': { $exists: true } });
+  }
+  stages.push({ $match: { $or: or } });
+  return stages;
+}
+
 // Get all registered customers who completed payment with refund eligibility
 superadminRouter.get('/refunds/paid-customers', async (req, res) => {
   try {
-    const { search, page = 1, limit = 25 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { search } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query, 25);
 
-    const conditions = [];
-    const params = [];
-
-    // Financial Safeguard 1: Genuinely verified paid customer check
-    // Active wallet balance alone does not prove customer paid - must have verified deposits
-    conditions.push(
-      `(c.payment_status = 'paid' OR COALESCE(w.total_lifetime_paid, 0) > 0 OR EXISTS (SELECT 1 FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid') OR EXISTS (SELECT 1 FROM wallet_transactions wt WHERE wt.customer_id = c.id AND wt.tx_type = 'Credit' AND wt.status = 'Verified ✓'))`
-    );
-
+    const searchStage = [];
     if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      const idx = params.length;
-      conditions.push(
-        `(LOWER(c.company_name) LIKE $${idx} OR LOWER(c.contact_person) LIKE $${idx} OR c.phone LIKE $${idx} OR LOWER(COALESCE(c.email, '')) LIKE $${idx} OR LOWER(c.id) LIKE $${idx})`
-      );
+      const rx = ciContains(search);
+      searchStage.push({
+        $match: { $or: [{ companyName: rx }, { contactPerson: rx }, { phone: rx }, { email: rx }, { _id: rx }] },
+      });
     }
 
-    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+    const stages = [
+      ...searchStage,
+      ...paidCustomerStages({ includeVerifiedCredit: true }),
+      { $addFields: { _noWallet: { $cond: [{ $ifNull: ['$wallet', false] }, 0, 1] } } },
+    ];
 
-    const countRes = await query(
-      `SELECT COUNT(*)::INT AS total
-       FROM customers c
-       LEFT JOIN wallets w ON w.customer_id = c.id
-       ${whereClause}`,
-      params
+    const { total, rows } = await runPaged(
+      Customer,
+      stages,
+      { _noWallet: -1, 'wallet.availableBalance': -1, 'wallet.totalLifetimePaid': -1, registeredAt: -1 },
+      offset,
+      limitNum
     );
-    const totalCount = countRes.rows[0]?.total || 0;
 
-    const listRes = await query(
-      `SELECT
-        c.id, c.company_name, c.contact_person, c.phone, c.email, c.city, c.state, c.status, c.payment_status, c.registered_at,
-        COALESCE(w.available_balance, 0)::NUMERIC(12,2) AS available_balance,
-        COALESCE(w.total_lifetime_paid, 0)::NUMERIC(12,2) AS total_lifetime_paid,
-        COALESCE(w.total_ad_spent, 0)::NUMERIC(12,2) AS total_ad_spent,
-        (SELECT COUNT(*)::INT FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid') AS paid_receipts_count,
-        (SELECT MAX(pr.paid_at) FROM payment_records pr WHERE pr.customer_id = c.id) AS last_payment_date,
-        (SELECT pr.utr_reference FROM payment_records pr WHERE pr.customer_id = c.id ORDER BY pr.paid_at DESC LIMIT 1) AS last_utr_ref,
-        (SELECT COUNT(*)::INT FROM refund_requests rf WHERE rf.customer_id = c.id) AS total_refund_requests,
-        (SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status IN ('Approved', 'Completed')) AS total_refunded_amount,
-        (SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status = 'Pending') AS pending_refund_amount,
-        -- Financial Safeguard: Strict bank-refundable eligibility calculation
-        -- Capped at MIN(available_balance, total_lifetime_paid - already_refunded - pending_refunds)
-        GREATEST(0, LEAST(
-          COALESCE(w.available_balance, 0),
-          GREATEST(0, COALESCE(w.total_lifetime_paid, 0) - COALESCE((SELECT SUM(amount) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status IN ('Approved', 'Completed')), 0) - COALESCE((SELECT SUM(amount) FROM refund_requests rf WHERE rf.customer_id = c.id AND rf.status = 'Pending'), 0))
-        ))::NUMERIC(12,2) AS eligible_bank_refundable,
-        -- Verified deposits array for tracing exact payment UTRs
-        (SELECT COALESCE(json_agg(
-          json_build_object(
-            'receipt_number', pr.receipt_number,
-            'utr_reference', pr.utr_reference,
-            'amount', pr.amount,
-            'paid_at', pr.paid_at,
-            'payment_mode', pr.payment_mode
-          ) ORDER BY pr.paid_at DESC
-        ), '[]'::json) FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid') AS verified_deposits
-       FROM customers c
-       LEFT JOIN wallets w ON w.customer_id = c.id
-       ${whereClause}
-       ORDER BY w.available_balance DESC, w.total_lifetime_paid DESC, c.registered_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limitNum, offset]
-    );
+    const ids = rows.map((r) => r._id);
+    const [prs, refunds] = await Promise.all([
+      ids.length ? PaymentRecord.find({ customerId: { $in: ids } }).sort({ createdAt: -1 }).lean() : [],
+      ids.length ? RefundRequest.find({ customerId: { $in: ids } }).lean() : [],
+    ]);
+    const prsBy = new Map();
+    const refBy = new Map();
+    prs.forEach((p) => (prsBy.get(p.customerId) || prsBy.set(p.customerId, []).get(p.customerId)).push(p));
+    refunds.forEach((r) => (refBy.get(r.customerId) || refBy.set(r.customerId, []).get(r.customerId)).push(r));
+
+    const isPaid = (s) => /^paid$/i.test(s || '') || /^verified/i.test(s || '');
+    const paidCustomers = rows.map((c) => {
+      const w = c.wallet || {};
+      const myPrs = prsBy.get(c._id) || []; // sorted by paid_at DESC
+      const myRefs = refBy.get(c._id) || [];
+      const paidPrs = myPrs.filter((p) => isPaid(p.status));
+      const approvedSum = myRefs
+        .filter((r) => /^(approved|completed)$/i.test(r.status || ''))
+        .reduce((s, r) => s + num(r.amount), 0);
+      const pendingSum = myRefs.filter((r) => /^pending$/i.test(r.status || '')).reduce((s, r) => s + num(r.amount), 0);
+      const bal = num(w.availableBalance);
+      const lifetime = num(w.totalLifetimePaid);
+      const eligible = Math.max(0, Math.min(bal, Math.max(0, lifetime - approvedSum - pendingSum)));
+
+      return {
+        id: c._id,
+        company_name: c.companyName,
+        contact_person: c.contactPerson,
+        phone: c.phone,
+        email: c.email,
+        city: c.city,
+        state: c.state,
+        status: c.status,
+        payment_status: c.paymentStatus,
+        registered_at: c.registeredAt,
+        available_balance: round2(bal),
+        total_lifetime_paid: round2(lifetime),
+        total_ad_spent: round2(num(w.totalAdSpent)),
+        paid_receipts_count: paidPrs.length,
+        last_payment_date: myPrs[0]?.createdAt ?? null,
+        last_utr_ref: myPrs[0]?.referenceUtr ?? null,
+        total_refund_requests: myRefs.length,
+        total_refunded_amount: round2(approvedSum),
+        pending_refund_amount: round2(pendingSum),
+        eligible_bank_refundable: round2(eligible),
+        verified_deposits: paidPrs.map((p) => ({
+          receipt_number: p.receiptNumber,
+          utr_reference: p.referenceUtr,
+          amount: num(p.amount),
+          paid_at: p.createdAt,
+          payment_mode: p.paymentMethod,
+        })),
+      };
+    });
 
     // Authoritative Summary stats
-    const statRes = await query(
-      `SELECT
-        COUNT(DISTINCT c.id)::INT AS total_paid_customers,
-        COALESCE(SUM(w.total_lifetime_paid), 0)::NUMERIC(12,2) AS total_amount_paid,
-        COALESCE(SUM(w.available_balance), 0)::NUMERIC(12,2) AS total_refundable_balance,
-        COALESCE((SELECT SUM(amount) FROM refund_requests WHERE status IN ('Approved', 'Completed')), 0)::NUMERIC(12,2) AS total_refunded_amount
-       FROM customers c
-       LEFT JOIN wallets w ON w.customer_id = c.id
-       WHERE (c.payment_status = 'paid' OR COALESCE(w.total_lifetime_paid, 0) > 0 OR EXISTS (SELECT 1 FROM payment_records pr WHERE pr.customer_id = c.id AND pr.status = 'paid'))`
-    );
+    const [statAgg, refunded] = await Promise.all([
+      Customer.aggregate([
+        ...paidCustomerStages({ includeVerifiedCredit: false }),
+        {
+          $group: {
+            _id: null,
+            total_paid_customers: { $sum: 1 },
+            total_amount_paid: { $sum: '$wallet.totalLifetimePaid' },
+            total_refundable_balance: { $sum: '$wallet.availableBalance' },
+          },
+        },
+      ]),
+      sumRefunds({ status: { $in: ciAny('Approved', 'Completed') } }),
+    ]);
+    const st = statAgg[0] || {};
 
     res.json({
       ok: true,
-      paidCustomers: listRes.rows,
+      paidCustomers,
       summary: {
-        totalPaidCustomers: statRes.rows[0]?.total_paid_customers || 0,
-        totalAmountPaid: Number(statRes.rows[0]?.total_amount_paid || 0),
-        totalRefundableBalance: Number(statRes.rows[0]?.total_refundable_balance || 0),
-        totalRefundedAmount: Number(statRes.rows[0]?.total_refunded_amount || 0),
+        totalPaidCustomers: st.total_paid_customers || 0,
+        totalAmountPaid: round2(st.total_amount_paid),
+        totalRefundableBalance: round2(st.total_refundable_balance),
+        totalRefundedAmount: refunded.total,
       },
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(totalCount / limitNum) || 1,
-      },
+      pagination: buildPagination(total, pageNum, limitNum),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/refunds/paid-customers]', err);
@@ -726,62 +1014,55 @@ superadminRouter.get('/refunds/paid-customers', async (req, res) => {
 
 superadminRouter.get('/refunds', async (req, res) => {
   try {
-    const { status, search, page = 1, limit = 20 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { status, search } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query, 20);
 
-    const conditions = [];
-    const params = [];
+    const pre = {};
+    if (status && status !== 'all') pre.status = ciExact(status);
 
-    if (status && status !== 'all') {
-      params.push(status);
-      conditions.push(`rf.status = $${params.length}`);
-    }
-
+    const stages = [
+      { $match: pre },
+      ...lookupCustomer('c'),
+      ...lookupWallet('w'),
+      {
+        $addFields: {
+          _rank: {
+            $switch: {
+              branches: [
+                { case: { $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'pending'] }, then: 1 },
+                { case: { $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'under review'] }, then: 2 },
+              ],
+              default: 3,
+            },
+          },
+        },
+      },
+    ];
     if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      const idx = params.length;
-      conditions.push(
-        `(LOWER(c.company_name) LIKE $${idx} OR LOWER(rf.id) LIKE $${idx} OR LOWER(rf.reason) LIKE $${idx} OR LOWER(COALESCE(rf.original_tx_ref, '')) LIKE $${idx})`
-      );
+      const rx = ciContains(search);
+      stages.push({
+        $match: { $or: [{ 'c.companyName': rx }, { _id: rx }, { reason: rx }, { originalTxRef: rx }] },
+      });
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const countRes = await query(
-      `SELECT COUNT(*)::INT AS total FROM refund_requests rf JOIN customers c ON c.id = rf.customer_id ${whereClause}`,
-      params
-    );
-    const totalCount = countRes.rows[0]?.total || 0;
-
-    const listRes = await query(
-      `SELECT
-        rf.id, rf.customer_id, c.company_name, c.contact_person, c.phone, c.email,
-        w.available_balance,
-        rf.original_tx_ref, rf.amount, rf.reason, rf.supporting_info, rf.status,
-        rf.rejection_reason, rf.review_notes, rf.reviewed_by, rf.reviewed_at,
-        rf.provider_ref, rf.created_at, rf.updated_at
-       FROM refund_requests rf
-       JOIN customers c ON c.id = rf.customer_id
-       LEFT JOIN wallets w ON w.customer_id = rf.customer_id
-       ${whereClause}
-       ORDER BY
-         CASE WHEN rf.status = 'Pending' THEN 1 WHEN rf.status = 'Under Review' THEN 2 ELSE 3 END,
-         rf.created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limitNum, offset]
-    );
+    const { total, rows } = await runPaged(RefundRequest, stages, { _rank: 1, createdAt: -1 }, offset, limitNum);
 
     res.json({
       ok: true,
-      refunds: listRes.rows,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(totalCount / limitNum) || 1,
-      },
+      refunds: rows.map((rf) => ({
+        id: rf._id,
+        customer_id: rf.customerId,
+        company_name: rf.c?.companyName,
+        contact_person: rf.c?.contactPerson,
+        phone: rf.c?.phone,
+        email: rf.c?.email,
+        available_balance: rf.w ? num(rf.w.availableBalance) : null,
+        ...mapRefundBase(rf),
+        supporting_info: rf.supportingInfo || null,
+        created_at: rf.createdAt,
+        updated_at: rf.updatedAt ?? rf.createdAt,
+      })),
+      pagination: buildPagination(total, pageNum, limitNum),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/refunds]', err);
@@ -811,27 +1092,21 @@ superadminRouter.post('/refunds', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Refund reason is mandatory.' });
     }
 
-    const [custRes, walletRes, prevRefundsRes, pendingRefundsRes] = await Promise.all([
-      query(`SELECT * FROM customers WHERE id = $1`, [customerId]),
-      query(`SELECT * FROM wallets WHERE customer_id = $1`, [customerId]),
-      query(
-        `SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) AS total FROM refund_requests WHERE customer_id = $1 AND status IN ('Approved', 'Completed')`,
-        [customerId]
-      ),
-      query(
-        `SELECT COALESCE(SUM(amount), 0)::NUMERIC(12,2) AS total FROM refund_requests WHERE customer_id = $1 AND status = 'Pending'`,
-        [customerId]
-      ),
+    const [customer, wallet, prevRefunds, pendingRefunds] = await Promise.all([
+      Customer.findById(customerId).lean(),
+      Wallet.findOne({ customerId }).lean(),
+      sumRefunds({ customerId, status: { $in: ciAny('Approved', 'Completed') } }),
+      sumRefunds({ customerId, status: { $in: ciAny('Pending') } }),
     ]);
 
-    if (custRes.rowCount === 0) {
+    if (!customer) {
       return res.status(404).json({ ok: false, error: 'Customer not found.' });
     }
 
-    const currentBal = Number(walletRes.rows[0]?.available_balance || 0);
-    const totalLifetimePaid = Number(walletRes.rows[0]?.total_lifetime_paid || 0);
-    const totalPreviouslyRefunded = Number(prevRefundsRes.rows[0]?.total || 0);
-    const totalPendingRefunds = Number(pendingRefundsRes.rows[0]?.total || 0);
+    const currentBal = num(wallet?.availableBalance);
+    const totalLifetimePaid = num(wallet?.totalLifetimePaid);
+    const totalPreviouslyRefunded = prevRefunds.total;
+    const totalPendingRefunds = pendingRefunds.total;
 
     // Safeguard 1: Separate wallet balance from bank refund eligibility
     // Refund cannot exceed current wallet available balance
@@ -853,21 +1128,20 @@ superadminRouter.post('/refunds', async (req, res) => {
       }
     }
 
-    const refundId = `ref_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    await query(
-      `INSERT INTO refund_requests (
-        id, customer_id, wallet_id, original_tx_ref, amount, reason, supporting_info, status, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'Pending', NOW(), NOW())`,
-      [
-        refundId,
-        customerId,
-        walletRes.rows[0]?.id || null,
-        originalTxRef.trim(),
-        refundAmount,
-        reason.trim(),
-        supportingInfo.trim(),
-      ]
-    );
+    const refundId = genId('ref');
+    const now = new Date();
+    await RefundRequest.create({
+      _id: refundId,
+      customerId,
+      walletId: wallet?._id || '',
+      originalTxRef: originalTxRef.trim(),
+      amount: refundAmount,
+      reason: reason.trim(),
+      supportingInfo: supportingInfo.trim(),
+      status: 'Pending',
+      createdAt: now,
+      updatedAt: now,
+    });
 
     await logSuperAdminAudit({
       actorId: adminId,
@@ -885,13 +1159,13 @@ superadminRouter.post('/refunds', async (req, res) => {
   }
 });
 
-// Review refund decision (Approve or Reject with atomic safeguards and concurrency row locks)
+// Review refund decision (Approve or Reject with atomic safeguards and concurrency guards)
 superadminRouter.patch('/refunds/:id/review', async (req, res) => {
   try {
     const { id } = req.params;
     const {
       decision, // 'Approved' or 'Rejected'
-      status,   // alias for decision
+      status, // alias for decision
       reason,
       reviewNotes = '',
       adminName = 'Super Admin',
@@ -909,110 +1183,107 @@ superadminRouter.patch('/refunds/:id/review', async (req, res) => {
 
     let reviewResult = null;
 
-    await withTransaction(async (tx) => {
-      // Concurrency Safeguard: Row-level lock on refund_requests
-      const refundCheck = await tx(`SELECT * FROM refund_requests WHERE id = $1 FOR UPDATE`, [id]);
-      if (refundCheck.rowCount === 0) {
-        throw new Error('NOT_FOUND: Refund request not found.');
-      }
+    await withMongoTransaction((session) =>
+      withCompensation(session, async (registerUndo) => {
+        const refund = await RefundRequest.findById(id).session(session).lean();
+        if (!refund) {
+          throw new HttpError(404, 'Refund request not found.');
+        }
 
-      const refund = refundCheck.rows[0];
-      if (refund.status === 'Completed' || refund.status === 'Approved') {
-        throw new Error('ALREADY_PROCESSED: This refund request has already been approved and completed.');
-      }
-      if (refund.status === 'Rejected') {
-        throw new Error('ALREADY_PROCESSED: This refund request has already been rejected.');
-      }
+        if (/^(completed|approved)$/i.test(refund.status || '')) {
+          throw new HttpError(409, 'This refund request has already been approved and completed.');
+        }
+        if (/^rejected$/i.test(refund.status || '')) {
+          throw new HttpError(409, 'This refund request has already been rejected.');
+        }
 
-      const refundAmount = Number(refund.amount);
+        const refundAmount = Number(refund.amount);
+        const now = new Date();
 
-      if (finalDecision === 'Rejected') {
-        await tx(
-          `UPDATE refund_requests
-           SET status = 'Rejected',
-               rejection_reason = $1,
-               review_notes = $2,
-               reviewed_by = $3,
-               reviewed_at = NOW(),
-               updated_at = NOW()
-           WHERE id = $4`,
-          [reason.trim(), reviewNotes.trim(), adminName, id]
+        // Concurrency safeguard: only one reviewer can move the request out of a non-final state.
+        const claimFilter = { _id: id, status: { $not: FINAL_REFUND_RE } };
+
+        if (finalDecision === 'Rejected') {
+          const rejected = await RefundRequest.findOneAndUpdate(
+            claimFilter,
+            {
+              $set: {
+                status: 'Rejected',
+                rejectionReason: reason.trim(),
+                reviewNotes: reviewNotes.trim(),
+                reviewedBy: adminName,
+                reviewedAt: now,
+                updatedAt: now,
+              },
+            },
+            { new: true, session }
+          );
+          if (!rejected) {
+            throw new HttpError(409, 'This refund request has already been processed.');
+          }
+
+          reviewResult = {
+            ok: true,
+            status: 'Rejected',
+            message: 'Refund request rejected with recorded reason.',
+          };
+          return;
+        }
+
+        // 1. Claim the request (atomic; flips it to Completed) so a concurrent approval cannot double-debit.
+        const providerRef = `REF_PAY_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+        const claimed = await RefundRequest.findOneAndUpdate(
+          claimFilter,
+          {
+            $set: {
+              status: 'Completed',
+              reviewNotes: reviewNotes.trim() || 'Approved by Super Admin',
+              reviewedBy: adminName,
+              reviewedAt: now,
+              providerRef,
+              payoutUtr: providerRef,
+              updatedAt: now,
+            },
+          },
+          { new: true, session }
         );
+        if (!claimed) {
+          throw new HttpError(409, 'This refund request has already been processed.');
+        }
+        registerUndo(() =>
+          RefundRequest.updateOne(
+            { _id: id },
+            {
+              $set: {
+                status: refund.status,
+                reviewNotes: refund.reviewNotes ?? null,
+                reviewedBy: refund.reviewedBy ?? null,
+                reviewedAt: refund.reviewedAt ?? null,
+                providerRef: refund.providerRef ?? null,
+                payoutUtr: refund.payoutUtr ?? null,
+              },
+            }
+          )
+        );
+
+        // 2 + 3. Atomic conditional wallet debit (balance >= amount) and immutable ledger Debit row
+        await debitWalletForRefund({
+          session,
+          registerUndo,
+          customerId: refund.customerId,
+          amount: refundAmount,
+          referenceUtr: providerRef,
+          description: `Super Admin Approved Refund (Ref: ${id}) - ${reason || 'Processed'}`,
+        });
 
         reviewResult = {
           ok: true,
-          status: 'Rejected',
-          message: 'Refund request rejected with recorded reason.',
-        };
-        return;
-      }
-
-      // Concurrency Safeguard: Row-level lock on customer's wallet
-      const walletRes = await tx(
-        `SELECT id, available_balance, total_lifetime_paid FROM wallets WHERE customer_id = $1 FOR UPDATE`,
-        [refund.customer_id]
-      );
-
-      if (walletRes.rowCount === 0) {
-        throw new Error('Customer wallet not found for refund processing.');
-      }
-
-      const currentBalance = Number(walletRes.rows[0].available_balance);
-      if (currentBalance < refundAmount) {
-        throw new Error(
-          `Insufficient wallet balance (₹${currentBalance.toFixed(2)}) for refund of ₹${refundAmount.toFixed(2)}.`
-        );
-      }
-
-      const balanceAfter = Number((currentBalance - refundAmount).toFixed(2));
-
-      // 1. Deduct wallet atomically
-      await tx(
-        `UPDATE wallets
-         SET available_balance = $1,
-             updated_at = NOW()
-         WHERE customer_id = $2`,
-        [balanceAfter, refund.customer_id]
-      );
-
-      // 2. Insert immutable debit transaction in ledger
-      const providerRef = `REF_PAY_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-      const txId = `tx_refund_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      await tx(
-        `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
-        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Official Bank / Gateway Refund', 'Completed ✓', NOW())`,
-        [
-          txId,
-          refund.customer_id,
-          walletRes.rows[0].id,
-          refundAmount,
-          balanceAfter,
+          status: 'Completed',
           providerRef,
-          `Super Admin Approved Refund (Ref: ${id}) - ${reason || 'Processed'}`,
-        ]
-      );
-
-      // 3. Mark refund as Completed
-      await tx(
-        `UPDATE refund_requests
-         SET status = 'Completed',
-             review_notes = $1,
-             reviewed_by = $2,
-             reviewed_at = NOW(),
-             provider_ref = $3,
-             updated_at = NOW()
-         WHERE id = $4`,
-        [reviewNotes.trim() || 'Approved by Super Admin', adminName, providerRef, id]
-      );
-
-      reviewResult = {
-        ok: true,
-        status: 'Completed',
-        providerRef,
-        message: `Refund of ₹${refundAmount.toFixed(2)} approved and deducted atomically from wallet.`,
-      };
-    });
+          message: `Refund of ₹${refundAmount.toFixed(2)} approved and deducted atomically from wallet.`,
+        };
+      })
+    );
 
     if (reviewResult && reviewResult.status === 'Completed') {
       await logSuperAdminAudit({
@@ -1039,13 +1310,7 @@ superadminRouter.patch('/refunds/:id/review', async (req, res) => {
     res.json(reviewResult);
   } catch (err) {
     console.error('[PATCH /api/superadmin/refunds/:id/review]', err);
-    if (err.message && err.message.startsWith('ALREADY_PROCESSED')) {
-      return res.status(409).json({ ok: false, error: err.message.replace('ALREADY_PROCESSED: ', '') });
-    }
-    if (err.message && err.message.startsWith('NOT_FOUND')) {
-      return res.status(404).json({ ok: false, error: err.message.replace('NOT_FOUND: ', '') });
-    }
-    res.status(500).json({ ok: false, error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -1055,103 +1320,108 @@ superadminRouter.patch('/refunds/:id/review', async (req, res) => {
 // =============================================================================
 superadminRouter.get('/refunds/reconciliation', async (req, res) => {
   try {
-    const { search, status = 'all', page = 1, limit = 25 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { search, status = 'all' } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query, 25);
 
-    const conditions = [];
-    const params = [];
+    const pre = {};
+    if (status && status !== 'all') pre.status = ciExact(status);
 
-    if (status && status !== 'all') {
-      params.push(status);
-      conditions.push(`rf.status = $${params.length}`);
-    }
-
+    const stages = [{ $match: pre }, ...lookupCustomer('c'), ...lookupWallet('w')];
     if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      const idx = params.length;
-      conditions.push(
-        `(LOWER(c.company_name) LIKE $${idx} OR LOWER(rf.id) LIKE $${idx} OR LOWER(COALESCE(rf.original_tx_ref, '')) LIKE $${idx} OR LOWER(COALESCE(rf.provider_ref, '')) LIKE $${idx})`
-      );
+      const rx = ciContains(search);
+      stages.push({
+        $match: {
+          $or: [{ 'c.companyName': rx }, { _id: rx }, { originalTxRef: rx }, { providerRef: rx }],
+        },
+      });
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const { total, rows } = await runPaged(RefundRequest, stages, { createdAt: -1 }, offset, limitNum);
 
-    const countRes = await query(
-      `SELECT COUNT(*)::INT AS total
-       FROM refund_requests rf
-       JOIN customers c ON c.id = rf.customer_id
-       ${whereClause}`,
-      params
-    );
-    const totalCount = countRes.rows[0]?.total || 0;
+    // Reconciliation trace: original deposit info from payment_records
+    const custIds = [...new Set(rows.map((r) => r.customerId))];
+    const prs = custIds.length
+      ? await PaymentRecord.find({ customerId: { $in: custIds } }).sort({ createdAt: -1 }).lean()
+      : [];
 
-    const listRes = await query(
-      `SELECT
-        rf.id AS refund_id,
-        rf.customer_id,
-        c.company_name,
-        c.contact_person,
-        c.phone,
-        c.email,
-        COALESCE(w.available_balance, 0)::NUMERIC(12,2) AS available_balance,
-        COALESCE(w.total_lifetime_paid, 0)::NUMERIC(12,2) AS total_lifetime_paid,
-        COALESCE(w.total_ad_spent, 0)::NUMERIC(12,2) AS total_ad_spent,
-        rf.original_tx_ref AS verified_utr,
-        rf.amount AS requested_amount,
-        rf.status AS refund_status,
-        rf.provider_ref,
-        rf.reason,
-        rf.review_notes,
-        rf.reviewed_by,
-        rf.reviewed_at,
-        rf.created_at AS request_date,
-        -- Reconciliation trace: original deposit info from payment_records
-        (SELECT json_build_object('receipt_number', pr.receipt_number, 'paid_at', pr.paid_at, 'amount', pr.amount, 'payment_mode', pr.payment_mode)
-         FROM payment_records pr
-         WHERE pr.customer_id = rf.customer_id AND (pr.utr_reference = rf.original_tx_ref OR pr.status = 'paid')
-         ORDER BY pr.paid_at DESC LIMIT 1) AS original_deposit_info,
-        -- Calculated Reconciliation State
-        CASE
-          WHEN rf.status = 'Completed' AND w.available_balance = 0 THEN 'Fully Refunded (Zero Balance)'
-          WHEN rf.status = 'Completed' AND w.available_balance > 0 THEN 'Partially Refunded (Active Balance)'
-          WHEN rf.status = 'Rejected' THEN 'Rejected by Auditor'
-          WHEN rf.status = 'Pending' THEN 'Pending Audit Decision'
-          ELSE rf.status
-        END AS reconciliation_state
-       FROM refund_requests rf
-       JOIN customers c ON c.id = rf.customer_id
-       LEFT JOIN wallets w ON w.customer_id = rf.customer_id
-       ${whereClause}
-       ORDER BY rf.created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limitNum, offset]
-    );
+    const records = rows.map((rf) => {
+      const ref = rf.originalTxRef;
+      const pr = prs.find(
+        (p) =>
+          p.customerId === rf.customerId &&
+          ((ref && p.referenceUtr === ref) || /^paid$/i.test(p.status || '') || /^verified/i.test(p.status || ''))
+      );
+      const st = String(rf.status || '');
+      const walletBal = rf.w ? num(rf.w.availableBalance) : null;
+      let reconciliationState = rf.status;
+      if (/^completed$/i.test(st) && walletBal === 0) reconciliationState = 'Fully Refunded (Zero Balance)';
+      else if (/^completed$/i.test(st) && walletBal !== null && walletBal > 0) reconciliationState = 'Partially Refunded (Active Balance)';
+      else if (/^rejected$/i.test(st)) reconciliationState = 'Rejected by Auditor';
+      else if (/^pending$/i.test(st)) reconciliationState = 'Pending Audit Decision';
+
+      return {
+        refund_id: rf._id,
+        customer_id: rf.customerId,
+        company_name: rf.c?.companyName,
+        contact_person: rf.c?.contactPerson,
+        phone: rf.c?.phone,
+        email: rf.c?.email,
+        available_balance: round2(rf.w?.availableBalance),
+        total_lifetime_paid: round2(rf.w?.totalLifetimePaid),
+        total_ad_spent: round2(rf.w?.totalAdSpent),
+        verified_utr: rf.originalTxRef || null,
+        requested_amount: num(rf.amount),
+        refund_status: rf.status,
+        provider_ref: rf.providerRef ?? rf.payoutUtr ?? null,
+        reason: rf.reason,
+        review_notes: rf.reviewNotes ?? null,
+        reviewed_by: rf.reviewedBy ?? null,
+        reviewed_at: rf.reviewedAt ?? null,
+        request_date: rf.createdAt,
+        original_deposit_info: pr
+          ? {
+              receipt_number: pr.receiptNumber,
+              paid_at: pr.createdAt,
+              amount: num(pr.amount),
+              payment_mode: pr.paymentMethod,
+            }
+          : null,
+        reconciliation_state: reconciliationState,
+      };
+    });
 
     // Global Financial Summary
-    const summaryRes = await query(
-      `SELECT
-        COALESCE(SUM(w.total_lifetime_paid), 0)::NUMERIC(12,2) AS total_customer_deposits,
-        COALESCE(SUM(w.total_ad_spent), 0)::NUMERIC(12,2) AS total_delivered_ad_spend,
-        COALESCE(SUM(w.available_balance), 0)::NUMERIC(12,2) AS total_current_liability,
-        COALESCE((SELECT SUM(amount) FROM refund_requests WHERE status IN ('Approved', 'Completed')), 0)::NUMERIC(12,2) AS total_refunded_to_bank,
-        COALESCE((SELECT SUM(amount) FROM refund_requests WHERE status = 'Pending'), 0)::NUMERIC(12,2) AS total_pending_claims,
-        COALESCE((SELECT COUNT(*) FROM refund_requests WHERE status IN ('Approved', 'Completed')), 0)::INT AS completed_refund_count,
-        COALESCE((SELECT COUNT(*) FROM refund_requests WHERE status = 'Rejected'), 0)::INT AS rejected_refund_count
-       FROM wallets w`
-    );
+    const [walletAgg, refunded, pending, completedCnt, rejectedCnt] = await Promise.all([
+      Wallet.aggregate([
+        {
+          $group: {
+            _id: null,
+            dep: { $sum: '$totalLifetimePaid' },
+            spend: { $sum: '$totalAdSpent' },
+            liab: { $sum: '$availableBalance' },
+          },
+        },
+      ]),
+      sumRefunds({ status: { $in: ciAny('Approved', 'Completed') } }),
+      sumRefunds({ status: { $in: ciAny('Pending') } }),
+      RefundRequest.countDocuments({ status: { $in: ciAny('Approved', 'Completed') } }),
+      RefundRequest.countDocuments({ status: { $in: ciAny('Rejected') } }),
+    ]);
+    const wa = walletAgg[0];
 
     res.json({
       ok: true,
-      records: listRes.rows,
-      summary: summaryRes.rows[0] || {},
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(totalCount / limitNum) || 1,
+      records,
+      summary: {
+        total_customer_deposits: round2(wa?.dep),
+        total_delivered_ad_spend: round2(wa?.spend),
+        total_current_liability: round2(wa?.liab),
+        total_refunded_to_bank: refunded.total,
+        total_pending_claims: pending.total,
+        completed_refund_count: completedCnt,
+        rejected_refund_count: rejectedCnt,
       },
+      pagination: buildPagination(total, pageNum, limitNum),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/refunds/reconciliation]', err);
@@ -1162,28 +1432,11 @@ superadminRouter.get('/refunds/reconciliation', async (req, res) => {
 // Export Refund Reconciliation Ledger as CSV
 superadminRouter.get('/refunds/reconciliation/export', async (req, res) => {
   try {
-    const listRes = await query(
-      `SELECT
-        rf.id AS refund_id,
-        c.company_name,
-        c.contact_person,
-        c.phone,
-        rf.original_tx_ref AS verified_utr,
-        rf.amount AS refunded_amount,
-        w.available_balance AS remaining_wallet_balance,
-        w.total_lifetime_paid AS total_deposited,
-        w.total_ad_spent AS delivered_ad_spend,
-        rf.provider_ref AS banking_reversal_ref,
-        rf.status,
-        rf.reason,
-        rf.reviewed_by,
-        rf.reviewed_at,
-        rf.created_at
-       FROM refund_requests rf
-       JOIN customers c ON c.id = rf.customer_id
-       LEFT JOIN wallets w ON w.customer_id = rf.customer_id
-       ORDER BY rf.created_at DESC`
-    );
+    const rows = await RefundRequest.aggregate([
+      { $sort: { createdAt: -1 } },
+      ...lookupCustomer('c'),
+      ...lookupWallet('w'),
+    ]);
 
     const headers = [
       'Refund ID',
@@ -1208,26 +1461,27 @@ superadminRouter.get('/refunds/reconciliation/export', async (req, res) => {
       const s = String(str).replace(/"/g, '""');
       return `"${s}"`;
     };
+    const money = (n) => (n === null || n === undefined ? null : num(n).toFixed(2));
 
     let csv = headers.join(',') + '\n';
-    listRes.rows.forEach((r) => {
+    rows.forEach((rf) => {
       csv +=
         [
-          escapeCsv(r.refund_id),
-          escapeCsv(r.company_name),
-          escapeCsv(r.contact_person),
-          escapeCsv(r.phone),
-          escapeCsv(r.verified_utr),
-          escapeCsv(r.refunded_amount),
-          escapeCsv(r.remaining_wallet_balance),
-          escapeCsv(r.total_deposited),
-          escapeCsv(r.delivered_ad_spend),
-          escapeCsv(r.banking_reversal_ref),
-          escapeCsv(r.status),
-          escapeCsv(r.reason),
-          escapeCsv(r.reviewed_by),
-          escapeCsv(r.reviewed_at),
-          escapeCsv(r.created_at),
+          escapeCsv(rf._id),
+          escapeCsv(rf.c?.companyName),
+          escapeCsv(rf.c?.contactPerson),
+          escapeCsv(rf.c?.phone),
+          escapeCsv(rf.originalTxRef || null),
+          escapeCsv(money(rf.amount)),
+          escapeCsv(rf.w ? money(rf.w.availableBalance) : null),
+          escapeCsv(rf.w ? money(rf.w.totalLifetimePaid) : null),
+          escapeCsv(rf.w ? money(rf.w.totalAdSpent) : null),
+          escapeCsv(rf.providerRef ?? rf.payoutUtr ?? null),
+          escapeCsv(rf.status),
+          escapeCsv(rf.reason),
+          escapeCsv(rf.reviewedBy ?? null),
+          escapeCsv(rf.reviewedAt ?? null),
+          escapeCsv(rf.createdAt),
         ].join(',') + '\n';
     });
 
@@ -1245,62 +1499,29 @@ superadminRouter.get('/refunds/reconciliation/export', async (req, res) => {
 // =============================================================================
 superadminRouter.get('/topups', async (req, res) => {
   try {
-    const { status, search, page = 1, limit = 20 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { status, search } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query, 20);
 
-    const conditions = [];
-    const params = [];
+    const pre = {};
+    if (status && status !== 'all') pre.status = ciExact(status);
 
-    if (status && status !== 'all') {
-      params.push(status);
-      conditions.push(`tp.status = $${params.length}`);
-    }
-
+    const stages = [
+      { $match: pre },
+      ...lookupCustomer('c'),
+      ...lookupWallet('w'),
+      { $addFields: { _rank: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'pending'] }, 1, 2] } } },
+    ];
     if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      const idx = params.length;
-      conditions.push(
-        `(LOWER(c.company_name) LIKE $${idx} OR LOWER(tp.reference_utr) LIKE $${idx} OR LOWER(tp.id) LIKE $${idx})`
-      );
+      const rx = ciContains(search);
+      stages.push({ $match: { $or: [{ 'c.companyName': rx }, { referenceUtr: rx }, { _id: rx }] } });
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const countRes = await query(
-      `SELECT COUNT(*)::INT AS total FROM topup_requests tp JOIN customers c ON c.id = tp.customer_id ${whereClause}`,
-      params
-    );
-    const totalCount = countRes.rows[0]?.total || 0;
-
-    const listRes = await query(
-      `SELECT
-        tp.id, tp.customer_id, c.company_name, c.contact_person, c.phone, c.email,
-        w.available_balance,
-        tp.amount, tp.payment_method, tp.reference_utr, tp.payment_evidence_url,
-        tp.notes, tp.status, tp.rejection_reason, tp.processed_by, tp.processed_at,
-        tp.created_at, tp.updated_at
-       FROM topup_requests tp
-       JOIN customers c ON c.id = tp.customer_id
-       LEFT JOIN wallets w ON w.customer_id = tp.customer_id
-       ${whereClause}
-       ORDER BY
-         CASE WHEN tp.status = 'Pending' THEN 1 ELSE 2 END,
-         tp.created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limitNum, offset]
-    );
+    const { total, rows } = await runPaged(TopupRequest, stages, { _rank: 1, createdAt: -1 }, offset, limitNum);
 
     res.json({
       ok: true,
-      topups: listRes.rows,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(totalCount / limitNum) || 1,
-      },
+      topups: rows.map((tp) => mapTopupRow(tp, tp.c, tp.w)),
+      pagination: buildPagination(total, pageNum, limitNum),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/topups]', err);
@@ -1333,47 +1554,48 @@ superadminRouter.post('/topups', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Payment Bank UTR / Reference ID is required.' });
     }
 
-    // Check duplicate UTR
-    const duplicateCheck = await query(
-      `SELECT id FROM topup_requests WHERE reference_utr = $1
-       UNION
-       SELECT id FROM wallet_transactions WHERE reference_utr = $1`,
-      [cleanUtr]
-    );
+    const duplicateMessage = `Duplicate Reference: Payment UTR "${cleanUtr}" is already registered or credited in the system.`;
 
-    if (duplicateCheck.rowCount > 0) {
-      return res.status(409).json({
-        ok: false,
-        error: `Duplicate Reference: Payment UTR "${cleanUtr}" is already registered or credited in the system.`,
-      });
+    // Check duplicate UTR
+    const [dupTopup, dupTx] = await Promise.all([
+      TopupRequest.exists({ referenceUtr: cleanUtr }),
+      WalletTransaction.exists({ referenceUtr: cleanUtr }),
+    ]);
+    if (dupTopup || dupTx) {
+      return res.status(409).json({ ok: false, error: duplicateMessage });
     }
 
-    const [custRes, walletRes] = await Promise.all([
-      query(`SELECT id FROM customers WHERE id = $1`, [customerId]),
-      query(`SELECT id FROM wallets WHERE customer_id = $1`, [customerId]),
+    const [cust, wallet] = await Promise.all([
+      Customer.exists({ _id: customerId }),
+      Wallet.findOne({ customerId }).select('_id').lean(),
     ]);
 
-    if (custRes.rowCount === 0) {
+    if (!cust) {
       return res.status(404).json({ ok: false, error: 'Customer business not found.' });
     }
 
-    const topupId = `topup_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const topupId = genId('topup');
+    const now = new Date();
 
-    await query(
-      `INSERT INTO topup_requests (
-        id, customer_id, wallet_id, amount, payment_method, reference_utr, payment_evidence_url, notes, status, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Pending', NOW(), NOW())`,
-      [
-        topupId,
+    try {
+      await TopupRequest.create({
+        _id: topupId,
         customerId,
-        walletRes.rows[0]?.id || null,
-        topupAmount,
+        walletId: wallet?._id || '',
+        amount: topupAmount,
         paymentMethod,
-        cleanUtr,
-        paymentEvidenceUrl.trim(),
-        notes.trim(),
-      ]
-    );
+        referenceUtr: cleanUtr,
+        evidenceUrl: paymentEvidenceUrl.trim(),
+        proofUrl: paymentEvidenceUrl.trim(),
+        notes: notes.trim(),
+        status: 'Pending',
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (err) {
+      if (isDuplicateKey(err)) return res.status(409).json({ ok: false, error: duplicateMessage });
+      throw err;
+    }
 
     await logSuperAdminAudit({
       actorId: adminId,
@@ -1397,105 +1619,93 @@ superadminRouter.patch('/topups/:id/approve', async (req, res) => {
     const { id } = req.params;
     const { adminName = 'Super Admin', adminId = 'superadmin', notes = '' } = req.body || {};
 
-    const topupCheck = await query(`SELECT * FROM topup_requests WHERE id = $1`, [id]);
-    if (topupCheck.rowCount === 0) {
+    const topup = await TopupRequest.findById(id).lean();
+    if (!topup) {
       return res.status(404).json({ ok: false, error: 'Top-up request not found.' });
     }
 
-    const topup = topupCheck.rows[0];
-    if (topup.status === 'Approved') {
+    if (/^approved$/i.test(topup.status || '')) {
       return res.status(409).json({ ok: false, error: 'This top-up request has already been approved and credited.' });
     }
-    if (topup.status === 'Rejected') {
+    if (/^rejected$/i.test(topup.status || '')) {
       return res.status(409).json({ ok: false, error: 'This top-up request was previously rejected.' });
     }
 
     const topupAmount = Number(topup.amount);
-    const cleanUtr = topup.reference_utr;
+    const cleanUtr = topup.referenceUtr;
+    const utrProcessedMessage = `Payment UTR "${cleanUtr}" has already been processed in the wallet transactions ledger.`;
 
     // Check duplicate in wallet_transactions
-    const utrCheck = await query(`SELECT id FROM wallet_transactions WHERE reference_utr = $1`, [cleanUtr]);
-    if (utrCheck.rowCount > 0) {
-      return res.status(409).json({
-        ok: false,
-        error: `Payment UTR "${cleanUtr}" has already been processed in the wallet transactions ledger.`,
-      });
+    if (await WalletTransaction.exists({ referenceUtr: cleanUtr })) {
+      return res.status(409).json({ ok: false, error: utrProcessedMessage });
     }
 
-    await withTransaction(async (tx) => {
-      // 1. Lock wallet row
-      const walletRes = await tx(
-        `SELECT id, available_balance, total_lifetime_paid FROM wallets WHERE customer_id = $1 FOR UPDATE`,
-        [topup.customer_id]
-      );
+    await withMongoTransaction((session) =>
+      withCompensation(session, async (registerUndo) => {
+        const now = new Date();
+        const cleanNotes = String(notes || '').trim();
 
-      if (walletRes.rowCount === 0) {
-        throw new Error('Wallet not found for customer.');
-      }
+        // 1. Claim the request atomically (only one approver can win; a concurrent approval cannot double-credit)
+        const $set = {
+          status: 'Approved',
+          processedBy: adminName,
+          processedAt: now,
+          approvedBy: adminName,
+          approvedAt: now,
+          updatedAt: now,
+        };
+        if (cleanNotes) $set.notes = cleanNotes; // notes = CASE WHEN $2 != '' THEN $2 ELSE notes END
 
-      const currentBalance = Number(walletRes.rows[0].available_balance);
-      const newBalance = Number((currentBalance + topupAmount).toFixed(2));
-      const newLifetime = Number((Number(walletRes.rows[0].total_lifetime_paid) + topupAmount).toFixed(2));
+        const claimed = await TopupRequest.findOneAndUpdate(
+          { _id: id, status: { $not: FINAL_TOPUP_RE } },
+          { $set },
+          { new: true, session }
+        );
+        if (!claimed) {
+          const cur = await TopupRequest.findById(id).session(session).lean();
+          if (cur && /^rejected$/i.test(cur.status || '')) {
+            throw new HttpError(409, 'This top-up request was previously rejected.');
+          }
+          throw new HttpError(409, 'This top-up request has already been approved and credited.');
+        }
+        registerUndo(() =>
+          TopupRequest.updateOne(
+            { _id: id },
+            {
+              $set: {
+                status: topup.status,
+                processedBy: topup.processedBy ?? null,
+                processedAt: topup.processedAt ?? null,
+                approvedBy: topup.approvedBy ?? null,
+                approvedAt: topup.approvedAt ?? null,
+                notes: topup.notes ?? '',
+              },
+            }
+          )
+        );
 
-      // 2. Credit wallet
-      await tx(
-        `UPDATE wallets
-         SET available_balance = $1,
-             total_lifetime_paid = $2,
-             updated_at = NOW()
-         WHERE customer_id = $3`,
-        [newBalance, newLifetime, topup.customer_id]
-      );
-
-      // 3. Record in wallet_transactions ledger
-      const txId = `tx_topup_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      await tx(
-        `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
-        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓', NOW())`,
-        [
-          txId,
-          topup.customer_id,
-          walletRes.rows[0].id,
-          topupAmount,
-          newBalance,
-          cleanUtr,
-          `Super Admin Verified Account Top-Up (Req: ${id})`,
-          topup.payment_method,
-        ]
-      );
-
-      // 4. Update topup_requests
-      await tx(
-        `UPDATE topup_requests
-         SET status = 'Approved',
-             processed_by = $1,
-             processed_at = NOW(),
-             notes = CASE WHEN $2 != '' THEN $2 ELSE notes END,
-             updated_at = NOW()
-         WHERE id = $3`,
-        [adminName, notes.trim(), id]
-      );
-
-      // 5. Insert payment record for accounting
-      const receiptNo = `REC_${Date.now()}_${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-      await tx(
-        `INSERT INTO payment_records (
-          id, receipt_number, customer_id, company_name, contact_person, phone, tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, paid_at
-        )
-        SELECT
-          $1, $2, c.id, c.company_name, c.contact_person, c.phone, 'topup', $3, 0.00, $3, $4, $5, 'paid', NOW()
-        FROM customers c WHERE c.id = $6`,
-        [
-          `pay_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-          receiptNo,
-          topupAmount,
-          topup.payment_method,
-          cleanUtr,
-          topup.customer_id,
-        ]
-      );
-    });
+        // 2-5. Atomic $inc wallet credit + Credit ledger row + payment record (UTR is unique => idempotent)
+        const customer = await Customer.findById(topup.customerId).session(session).lean();
+        try {
+          await creditWalletLedger({
+            session,
+            registerUndo,
+            customerId: topup.customerId,
+            amount: topupAmount,
+            referenceUtr: cleanUtr,
+            paymentMethod: topup.paymentMethod || 'Razorpay Secure (UPI/Card)',
+            description: `Super Admin Verified Account Top-Up (Req: ${id})`,
+            txIdPrefix: 'tx_topup',
+            receiptCustomer: customer, // payment record only if the customer exists (SQL INSERT..SELECT)
+          });
+        } catch (err) {
+          if (err instanceof HttpError && err.message === 'DUPLICATE_UTR') {
+            throw new HttpError(409, utrProcessedMessage);
+          }
+          throw err;
+        }
+      })
+    );
 
     await logSuperAdminAudit({
       actorId: adminId,
@@ -1503,7 +1713,7 @@ superadminRouter.patch('/topups/:id/approve', async (req, res) => {
       actionType: 'TOPUP_APPROVED',
       targetType: 'topup',
       targetId: id,
-      details: { customerId: topup.customer_id, amount: topupAmount, referenceUtr: cleanUtr },
+      details: { customerId: topup.customerId, amount: topupAmount, referenceUtr: cleanUtr },
     });
 
     res.json({
@@ -1512,7 +1722,7 @@ superadminRouter.patch('/topups/:id/approve', async (req, res) => {
     });
   } catch (err) {
     console.error('[PATCH /api/superadmin/topups/:id/approve]', err);
-    res.status(500).json({ ok: false, error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -1526,26 +1736,33 @@ superadminRouter.patch('/topups/:id/reject', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Mandatory rejection reason must be provided.' });
     }
 
-    const checkRes = await query(`SELECT * FROM topup_requests WHERE id = $1`, [id]);
-    if (checkRes.rowCount === 0) {
+    const topup = await TopupRequest.findById(id).lean();
+    if (!topup) {
       return res.status(404).json({ ok: false, error: 'Top-up request not found.' });
     }
 
-    const topup = checkRes.rows[0];
-    if (topup.status === 'Approved') {
+    if (/^approved$/i.test(topup.status || '')) {
       return res.status(409).json({ ok: false, error: 'Cannot reject an already approved and credited top-up.' });
     }
 
-    await query(
-      `UPDATE topup_requests
-       SET status = 'Rejected',
-           rejection_reason = $1,
-           processed_by = $2,
-           processed_at = NOW(),
-           updated_at = NOW()
-       WHERE id = $3`,
-      [reason.trim(), adminName, id]
+    const now = new Date();
+    // Atomic guard: never overwrite a request that was approved concurrently
+    const updated = await TopupRequest.findOneAndUpdate(
+      { _id: id, status: { $not: /^approved$/i } },
+      {
+        $set: {
+          status: 'Rejected',
+          rejectionReason: reason.trim(),
+          processedBy: adminName,
+          processedAt: now,
+          updatedAt: now,
+        },
+      },
+      { new: true }
     );
+    if (!updated) {
+      return res.status(409).json({ ok: false, error: 'Cannot reject an already approved and credited top-up.' });
+    }
 
     await logSuperAdminAudit({
       actorId: adminId,
@@ -1554,7 +1771,7 @@ superadminRouter.patch('/topups/:id/reject', async (req, res) => {
       targetType: 'topup',
       targetId: id,
       reason: reason.trim(),
-      details: { customerId: topup.customer_id, amount: topup.amount },
+      details: { customerId: topup.customerId, amount: topup.amount },
     });
 
     res.json({ ok: true, message: 'Top-up request rejected with recorded reason.' });
@@ -1588,106 +1805,50 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Transaction reference UTR is required.' });
     }
 
+    const duplicateMessage = `Duplicate Reference: Payment UTR "${cleanUtr}" has already been credited in the ledger.`;
+
     // Check duplicate UTR
-    const dupCheck = await query(`SELECT id FROM wallet_transactions WHERE reference_utr = $1`, [cleanUtr]);
-    if (dupCheck.rowCount > 0) {
-      return res.status(409).json({
-        ok: false,
-        error: `Duplicate Reference: Payment UTR "${cleanUtr}" has already been credited in the ledger.`,
-      });
+    if (await WalletTransaction.exists({ referenceUtr: cleanUtr })) {
+      return res.status(409).json({ ok: false, error: duplicateMessage });
     }
 
-    const custCheck = await query(`SELECT id, company_name, contact_person, phone FROM customers WHERE id = $1`, [customerId]);
-    if (custCheck.rowCount === 0) {
+    const customer = await Customer.findById(customerId).lean();
+    if (!customer) {
       return res.status(404).json({ ok: false, error: 'Customer account not found.' });
     }
-    const customer = custCheck.rows[0];
 
     let recordedNewBalance = 0;
     let recordedOldBalance = 0;
 
-    await withTransaction(async (tx) => {
-      const walletRes = await tx(
-        `SELECT id, available_balance, total_lifetime_paid FROM wallets WHERE customer_id = $1 FOR UPDATE`,
-        [customerId]
-      );
-
-      let wallet = walletRes.rows[0];
-      if (!wallet) {
-        // Auto-create customer wallet record if not present
-        const newWalletId = `wal_${customerId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-        const ins = await tx(
-          `INSERT INTO wallets (id, customer_id, available_balance, total_lifetime_paid, total_ad_spent, daily_ad_spend, ad_campaign_active, created_at, updated_at)
-           VALUES ($1, $2, 0.00, 0.00, 0.00, 300.00, FALSE, NOW(), NOW())
-           ON CONFLICT (customer_id) DO UPDATE SET updated_at = NOW()
-           RETURNING id, available_balance, total_lifetime_paid`,
-          [newWalletId, customerId]
-        );
-        wallet = ins.rows[0];
-      }
-
-      const currentBalance = Number(wallet.available_balance || 0);
-      const newBalance = Number((currentBalance + creditAmount).toFixed(2));
-      const newLifetime = Number((Number(wallet.total_lifetime_paid || 0) + creditAmount).toFixed(2));
-      recordedOldBalance = currentBalance;
-      recordedNewBalance = newBalance;
-
-      // 1. Update wallet balance
-      await tx(
-        `UPDATE wallets
-         SET available_balance = $1,
-             total_lifetime_paid = $2,
-             updated_at = NOW()
-         WHERE customer_id = $3`,
-        [newBalance, newLifetime, customerId]
-      );
-
-      // 2. Mark customer payment status active/paid
-      await tx(
-        `UPDATE customers
-         SET payment_status = 'paid',
-             updated_at = NOW()
-         WHERE id = $1`,
-        [customerId]
-      );
-
-      // 3. Insert into wallet transactions
-      const txId = `tx_manual_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      await tx(
-        `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
-        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓', NOW())`,
-        [
-          txId,
-          customerId,
-          wallet.id,
-          creditAmount,
-          newBalance,
-          cleanUtr,
-          description.trim(),
-          paymentMethod,
-        ]
-      );
-
-      // 4. Insert into payment_records for billing / invoices
-      const receiptNo = `REC_${Date.now()}_${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-      await tx(
-        `INSERT INTO payment_records (
-          id, receipt_number, customer_id, company_name, contact_person, phone, tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, paid_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'topup', $7, 0.00, $7, $8, $9, 'paid', NOW())`,
-        [
-          `pay_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-          receiptNo,
-          customerId,
-          customer.company_name,
-          customer.contact_person,
-          customer.phone,
-          creditAmount,
-          paymentMethod,
-          cleanUtr,
-        ]
-      );
-    });
+    await withMongoTransaction((session) =>
+      withCompensation(session, async (registerUndo) => {
+        try {
+          const result = await creditWalletLedger({
+            session,
+            registerUndo,
+            customerId,
+            amount: creditAmount,
+            referenceUtr: cleanUtr,
+            paymentMethod,
+            description: description.trim(),
+            txIdPrefix: 'tx_manual',
+            // Auto-create customer wallet record if not present
+            createWalletIfMissing: true,
+            newWalletId: `wal_${customerId.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+            // Mark customer payment status active/paid
+            markCustomerPaid: true,
+            receiptCustomer: customer,
+          });
+          recordedOldBalance = result.previousBalance;
+          recordedNewBalance = result.newBalance;
+        } catch (err) {
+          if (err instanceof HttpError && err.message === 'DUPLICATE_UTR') {
+            throw new HttpError(409, duplicateMessage);
+          }
+          throw err;
+        }
+      })
+    );
 
     await logSuperAdminAudit({
       actorId: adminId,
@@ -1696,7 +1857,7 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
       targetType: 'wallet',
       targetId: customerId,
       details: {
-        companyName: customer.company_name,
+        companyName: customer.companyName,
         amount: creditAmount,
         previousBalance: recordedOldBalance,
         newBalance: recordedNewBalance,
@@ -1708,16 +1869,16 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
     res.json({
       ok: true,
       customerId,
-      companyName: customer.company_name,
+      companyName: customer.companyName,
       amount: creditAmount,
       previousBalance: recordedOldBalance,
       newBalance: recordedNewBalance,
       referenceUtr: cleanUtr,
-      message: `Top-up of ₹${creditAmount.toFixed(2)} applied successfully to ${customer.company_name}'s wallet.`,
+      message: `Top-up of ₹${creditAmount.toFixed(2)} applied successfully to ${customer.companyName}'s wallet.`,
     });
   } catch (err) {
     console.error('[POST /api/superadmin/topups/manual-credit]', err);
-    res.status(500).json({ ok: false, error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -1726,108 +1887,101 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
 // =============================================================================
 superadminRouter.get('/accounts', async (req, res) => {
   try {
-    const { status, type = 'business', search, page = 1, limit = 25 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { status, type = 'business', search } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query, 25);
 
     if (type === 'user') {
-      const conditions = [];
-      const params = [];
-
-      if (status && status !== 'all') {
-        params.push(status);
-        conditions.push(`u.status = $${params.length}`);
-      }
-
+      const filter = {};
+      if (status && status !== 'all') filter.status = ciExact(status);
       if (search && search.trim()) {
-        params.push(`%${search.trim().toLowerCase()}%`);
-        const idx = params.length;
-        conditions.push(
-          `(LOWER(u.full_name) LIKE $${idx} OR LOWER(u.email) LIKE $${idx} OR LOWER(u.username) LIKE $${idx})`
-        );
+        const rx = ciContains(search);
+        filter.$or = [{ fullName: rx }, { email: rx }, { username: rx }];
       }
 
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const [totalCount, users] = await Promise.all([
+        SystemUser.countDocuments(filter),
+        SystemUser.find(filter).sort({ createdAt: -1 }).skip(offset).limit(limitNum).lean(),
+      ]);
 
-      const countRes = await query(`SELECT COUNT(*)::INT AS total FROM system_users u ${whereClause}`, params);
-      const totalCount = countRes.rows[0]?.total || 0;
-
-      const listRes = await query(
-        `SELECT
-          u.id, u.full_name, u.email, u.username, u.phone, u.role, u.permissions,
-          u.status, u.last_login_at, u.created_at,
-          c.company_name AS business_name
-         FROM system_users u
-         LEFT JOIN customers c ON c.id = u.customer_id
-         ${whereClause}
-         ORDER BY u.created_at DESC
-         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-        [...params, limitNum, offset]
-      );
+      const custIds = [...new Set(users.map((u) => u.customerId).filter(Boolean))];
+      const custs = custIds.length ? await Customer.find({ _id: { $in: custIds } }).select('companyName').lean() : [];
+      const custMap = new Map(custs.map((c) => [c._id, c.companyName]));
 
       return res.json({
         ok: true,
         type: 'user',
-        accounts: listRes.rows,
-        pagination: {
-          total: totalCount,
-          page: pageNum,
-          limit: limitNum,
-          totalPages: Math.ceil(totalCount / limitNum) || 1,
-        },
+        accounts: users.map((u) => ({
+          id: u._id,
+          full_name: u.fullName,
+          email: u.email,
+          username: u.username,
+          phone: u.phone || null,
+          role: u.role,
+          permissions: u.permissions || [],
+          status: u.status,
+          last_login_at: u.lastLoginAt ?? null,
+          created_at: u.createdAt,
+          business_name: u.customerId ? custMap.get(u.customerId) ?? null : null,
+        })),
+        pagination: buildPagination(totalCount, pageNum, limitNum),
       });
     }
 
     // Business Accounts (customers)
-    const conditions = [];
-    const params = [];
-
-    if (status && status !== 'all') {
-      params.push(status);
-      conditions.push(`c.status = $${params.length}`);
-    }
-
+    const filter = {};
+    if (status && status !== 'all') filter.status = ciExact(status);
     if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      const idx = params.length;
-      conditions.push(
-        `(LOWER(c.company_name) LIKE $${idx} OR LOWER(c.contact_person) LIKE $${idx} OR c.phone LIKE $${idx} OR LOWER(COALESCE(c.email, '')) LIKE $${idx} OR LOWER(c.id) LIKE $${idx})`
-      );
+      const rx = ciContains(search);
+      filter.$or = [{ companyName: rx }, { contactPerson: rx }, { phone: rx }, { email: rx }, { _id: rx }];
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [totalCount, customers] = await Promise.all([
+      Customer.countDocuments(filter),
+      Customer.find(filter).sort({ registeredAt: -1 }).skip(offset).limit(limitNum).lean(),
+    ]);
 
-    const countRes = await query(`SELECT COUNT(*)::INT AS total FROM customers c ${whereClause}`, params);
-    const totalCount = countRes.rows[0]?.total || 0;
-
-    const listRes = await query(
-      `SELECT
-        c.id, c.company_name, c.contact_person, c.phone, c.email, c.category, c.city,
-        c.status, c.registered_at, COALESCE(c.registered_at, NOW()) AS created_at,
-        COALESCE(w.available_balance, 0)::NUMERIC(12,2) AS available_balance,
-        COALESCE(w.daily_ad_spend, 300.00)::NUMERIC(10,2) AS daily_ad_spend,
-        COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
-        (SELECT COUNT(*)::INT FROM marketing_campaigns mc WHERE mc.customer_id = c.id AND mc.status = 'Running') AS running_campaigns,
-        (SELECT COUNT(*)::INT FROM leads l WHERE l.customer_id = c.id) AS total_leads
-       FROM customers c
-       LEFT JOIN wallets w ON w.customer_id = c.id
-       ${whereClause}
-       ORDER BY c.registered_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limitNum, offset]
-    );
+    const ids = customers.map((c) => c._id);
+    const [wallets, running, leadCounts] = ids.length
+      ? await Promise.all([
+          Wallet.find({ customerId: { $in: ids } }).lean(),
+          MarketingCampaign.aggregate([
+            { $match: { customerId: { $in: ids }, status: { $in: ciAny('Running', 'Active') } } },
+            { $group: { _id: '$customerId', n: { $sum: 1 } } },
+          ]),
+          Lead.aggregate([
+            { $match: { customerId: { $in: ids } } },
+            { $group: { _id: '$customerId', n: { $sum: 1 } } },
+          ]),
+        ])
+      : [[], [], []];
+    const walletMap = new Map(wallets.map((w) => [w.customerId, w]));
+    const runMap = new Map(running.map((r) => [r._id, r.n]));
+    const leadMap = new Map(leadCounts.map((r) => [r._id, r.n]));
 
     res.json({
       ok: true,
       type: 'business',
-      accounts: listRes.rows,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(totalCount / limitNum) || 1,
-      },
+      accounts: customers.map((c) => {
+        const w = walletMap.get(c._id);
+        return {
+          id: c._id,
+          company_name: c.companyName,
+          contact_person: c.contactPerson,
+          phone: c.phone,
+          email: c.email,
+          category: c.category,
+          city: c.city,
+          status: c.status,
+          registered_at: c.registeredAt,
+          created_at: c.registeredAt || new Date(),
+          available_balance: num(w?.availableBalance),
+          daily_ad_spend: num(w?.dailyAdSpend ?? 300),
+          ad_campaign_active: Boolean(w?.adCampaignActive),
+          running_campaigns: runMap.get(c._id) || 0,
+          total_leads: leadMap.get(c._id) || 0,
+        };
+      }),
+      pagination: buildPagination(totalCount, pageNum, limitNum),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/accounts]', err);
@@ -1856,20 +2010,19 @@ superadminRouter.patch('/accounts/:id/status', async (req, res) => {
     }
 
     if (accountType === 'user') {
-      const userRes = await query(`SELECT * FROM system_users WHERE id = $1`, [id]);
-      if (userRes.rowCount === 0) {
+      const user = await SystemUser.findById(id).lean();
+      if (!user) {
         return res.status(404).json({ ok: false, error: 'System user not found.' });
       }
 
-      const user = userRes.rows[0];
-
       // Protect last active Super Admin from accidental lockout
-      if (user.role === 'Super Admin' && status !== 'active') {
-        const activeAdmins = await query(
-          `SELECT COUNT(*)::INT AS count FROM system_users WHERE role = 'Super Admin' AND status = 'active' AND id != $1`,
-          [id]
-        );
-        if ((activeAdmins.rows[0]?.count || 0) < 1) {
+      if (SUPER_ADMIN_ROLE_RE.test(user.role || '') && status !== 'active') {
+        const activeAdmins = await SystemUser.countDocuments({
+          role: SUPER_ADMIN_ROLE_RE,
+          status: 'active',
+          _id: { $ne: id },
+        });
+        if (activeAdmins < 1) {
           return res.status(403).json({
             ok: false,
             error: 'Lockout Prevention: Cannot suspend or block the last active Super Admin account.',
@@ -1877,7 +2030,7 @@ superadminRouter.patch('/accounts/:id/status', async (req, res) => {
         }
       }
 
-      await query(`UPDATE system_users SET status = $1, updated_at = NOW() WHERE id = $2`, [status, id]);
+      await SystemUser.updateOne({ _id: id }, { $set: { status, updatedAt: new Date() } });
 
       await logSuperAdminAudit({
         actorId: adminId,
@@ -1893,39 +2046,51 @@ superadminRouter.patch('/accounts/:id/status', async (req, res) => {
     }
 
     // Business Account (customers)
-    const custRes = await query(`SELECT * FROM customers WHERE id = $1`, [id]);
-    if (custRes.rowCount === 0) {
+    const customer = await Customer.findById(id).lean();
+    if (!customer) {
       return res.status(404).json({ ok: false, error: 'Business account not found.' });
     }
 
-    const customer = custRes.rows[0];
     const previousStatus = customer.status;
 
-    await withTransaction(async (tx) => {
-      // 1. Update customer status
-      await tx(`UPDATE customers SET status = $1, updated_at = NOW() WHERE id = $2`, [status, id]);
+    await withMongoTransaction(async (session) => {
+      const now = new Date();
 
-      // 2. Record in account_status_history
-      const historyId = `ash_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      await tx(
-        `INSERT INTO account_status_history (id, customer_id, previous_status, new_status, reason, changed_by, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-        [historyId, id, previousStatus, status, reason.trim(), adminName]
+      // 1 + 2. Update customer status and record it in the status history
+      await Customer.updateOne(
+        { _id: id },
+        {
+          $set: { status, updatedAt: now },
+          $push: {
+            statusHistory: {
+              oldStatus: previousStatus,
+              newStatus: status,
+              reason: reason.trim(),
+              changedBy: adminName,
+              changedAt: now,
+            },
+          },
+        },
+        { session }
       );
 
       // 3. If suspending, pause active campaigns and wallet pacing
       if (status === 'suspended') {
-        await tx(
-          `UPDATE marketing_campaigns
-           SET status = 'Paused', last_action = 'System Hold (Suspended)', last_actor = $1, last_action_at = NOW(), updated_at = NOW()
-           WHERE customer_id = $2 AND status = 'Running'`,
-          [adminName, id]
+        await MarketingCampaign.updateMany(
+          { customerId: id, status: { $in: ciAny('Running', 'Active') } },
+          {
+            $set: {
+              status: 'Paused',
+              lastAction: 'System Hold (Suspended)',
+              lastActor: adminName,
+              lastActionAt: now,
+              updatedAt: now,
+            },
+          },
+          { session }
         );
 
-        await tx(
-          `UPDATE wallets SET ad_campaign_active = FALSE, updated_at = NOW() WHERE customer_id = $1`,
-          [id]
-        );
+        await Wallet.updateOne({ customerId: id }, { $set: { adCampaignActive: false, updatedAt: now } }, { session });
       }
     });
 
@@ -1936,12 +2101,12 @@ superadminRouter.patch('/accounts/:id/status', async (req, res) => {
       targetType: 'business',
       targetId: id,
       reason: reason.trim(),
-      details: { previousStatus, newStatus: status, companyName: customer.company_name },
+      details: { previousStatus, newStatus: status, companyName: customer.companyName },
     });
 
     res.json({
       ok: true,
-      message: `Business account "${customer.company_name}" status updated to ${status}.`,
+      message: `Business account "${customer.companyName}" status updated to ${status}.`,
     });
   } catch (err) {
     console.error('[PATCH /api/superadmin/accounts/:id/status]', err);
@@ -1953,12 +2118,21 @@ superadminRouter.patch('/accounts/:id/status', async (req, res) => {
 superadminRouter.get('/accounts/:id/history', async (req, res) => {
   try {
     const { id } = req.params;
-    const historyRes = await query(
-      `SELECT * FROM account_status_history WHERE customer_id = $1 ORDER BY created_at DESC`,
-      [id]
-    );
+    const customer = await Customer.findById(id).select('statusHistory').lean();
 
-    res.json({ ok: true, history: historyRes.rows });
+    const history = (customer?.statusHistory || [])
+      .map((h) => ({
+        id: String(h._id),
+        customer_id: id,
+        previous_status: h.oldStatus,
+        new_status: h.newStatus,
+        reason: h.reason,
+        changed_by: h.changedBy,
+        created_at: h.changedAt,
+      }))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    res.json({ ok: true, history });
   } catch (err) {
     console.error('[GET /api/superadmin/accounts/:id/history]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -2000,66 +2174,94 @@ superadminRouter.post('/businesses', async (req, res) => {
     const finalPassword = password && password.trim() ? password.trim() : `AdMafia@${cleanPhone.slice(-4)}`;
     const finalUsername = username && username.trim() ? username.trim().toLowerCase().replace(/\s+/g, '') : `biz_${cleanPhone}`;
 
+    const duplicateMessage = `A business with mobile ${cleanPhone} or username "${finalUsername}" is already registered.`;
+
     // Check duplicate phone or username
-    const phoneCheck = await query(`SELECT id FROM customers WHERE phone = $1 OR LOWER(username) = $2`, [cleanPhone, finalUsername]);
-    if (phoneCheck.rowCount > 0) {
-      return res.status(409).json({ ok: false, error: `A business with mobile ${cleanPhone} or username "${finalUsername}" is already registered.` });
+    const phoneCheck = await Customer.exists({
+      $or: [{ phone: cleanPhone }, { username: ciExact(finalUsername) }],
+    });
+    if (phoneCheck) {
+      return res.status(409).json({ ok: false, error: duplicateMessage });
     }
 
-    const custId = `cust_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const walletId = `wlt_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const custId = genId('cust');
+    const walletId = genId('wlt');
     const parsedInitialBalance = Math.max(0, parseFloat(initialBalance) || 0);
 
-    await withTransaction(async (tx) => {
-      // 1. Create Customer Business
-      await tx(
-        `INSERT INTO customers (
-          id, username, phone, email, password_hash, company_name, category, contact_person, city, state,
-          status, profile_status, payment_status, kyc_percent, verified, is_self_registered, registered_from, registered_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-          'active', 'complete', 'paid', 100, TRUE, FALSE, 'Super Admin Control Center', NOW()
-        )`,
-        [
-          custId,
-          finalUsername,
-          cleanPhone,
-          email.trim() || null,
-          finalPassword,
-          companyName.trim(),
-          category.trim(),
-          contactPerson.trim(),
-          city.trim(),
-          state.trim(),
-        ]
-      );
+    try {
+      await withMongoTransaction(async (session) => {
+        const now = new Date();
 
-      // 2. Create Marketing Wallet
-      await tx(
-        `INSERT INTO wallets (
-          id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, total_ad_spent, ad_campaign_active, created_at
-        ) VALUES ($1, $2, $3, 300.00, $4, 0.00, FALSE, NOW())`,
-        [walletId, custId, parsedInitialBalance, parsedInitialBalance]
-      );
-
-      // 3. If initial balance provided, record initial deposit transaction
-      if (parsedInitialBalance > 0) {
-        const txId = `tx_init_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        await tx(
-          `INSERT INTO wallet_transactions (
-            id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
-          ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, 'Super Admin Initial Account Balance', 'Admin Verified Credit', 'Verified ✓', NOW())`,
+        // 1. Create Customer Business
+        await Customer.create(
           [
-            txId,
-            custId,
-            walletId,
-            parsedInitialBalance,
-            parsedInitialBalance,
-            `INIT_${Date.now()}_${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
-          ]
+            {
+              _id: custId,
+              username: finalUsername,
+              phone: cleanPhone,
+              email: email.trim() || '',
+              passwordHash: finalPassword,
+              companyName: companyName.trim(),
+              category: category.trim(),
+              contactPerson: contactPerson.trim(),
+              city: city.trim(),
+              state: state.trim(),
+              status: 'active',
+              profileStatus: 'complete',
+              paymentStatus: 'paid',
+              kycPercent: 100,
+              verified: true,
+              isSelfRegistered: false,
+              registeredFrom: 'Super Admin Control Center',
+              registeredAt: now,
+            },
+          ],
+          { session }
         );
-      }
-    });
+
+        // 2. Create Marketing Wallet
+        await Wallet.create(
+          [
+            {
+              _id: walletId,
+              customerId: custId,
+              availableBalance: parsedInitialBalance,
+              dailyAdSpend: 300,
+              totalLifetimePaid: parsedInitialBalance,
+              totalAdSpent: 0,
+              adCampaignActive: false,
+              createdAt: now,
+            },
+          ],
+          { session }
+        );
+
+        // 3. If initial balance provided, record initial deposit transaction
+        if (parsedInitialBalance > 0) {
+          await WalletTransaction.create(
+            [
+              {
+                _id: genId('tx_init'),
+                customerId: custId,
+                walletId,
+                txType: 'Credit',
+                amount: parsedInitialBalance,
+                balanceAfter: parsedInitialBalance,
+                referenceUtr: `INIT_${Date.now()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+                description: 'Super Admin Initial Account Balance',
+                paymentMethod: 'Admin Verified Credit',
+                status: 'Verified ✓',
+                createdAt: now,
+              },
+            ],
+            { session }
+          );
+        }
+      });
+    } catch (err) {
+      if (isDuplicateKey(err)) return res.status(409).json({ ok: false, error: duplicateMessage });
+      throw err;
+    }
 
     await logSuperAdminAudit({
       actorId: adminId,
@@ -2126,38 +2328,40 @@ superadminRouter.post('/users', async (req, res) => {
       'Super Admin'
     );
 
-    // Check duplicate
-    const dupCheck = await query(
-      `SELECT id FROM system_users WHERE LOWER(email) = $1 OR LOWER(username) = $2`,
-      [cleanEmail, cleanUsername]
-    );
+    const duplicateMessage = 'A user with this email or username already exists.';
 
-    if (dupCheck.rowCount > 0) {
-      return res.status(409).json({ ok: false, error: 'A user with this email or username already exists.' });
+    // Check duplicate
+    const dupCheck = await SystemUser.exists({
+      $or: [{ email: ciExact(cleanEmail) }, { username: ciExact(cleanUsername) }],
+    });
+    if (dupCheck) {
+      return res.status(409).json({ ok: false, error: duplicateMessage });
     }
 
-    const userId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const permsJson = JSON.stringify(Array.isArray(permissions) ? permissions : ['all']);
+    const userId = genId('usr');
+    const now = new Date();
 
-    await query(
-      `INSERT INTO system_users (
-        id, customer_id, full_name, email, username, phone, password_hash, role, department, permissions, status, created_by, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())`,
-      [
-        userId,
-        customerId || null,
-        fullName.trim(),
-        cleanEmail,
-        cleanUsername,
-        cleanPhone || null,
-        finalPassword,
+    try {
+      await SystemUser.create({
+        _id: userId,
+        customerId: customerId || null,
+        fullName: fullName.trim(),
+        email: cleanEmail,
+        username: cleanUsername,
+        phone: cleanPhone || '',
+        passwordHash: finalPassword,
         role,
-        userDept,
-        permsJson,
+        department: userDept,
+        permissions: Array.isArray(permissions) ? permissions : ['all'],
         status,
-        adminName,
-      ]
-    );
+        createdBy: adminName,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (err) {
+      if (isDuplicateKey(err)) return res.status(409).json({ ok: false, error: duplicateMessage });
+      throw err;
+    }
 
     await logSuperAdminAudit({
       actorId: adminId,
@@ -2195,12 +2399,12 @@ superadminRouter.post('/accounts/:id/reset-password', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'New password is required.' });
     }
 
-    const check = await query(`SELECT id, company_name, username, phone, email FROM customers WHERE id = $1`, [id]);
-    if (check.rowCount === 0) {
+    const check = await Customer.findById(id).select('companyName username phone email').lean();
+    if (!check) {
       return res.status(404).json({ ok: false, error: 'Customer business not found.' });
     }
 
-    await query(`UPDATE customers SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [newPassword.trim(), id]);
+    await Customer.updateOne({ _id: id }, { $set: { passwordHash: newPassword.trim(), updatedAt: new Date() } });
 
     await logSuperAdminAudit({
       actorId: 'superadmin',
@@ -2208,14 +2412,14 @@ superadminRouter.post('/accounts/:id/reset-password', async (req, res) => {
       actionType: 'ACCOUNT_PASSWORD_RESET',
       targetType: 'business',
       targetId: id,
-      details: { companyName: check.rows[0].company_name },
+      details: { companyName: check.companyName },
     });
 
     res.json({
       ok: true,
       customerId: id,
-      username: check.rows[0].username,
-      companyName: check.rows[0].company_name,
+      username: check.username,
+      companyName: check.companyName,
       message: 'Password reset successfully for customer business.',
     });
   } catch (err) {
@@ -2233,12 +2437,12 @@ superadminRouter.post('/users/:id/reset-password', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'New password is required.' });
     }
 
-    const check = await query(`SELECT id, full_name, username, email FROM system_users WHERE id = $1`, [id]);
-    if (check.rowCount === 0) {
+    const check = await SystemUser.findById(id).select('fullName username email').lean();
+    if (!check) {
       return res.status(404).json({ ok: false, error: 'User not found.' });
     }
 
-    await query(`UPDATE system_users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [newPassword.trim(), id]);
+    await SystemUser.updateOne({ _id: id }, { $set: { passwordHash: newPassword.trim(), updatedAt: new Date() } });
 
     await logSuperAdminAudit({
       actorId: 'superadmin',
@@ -2246,13 +2450,13 @@ superadminRouter.post('/users/:id/reset-password', async (req, res) => {
       actionType: 'USER_PASSWORD_RESET',
       targetType: 'user',
       targetId: id,
-      details: { username: check.rows[0].username, fullName: check.rows[0].full_name },
+      details: { username: check.username, fullName: check.fullName },
     });
 
     res.json({
       ok: true,
       userId: id,
-      username: check.rows[0].username,
+      username: check.username,
       message: 'Password reset successfully for user.',
     });
   } catch (err) {
@@ -2264,17 +2468,31 @@ superadminRouter.post('/users/:id/reset-password', async (req, res) => {
 // List all system users with associated business name
 superadminRouter.get('/users', async (req, res) => {
   try {
-    const listRes = await query(
-      `SELECT
-        u.id, u.customer_id, u.full_name, u.email, u.username, u.phone, u.role, COALESCE(u.department, 'Super Admin') AS department, u.permissions,
-        u.status, u.last_login_at, u.created_by, u.created_at,
-        c.company_name AS business_name
-       FROM system_users u
-       LEFT JOIN customers c ON c.id = u.customer_id
-       ORDER BY u.created_at DESC`
-    );
+    const users = await SystemUser.find({}).sort({ createdAt: -1 }).lean();
 
-    res.json({ ok: true, users: listRes.rows });
+    const custIds = [...new Set(users.map((u) => u.customerId).filter(Boolean))];
+    const custs = custIds.length ? await Customer.find({ _id: { $in: custIds } }).select('companyName').lean() : [];
+    const custMap = new Map(custs.map((c) => [c._id, c.companyName]));
+
+    res.json({
+      ok: true,
+      users: users.map((u) => ({
+        id: u._id,
+        customer_id: u.customerId ?? null,
+        full_name: u.fullName,
+        email: u.email,
+        username: u.username,
+        phone: u.phone || null,
+        role: u.role,
+        department: u.department || 'Super Admin',
+        permissions: u.permissions || [],
+        status: u.status,
+        last_login_at: u.lastLoginAt ?? null,
+        created_by: u.createdBy || null,
+        created_at: u.createdAt,
+        business_name: u.customerId ? custMap.get(u.customerId) ?? null : null,
+      })),
+    });
   } catch (err) {
     console.error('[GET /api/superadmin/users]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -2286,57 +2504,35 @@ superadminRouter.get('/users', async (req, res) => {
 // =============================================================================
 superadminRouter.get('/audit-logs', async (req, res) => {
   try {
-    const { actionType, targetType, search, page = 1, limit = 30 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { actionType, targetType, search } = req.query;
+    const { pageNum, limitNum, offset } = parsePaging(req.query, 30);
 
-    const conditions = [];
-    const params = [];
+    const and = [];
 
     if (actionType && actionType !== 'all') {
-      params.push(actionType);
-      conditions.push(`action_type = $${params.length}`);
+      and.push({ $or: [{ actionType }, { action: actionType }] });
     }
 
     if (targetType && targetType !== 'all') {
-      params.push(targetType);
-      conditions.push(`target_type = $${params.length}`);
+      and.push({ $or: [{ targetType }, { targetEntity: targetType }] });
     }
 
     if (search && search.trim()) {
-      params.push(`%${search.trim().toLowerCase()}%`);
-      const idx = params.length;
-      conditions.push(
-        `(LOWER(actor_name) LIKE $${idx} OR LOWER(target_id) LIKE $${idx} OR LOWER(COALESCE(reason, '')) LIKE $${idx})`
-      );
+      const rx = ciContains(search);
+      and.push({ $or: [{ actorName: rx }, { targetId: rx }, { reason: rx }] });
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const filter = and.length ? { $and: and } : {};
 
-    const countRes = await query(
-      `SELECT COUNT(*)::INT AS total FROM superadmin_audit_logs ${whereClause}`,
-      params
-    );
-    const totalCount = countRes.rows[0]?.total || 0;
-
-    const listRes = await query(
-      `SELECT * FROM superadmin_audit_logs
-       ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limitNum, offset]
-    );
+    const [totalCount, logs] = await Promise.all([
+      SuperAdminAuditLog.countDocuments(filter),
+      SuperAdminAuditLog.find(filter).sort({ createdAt: -1, timestamp: -1 }).skip(offset).limit(limitNum).lean(),
+    ]);
 
     res.json({
       ok: true,
-      logs: listRes.rows,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(totalCount / limitNum) || 1,
-      },
+      logs: logs.map(mapAudit),
+      pagination: buildPagination(totalCount, pageNum, limitNum),
     });
   } catch (err) {
     console.error('[GET /api/superadmin/audit-logs]', err);

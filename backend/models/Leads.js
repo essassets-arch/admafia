@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 // 1. MASTER LEADS (INGESTION)
 const MasterLeadSchema = new mongoose.Schema({
   _id: { type: String, required: true },
-  leadNumber: { type: String, required: true, unique: true, index: true },
+  leadNumber: { type: String, required: true, unique: true, index: true, default: function () { return this?._id ? `ML-${this._id}` : `ML-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`; } },
   fullName: { type: String, required: true },
   phone: { type: String, required: true, index: true },
   email: { type: String, default: '' },
@@ -17,6 +17,14 @@ const MasterLeadSchema = new mongoose.Schema({
   budget: { type: String, default: '' },
   status: { type: String, default: 'Unassigned', index: true },
   totalDispatched: { type: Number, default: 0 },
+  // Legacy master_leads columns (additive)
+  title: { type: String, default: '' },
+  description: { type: String, default: '' },
+  groupId: { type: String, default: null, index: true },
+  priority: { type: String, default: 'Urgent' },
+  location: { type: String, default: '' },
+  deadlineDate: { type: Date, default: null },
+  createdBy: { type: String, default: 'Admin Operations' },
   createdAt: { type: Date, default: Date.now, index: true }
 }, {
   collection: 'master_leads',
@@ -28,7 +36,7 @@ export const MasterLead = mongoose.models.MasterLead || mongoose.model('MasterLe
 // 2. DISPATCHED CUSTOMER LEADS
 const LeadSchema = new mongoose.Schema({
   _id: { type: String, required: true },
-  masterLeadId: { type: String, required: true, index: true },
+  masterLeadId: { type: String, default: null, index: true },
   customerId: { type: String, required: true, index: true },
   fullName: { type: String, required: true },
   phone: { type: String, required: true },
@@ -36,16 +44,26 @@ const LeadSchema = new mongoose.Schema({
   category: { type: String, required: true, index: true },
   city: { type: String, default: '' },
   state: { type: String, default: '' },
+  // Free-form: SQL leads.status was VARCHAR (uses lowercase 'new', 'Callback', 'Converted', 'Dropped', 'Not Interested', etc.)
   status: {
     type: String,
-    enum: ['New', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost', 'Invalid', 'Interested', 'In Follow-up', 'Pending'],
-    default: 'New',
+    default: 'new',
     index: true
   },
   isRead: { type: Boolean, default: false, index: true },
   assignedAt: { type: Date, default: Date.now, index: true },
   lastContactedAt: { type: Date, default: null },
   notes: { type: String, default: '' },
+  // Legacy leads columns (additive)
+  displayPhone: { type: String, default: '' },
+  requirement: { type: String, default: '' },
+  budget: { type: String, default: '' },
+  source: { type: String, default: '' },
+  priority: { type: String, default: '' },
+  isHot: { type: Boolean, default: true },
+  customerPhone: { type: String, default: '' },
+  customerUsername: { type: String, default: '' },
+  companyName: { type: String, default: '' },
   followups: [{
     note: { type: String, required: true },
     stage: { type: String, default: 'Contacted' },
@@ -72,6 +90,10 @@ const LeadAssignmentSchema = new mongoose.Schema({
   groupId: { type: String, default: null },
   status: { type: String, default: 'Assigned' },
   responseStatus: { type: String, default: 'Pending' },
+  responseNotes: { type: String, default: '' },
+  isRead: { type: Boolean, default: false },
+  notificationStatus: { type: String, default: 'Delivered' },
+  respondedAt: { type: Date, default: null },
   assignedAt: { type: Date, default: Date.now, index: true }
 }, {
   collection: 'lead_assignments',
@@ -85,10 +107,17 @@ export const LeadAssignment = mongoose.models.LeadAssignment || mongoose.model('
 // 4. SALES TASKS
 const SalesTaskSchema = new mongoose.Schema({
   _id: { type: String, required: true },
-  customerId: { type: String, required: true, index: true },
+  customerId: { type: String, default: null, index: true },
   assignedTo: { type: String, default: 'Sales Executive', index: true },
   taskType: { type: String, default: 'Call', index: true },
-  title: { type: String, required: true },
+  // Legacy sales_tasks columns (additive)
+  companyName: { type: String, default: '' },
+  contactPerson: { type: String, default: '' },
+  phone: { type: String, default: '' },
+  priority: { type: String, default: 'High' },
+  dueStatus: { type: String, default: 'today' },
+  dueTime: { type: String, default: '' },
+  title: { type: String, default: '' },
   notes: { type: String, default: '' },
   dueAt: { type: Date, default: null },
   status: { type: String, enum: ['pending', 'in_progress', 'completed', 'cancelled'], default: 'pending', index: true },
@@ -104,18 +133,34 @@ export const SalesTask = mongoose.models.SalesTask || mongoose.model('SalesTask'
 // 5. SUPPORT QUERIES & TICKETS
 const SupportQuerySchema = new mongoose.Schema({
   _id: { type: String, required: true },
-  customerId: { type: String, required: true, index: true },
-  ticketNumber: { type: String, required: true, unique: true, index: true },
+  customerId: { type: String, default: null, index: true }, // SQL customer_id was nullable (admin-created "Direct Business Enquiry")
+  ticketNumber: { type: String, required: true, unique: true, index: true, default: function () { return this?._id ? `TKT-${this._id}` : `TKT-${Date.now()}_${Math.random().toString(36).slice(2, 7)}`; } },
   subject: { type: String, required: true },
   category: { type: String, default: 'Billing' },
-  priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
-  status: { type: String, enum: ['Open', 'In Progress', 'Resolved', 'Closed'], default: 'Open', index: true },
+  // priority / status: free-form (SQL VARCHAR, no CHECK). Sales desk uses 'Open'/'In Progress'/'Resolved'/'Closed',
+  // super admin desk uses lowercase 'open'/'pending'/'resolved' and priority 'normal'.
+  priority: { type: String, default: 'medium' },
+  status: { type: String, default: 'Open', index: true },
   assignedAgent: { type: String, default: null },
+  // Legacy support_queries columns (additive)
+  companyName: { type: String, default: '' },
+  contactName: { type: String, default: '' },
+  contactEmail: { type: String, default: '' },
+  contactPhone: { type: String, default: '' },
+  internalNotes: { type: String, default: '' },
+  lastRepliedAt: { type: Date, default: null },
+  lastRepliedBy: { type: String, default: '' },
+  slaBreached: { type: Boolean, default: false },
+  hoursOpen: { type: Number, default: 0 },
   messages: [{
     sender: { type: String, required: true },
     senderRole: { type: String, enum: ['customer', 'agent', 'system'], default: 'customer' },
     message: { type: String, required: true },
     attachments: [{ type: String }],
+    // support_query_messages legacy columns (additive)
+    messageId: { type: String, default: null },
+    senderType: { type: String, default: null }, // 'admin' | 'internal_note' | 'customer' | 'system'
+    isInternalNote: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
   }],
   resolvedAt: { type: Date, default: null },

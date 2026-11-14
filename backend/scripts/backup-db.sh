@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
-# AdMafia Production PostgreSQL Database Backup & Verification Runbook
-# Run this script on the target VPS before running migrations or deploying
+# AdMafia Production MongoDB Database Backup & Restore Runbook
+# Run this script on the target VPS before maintenance or deployments
 # =============================================================================
 
 set -e
@@ -9,45 +9,29 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="${SCRIPT_DIR}/../../backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/admafia_crm_backup_${TIMESTAMP}.sql"
+ARCHIVE_FILE="${BACKUP_DIR}/admafia_crm_mongo_${TIMESTAMP}.archive.gz"
 
 echo "=========================================================="
-echo "📦 STARTING ADMAFIA POSTGRESQL PRODUCTION BACKUP"
+echo "📦 STARTING ADMAFIA MONGODB PRODUCTION BACKUP"
 echo "=========================================================="
 
 mkdir -p "$BACKUP_DIR"
 
-# Check if PostgreSQL container is running
-if docker ps --format '{{.Names}}' | grep -q "admafia-postgres"; then
-  echo "✓ Found running admafia-postgres container."
-  echo "Taking full database snapshot to: $BACKUP_FILE"
-  docker exec -t admafia-postgres pg_dump -U postgres -d admafia_crm > "$BACKUP_FILE"
-elif command -v pg_dump &> /dev/null; then
-  echo "Taking direct PostgreSQL snapshot..."
-  pg_dump -U postgres -d admafia_crm > "$BACKUP_FILE"
+if docker ps --format '{{.Names}}' | grep -q "^admafia-mongo$"; then
+  echo "✓ Found running admafia-mongo container."
+  echo "Taking full compressed mongodump archive to: $ARCHIVE_FILE"
+  docker exec admafia-mongo mongodump --db=admafia_crm --archive --gzip > "$ARCHIVE_FILE"
+elif command -v mongodump &> /dev/null; then
+  echo "Taking direct host mongodump archive..."
+  mongodump --uri="${MONGO_URI:-mongodb://127.0.0.1:27017/admafia_crm?directConnection=true}" --archive="$ARCHIVE_FILE" --gzip
 else
-  echo "ℹ️ Using node database snapshot tool..."
-  node -e "
-    const fs = require('fs');
-    const path = require('path');
-    const src = path.join(__dirname, '..', 'pgdata');
-    const dest = path.join('${BACKUP_DIR}', 'pgdata_snap_${TIMESTAMP}');
-    if (fs.existsSync(src)) {
-      fs.cpSync(src, dest, { recursive: true });
-      console.log('✓ Successfully backed up pgdata to ' + dest);
-    }
-  "
+  echo "❌ Error: Neither running admafia-mongo container nor host mongodump CLI found."
+  exit 1
 fi
 
-if [ -f "$BACKUP_FILE" ]; then
-  FILE_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
-  echo "✅ Backup successfully created: $BACKUP_FILE ($FILE_SIZE)"
-else
-  echo "✅ File-level database snapshot created in $BACKUP_DIR"
-fi
-
+FILE_SIZE=$(du -h "$ARCHIVE_FILE" | cut -f1)
+echo "✅ MongoDB backup successfully created: $ARCHIVE_FILE ($FILE_SIZE)"
 echo "=========================================================="
-echo "Rollback command if ever needed:"
-echo "cat $BACKUP_FILE | docker exec -i admafia-postgres psql -U postgres -d admafia_crm"
+echo "Restore command if ever needed:"
+echo "cat $ARCHIVE_FILE | docker exec -i admafia-mongo mongorestore --archive --gzip --drop"
 echo "=========================================================="
-

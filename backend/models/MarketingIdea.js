@@ -11,13 +11,23 @@ const MarketingIdeaSchema = new mongoose.Schema({
   suggestedPlatform: { type: String, default: 'Instagram' },
   status: {
     type: String,
-    enum: ['Draft', 'Proposed', 'Approved', 'Rejected', 'Converted'],
+    enum: ['Draft', 'Proposed', 'Approved', 'Rejected', 'Converted', 'Saved', 'Archived'],
     default: 'Proposed',
     index: true
   },
   tags: [{ type: String }],
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  updatedAt: { type: Date, default: Date.now },
+  objective: { type: String, default: '' },
+  captionSuggestions: { type: String, default: '' },
+  callToAction: { type: String, default: '' },
+  hashtags: { type: String, default: '' },
+  creativeBrief: { type: String, default: '' },
+  platform: { type: String, default: 'Meta Ads (Facebook & Instagram)' },
+  language: { type: String, default: 'English / Hinglish' },
+  campaignPeriod: { type: String, default: '' },
+  constraints: { type: String, default: '' },
+  createdBy: { type: String, default: 'Marketing Executive' }
 }, {
   collection: 'marketing_ideas',
   timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' }

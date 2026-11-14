@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import fs from 'fs';
 import path from 'path';
 import net from 'net';
 import { fileURLToPath } from 'url';
@@ -9,7 +10,6 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-let mongoConnection = null;
 let isConnected = false;
 let initPromise = null;
 
@@ -22,18 +22,12 @@ const mongoStatus = {
   lastError: null,
 };
 
-/**
- * Probes whether a TCP port is open before attempting Mongoose connection.
- * Prevents unhandled socket ECONNREFUSED error toasts in IDE during offline local development.
- */
-function probePort(host, port, timeoutMs = 800) {
+function probePort(host, port, timeoutMs = 1500) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
-    let reachable = false;
 
     socket.setTimeout(timeoutMs);
     socket.once('connect', () => {
-      reachable = true;
       socket.destroy();
       resolve(true);
     });
@@ -50,85 +44,122 @@ function probePort(host, port, timeoutMs = 800) {
 
     try {
       socket.connect(port, host);
-    } catch (e) {
+    } catch {
       resolve(false);
     }
   });
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resolveAuthoritativeMongoUri() {
+  const inDocker = fs.existsSync('/.dockerenv');
+  let raw = (process.env.MONGO_URI || '').trim();
+
+  // Guard against legacy .env.example placeholder credentials or host-localhost inside Docker
+  if (!raw || raw.includes('your_secure_mongo_password') || raw.includes('admafia_mongo:')) {
+    raw = inDocker
+      ? 'mongodb://mongo:27017/admafia_crm?directConnection=true'
+      : 'mongodb://127.0.0.1:27017/admafia_crm?directConnection=true';
+  } else if (inDocker && (raw.includes('//localhost:') || raw.includes('//127.0.0.1:'))) {
+    raw = raw.replace('//localhost:', '//mongo:').replace('//127.0.0.1:', '//mongo:');
+  }
+
+  if (!raw.includes('directConnection=')) {
+    raw += (raw.includes('?') ? '&' : '?') + 'directConnection=true';
+  }
+  return raw;
+}
+
 /**
- * Initializes connection to MongoDB for Marketing Posts, Artwork Revisions, and Telemetry.
- * Uses graceful connection timeout and pre-flight port probing so offline local development does not crash or throw unhandled socket errors.
+ * Initializes authoritative connection to MongoDB 7.0 Replica Set (`rs0`) for AdMafia CRM.
  */
 export async function initMongo() {
-  if (isConnected) return mongoStatus;
+  if (isConnected && mongoose.connection.readyState === 1) return mongoStatus;
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    let mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/admafia_crm';
-    if (!mongoUri.includes('directConnection=')) {
-      mongoUri += (mongoUri.includes('?') ? '&' : '?') + 'directConnection=true';
-    }
+    const inDocker = fs.existsSync('/.dockerenv');
+    const maxAttempts = inDocker || process.env.NODE_ENV === 'production' ? 12 : 3;
+    const mongoUri = resolveAuthoritativeMongoUri();
 
     try {
-      // Parse host & port for status reporting
+      const parsed = new URL(mongoUri.replace('mongodb://', 'http://').replace('mongodb+srv://', 'http://'));
+      mongoStatus.host = parsed.hostname;
+      mongoStatus.port = Number(parsed.port || 27017);
+      mongoStatus.database = parsed.pathname.replace(/^\//, '').split('?')[0] || mongoStatus.database;
+    } catch {
+      mongoStatus.host = inDocker ? 'mongo' : '127.0.0.1';
+    }
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const parsed = new URL(mongoUri.replace('mongodb://', 'http://').replace('mongodb+srv://', 'http://'));
-        mongoStatus.host = parsed.hostname;
-        mongoStatus.port = Number(parsed.port || 27017);
-        mongoStatus.database = parsed.pathname.replace(/^\//, '').split('?')[0] || mongoStatus.database;
-      } catch (parseErr) {
-        mongoStatus.host = '127.0.0.1';
-      }
+        const isListening = await probePort(mongoStatus.host, mongoStatus.port, 1500);
+        if (!isListening) {
+          throw new Error(`Port ${mongoStatus.port} not yet accepting connections on ${mongoStatus.host}`);
+        }
 
-      // Pre-flight check: Is the MongoDB server actually listening?
-      const isListening = await probePort(mongoStatus.host, mongoStatus.port, 1500);
-      if (!isListening) {
-        isConnected = false;
-        mongoStatus.connected = false;
-        mongoStatus.lastError = `Port ${mongoStatus.port} closed (MongoDB daemon not running locally)`;
-        console.log(`[MongoDB] Notice: Standalone MongoDB server is not running on ${mongoStatus.host}:${mongoStatus.port}.`);
-        console.log('[MongoDB] Running in graceful offline mode. Core PostgreSQL CRM remains 100% active.');
+        if (attempt === 1) {
+          console.log(`[MongoDB] Connecting to ${mongoUri.replace(/:[^:]*@/, ':***@')}...`);
+        }
+
+        mongoose.set('strictQuery', false);
+        await mongoose.connect(mongoUri, {
+          serverSelectionTimeoutMS: 5000,
+          connectTimeoutMS: 5000,
+          maxPoolSize: 25,
+          directConnection: true,
+        });
+
+        isConnected = true;
+        mongoStatus.connected = true;
+        mongoStatus.lastError = null;
+
+        console.log(
+          `[MongoDB] Authoritative CRM database connected: "${mongoStatus.database}" on ${mongoStatus.host}:${mongoStatus.port}`
+        );
+
+        mongoose.connection.removeAllListeners('error');
+        mongoose.connection.removeAllListeners('disconnected');
+
+        mongoose.connection.on('error', (err) => {
+          console.warn('[MongoDB] Connection error event:', err.message);
+          mongoStatus.connected = false;
+          mongoStatus.lastError = err.message;
+        });
+
+        mongoose.connection.on('disconnected', () => {
+          console.warn('[MongoDB] Disconnected from MongoDB server.');
+          mongoStatus.connected = false;
+          isConnected = false;
+          initPromise = null;
+        });
+
         return mongoStatus;
-      }
-
-      console.log(`[MongoDB] Connecting to ${mongoUri.replace(/:[^:]*@/, ':***@')}...`);
-
-      mongoose.set('strictQuery', false);
-      mongoConnection = await mongoose.connect(mongoUri, {
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 5000,
-        maxPoolSize: 20,
-        directConnection: true,
-      });
-
-      isConnected = true;
-      mongoStatus.connected = true;
-      mongoStatus.lastError = null;
-
-      console.log(`[MongoDB] Connected successfully to "${mongoStatus.database}" on ${mongoStatus.host}:${mongoStatus.port}`);
-
-      mongoose.connection.on('error', (err) => {
-        console.warn('[MongoDB] Connection error event:', err.message);
+      } catch (err) {
+        isConnected = false;
         mongoStatus.connected = false;
         mongoStatus.lastError = err.message;
-      });
 
-      mongoose.connection.on('disconnected', () => {
-        console.warn('[MongoDB] Disconnected from MongoDB server.');
-        mongoStatus.connected = false;
-        isConnected = false;
-      });
-
-      return mongoStatus;
-    } catch (err) {
-      isConnected = false;
-      mongoStatus.connected = false;
-      mongoStatus.lastError = err.message;
-      console.warn(`[MongoDB] Standalone MongoDB server not reachable at ${mongoStatus.host}:${mongoStatus.port} (${err.message}).`);
-      console.warn('[MongoDB] Running in graceful standalone mode. Core PostgreSQL CRM remains 100% active.');
-      return mongoStatus;
+        if (attempt < maxAttempts) {
+          console.warn(
+            `[MongoDB] Connection attempt ${attempt}/${maxAttempts} waiting for ${mongoStatus.host}:${mongoStatus.port} (${err.message})...`
+          );
+          await sleep(1500);
+        } else {
+          console.error(
+            `[MongoDB] Failed to reach MongoDB at ${mongoStatus.host}:${mongoStatus.port} after ${maxAttempts} attempts: ${err.message}`
+          );
+          initPromise = null;
+          return mongoStatus;
+        }
+      }
     }
+
+    initPromise = null;
+    return mongoStatus;
   })();
 
   return initPromise;
@@ -141,7 +172,8 @@ export function isMongoConnected() {
 export function getMongoStatus() {
   return {
     ...mongoStatus,
-    readyState: mongoose.connection.readyState, // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+    connected: isConnected && mongoose.connection.readyState === 1,
+    readyState: mongoose.connection.readyState,
   };
 }
 

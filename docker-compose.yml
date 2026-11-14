@@ -1,29 +1,25 @@
 name: admafia
 
 services:
-  # 1. PostgreSQL 16 Relational Database
-  db:
-    image: postgres:16-alpine
-    container_name: admafia-db
+  # 1. MongoDB 7.0 Replica Set (`rs0`) — Sole Authoritative CRM Database & Transactional Outbox
+  mongo:
+    image: mongo:7.0-jammy
+    container_name: admafia-mongo
     restart: always
-    environment:
-      POSTGRES_DB: admafia_crm
-      POSTGRES_USER: admafia_user
-      POSTGRES_PASSWORD: AdMafiaStrongPass2026!
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backend/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - mongo_data:/data/db
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:27017:27017"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admafia_user -d admafia_crm"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"try { rs.status().ok } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo:27017'}]}).ok }\""]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - admafia-net
 
-  # 2. Node.js Express REST API Backend
+  # 2. Node.js Express REST API Backend (100% MongoDB / Mongoose)
   backend:
     build:
       context: .
@@ -36,18 +32,13 @@ services:
       - path: ./.env
         required: false
     depends_on:
-      db:
+      mongo:
         condition: service_healthy
     environment:
       PORT: 5000
-      PGHOST: db
-      PGPORT: 5432
-      PGUSER: admafia_user
-      PGPASSWORD: AdMafiaStrongPass2026!
-      PGDATABASE: admafia_crm
       NODE_ENV: production
       TRUST_PROXY_HEADERS: "true"
-      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/admafia_crm}
+      MONGO_URI: ${DOCKER_MONGO_URI:-mongodb://mongo:27017/admafia_crm?directConnection=true}
     ports:
       - "127.0.0.1:5000:5000"
     volumes:
@@ -74,51 +65,9 @@ services:
     networks:
       - admafia-net
 
-  # 4. pgAdmin 4 Web Database Administration Browser (/dbadmin/browser/)
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: admafia-pgadmin
-    restart: always
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admafia.marketing
-      PGADMIN_DEFAULT_PASSWORD: AdMafiaAdmin2026!
-      PGADMIN_LISTEN_PORT: 80
-      SCRIPT_NAME: /dbadmin
-    volumes:
-      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
-      - pgadmin_data:/var/lib/pgadmin
-    ports:
-      - "127.0.0.1:5055:80"
-    networks:
-      - admafia-net
-
-  # 5. MongoDB 7.0 Document Database (Primary CRM Database & Outbox)
-  mongo:
-    image: mongo:7.0-jammy
-    container_name: admafia-mongo
-    restart: always
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    volumes:
-      - mongo_data:/data/db
-    ports:
-      - "127.0.0.1:27017:27017"
-    healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval \"try { rs.status().ok } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo:27017'}]}).ok }\""]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - admafia-net
-
 volumes:
-  postgres_data:
-  pgadmin_data:
   mongo_data:
 
 networks:
   admafia-net:
     driver: bridge
-
