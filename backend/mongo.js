@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import path from 'path';
+import net from 'net';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
@@ -15,15 +16,49 @@ let initPromise = null;
 const mongoStatus = {
   connected: false,
   engine: 'mongodb-7',
-  database: process.env.MONGO_INITDB_DATABASE || 'admafia_marketing',
+  database: process.env.MONGO_INITDB_DATABASE || 'admafia_crm',
   host: 'unknown',
   port: 27017,
   lastError: null,
 };
 
 /**
+ * Probes whether a TCP port is open before attempting Mongoose connection.
+ * Prevents unhandled socket ECONNREFUSED error toasts in IDE during offline local development.
+ */
+function probePort(host, port, timeoutMs = 800) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let reachable = false;
+
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => {
+      reachable = true;
+      socket.destroy();
+      resolve(true);
+    });
+
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.once('error', () => {
+      socket.destroy();
+      resolve(false);
+    });
+
+    try {
+      socket.connect(port, host);
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
+/**
  * Initializes connection to MongoDB for Marketing Posts, Artwork Revisions, and Telemetry.
- * Uses graceful connection timeout so offline local development does not crash the server.
+ * Uses graceful connection timeout and pre-flight port probing so offline local development does not crash or throw unhandled socket errors.
  */
 export async function initMongo() {
   if (isConnected) return mongoStatus;
@@ -41,6 +76,17 @@ export async function initMongo() {
         mongoStatus.database = parsed.pathname.replace(/^\//, '') || mongoStatus.database;
       } catch (parseErr) {
         mongoStatus.host = '127.0.0.1';
+      }
+
+      // Pre-flight check: Is the MongoDB server actually listening?
+      const isListening = await probePort(mongoStatus.host, mongoStatus.port, 800);
+      if (!isListening) {
+        isConnected = false;
+        mongoStatus.connected = false;
+        mongoStatus.lastError = `Port ${mongoStatus.port} closed (MongoDB daemon not running locally)`;
+        console.log(`[MongoDB] Notice: Standalone MongoDB server is not running on ${mongoStatus.host}:${mongoStatus.port}.`);
+        console.log('[MongoDB] Running in graceful offline mode. Core PostgreSQL CRM remains 100% active.');
+        return mongoStatus;
       }
 
       console.log(`[MongoDB] Connecting to ${mongoUri.replace(/:[^:]*@/, ':***@')}...`);
