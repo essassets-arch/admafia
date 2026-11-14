@@ -5,11 +5,13 @@ import countryService, { formatDailyRate } from '../services/countryService';
 const WA_NUMBER = '916359120081'; // +91 6359 120 081
 
 export default function WhatsAppWidget() {
+  const [mounted, setMounted] = useState(false);
   const [country, setCountry] = useState(countryService.getCurrentCountry);
   const [showTooltip, setShowTooltip] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const unsubscribe = countryService.subscribe((c) => {
       if (c) setCountry(c);
     });
@@ -18,15 +20,16 @@ export default function WhatsAppWidget() {
 
   // Auto-show teaser bubble after 2.5s for initial visitor engagement
   useEffect(() => {
+    if (!mounted) return;
     const timer = setTimeout(() => {
       if (!hasInteracted) {
         setShowTooltip(true);
       }
     }, 2500);
     return () => clearTimeout(timer);
-  }, [hasInteracted]);
+  }, [mounted, hasInteracted]);
 
-  if (!country) return null;
+  if (!mounted || !country) return null;
 
   const dailyRate = formatDailyRate(country);
   const dynamicMsg = `Hi AdMafia Marketing! I'm interested in generating customer leads from ${dailyRate} in ${country?.country_name || 'my area'}. Please guide me.`;
