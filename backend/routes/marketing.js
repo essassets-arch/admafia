@@ -9,6 +9,7 @@ import {
   syncReviewToMongo,
   recordTelemetryEvent
 } from '../services/marketingStorage.js';
+import { recordOutboxEvent } from '../services/outboxWorker.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -181,15 +182,20 @@ async function logAuditEvent(customerId, entityType, entityId, action, actor, de
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [id, customerId || null, entityType, entityId, action, actor || 'Marketing Operator', JSON.stringify(details), ip]
     );
-    // Asynchronous shadow telemetry stream to MongoDB
-    recordTelemetryEvent({
-      id,
-      customerId,
-      action: `${entityType}_${action}`,
-      postId: entityType === 'post' ? entityId : null,
-      campaignId: entityType === 'campaign' ? entityId : null,
-      details,
-      timestamp: new Date()
+    // Transactional outbox record
+    recordOutboxEvent(null, {
+      aggregateType: 'marketing_audit_event',
+      aggregateId: id,
+      eventType: 'AUDIT_RECORDED',
+      payload: {
+        id,
+        customerId,
+        action: `${entityType}_${action}`,
+        postId: entityType === 'post' ? entityId : null,
+        campaignId: entityType === 'campaign' ? entityId : null,
+        details,
+        timestamp: new Date()
+      }
     }).catch(() => {});
   } catch (err) {
     console.error('[Marketing Audit Log Error]:', err.message);
@@ -1099,6 +1105,21 @@ marketingRouter.post('/posts', async (req, res) => {
       created_at: new Date()
     }).catch(() => {});
 
+    recordOutboxEvent(null, {
+      aggregateType: 'marketing_post',
+      aggregateId: postId,
+      eventType: 'POST_CREATED',
+      payload: {
+        customer_id: customerId,
+        title: title.trim(),
+        platform,
+        caption: caption.trim(),
+        status: finalStatus,
+        revision_number: 1,
+        created_at: new Date()
+      }
+    }).catch(() => {});
+
     res.status(201).json({
       ok: true,
       postId,
@@ -1405,6 +1426,21 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
         `UPDATE marketing_posts SET status = $1, updated_at = NOW() WHERE id = $2`,
         [decision, postId]
       );
+
+      // 5. Atomically enqueue review into transactional outbox
+      await recordOutboxEvent(txQuery, {
+        aggregateType: 'marketing_post',
+        aggregateId: postId,
+        eventType: 'REVIEW_RECORDED',
+        payload: {
+          revision_number: currentRev,
+          decision,
+          reviewer_name: reviewerName,
+          remarks,
+          rejection_reason: rejectionReason,
+          created_at: new Date()
+        }
+      });
 
       reviewResult = {
         decision,

@@ -6,10 +6,11 @@ import {
   syncReviewToMongo,
   recordTelemetryEvent
 } from '../services/marketingStorage.js';
+import { recordOutboxEvent } from '../services/outboxWorker.js';
 
 export const graphicsRouter = express.Router();
 
-// Helper: Audit Logger (PostgreSQL + MongoDB Telemetry)
+// Helper: Audit Logger (PostgreSQL + Transactional Outbox)
 async function logAuditEvent(customerId, entityType, entityId, action, actor, details = {}) {
   try {
     const id = `audit_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
@@ -18,14 +19,19 @@ async function logAuditEvent(customerId, entityType, entityId, action, actor, de
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [id, customerId || null, entityType, entityId, action, actor || 'Graphics Designer', JSON.stringify(details)]
     );
-    // Asynchronous shadow telemetry stream to MongoDB
-    recordTelemetryEvent({
-      id,
-      customerId,
-      action: `${entityType}_${action}`,
-      postId: entityId,
-      details,
-      timestamp: new Date()
+    // Reliable Transactional Outbox record
+    recordOutboxEvent(null, {
+      aggregateType: 'marketing_audit_event',
+      aggregateId: id,
+      eventType: 'AUDIT_RECORDED',
+      payload: {
+        id,
+        customerId,
+        action: `${entityType}_${action}`,
+        postId: entityId,
+        details,
+        timestamp: new Date()
+      }
     }).catch(() => {});
   } catch (err) {
     console.error('[Graphics Audit Log Error]:', err.message);
@@ -395,6 +401,21 @@ graphicsRouter.post('/upload', async (req, res) => {
           updated_at = NOW()
         WHERE id = $6
       `, [mediaUrl.trim(), mediaType, creativeFormat, designerNotes, designerName, postId]);
+
+      // 3. Atomically enqueue into transactional outbox
+      await recordOutboxEvent(txQuery, {
+        aggregateType: 'artwork_revision',
+        aggregateId: postId,
+        eventType: 'ARTWORK_UPLOADED',
+        payload: {
+          revision_number: currentRev,
+          media_url: mediaUrl.trim(),
+          media_type: mediaType,
+          designer_name: designerName,
+          status: 'Pending Verification',
+          created_at: new Date()
+        }
+      });
     });
 
     await logAuditEvent(post.customer_id, 'graphics_upload', postId, 'Uploaded Creative Artwork', designerName, {
@@ -491,6 +512,21 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
           updated_at = NOW()
         WHERE id = $7
       `, [mediaUrl.trim(), mediaType, creativeFormat, fullNotes, designerName, nextRev, postId]);
+
+      // 4. Atomically enqueue into transactional outbox
+      await recordOutboxEvent(txQuery, {
+        aggregateType: 'artwork_revision',
+        aggregateId: postId,
+        eventType: 'ARTWORK_UPLOADED',
+        payload: {
+          revision_number: nextRev,
+          media_url: mediaUrl.trim(),
+          media_type: mediaType,
+          designer_name: designerName,
+          status: 'Pending Verification',
+          created_at: new Date()
+        }
+      });
 
       resultPayload = {
         customerId: post.customer_id,

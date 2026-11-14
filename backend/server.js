@@ -8,6 +8,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
 import { initMongo, getMongoStatus, isMongoConnected } from './mongo.js';
 import { migrateHistoricalMarketingData } from './services/marketingStorage.js';
+import { startOutboxWorker } from './services/outboxWorker.js';
 import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
@@ -1228,7 +1229,7 @@ app.post('/api/auth/login', async (req, res) => {
     // 1. Check customers table (Business Account login by username, email, or 10-digit mobile)
     const custCheck = await query(
       `SELECT id, password_hash, status FROM customers
-       WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR (length($2) = 10 AND phone = $2)
+       WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR phone = $2
        LIMIT 1`,
       [q, cleanPhone]
     );
@@ -1248,7 +1249,7 @@ app.post('/api/auth/login', async (req, res) => {
       const userCheck = await query(
         `SELECT id, customer_id, full_name, email, username, phone, password_hash, role, permissions, status
          FROM system_users
-         WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR (length($2) = 10 AND phone = $2)
+         WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR phone = $2
          LIMIT 1`,
         [q, cleanPhone]
       );
@@ -5709,8 +5710,13 @@ app.listen(PORT, () => {
               })
               .catch((etlErr) => console.warn('[MongoDB ETL Warning]:', etlErr.message));
           }
+          // Start background transactional outbox relay worker
+          startOutboxWorker(2500);
         })
-        .catch((mErr) => console.warn('[MongoDB Warning]:', mErr.message));
+        .catch((mErr) => {
+          console.warn('[MongoDB Warning]:', mErr.message);
+          startOutboxWorker(5000);
+        });
 
       setTimeout(() => {
         processDailyAdSpendPacing()

@@ -190,16 +190,8 @@ export async function initDatabase() {
       pgliteInstance = new PGlite(dataDir);
       await pgliteInstance.waitReady;
     } catch (pgInitErr) {
-      console.warn('[PostgreSQL] PGlite failed to resume from existing data directory, auto-recovering:', pgInitErr.message);
-      try {
-        if (process.platform === 'win32') {
-          cp.execSync(`powershell -Command "Remove-Item -Path '${dataDir}' -Recurse -Force"`, { stdio: 'ignore' });
-        } else {
-          fs.rmSync(dataDir, { recursive: true, force: true });
-        }
-      } catch (rmErr) {}
-      pgliteInstance = new PGlite(dataDir);
-      await pgliteInstance.waitReady;
+      console.warn('[PostgreSQL] PGlite failed to resume from existing data directory:', pgInitErr.message);
+      throw pgInitErr;
     }
     dbMode = 'pglite-postgres';
     console.log(`[PostgreSQL] Initialized persistent PostgreSQL database at ${dataDir}`);

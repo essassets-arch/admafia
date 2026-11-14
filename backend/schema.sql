@@ -815,3 +815,24 @@ CREATE TABLE IF NOT EXISTS country_pricing_audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_cp_audit_code ON country_pricing_audit_logs(country_code);
 CREATE INDEX IF NOT EXISTS idx_cp_audit_created ON country_pricing_audit_logs(created_at DESC);
+
+-- =============================================================================
+-- 17. TRANSACTIONAL OUTBOX (Reliable Relay for MongoDB Creative & Telemetry)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS crm_outbox (
+    id              VARCHAR(64) PRIMARY KEY,
+    aggregate_type  VARCHAR(64) NOT NULL,
+    aggregate_id    VARCHAR(64) NOT NULL,
+    event_type      VARCHAR(64) NOT NULL,
+    payload         JSONB NOT NULL,
+    status          VARCHAR(24) NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    retry_count     INT NOT NULL DEFAULT 0,
+    last_error      TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    processed_at    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_outbox_pending ON crm_outbox(status, created_at)
+WHERE status IN ('pending', 'failed');
+
