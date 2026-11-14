@@ -67,19 +67,24 @@ export async function runFullMigration() {
   let mongoUri = process.env.MONGO_URI;
   if (!mongoUri || mongoUri.includes('admafia_mongo:')) {
     mongoUri = (process.env.PGHOST === 'db' || process.env.DATABASE_URL?.includes('@db:'))
-      ? 'mongodb://mongo:27017/admafia_crm'
-      : 'mongodb://127.0.0.1:27017/admafia_crm';
+      ? 'mongodb://mongo:27017/admafia_crm?directConnection=true'
+      : 'mongodb://127.0.0.1:27017/admafia_crm?directConnection=true';
+  }
+  if (!mongoUri.includes('directConnection=')) {
+    mongoUri += (mongoUri.includes('?') ? '&' : '?') + 'directConnection=true';
   }
 
+  console.log(`🔌 Connecting to MongoDB at: ${mongoUri.replace(/:[^:]*@/, ':***@')}...`);
   try {
-    await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
-    console.log(`✓ MongoDB connected at ${mongoUri.replace(/:[^:]*@/, ':***@')}.\n`);
+    await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000, directConnection: true });
+    console.log(`✓ MongoDB connected successfully.\n`);
   } catch (mongoConnErr) {
-    console.warn(`[MongoDB] Primary connection to ${mongoUri.replace(/:[^:]*@/, ':***@')} failed (${mongoConnErr.message}). Retrying fallback...`);
-    const fallbackUri = mongoUri.includes('@')
-      ? mongoUri.replace(/mongodb:\/\/[^@]+@/, 'mongodb://')
-      : (mongoUri.includes('127.0.0.1') ? 'mongodb://mongo:27017/admafia_crm' : 'mongodb://127.0.0.1:27017/admafia_crm');
-    await mongoose.connect(fallbackUri, { serverSelectionTimeoutMS: 5000 });
+    console.warn(`[MongoDB] Primary connection failed (${mongoConnErr.message}). Retrying fallback...`);
+    const fallbackUri = mongoUri.includes('mongo:')
+      ? 'mongodb://127.0.0.1:27017/admafia_crm?directConnection=true'
+      : 'mongodb://mongo:27017/admafia_crm?directConnection=true';
+    console.log(`🔌 Connecting to fallback MongoDB at: ${fallbackUri}...`);
+    await mongoose.connect(fallbackUri, { serverSelectionTimeoutMS: 5000, directConnection: true });
     console.log(`✓ MongoDB connected at ${fallbackUri}.\n`);
   }
 
