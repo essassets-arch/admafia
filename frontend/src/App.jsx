@@ -1077,7 +1077,7 @@ export default function App({ initialCountry = null } = {}) {
                 </p>
               </div>
               <div className="price">
-                {dailyBudget}<small> /day minimum</small>
+                <small>Starting</small>{dailyBudget}
               </div>
             </div>
 
