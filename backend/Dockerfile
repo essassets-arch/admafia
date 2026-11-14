@@ -19,11 +19,7 @@ RUN npm install --omit=dev
 # Copy application files
 COPY backend/ ./
 COPY --from=frontend-builder /site/dist /frontend/dist
-COPY --from=frontend-builder /site/node_modules/react /frontend/node_modules/react
-COPY --from=frontend-builder /site/node_modules/react-dom /frontend/node_modules/react-dom
-COPY --from=frontend-builder /site/node_modules/scheduler /frontend/node_modules/scheduler
-COPY --from=frontend-builder /site/node_modules/loose-envify /frontend/node_modules/loose-envify
-COPY --from=frontend-builder /site/node_modules/js-tokens /frontend/node_modules/js-tokens
+COPY --from=frontend-builder /site/node_modules /frontend/node_modules
 
 EXPOSE 5000
 
