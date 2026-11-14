@@ -96,10 +96,6 @@ services:
     container_name: admafia-mongo
     restart: always
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admafia_mongo}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-AdMafiaMongoPass2026!}
-      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-admafia_crm}
     volumes:
       - mongo_data:/data/db
     ports:

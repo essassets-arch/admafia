@@ -1,0 +1,122 @@
+{
+  "startedAt": "2026-11-14T10:01:26.163Z",
+  "entities": {
+    "country_pricing": {
+      "pgCount": 2,
+      "mongoCount": 2,
+      "status": "RECONCILED"
+    },
+    "customer_groups": {
+      "pgCount": 0,
+      "mongoCount": 0,
+      "status": "RECONCILED"
+    },
+    "customers": {
+      "pgCount": 3,
+      "mongoCount": 3,
+      "status": "RECONCILED"
+    },
+    "system_users": {
+      "pgCount": 4,
+      "mongoCount": 4,
+      "status": "RECONCILED"
+    },
+    "wallets": {
+      "pgCount": 3,
+      "mongoCount": 3,
+      "status": "RECONCILED"
+    },
+    "wallet_transactions": {
+      "pgCount": 4,
+      "mongoCount": 4,
+      "status": "RECONCILED"
+    },
+    "payment_records": {
+      "pgCount": 2,
+      "mongoCount": 2,
+      "status": "RECONCILED"
+    },
+    "tax_invoices": {
+      "pgCount": 0,
+      "mongoCount": 0,
+      "status": "RECONCILED"
+    },
+    "master_leads": {
+      "pgCount": 6,
+      "mongoCount": 6,
+      "status": "RECONCILED"
+    },
+    "leads": {
+      "pgCount": 0,
+      "mongoCount": 0,
+      "status": "RECONCILED"
+    },
+    "marketing_campaigns": {
+      "pgCount": 2,
+      "mongoCount": 2,
+      "status": "RECONCILED"
+    },
+    "marketing_posts": {
+      "pgCount": 4,
+      "mongoCount": 4,
+      "status": "RECONCILED"
+    },
+    "marketing_ideas": {
+      "pgCount": 0,
+      "mongoCount": 0,
+      "status": "RECONCILED"
+    },
+    "sales_tasks": {
+      "pgCount": 0,
+      "mongoCount": 0,
+      "status": "RECONCILED"
+    },
+    "support_queries": {
+      "pgCount": 0,
+      "mongoCount": 0,
+      "status": "RECONCILED"
+    },
+    "refund_requests": {
+      "pgCount": 0,
+      "mongoCount": 0,
+      "status": "RECONCILED"
+    },
+    "topup_requests": {
+      "pgCount": 2,
+      "mongoCount": 2,
+      "status": "RECONCILED"
+    },
+    "deleted_failed_transactions": {
+      "pgCount": 0,
+      "mongoCount": 0,
+      "status": "RECONCILED"
+    },
+    "superadmin_audit_logs": {
+      "pgCount": 36,
+      "mongoCount": 36,
+      "status": "RECONCILED"
+    },
+    "marketing_audit_events": {
+      "pgCount": 20,
+      "mongoCount": 20,
+      "status": "RECONCILED"
+    },
+    "country_pricing_audit_logs": {
+      "pgCount": 0,
+      "mongoCount": 0,
+      "status": "RECONCILED"
+    }
+  },
+  "financialReconciliation": {
+    "pgWalletBalanceSum": 3000,
+    "mongoWalletBalanceSum": 3000,
+    "walletBalanceMatch": true,
+    "pgLifetimePaidSum": 4000,
+    "mongoLifetimePaidSum": 4000,
+    "lifetimePaidMatch": true,
+    "reconciliationStatus": "PERFECT_MATCH"
+  },
+  "status": "COMPLETED_SUCCESSFULLY",
+  "quarantined": [],
+  "completedAt": "2026-11-14T10:01:27.353Z"
+}

@@ -153,7 +153,7 @@ export async function runFullMigration() {
     let custCount = 0;
     for (const r of custRows.rows) {
       const memRes = await query('SELECT group_id, assigned_at FROM customer_group_memberships WHERE customer_id = $1', [r.id]);
-      const statusRes = await query('SELECT old_status, new_status, reason, changed_by, changed_at FROM account_status_history WHERE customer_id = $1', [r.id]);
+      const statusRes = await query('SELECT previous_status AS old_status, new_status, reason, changed_by, created_at AS changed_at FROM account_status_history WHERE customer_id = $1', [r.id]);
 
       await Customer.findByIdAndUpdate(
         r.id,
@@ -306,7 +306,7 @@ export async function runFullMigration() {
     // ENTITY 7: Payment Records
     // -------------------------------------------------------------------------
     console.log('📦 Migrating: payment_records...');
-    const payRows = await query('SELECT * FROM payment_records ORDER BY created_at ASC');
+    const payRows = await query('SELECT * FROM payment_records ORDER BY paid_at ASC');
     let payCount = 0;
     for (const r of payRows.rows) {
       await PaymentRecord.findByIdAndUpdate(
@@ -315,19 +315,19 @@ export async function runFullMigration() {
           $set: {
             _id: r.id,
             customerId: r.customer_id,
-            walletId: r.wallet_id,
+            walletId: null,
             amount: Number(r.amount),
             currency: r.currency || 'INR',
-            paymentMethod: r.payment_method || 'Razorpay',
-            gatewayOrderId: r.gateway_order_id,
-            gatewayPaymentId: r.gateway_payment_id,
-            gatewaySignature: r.gateway_signature,
-            referenceUtr: r.reference_utr,
+            paymentMethod: r.payment_mode || 'Razorpay',
+            gatewayOrderId: null,
+            gatewayPaymentId: null,
+            gatewaySignature: null,
+            referenceUtr: r.utr_reference,
             receiptNumber: r.receipt_number,
             notes: r.notes || '',
             status: r.status || 'Verified ✓',
-            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
-            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
+            createdAt: r.paid_at ? new Date(r.paid_at) : new Date(),
+            updatedAt: r.paid_at ? new Date(r.paid_at) : new Date()
           }
         },
         { upsert: true }
@@ -351,16 +351,16 @@ export async function runFullMigration() {
             _id: r.id,
             customerId: r.customer_id,
             paymentRecordId: r.payment_record_id,
-            invoiceNumber: r.invoice_number,
-            invoiceDate: r.invoice_date ? new Date(r.invoice_date) : new Date(),
+            invoiceNumber: r.invoice_no,
+            invoiceDate: r.issued_date ? new Date(r.issued_date) : new Date(),
             sacCode: r.sac_code || '998311',
             baseAmount: Number(r.base_amount),
             cgstAmount: Number(r.cgst_amount || 0),
             sgstAmount: Number(r.sgst_amount || 0),
-            igstAmount: Number(r.igst_amount || 0),
+            igstAmount: 0,
             totalAmount: Number(r.total_amount),
             currency: r.currency || 'INR',
-            pdfUrl: r.pdf_url || '',
+            pdfUrl: '',
             createdAt: r.created_at ? new Date(r.created_at) : new Date()
           }
         },
@@ -383,20 +383,20 @@ export async function runFullMigration() {
         {
           $set: {
             _id: r.id,
-            leadNumber: r.lead_number,
-            fullName: r.full_name,
-            phone: r.phone,
-            email: r.email || '',
+            leadNumber: `ML-${r.id}`,
+            fullName: r.buyer_name,
+            phone: r.buyer_phone,
+            email: r.buyer_email || '',
             category: r.category,
-            subCategory: r.sub_category || '',
+            subCategory: '',
             city: r.city || '',
-            state: r.state || '',
-            country: r.country || 'India',
+            state: r.location || '',
+            country: 'India',
             source: r.source || 'Meta Ads',
             requirement: r.requirement || '',
             budget: r.budget || '',
-            status: r.status || 'Unassigned',
-            totalDispatched: Number(r.total_dispatched || 0),
+            status: 'Unassigned',
+            totalDispatched: 0,
             createdAt: r.created_at ? new Date(r.created_at) : new Date()
           }
         },
@@ -409,29 +409,29 @@ export async function runFullMigration() {
     const lRows = await query('SELECT * FROM leads ORDER BY created_at ASC');
     let lCount = 0;
     for (const r of lRows.rows) {
-      const followRes = await query('SELECT note, stage, created_by, created_at FROM lead_followups WHERE lead_id = $1', [r.id]);
+      const followRes = await query('SELECT notes AS note, status AS stage, scheduled_date, scheduled_time, channel, created_at FROM lead_followups WHERE lead_id = $1', [r.id]);
       await Lead.findByIdAndUpdate(
         r.id,
         {
           $set: {
             _id: r.id,
-            masterLeadId: r.master_lead_id,
+            masterLeadId: r.master_lead_id || `standalone_${r.id}`,
             customerId: r.customer_id,
-            fullName: r.full_name,
-            phone: r.phone,
-            email: r.email || '',
-            category: r.category,
+            fullName: r.buyer_name,
+            phone: r.buyer_phone,
+            email: r.buyer_email || '',
+            category: r.category || 'IT & Software',
             city: r.city || '',
-            state: r.state || '',
+            state: '',
             status: r.status || 'New',
             isRead: Boolean(r.is_read),
-            assignedAt: r.assigned_at ? new Date(r.assigned_at) : new Date(),
-            lastContactedAt: r.last_contacted_at ? new Date(r.last_contacted_at) : null,
+            assignedAt: r.created_at ? new Date(r.created_at) : new Date(),
+            lastContactedAt: null,
             notes: r.notes || '',
             followups: followRes.rows.map(f => ({
-              note: f.note,
-              stage: f.stage,
-              createdBy: f.created_by,
+              note: f.note || `${f.channel} on ${f.scheduled_date} ${f.scheduled_time}`,
+              stage: f.stage || 'In Follow-up',
+              createdBy: 'Customer',
               createdAt: new Date(f.created_at)
             })),
             updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
@@ -458,14 +458,14 @@ export async function runFullMigration() {
             _id: r.id,
             customerId: r.customer_id,
             postId: r.post_id || null,
-            campaignName: r.campaign_name,
+            campaignName: r.name,
             objective: r.objective || 'lead_generation',
             platform: r.platform || 'Meta Ads',
             targetAudience: r.target_audience || '',
             dailyBudget: Number(r.daily_budget || 300),
-            totalSpend: Number(r.total_spend || 0),
+            totalSpend: Number(r.total_budget || 0),
             status: r.status || 'Active',
-            activeDays: r.active_days ? r.active_days.split(',').map(s => s.trim()) : [],
+            activeDays: [],
             startDate: r.start_date ? new Date(r.start_date) : new Date(),
             endDate: r.end_date ? new Date(r.end_date) : null,
             createdAt: r.created_at ? new Date(r.created_at) : new Date(),
@@ -498,24 +498,24 @@ export async function runFullMigration() {
             title: r.title || 'Untitled Post',
             caption: r.caption || '',
             targetPlatform: r.platform || 'All',
-            category: r.category || 'General',
+            category: 'General',
             status: r.status || 'Pending Verification',
             currentRevisionNumber: Number(r.revision_number || 1),
             revisions: revRes.rows.map(rev => ({
               revisionNumber: Number(rev.revision_number || 1),
               artworkUrl: rev.media_url || '',
-              fileSize: Number(rev.file_size || 0),
+              fileSize: 0,
               mimeType: rev.media_type || 'image/png',
-              status: rev.status || 'Pending Verification',
+              status: rev.review_status || 'Pending Verification',
               rejectionReason: rev.rejection_reason || null,
-              designerName: rev.designer_name || 'designer',
-              uploadedAt: rev.created_at ? new Date(rev.created_at) : new Date()
+              designerName: rev.uploaded_by || 'Graphics Designer',
+              uploadedAt: rev.uploaded_at ? new Date(rev.uploaded_at) : new Date()
             })),
             reviews: reviewRes.rows.map(rv => ({
               revisionNumber: Number(rv.revision_number || 1),
-              action: rv.decision || rv.action || 'Approved',
+              action: rv.decision || 'Approved',
               reviewerName: rv.reviewer_name || 'auditor',
-              notes: rv.approval_remarks || rv.rejection_reason || rv.notes || '',
+              notes: rv.remarks || rv.rejection_reason || '',
               reviewedAt: rv.created_at ? new Date(rv.created_at) : new Date()
             })),
             isDeleted: Boolean(r.is_deleted),
@@ -529,6 +529,305 @@ export async function runFullMigration() {
     }
     report.entities.marketing_posts = { pgCount: postRows.rowCount, mongoCount: postCount, status: 'RECONCILED' };
     console.log(`  ✓ Migrated ${postCount}/${postRows.rowCount} marketing posts.`);
+
+    // -------------------------------------------------------------------------
+    // ENTITY 12: Marketing Ideas
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: marketing_ideas...');
+    const ideaRows = await query('SELECT * FROM marketing_ideas ORDER BY created_at ASC');
+    let ideaCount = 0;
+    for (const r of ideaRows.rows) {
+      await MarketingIdea.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            customerId: r.customer_id,
+            title: r.title,
+            objective: r.objective,
+            concept: r.concept,
+            targetAudience: r.target_audience || '',
+            captionSuggestions: r.caption_suggestions || '',
+            callToAction: r.call_to_action || '',
+            hashtags: r.hashtags || '',
+            creativeBrief: r.creative_brief || '',
+            platform: r.platform || 'Meta Ads (Facebook & Instagram)',
+            language: r.language || 'English / Hinglish',
+            campaignPeriod: r.campaign_period || '',
+            constraints: r.constraints || '',
+            status: r.status || 'Saved',
+            createdBy: r.created_by || 'Marketing Executive',
+            createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+            updatedAt: r.updated_at ? new Date(r.updated_at) : new Date()
+          }
+        },
+        { upsert: true }
+      );
+      ideaCount++;
+    }
+    report.entities.marketing_ideas = { pgCount: ideaRows.rowCount, mongoCount: ideaCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${ideaCount}/${ideaRows.rowCount} marketing ideas.`);
+
+    // -------------------------------------------------------------------------
+    // ENTITY 13: Sales Tasks
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: sales_tasks...');
+    const taskRows = await query('SELECT * FROM sales_tasks ORDER BY created_at ASC');
+    let taskCount = 0;
+    for (const r of taskRows.rows) {
+      await SalesTask.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            customerId: r.customer_id,
+            assignedTo: 'Sales Executive',
+            taskType: r.task_type || 'Call',
+            title: `${r.task_type} for ${r.company_name}`,
+            notes: r.notes || '',
+            dueAt: null,
+            status: r.status === 'completed' ? 'completed' : 'pending',
+            completedAt: r.status === 'completed' ? new Date() : null,
+            createdAt: r.created_at ? new Date(r.created_at) : new Date()
+          }
+        },
+        { upsert: true }
+      );
+      taskCount++;
+    }
+    report.entities.sales_tasks = { pgCount: taskRows.rowCount, mongoCount: taskCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${taskCount}/${taskRows.rowCount} sales tasks.`);
+
+    // -------------------------------------------------------------------------
+    // ENTITY 14: Support Queries & Messages
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: support_queries...');
+    const sqRows = await query('SELECT * FROM support_queries ORDER BY created_at ASC');
+    let sqCount = 0;
+    for (const r of sqRows.rows) {
+      const msgRes = await query('SELECT * FROM support_query_messages WHERE query_id = $1 ORDER BY created_at ASC', [r.id]);
+      await SupportQuery.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            customerId: r.customer_id,
+            ticketNumber: `TICK-${r.id}`,
+            subject: r.subject,
+            category: r.category || 'Billing',
+            priority: (r.priority || 'Normal').toLowerCase() === 'urgent' ? 'urgent' : 'medium',
+            status: r.status || 'Open',
+            assignedAgent: r.assigned_admin || null,
+            messages: msgRes.rows.map(m => ({
+              sender: m.sender_name,
+              senderRole: m.sender_type === 'admin' ? 'agent' : 'customer',
+              message: m.message,
+              attachments: [],
+              createdAt: m.created_at ? new Date(m.created_at) : new Date()
+            })),
+            resolvedAt: r.resolved_at ? new Date(r.resolved_at) : null,
+            createdAt: r.created_at ? new Date(r.created_at) : new Date()
+          }
+        },
+        { upsert: true }
+      );
+      sqCount++;
+    }
+    report.entities.support_queries = { pgCount: sqRows.rowCount, mongoCount: sqCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${sqCount}/${sqRows.rowCount} support queries.`);
+
+    // -------------------------------------------------------------------------
+    // ENTITY 15: Refund Requests
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: refund_requests...');
+    const refRows = await query('SELECT * FROM refund_requests ORDER BY created_at ASC');
+    let refCount = 0;
+    for (const r of refRows.rows) {
+      await RefundRequest.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            customerId: r.customer_id,
+            walletId: r.wallet_id || '',
+            amount: Number(r.amount),
+            currency: 'INR',
+            reason: r.reason,
+            bankDetails: {},
+            status: r.status || 'Pending',
+            reviewedBy: r.reviewed_by || null,
+            reviewedAt: r.reviewed_at ? new Date(r.reviewed_at) : null,
+            rejectionReason: r.rejection_reason || null,
+            createdAt: r.created_at ? new Date(r.created_at) : new Date()
+          }
+        },
+        { upsert: true }
+      );
+      refCount++;
+    }
+    report.entities.refund_requests = { pgCount: refRows.rowCount, mongoCount: refCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${refCount}/${refRows.rowCount} refund requests.`);
+
+    // -------------------------------------------------------------------------
+    // ENTITY 16: Topup Requests
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: topup_requests...');
+    const topRows = await query('SELECT * FROM topup_requests ORDER BY created_at ASC');
+    let topCount = 0;
+    for (const r of topRows.rows) {
+      await TopupRequest.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            customerId: r.customer_id,
+            walletId: r.wallet_id || '',
+            amount: Number(r.amount),
+            currency: 'INR',
+            paymentMethod: r.payment_method || 'Razorpay',
+            referenceUtr: r.reference_utr,
+            evidenceUrl: r.payment_evidence_url || '',
+            status: r.status || 'Pending',
+            processedBy: r.processed_by || null,
+            processedAt: r.processed_at ? new Date(r.processed_at) : null,
+            rejectionReason: r.rejection_reason || null,
+            createdAt: r.created_at ? new Date(r.created_at) : new Date()
+          }
+        },
+        { upsert: true }
+      );
+      topCount++;
+    }
+    report.entities.topup_requests = { pgCount: topRows.rowCount, mongoCount: topCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${topCount}/${topRows.rowCount} topup requests.`);
+
+    // -------------------------------------------------------------------------
+    // ENTITY 17: Deleted Failed Transactions
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: deleted_failed_transactions...');
+    const delRows = await query('SELECT * FROM deleted_failed_transactions ORDER BY deleted_at ASC');
+    let delCount = 0;
+    for (const r of delRows.rows) {
+      await DeletedFailedTransaction.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            originalId: r.original_id || r.id,
+            customerId: r.customer_id,
+            customerName: r.customer_name || '',
+            companyName: r.company_name || '',
+            contactPerson: r.contact_person || '',
+            phone: r.phone || '',
+            email: r.email || '',
+            city: r.city || '',
+            state: r.state || '',
+            category: r.category || '',
+            amount: Number(r.amount || 0),
+            referenceUtr: r.reference_utr || '',
+            description: r.description || '',
+            paymentMethod: r.payment_method || '',
+            failureReason: r.failure_reason || '',
+            originalCreatedAt: r.original_created_at ? new Date(r.original_created_at) : null,
+            deletedAt: r.deleted_at ? new Date(r.deleted_at) : new Date(),
+            deletedBy: r.deleted_by || 'Sales Admin'
+          }
+        },
+        { upsert: true }
+      );
+      delCount++;
+    }
+    report.entities.deleted_failed_transactions = { pgCount: delRows.rowCount, mongoCount: delCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${delCount}/${delRows.rowCount} deleted failed transactions.`);
+
+    // -------------------------------------------------------------------------
+    // ENTITY 18: Superadmin Audit Logs
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: superadmin_audit_logs...');
+    const saAuditRows = await query('SELECT * FROM superadmin_audit_logs ORDER BY created_at ASC');
+    let saAuditCount = 0;
+    for (const r of saAuditRows.rows) {
+      await SuperAdminAuditLog.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            actorId: r.actor_id,
+            actorName: r.actor_name,
+            actorRole: r.actor_role,
+            actionType: r.action_type,
+            targetType: r.target_type,
+            targetId: r.target_id,
+            reason: r.reason || '',
+            details: typeof r.details === 'string' ? JSON.parse(r.details || '{}') : (r.details || {}),
+            ipAddress: r.ip_address || '',
+            createdAt: r.created_at ? new Date(r.created_at) : new Date()
+          }
+        },
+        { upsert: true }
+      );
+      saAuditCount++;
+    }
+    report.entities.superadmin_audit_logs = { pgCount: saAuditRows.rowCount, mongoCount: saAuditCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${saAuditCount}/${saAuditRows.rowCount} superadmin audit logs.`);
+
+    // -------------------------------------------------------------------------
+    // ENTITY 19: Marketing Audit Events
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: marketing_audit_events...');
+    const mktAuditRows = await query('SELECT * FROM marketing_audit_events ORDER BY created_at ASC');
+    let mktAuditCount = 0;
+    for (const r of mktAuditRows.rows) {
+      await MarketingAuditEvent.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            customerId: r.customer_id,
+            entityType: r.entity_type,
+            entityId: r.entity_id,
+            action: r.action,
+            actor: r.actor,
+            details: typeof r.details === 'string' ? JSON.parse(r.details || '{}') : (r.details || {}),
+            ipAddress: r.ip_address || '',
+            createdAt: r.created_at ? new Date(r.created_at) : new Date()
+          }
+        },
+        { upsert: true }
+      );
+      mktAuditCount++;
+    }
+    report.entities.marketing_audit_events = { pgCount: mktAuditRows.rowCount, mongoCount: mktAuditCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${mktAuditCount}/${mktAuditRows.rowCount} marketing audit events.`);
+
+    // -------------------------------------------------------------------------
+    // ENTITY 20: Country Pricing Audit Logs
+    // -------------------------------------------------------------------------
+    console.log('📦 Migrating: country_pricing_audit_logs...');
+    const cpAuditRows = await query('SELECT * FROM country_pricing_audit_logs ORDER BY created_at ASC');
+    let cpAuditCount = 0;
+    for (const r of cpAuditRows.rows) {
+      await CountryPricingAuditLog.findByIdAndUpdate(
+        r.id,
+        {
+          $set: {
+            _id: r.id,
+            countryCode: r.country_code,
+            countryName: r.country_name,
+            oldPricing: typeof r.old_pricing === 'string' ? JSON.parse(r.old_pricing || '{}') : (r.old_pricing || {}),
+            newPricing: typeof r.new_pricing === 'string' ? JSON.parse(r.new_pricing || '{}') : (r.new_pricing || {}),
+            changedBy: r.changed_by || 'Super Admin',
+            changeReason: r.change_reason || '',
+            effectiveDate: r.effective_date ? new Date(r.effective_date) : new Date(),
+            createdAt: r.created_at ? new Date(r.created_at) : new Date()
+          }
+        },
+        { upsert: true }
+      );
+      cpAuditCount++;
+    }
+    report.entities.country_pricing_audit_logs = { pgCount: cpAuditRows.rowCount, mongoCount: cpAuditCount, status: 'RECONCILED' };
+    console.log(`  ✓ Migrated ${cpAuditCount}/${cpAuditRows.rowCount} country pricing audit logs.`);
 
     // -------------------------------------------------------------------------
     // FINANCIAL RECONCILIATION AUDIT

@@ -31,7 +31,7 @@ const WalletTransactionSchema = new mongoose.Schema({
   txType: { type: String, enum: ['Credit', 'Debit'], required: true, index: true },
   amount: { type: Number, required: true, min: 0.01 },
   balanceAfter: { type: Number, required: true, min: 0 },
-  referenceUtr: { type: String, required: true, index: true }, // Bank UTR or Payment ID (Idempotency Key)
+  referenceUtr: { type: String, required: true }, // Bank UTR or Payment ID (Idempotency Key)
   description: { type: String, required: true },
   paymentMethod: { type: String, default: 'Razorpay Secure (UPI/Card)' },
   status: { type: String, default: 'Verified ✓' },

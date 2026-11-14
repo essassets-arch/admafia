@@ -58,7 +58,7 @@ const LeadSchema = new mongoose.Schema({
   timestamps: { createdAt: 'assignedAt', updatedAt: 'updatedAt' }
 });
 
-LeadSchema.index({ customerId: 1, masterLeadId: 1 }, { unique: true });
+LeadSchema.index({ customerId: 1, masterLeadId: 1 });
 LeadSchema.index({ customerId: 1, status: 1 });
 
 export const Lead = mongoose.models.Lead || mongoose.model('Lead', LeadSchema);
