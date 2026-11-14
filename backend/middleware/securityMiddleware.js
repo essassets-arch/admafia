@@ -36,17 +36,17 @@ export function securityHeadersMiddleware(req, res, next) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
 
-  // Content-Security-Policy compatible with Vite SPA, SSR country bootstrap, Razorpay Checkout & Firebase FCM
+  // Content-Security-Policy compatible with Vite SPA, SSR country bootstrap, Razorpay Checkout, Firebase FCM & Analytics Pixel
   res.setHeader(
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.gstatic.com https://apis.google.com",
+      "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.gstatic.com https://apis.google.com https://connect.facebook.net",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: blob: https:",
-      "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://fcm.googleapis.com https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com https://firebase.googleapis.com https://*.googleapis.com https://www.gstatic.com",
-      "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com",
+      "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://fcm.googleapis.com https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com https://firebase.googleapis.com https://*.googleapis.com https://www.gstatic.com https://www.facebook.com https://connect.facebook.net",
+      "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://www.facebook.com",
       "object-src 'none'",
       "base-uri 'self'",
     ].join('; ')

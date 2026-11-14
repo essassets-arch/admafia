@@ -65,6 +65,42 @@ function sanitizeStoredCustomer(cust) {
   return copy;
 }
 
+const PIXEL_ID = '1124252446675289';
+
+function ensureAnalyticsPixel() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null;
+  try {
+    if (!window.fbq) {
+      const n = (window.fbq = function (...args) {
+        if (n.callMethod) {
+          n.callMethod.apply(n, args);
+        } else {
+          n.queue.push(args);
+        }
+      });
+      if (!window._fbq) window._fbq = n;
+      n.push = n;
+      n.loaded = true;
+      n.version = '2.0';
+      n.queue = [];
+      const t = document.createElement('script');
+      t.async = true;
+      t.src = 'https://connect.facebook.net/en_US/fbevents.js';
+      t.onerror = () => {};
+      const s = document.getElementsByTagName('script')[0];
+      if (s && s.parentNode) s.parentNode.insertBefore(t, s);
+      else document.head.appendChild(t);
+    }
+    if (!window.__amPixelInitialized) {
+      window.__amPixelInitialized = true;
+      window.fbq('init', PIXEL_ID);
+    }
+    return window.fbq;
+  } catch {
+    return null;
+  }
+}
+
 export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWebsite }) {
   const [selectedCountry, setSelectedCountry] = useState(() => countryService.getCurrentCountry());
 
@@ -72,6 +108,37 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
     return countryService.subscribe((country) => {
       if (country) setSelectedCountry(country);
     });
+  }, []);
+
+  // Track every Register Page visit with Pixel 1124252446675289 (both direct /register loads & SPA transitions)
+  useEffect(() => {
+    try {
+      const pathLower = (window.location.pathname || '').toLowerCase();
+      const hashLower = (window.location.hash || '').toLowerCase();
+      if (!pathLower.includes('register') && !hashLower.includes('register')) {
+        window.history.replaceState({}, '', '/#register');
+      }
+
+      const fbqFn = ensureAnalyticsPixel();
+      if (!fbqFn) return;
+
+      const currentUrl = (window.location.pathname || '/') + (window.location.hash || '');
+      const initialUrl = window.__amInitialPixelUrl || '';
+      if (!initialUrl || initialUrl !== currentUrl) {
+        fbqFn('track', 'PageView');
+      }
+      window.__amInitialPixelUrl = null;
+
+      fbqFn('track', 'ViewContent', {
+        content_name: 'Register Page',
+        content_category: 'Account Registration',
+      });
+      fbqFn('trackCustom', 'RegisterPageVisit', {
+        page: currentUrl,
+      });
+    } catch {
+      // Ignore client ad-blocker restrictions
+    }
   }, []);
 
   // Step 1: Verify WhatsApp | Step 2: Email & Business Details | Step 3: Password & Confirm
@@ -457,6 +524,18 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       newCustomer.kycPercent = regEval.kycPercent;
       newCustomer.profileStatus = regEval.profileStatus;
       newCustomer.profile_status = regEval.profileStatus;
+
+      try {
+        const fbqFn = ensureAnalyticsPixel();
+        if (fbqFn) {
+          fbqFn('track', 'CompleteRegistration', {
+            status: true,
+            currency: selectedCountry?.currency_code || 'INR',
+          });
+        }
+      } catch {
+        // Ignore client ad-blocker restrictions
+      }
 
       try {
         localStorage.setItem('growthline_active_user', JSON.stringify(newCustomer));

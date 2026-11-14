@@ -11,7 +11,8 @@
       var _loc = window.location;
       var _path = (_loc.pathname || '').toLowerCase();
       var _hash = (_loc.hash || '').toLowerCase();
-      var _isInternalDesk = _path.includes('/sales') || _path.includes('/superadmin') || _path.includes('/portal') || _hash.includes('#sales') || _hash.includes('#balance') || _hash.includes('#transactions');
+      var _isRegisterRoute = _path.includes('/register') || _hash.includes('register') || _hash.includes('create-account');
+      var _isInternalDesk = !_isRegisterRoute && (_path.includes('/sales') || _path.includes('/superadmin') || _path.includes('/marketing') || _path.includes('/graphics') || _path.includes('/portal') || _hash.includes('#sales') || _hash.includes('#balance') || _hash.includes('#transactions'));
 
       if (!_isInternalDesk) {
         !function (f, b, e, v, n, t, s) {
@@ -27,6 +28,8 @@
           s.parentNode.insertBefore(t, s)
         }(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
         if (window.fbq) {
+          window.__amPixelInitialized = true;
+          window.__amInitialPixelUrl = (_loc.pathname || '/') + (_loc.hash || '');
           fbq('init', '1124252446675289');
           fbq('track', 'PageView');
         }
