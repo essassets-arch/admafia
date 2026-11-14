@@ -30,7 +30,7 @@ export async function initMongo() {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/admafia_marketing';
+    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/admafia_crm';
 
     try {
       // Parse host & port for status reporting
