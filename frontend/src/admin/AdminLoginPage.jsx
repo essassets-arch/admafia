@@ -299,7 +299,7 @@ export default function AdminLoginPage({
 
       {/* Bottom Bar */}
       <footer className="adm-login-bottom-bar">
-        &copy; {new Date().getFullYear()} AdMafia Marketing CRM &bull; Multi-Department Relational Operations Gateway &bull; PostgreSQL Protected
+        &copy; {new Date().getFullYear()} AdMafia Marketing CRM &bull; Multi-Department Operations Gateway &bull; MongoDB Protected
       </footer>
     </div>
   );

@@ -45,7 +45,7 @@ const ArtworkReviewSchema = new mongoose.Schema({
 
 const MarketingPostSchema = new mongoose.Schema({
   _id: { type: String, required: true }, // Preserves original post_id (e.g. POST_179464...)
-  customerId: { type: String, required: true, index: true }, // Links directly to PostgreSQL customers.id
+  customerId: { type: String, required: true, index: true }, // Links directly to Customer._id
   title: { type: String, required: true, trim: true },
   caption: { type: String, default: '' },
   targetPlatform: {

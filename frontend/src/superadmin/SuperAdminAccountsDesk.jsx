@@ -193,7 +193,7 @@ export default function SuperAdminAccountsDesk() {
               <div style="text-align:left; font-size:13px;">
                 <p>New Password: <code style="font-size:14px; color:#4338ca; font-weight:700;">${newPassword.trim()}</code></p>
                 <div style="margin-top:8px; padding:8px; background:#eff6ff; border-radius:6px; font-size:12px; color:#1e40af;">
-                  ✓ Updated in PostgreSQL. Customer can log in immediately.
+                  ✓ Updated in MongoDB. Customer can log in immediately.
                 </div>
               </div>
             `,

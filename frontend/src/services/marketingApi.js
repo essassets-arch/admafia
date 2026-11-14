@@ -1,6 +1,6 @@
 /**
  * AdMafia Marketing Panel - Authoritative API Client Service
- * Connects directly to backend PostgreSQL /api/marketing/* routes
+ * Connects directly to backend MongoDB /api/marketing/* routes
  */
 
 const BASE_URL = import.meta.env?.VITE_API_URL || '/api/marketing';

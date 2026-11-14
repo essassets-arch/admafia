@@ -239,7 +239,7 @@ export default function SuperAdminTopupsDesk() {
           title: 'Wallet Credited! 🚀',
           html: `
             <div style="text-align: left; font-size: 0.90rem; line-height: 1.7;">
-              <p>₹<strong>${Number(topup.amount).toLocaleString('en-IN')}</strong> has been added to <strong>${topup.company_name}</strong>'s wallet in PostgreSQL.</p>
+              <p>₹<strong>${Number(topup.amount).toLocaleString('en-IN')}</strong> has been added to <strong>${topup.company_name}</strong>'s wallet in MongoDB.</p>
               <div style="margin-top: 10px; padding: 10px; background: #eff6ff; border-radius: 8px; color: #1e40af; font-size: 0.82rem;">
                 ✓ The customer account dashboard shows this balance and verified transaction receipt immediately.
               </div>
@@ -282,7 +282,7 @@ export default function SuperAdminTopupsDesk() {
         Swal.fire({
           icon: 'info',
           title: 'Top-Up Request Rejected',
-          text: 'Request marked as rejected with recorded reason in PostgreSQL.',
+          text: 'Request marked as rejected with recorded reason in MongoDB.',
         });
       }
     } catch (err) {
@@ -321,7 +321,7 @@ export default function SuperAdminTopupsDesk() {
           <div>Bank Reference UTR: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${manualForm.referenceUtr}</code></div>
           <div>Payment Method: <strong>${manualForm.paymentMethod}</strong></div>
           <div style="margin-top: 10px; padding: 10px; background: #ecfdf5; border-radius: 8px; color: #065f46; font-size: 0.82rem;">
-            ✓ Funds will be added directly into PostgreSQL wallet and will immediately show on the customer's dashboard.
+            ✓ Funds will be added directly into MongoDB wallet and will immediately show on the customer's dashboard.
           </div>
         </div>
       `,
@@ -361,7 +361,7 @@ export default function SuperAdminTopupsDesk() {
                 <div>UTR Reference: <code>${res.referenceUtr || manualForm.referenceUtr}</code></div>
               </div>
               <div style="padding: 10px; background: #eff6ff; border-radius: 8px; color: #1e40af; font-size: 0.82rem;">
-                ✓ Updated in PostgreSQL authoritative ledger. Customer dashboard reflects this credit immediately.
+                ✓ Updated in MongoDB authoritative ledger. Customer dashboard reflects this credit immediately.
               </div>
             </div>
           `,
@@ -522,7 +522,7 @@ export default function SuperAdminTopupsDesk() {
                     <tr>
                       <td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
                         <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
-                        <div>Loading registered businesses from PostgreSQL...</div>
+                        <div>Loading registered businesses from MongoDB...</div>
                       </td>
                     </tr>
                   ) : filteredCustomers.length === 0 ? (

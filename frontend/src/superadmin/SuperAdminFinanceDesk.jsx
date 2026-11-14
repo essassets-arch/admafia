@@ -132,7 +132,7 @@ export default function SuperAdminFinanceDesk() {
         <div>
           <h1>Manage Finance &amp; Ledger</h1>
           <p>
-            Authoritative financial control for AdMafia. Inspect account-wise balances, trace every credit and debit in the PostgreSQL transaction ledger, and export financial audit reports.
+            Authoritative financial control for AdMafia. Inspect account-wise balances, trace every credit and debit in the MongoDB transaction ledger, and export financial audit reports.
           </p>
         </div>
 

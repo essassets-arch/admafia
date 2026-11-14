@@ -254,7 +254,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
           <div className="marketing-top-actions">
             <div className="marketing-live-pill">
               <span className="marketing-live-dot" />
-              <span>PostgreSQL Live Sync</span>
+              <span>MongoDB Live Sync</span>
             </div>
             <div className="marketing-clock-tag">
               {liveClock.toLocaleTimeString('en-IN', {

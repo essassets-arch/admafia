@@ -381,7 +381,7 @@ export default function MasterTransactionLogsDesk({
       title: 'Sales-Assisted Top-Up Recovery',
       html: `
         <div style="text-align: left; font-size: 0.90rem; color: #334155;">
-          <p>Credit customer advertising wallet directly in PostgreSQL:</p>
+          <p>Credit customer advertising wallet directly in MongoDB:</p>
           <div style="background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 12px;">
             <div>Customer: <strong>${identity.displayName}</strong> (@${identity.username})</div>
             <div>Phone: <strong>+91 ${tx.phone}</strong></div>
@@ -509,7 +509,7 @@ export default function MasterTransactionLogsDesk({
             className="desk-action-btn"
             onClick={() => fetchTransactions(true)}
             disabled={loading}
-            title="Reload live transactions from PostgreSQL database"
+            title="Reload live transactions from MongoDB database"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
           >
             <RefreshCw size={14} className={loading ? 'desk-spin' : ''} />

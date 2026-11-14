@@ -324,7 +324,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
             <div>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>Recent Financial Activity</h3>
               <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
-                Live transactions processed through the PostgreSQL ledger
+                Live transactions processed through the MongoDB ledger
               </div>
             </div>
             <button

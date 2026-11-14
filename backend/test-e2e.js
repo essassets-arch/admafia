@@ -3,7 +3,7 @@
  * GROWTHLINE B2B LEAD GENERATION CRM — FULL DYNAMIC E2E TEST SUITE
  * ============================================================================
  * Verifies:
- *  1. Backend & PostgreSQL Health Check (Zero Static Data Baseline)
+ *  1. Backend & MongoDB Health Check (Zero Static Data Baseline)
  *  2. Multi-Account Registration (Account A & Account B via /api/auth/register)
  *  3. Customer Authentication (/api/auth/login with Phone & Username)
  *  4. Step 1: Business Profile Completion (/api/customers/:id/profile)
@@ -64,10 +64,10 @@ async function runTests() {
   await api('/groups/grp_test_it', { method: 'DELETE' });
   await api('/groups/grp_test_hw', { method: 'DELETE' });
 
-  console.log('1️⃣  Checking PostgreSQL Connection & Baseline Counts...');
+  console.log('1️⃣  Checking MongoDB Connection & Baseline Counts...');
   const health1 = await api('/health');
   assert(health1.status === 200 && health1.data.ok === true, 'GET /api/health returns 200 OK');
-  assert(health1.data.db.connected === true, `PostgreSQL engine connected (${health1.data.db.engine})`);
+  assert(health1.data.db.connected === true, `MongoDB engine connected (${health1.data.db.engine})`);
   const initialCustomers = Number(health1.data.counts.customers_count || 0);
   console.log(`   ℹ️  Initial customers in DB: ${initialCustomers}\n`);
 

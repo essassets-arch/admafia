@@ -468,7 +468,7 @@ Role: ${c.role || 'Business Customer'}`;
               <p>Account: <strong>${savedTarget.full_name || savedTarget.company_name || savedTarget.username}</strong></p>
               <p>New Login Password: <code style="font-size:14px; font-weight:700; color:#4338ca;">${savedNewPwd}</code></p>
               <div style="margin-top:10px; padding:8px 12px; background:#eff6ff; border-radius:6px; color:#1e40af;">
-                ✓ Login credentials updated in PostgreSQL. User can log in with new password immediately.
+                ✓ Login credentials updated in MongoDB. User can log in with new password immediately.
               </div>
             </div>
           `,
@@ -569,7 +569,7 @@ Role: ${c.role || 'Business Customer'}`;
                 <Building2 size={18} className="sa-brand-icon" />
                 <h3>Enterprise Business &amp; Customer Portal Registration</h3>
               </div>
-              <span className="sa-badge sa-badge-primary">PostgreSQL Active</span>
+              <span className="sa-badge sa-badge-primary">MongoDB Active</span>
             </div>
 
             <div className="sa-form-body">
@@ -813,7 +813,7 @@ Role: ${c.role || 'Business Customer'}`;
             </h4>
             <ul>
               <li>
-                <strong>PostgreSQL Authentication:</strong> Credentials are saved directly to PostgreSQL. The business owner can immediately log in at <code>https://admafia.marketing/portal</code> or <code>/#login</code>.
+                <strong>MongoDB Authentication:</strong> Credentials are saved directly to MongoDB. The business owner can immediately log in at <code>https://admafia.marketing/portal</code> or <code>/#login</code>.
               </li>
               <li>
                 <strong>Multi-Identifier Sign In:</strong> Business users can log in using either their 10-digit mobile number, official email, or assigned username.
@@ -838,7 +838,7 @@ Role: ${c.role || 'Business Customer'}`;
                 <UserCheck size={18} className="sa-brand-icon" />
                 <h3>User Login &amp; Role Provisioning</h3>
               </div>
-              <span className="sa-badge sa-badge-warning">PostgreSQL Backed</span>
+              <span className="sa-badge sa-badge-warning">MongoDB Backed</span>
             </div>
 
             <div className="sa-form-body">
@@ -1229,7 +1229,7 @@ Role: ${c.role || 'Business Customer'}`;
 
             <div style={{ padding: 24 }}>
               <p style={{ margin: '0 0 16px 0', fontSize: '0.86rem', color: '#475569' }}>
-                The account has been recorded in PostgreSQL. You can launch the Customer Dashboard immediately or copy credentials for the customer.
+                The account has been recorded in MongoDB. You can launch the Customer Dashboard immediately or copy credentials for the customer.
               </p>
 
               {/* Credentials Card Box */}

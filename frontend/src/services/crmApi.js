@@ -1,5 +1,5 @@
 /**
- * Growthline / AdMafia CRM — Frontend <-> PostgreSQL Backend API Client
+ * Growthline / AdMafia CRM — Frontend <-> MongoDB Backend API Client
  * Connects the React Frontend (Customer CRM & Sales Desks) to http://localhost:5000/api
  */
 
@@ -29,18 +29,18 @@ async function apiRequest(endpoint, options = {}) {
 
 export const crmApi = {
   /**
-   * Check backend & PostgreSQL health
+   * Check backend & MongoDB health
    */
   async checkHealth() {
     return apiRequest('/health');
   },
 
   /**
-   * Fetch full CRM state from PostgreSQL and hydrate localStorage + UI
+   * Fetch full CRM state from MongoDB and hydrate localStorage + UI
    */
   async syncStateFromPostgres() {
     try {
-      // Fetch authoritative state directly from PostgreSQL
+      // Fetch authoritative state directly from MongoDB
       const fresh = await apiRequest('/state');
 
       if (Array.isArray(fresh.customers)) {
@@ -75,11 +75,24 @@ export const crmApi = {
       }
 
       window.dispatchEvent(new CustomEvent('growthline_postgres_synced', { detail: fresh }));
+      window.dispatchEvent(new CustomEvent('growthline_database_synced', { detail: fresh }));
+      window.dispatchEvent(new CustomEvent('growthline_mongo_synced', { detail: fresh }));
       return fresh;
     } catch (err) {
       console.warn('[crmApi] Backend sync warning:', err.message);
       return null;
     }
+  },
+
+  /**
+   * MongoDB alias for syncStateFromPostgres
+   */
+  async syncStateFromMongo() {
+    return this.syncStateFromPostgres();
+  },
+
+  async syncStateFromDatabase() {
+    return this.syncStateFromPostgres();
   },
 
   /**

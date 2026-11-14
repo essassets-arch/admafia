@@ -195,7 +195,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
             className="marketing-btn-refresh"
             onClick={() => fetchCustomers(true)}
             disabled={refreshing}
-            title="Refresh from PostgreSQL Database"
+            title="Refresh from MongoDB Database"
           >
             <RefreshCw size={14} className={refreshing ? 'spin' : ''} />
             <span>{refreshing ? 'Syncing...' : 'Live Refresh'}</span>

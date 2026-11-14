@@ -261,7 +261,7 @@ sequenceDiagram
     Bus-->>Support: Automatically queues client in PendingPaymentVerificationView
     Bus-->>SA: Updates Monthly Gross Sales & Rep Performance KPIs
     Store->>DB: Debounced POST /api/sales/full-sync
-    DB-->>Store: 200 OK (PostgreSQL / SQLite updated)
+    DB-->>Store: 200 OK (MongoDB Replica Set updated)
 ```
 
 ### Event Bus Directory:
@@ -285,43 +285,39 @@ sequenceDiagram
 | `POST` | `/api/sales/proposals` | `{ dealId, packageTier, dailySpend, gstNumber }` | `{ success: true, proposalUrl, quoteId }` | Generate and issue commercial proposal |
 | `GET` | `/api/sales/performance` | `?repId=<id>` | `{ quota, revenueClosed, winRate, rank }` | Rep monthly scorecard and quota progress |
 
-### 6.2 Database Schema: `sales_deals` & `sales_call_logs`
+### 6.2 Mongoose Schema: `sales_deals` & `sales_call_logs`
 
-```sql
--- Sales Deals & Pipeline Table
-CREATE TABLE IF NOT EXISTS sales_deals (
-  id VARCHAR(100) PRIMARY KEY,
-  lead_id VARCHAR(100) NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
-  customer_id VARCHAR(100) REFERENCES customers(id) ON DELETE SET NULL,
-  rep_id VARCHAR(100) NOT NULL,
-  deal_title VARCHAR(255) NOT NULL,
-  stage VARCHAR(50) NOT NULL DEFAULT 'discovery',
-  package_tier VARCHAR(100) NOT NULL DEFAULT 'Starter Runway',
-  daily_ad_spend NUMERIC(10, 2) NOT NULL DEFAULT 300.00,
-  total_deal_value NUMERIC(12, 2) NOT NULL DEFAULT 10000.00,
-  probability_pct INTEGER NOT NULL DEFAULT 20,
-  expected_close_date DATE,
-  lost_reason VARCHAR(255),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  closed_at TIMESTAMPTZ
-);
+```javascript
+// 1. Sales Deals & Pipeline Collection (Mongoose)
+const SalesDealSchema = new mongoose.Schema({
+  _id: { type: String, required: true },
+  leadId: { type: String, required: true, ref: 'Lead', index: true },
+  customerId: { type: String, default: null, ref: 'Customer', index: true },
+  repId: { type: String, required: true, index: true },
+  dealTitle: { type: String, required: true },
+  stage: { type: String, default: 'discovery', index: true },
+  packageTier: { type: String, default: 'Starter Runway' },
+  dailyAdSpend: { type: Number, default: 300.00 },
+  totalDealValue: { type: Number, default: 10000.00 },
+  probabilityPct: { type: Number, default: 20 },
+  expectedCloseDate: { type: Date, default: null },
+  lostReason: { type: String, default: null },
+  createdAt: { type: Date, default: Date.now },
+  closedAt: { type: Date, default: null }
+}, { collection: 'sales_deals', timestamps: true });
 
--- Call Logs Table
-CREATE TABLE IF NOT EXISTS sales_call_logs (
-  id VARCHAR(100) PRIMARY KEY,
-  deal_id VARCHAR(100) REFERENCES sales_deals(id) ON DELETE CASCADE,
-  lead_id VARCHAR(100) NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
-  rep_id VARCHAR(100) NOT NULL,
-  duration_seconds INTEGER NOT NULL DEFAULT 0,
-  outcome VARCHAR(100) NOT NULL,
-  notes TEXT,
-  scheduled_callback TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_sales_deals_rep ON sales_deals(rep_id);
-CREATE INDEX IF NOT EXISTS idx_sales_deals_stage ON sales_deals(stage);
-CREATE INDEX IF NOT EXISTS idx_sales_calls_deal ON sales_call_logs(deal_id);
+// 2. Call Logs Collection (Mongoose)
+const SalesCallLogSchema = new mongoose.Schema({
+  _id: { type: String, required: true },
+  dealId: { type: String, required: true, ref: 'SalesDeal', index: true },
+  leadId: { type: String, required: true, ref: 'Lead', index: true },
+  repId: { type: String, required: true, index: true },
+  durationSeconds: { type: Number, default: 0 },
+  outcome: { type: String, required: true },
+  notes: { type: String, default: '' },
+  scheduledCallback: { type: Date, default: null },
+  createdAt: { type: Date, default: Date.now, index: true }
+}, { collection: 'sales_call_logs', timestamps: { createdAt: 'createdAt', updatedAt: false } });
 ```
 
 ---

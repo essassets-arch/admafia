@@ -7988,7 +7988,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
     Swal.fire({
       icon: 'success',
       title: 'Wallet Credited & Recovered!',
-      html: `Successfully credited <strong>₹${rechargeNum.toLocaleString('en-IN')}</strong> to <strong>${targetCust.companyName || targetCust.name}</strong>.<br/><small style="color: #64748b;">Authoritative ledger entry and official tax receipt recorded in PostgreSQL.</small>`,
+      html: `Successfully credited <strong>₹${rechargeNum.toLocaleString('en-IN')}</strong> to <strong>${targetCust.companyName || targetCust.name}</strong>.<br/><small style="color: #64748b;">Authoritative ledger entry and official tax receipt recorded in MongoDB.</small>`,
       confirmButtonColor: '#059669',
     });
     setTopupCust(null);

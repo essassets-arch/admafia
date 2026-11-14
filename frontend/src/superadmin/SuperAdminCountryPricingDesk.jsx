@@ -641,7 +641,7 @@ export default function SuperAdminCountryPricingDesk() {
                 {auditLogs.length === 0 && (
                   <tr>
                     <td colSpan={5} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
-                      No rate adjustments logged yet. Initial rates seeded into PostgreSQL master.
+                      No rate adjustments logged yet. Initial rates seeded into MongoDB master.
                     </td>
                   </tr>
                 )}

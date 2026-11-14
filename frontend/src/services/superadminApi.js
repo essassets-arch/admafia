@@ -1,6 +1,6 @@
 /**
  * AdMafia Super Admin Control Center - Authoritative Frontend API Client
- * Connects directly to backend PostgreSQL /api/superadmin/* routes
+ * Connects directly to backend MongoDB /api/superadmin/* routes
  */
 
 const BASE_URL = import.meta.env?.VITE_API_URL || '/api';

@@ -445,7 +445,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
           <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px', color: '#4f46e5' }} />
-          <p style={{ fontWeight: 600 }}>Loading customer categories from PostgreSQL...</p>
+          <p style={{ fontWeight: 600 }}>Loading customer categories from MongoDB...</p>
         </div>
       ) : filteredRows.length === 0 ? (
         <div

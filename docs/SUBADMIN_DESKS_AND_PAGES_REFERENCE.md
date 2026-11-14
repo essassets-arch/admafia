@@ -131,7 +131,7 @@ sequenceDiagram
     actor Admin as Sub Admin
     participant View as Pending Verification Desk
     participant Sync as Finance Sync Engine
-    participant Wallet as PostgreSQL Wallet Table
+    participant Wallet as MongoDB Wallets Collection
     participant DB as Backend REST API
 
     Admin->>View: Selects "Both Incomplete" or "Payment Pending"

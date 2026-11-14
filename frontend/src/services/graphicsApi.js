@@ -1,6 +1,6 @@
 /**
  * AdMafia Graphics Department - Authoritative API Client Service
- * Connects directly to backend PostgreSQL /api/graphics/* routes
+ * Connects directly to backend MongoDB /api/graphics/* routes
  */
 
 const BASE_URL = import.meta.env?.VITE_API_URL || '/api';

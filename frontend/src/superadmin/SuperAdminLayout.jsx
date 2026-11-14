@@ -225,7 +225,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
         {/* Live System Indicator */}
         <div className="sa-system-pill">
           <span className="sa-pulse-dot" />
-          <span>PostgreSQL Authoritative</span>
+          <span>MongoDB Authoritative</span>
         </div>
 
         {/* Main Navigation Desks */}

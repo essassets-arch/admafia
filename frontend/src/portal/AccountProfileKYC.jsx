@@ -557,7 +557,7 @@ export default function AccountProfileKYC({
 
       {savedSuccess && (
         <div className="profile-success-alert">
-          ✓ Business profile successfully updated and synchronized with PostgreSQL &amp; sales lead distribution engine!
+          ✓ Business profile successfully updated and synchronized with MongoDB &amp; sales lead distribution engine!
         </div>
       )}
 

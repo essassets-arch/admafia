@@ -423,12 +423,12 @@ async function runTestSuite() {
     assert(clearPresetAttempt.status === 200, 'Clear preset request returns HTTP 200');
     assert(clearPresetAttempt.data?.customer?.activeDays.includes(todayDayCode), `Clear preset preserves booked day (${todayDayCode})`);
 
-    // 4. Page refresh restores the lock authoritative from PostgreSQL
+    // 4. Page refresh restores the lock authoritative from MongoDB
     const refreshedCust = await api(`/customers/${customerId}`);
     assert(refreshedCust.status === 200, 'Page refresh (GET /customers/:id) returns HTTP 200');
     assert(refreshedCust.data?.customer?.isDeductedToday === true, 'Page refresh restores isDeductedToday: true');
     assert(refreshedCust.data?.customer?.bookedDays.includes(todayDayCode), `Page refresh restores bookedDays containing ${todayDayCode}`);
-    assert(refreshedCust.data?.customer?.bookedDates.length >= 1, 'Page refresh restores authoritative bookedDates array from PostgreSQL');
+    assert(refreshedCust.data?.customer?.bookedDates.length >= 1, 'Page refresh restores authoritative bookedDates array from MongoDB');
 
     // 5. Campaign Stop does not erase booking history
     const stopCampaignRes = await api(`/customers/${customerId}`, {

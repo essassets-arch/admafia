@@ -869,7 +869,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
               <span className="auth-trust-dot">•</span>
               <div className="auth-trust-pill">
                 <Zap size={14} color="#38bdf8" />
-                <span>PostgreSQL Relational Storage</span>
+                <span>MongoDB Enterprise Storage</span>
               </div>
               <span className="auth-trust-dot">•</span>
               <div className="auth-trust-pill">

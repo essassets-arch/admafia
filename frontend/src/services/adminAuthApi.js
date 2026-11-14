@@ -1,6 +1,6 @@
 /**
  * AdMafia Unified Department & Admin Authentication Service
- * Communicates with PostgreSQL system_users table
+ * Communicates with MongoDB system_users collection
  */
 
 const API_BASE = '';

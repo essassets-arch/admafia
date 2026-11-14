@@ -307,7 +307,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
           <div className="graphics-top-actions">
             <div className="graphics-live-pill">
               <span className="graphics-live-dot" />
-              <span>PostgreSQL Live Sync</span>
+              <span>MongoDB Live Sync</span>
             </div>
 
             <div className="graphics-clock-tag">
