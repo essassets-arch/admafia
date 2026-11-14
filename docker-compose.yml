@@ -89,12 +89,13 @@ services:
     container_name: admafia-mongo-express
     restart: always
     env_file:
-      - path: ./backend/.env
+      - path: ./.env
         required: false
     depends_on:
       mongo:
         condition: service_healthy
     environment:
+      PORT: "8081"
       ME_CONFIG_MONGODB_URL: ${ME_MONGODB_URL:-mongodb://mongo:27017/?directConnection=true}
       ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
       ME_CONFIG_SITE_BASEURL: /db-console/
