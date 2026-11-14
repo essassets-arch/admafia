@@ -26,3 +26,7 @@ export {
   CountryPricingAuditLog,
   OutboxEvent
 } from './CampaignsAndPricing.js';
+export { OtpVerification } from './OtpVerification.js';
+export { OtpDeliveryLog } from './OtpDeliveryLog.js';
+export { Notification, FcmToken } from './Notification.js';
+export { CronLock, SecurityEventLog } from './SecurityAndLocks.js';

@@ -1,6 +1,6 @@
 /**
  * AdMafia Unified Department & Admin Authentication Service
- * Communicates with MongoDB system_users collection
+ * Communicates with MongoDB system_users collection via HttpOnly Cookie + HS256 JWT
  */
 
 const API_BASE = '';
@@ -10,16 +10,17 @@ const TOKEN_KEY = 'admafia_admin_token';
 
 export const adminAuthApi = {
   /**
-   * Fetch configured departments, assigned URLs, and valid default demo credentials
+   * Fetch configured departments and assigned URLs (zero plaintext passwords)
    */
   async getDepartments() {
     try {
-      const res = await fetch(`${API_BASE}/api/auth/admin-departments`);
+      const res = await fetch(`${API_BASE}/api/auth/admin-departments`, {
+        credentials: 'include',
+      });
       const data = await res.json();
       return data;
     } catch (err) {
       console.error('[adminAuthApi.getDepartments]', err);
-      // Fallback offline catalog
       return {
         ok: true,
         departments: [
@@ -30,14 +31,7 @@ export const adminAuthApi = {
             path: '/superadmin',
             roleBadge: 'Super Admin',
             color: '#7c3aed',
-            defaultUser: {
-              username: 'superadmin',
-              email: 'admin@admafia.marketing',
-              password: 'SuperAdmin@2026!',
-              role: 'Super Admin',
-              title: 'Founders, Platform Owners & Finance Directors',
-            },
-            desks: ['Dashboard', 'Check Queries', 'Manage Finance', 'Check Refunds', 'Account Top-Up', 'Account Block / Activate', 'Add User / Business'],
+            desks: ['Dashboard', 'Growth Analytics', 'Database & Snapshots', 'Check Queries', 'Manage Finance', 'Check Refunds', 'Account Top-Up', 'Account Block / Activate', 'Add User / Business'],
           },
           {
             id: 'marketing',
@@ -46,13 +40,6 @@ export const adminAuthApi = {
             path: '/marketing',
             roleBadge: 'Marketing Manager',
             color: '#ec4899',
-            defaultUser: {
-              username: 'marketing',
-              email: 'marketing@admafia.marketing',
-              password: 'Marketing@2026!',
-              role: 'Marketing Manager',
-              title: 'Marketing Managers, Planners & Media Buyers',
-            },
             desks: ['Marketing Overview', 'Customers Desk', 'Build Ideas Desk', 'Create Post Ideas', 'Verify Posts Desk', 'Customer Marketing Control'],
           },
           {
@@ -62,13 +49,6 @@ export const adminAuthApi = {
             path: '/graphics',
             roleBadge: 'Senior Graphics Designer',
             color: '#06b6d4',
-            defaultUser: {
-              username: 'graphics',
-              email: 'graphics@admafia.marketing',
-              password: 'Graphics@2026!',
-              role: 'Senior Graphics Designer',
-              title: 'Graphic Designers & Creative Artists',
-            },
             desks: ['Post Requests Queue', 'Upload Post / Creative', 'Approved Posts', 'Rejected Posts / Revisions'],
           },
           {
@@ -78,13 +58,6 @@ export const adminAuthApi = {
             path: '/sales',
             roleBadge: 'Sales Executive',
             color: '#10b981',
-            defaultUser: {
-              username: 'sales',
-              email: 'sales@admafia.marketing',
-              password: 'Sales@2026!',
-              role: 'Sales Executive',
-              title: 'Sales Executives, Telecallers & Closers',
-            },
             desks: ['Sales Executive Dashboard', 'Customer Groups Desk', 'Lead Qualification & Follow-up Desks'],
           },
         ],
@@ -93,11 +66,12 @@ export const adminAuthApi = {
   },
 
   /**
-   * Dynamic Admin & Department Login against PostgreSQL system_users
+   * Dynamic Admin & Department Login against MongoDB system_users
    */
   async login({ identifier, username, password }) {
     const res = await fetch(`${API_BASE}/api/auth/admin-login`, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -107,7 +81,7 @@ export const adminAuthApi = {
       }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
       throw new Error(data.error || 'Authentication failed. Please check your credentials.');
     }
@@ -133,15 +107,14 @@ export const adminAuthApi = {
   },
 
   /**
-   * Get active authenticated user
+   * Get active authenticated user (requires valid JWT token)
    */
   getCurrentUser() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
       const token = localStorage.getItem(TOKEN_KEY) || '';
-      // Invalidate legacy mock direct tokens to enforce authentic /admin/login authentication
-      if (token && token.includes('_direct')) {
+      if (!token || token.includes('_direct') || token.split('.').length !== 3) {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(TOKEN_KEY);
         return null;
@@ -164,10 +137,15 @@ export const adminAuthApi = {
   },
 
   /**
-   * Clear session on Sign Out
+   * Clear session & HttpOnly cookie on Sign Out
    */
   logout() {
     try {
+      fetch(`${API_BASE}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {});
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(TOKEN_KEY);
     } catch (e) {}
@@ -185,7 +163,6 @@ export const adminAuthApi = {
     const dept = (user.department || '').toLowerCase();
     const target = (targetDept || '').toLowerCase();
 
-    // Super Admin has global override access to all departments
     if (dept === 'super admin' || role === 'super admin' || role === 'operations manager' || role === 'finance auditor') {
       return true;
     }
@@ -211,4 +188,3 @@ export const adminAuthApi = {
 };
 
 export default adminAuthApi;
-

@@ -45,6 +45,8 @@ const WalletTransactionSchema = new mongoose.Schema({
 
 WalletTransactionSchema.index({ referenceUtr: 1 }, { unique: true, sparse: true });
 WalletTransactionSchema.index({ customerId: 1, txType: 1 });
+WalletTransactionSchema.index({ customerId: 1, createdAt: -1 });
+WalletTransactionSchema.index({ status: 1, createdAt: -1 });
 
 export const WalletTransaction = mongoose.models.WalletTransaction || mongoose.model('WalletTransaction', WalletTransactionSchema);
 
@@ -77,6 +79,9 @@ const PaymentRecordSchema = new mongoose.Schema({
   collection: 'payment_records',
   timestamps: true
 });
+
+PaymentRecordSchema.index({ status: 1, createdAt: -1 });
+PaymentRecordSchema.index({ customerId: 1, createdAt: -1 });
 
 export const PaymentRecord = mongoose.models.PaymentRecord || mongoose.model('PaymentRecord', PaymentRecordSchema);
 

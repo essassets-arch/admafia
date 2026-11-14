@@ -78,6 +78,8 @@ const LeadSchema = new mongoose.Schema({
 
 LeadSchema.index({ customerId: 1, masterLeadId: 1 });
 LeadSchema.index({ customerId: 1, status: 1 });
+LeadSchema.index({ customerId: 1, assignedAt: -1 });
+LeadSchema.index({ category: 1, city: 1, assignedAt: -1 });
 
 export const Lead = mongoose.models.Lead || mongoose.model('Lead', LeadSchema);
 

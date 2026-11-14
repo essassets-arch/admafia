@@ -43,7 +43,8 @@ Stores registered B2B clients running marketing campaigns and receiving leads.
 - **`username`** (String, Unique Index): Unique customer handle for login.
 - **`phone`** (String, Unique Index): 10-digit primary mobile number.
 - **`email`** (String, Index) & **`personalEmail`** (String).
-- **`passwordHash`** (String): Bcrypt or secured credential hash.
+- **`passwordHash`** (String): Salted `crypto.scrypt` credential hash (`scrypt$N$r$p$salt$hash`) with constant-time verification and automatic zero-downtime upgrade from legacy hashes.
+- **`phoneVerified`** (Boolean, Index, Default: `false` on admin-created until verified; `true` upon WhatsApp OTP verification) & **`phoneVerifiedAt`** (Date).
 - **`companyName`** (String, Required): Legal or trading business name.
 - **`category`** (String, Index): Niche/vertical (e.g., *IT & Software*, *Solar*, *Real Estate*).
 - **`industry`** (String) & **`website`** (String).
@@ -200,8 +201,42 @@ Immutable distribution log tracking the algorithmic dispatch of master leads to 
 
 #### `outbox_events` (`CampaignsAndPricing.js`)
 - Implements the **Transactional Outbox Pattern**.
-- Stores async events created atomically inside the same MongoDB session as business mutations.
-- Monitored by `services/outboxWorker.js` to dispatch webhooks, notifications, or external platform syncs with zero message loss.
+- Stores async events created atomically inside the same MongoDB session as business mutations (`NEW_CUSTOMER_REGISTERED`, `WALLET_CREDITED`, `LEAD_DISPATCHED`, `DAILY_SPEND_DEDUCTED`).
+- Monitored by `services/outboxWorker.js` to dispatch real-time SSE + Firebase Cloud Messaging (FCM HTTP v1) notifications with zero message loss.
+
+---
+
+### 2.5 WhatsApp OTP, Real-Time Notifications & Security Shield (`backend/models/`)
+
+#### `otp_verifications` (`OtpVerification.js`)
+- Stores active 6-digit Meta WhatsApp Cloud API (`v26.0`) OTP challenges (`purpose`: `'register' | 'password_reset' | 'verify_phone'`).
+- **Zero Plaintext OTPs**: Stores only HMAC-SHA256 `otpHash`, attempt counter (`attempts` / `maxAttempts = 5`), `locked`, single-use `verificationTokenHash`, `verifiedAt`, `consumedAt`, and automatic MongoDB TTL index on `expiresAt` (`expireAfterSeconds: 0`).
+
+#### `otp_delivery_logs` (`OtpDeliveryLog.js`)
+- Stores masked phone telemetry (`maskedPhone`), Meta Graph `wamid`, HTTP status, dispatch `latencyMs`, and delivery receipt updates (`accepted`, `sent`, `delivered`, `read`, `failed`) with a 90-day TTL index.
+
+#### `notifications` & `fcm_tokens` (`Notification.js`)
+- `notifications`: Stores per-recipient real-time alerts (`recipientType`: `'customer' | 'staff'`, `recipientId`, `department`, `eventType`, `title`, `body`, `deepLink`, `read`, `createdAt`) with compound index `{ recipientType: 1, recipientId: 1, read: 1, createdAt: -1 }` and 90-day TTL.
+- `fcm_tokens`: Maps active Web/Android/iOS Firebase Cloud Messaging device tokens (`token` unique index) to `recipientType` + `recipientId` + `department`, automatically pruning `UNREGISTERED` tokens on FCM v1 `404/410` responses.
+
+#### `cron_locks` & `security_event_logs` (`SecurityAndLocks.js`)
+- `cron_locks`: Distributed MongoDB TTL lease lock (`_id: jobName`, `lockedUntil` TTL) ensuring multi-replica Cloud Run / ECS Fargate deployments execute scheduled jobs (such as `daily_ad_spend_pacing`) exactly once across the fleet.
+- `security_event_logs`: 30-day TTL security audit collection recording blocked rate limits (`RATE_LIMIT`), OTP lockouts (`OTP_LOCKOUT`), stripped NoSQL operators (`NOSQL_SANITIZED`), unauthorized RBAC attempts (`RBAC_DENIED`), and rejected CORS origins (`CORS_BLOCKED`).
+
+---
+
+## 5. Live Database Visibility (MongoDB Compass / Atlas) & 3-2-1 Snapshot Strategy
+
+1. **Local Isolated Docker Compass URI**:
+   - `mongodb://127.0.0.1:27018/admafia_crm?directConnection=true`
+   - Web GUI (`mongo-express`): `http://127.0.0.1:8081`
+2. **Production VPS Compass via Encrypted SSH Tunnel** (Port `27017` is NEVER exposed on `0.0.0.0`):
+   - Tunnel command: `ssh -N -L 27019:127.0.0.1:27017 root@admafia.marketing`
+   - Compass URI: `mongodb://127.0.0.1:27019/admafia_crm?directConnection=true`
+3. **10,000+ User Cloud Cutover Target**:
+   - **MongoDB Atlas `M10` Dedicated (`ap-south-1` Mumbai)** — 3-node Replica Set auto-failover + Point-in-Time Continuous Cloud Backup + zero-code `MONGO_URI` cutover.
+4. **Automated 3-2-1 Encrypted Snapshots (`backend/scripts/snapshot-backup.sh` & Super Admin Database Desk)**:
+   - Captures consistent point-in-time Replica Set state via `mongodump --oplog --archive --gzip`, encrypts with **AES-256-CBC** (`scrypt` key derivation + `SHA-256` checksum), and syncs offsite to Cloudflare R2 / S3 (`rclone` / `storageProvider.js`).
 
 ---
 

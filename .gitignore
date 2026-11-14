@@ -15,9 +15,19 @@ backend/pgdata/
 backend/scripts/migration_checkpoint.json
 backend/scripts/migration_reconciliation_report.json
 .env
+.env.*
+!.env.example
 frontend/.env
+frontend/.env.*
+!frontend/.env.example
 backend/.env
+backend/.env.*
+!backend/.env.example
 *.local
+*firebase-adminsdk*.json
+firebase-service-account*.json
+*.pem
+*.key
 
 # Logs
 logs

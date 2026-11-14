@@ -21,6 +21,8 @@ import {
   deductDailySpendAtomic,
   HttpError,
 } from '../repositories/marketingRepo.js';
+import { validateMediaUploadMagicBytes } from '../middleware/securityMiddleware.js';
+import { storeMediaAsset } from '../services/storageProvider.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1418,16 +1420,27 @@ marketingRouter.post('/media/upload', async (req, res) => {
       });
     }
 
+    // Positive Magic-Byte Verification (PNG / JPEG / WebP / GIF / MP4) + Script Block
+    const magicCheck = validateMediaUploadMagicBytes(base64Data);
+    if (!magicCheck.valid) {
+      return res.status(415).json({
+        ok: false,
+        error: magicCheck.error,
+      });
+    }
+
     const safeName = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}${userExt}`;
-    const filePath = path.join(uploadDir, safeName);
-
-    fs.writeFileSync(filePath, buffer);
-
-    const publicUrl = `/uploads/marketing/${safeName}`;
+    const stored = await storeMediaAsset({
+      folder: 'marketing',
+      fileName: safeName,
+      buffer,
+      contentType,
+    });
 
     res.json({
       ok: true,
-      url: publicUrl,
+      url: stored.url,
+      provider: stored.provider,
       filename: safeName,
       sizeBytes: buffer.length,
       mimeType: contentType,

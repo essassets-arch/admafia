@@ -22,7 +22,7 @@ import { CustomerLoginPage, CustomerRegisterPage } from './portal/AuthPages';
 import crmApi from './services/crmApi';
 import './portal/portal.css';
 
-// One-time cleanup of legacy static/mock data in localStorage for strict customer isolation
+// One-time cleanup of legacy static/mock data in localStorage for strict customer isolation + JWT v4 enforcement
 try {
   if (typeof window !== 'undefined' && !localStorage.getItem('growthline_clean_isolation_v3')) {
     const keysToRemove = [];
@@ -35,8 +35,13 @@ try {
     keysToRemove.forEach((k) => localStorage.removeItem(k));
     localStorage.setItem('growthline_clean_isolation_v3', 'true');
   }
-  if (typeof window !== 'undefined') {
-    crmApi.syncStateFromPostgres();
+  if (typeof window !== 'undefined' && !localStorage.getItem('growthline_jwt_security_v4')) {
+    const hasCustToken = Boolean(localStorage.getItem('admafia_customer_token'));
+    if (!hasCustToken) {
+      localStorage.removeItem('growthline_active_user');
+    }
+    localStorage.removeItem('growthline_registered_customers');
+    localStorage.setItem('growthline_jwt_security_v4', 'true');
   }
 } catch (e) {}
 
@@ -652,8 +657,8 @@ export default function App({ initialCountry = null } = {}) {
       <PortalDashboard
         key={currentUser?.id || currentUser?.phone || currentUser?.username || 'portal'}
         onSignOut={() => {
+          crmApi.logout();
           try {
-            localStorage.removeItem('growthline_active_user');
             sessionStorage.clear();
           } catch(e) {}
           setCurrentUser(null);
@@ -753,17 +758,26 @@ export default function App({ initialCountry = null } = {}) {
     );
   }
 
-  // View 5: Agency Leadership Auth
+  // View 5: Agency Leadership / Unified Customer Auth
   if (currentView === 'auth') {
     return (
-      <AuthPage 
+      <AuthPage
+        onAuthenticated={(user) => {
+          if (user) {
+            try { localStorage.setItem('growthline_active_user', JSON.stringify(user)); } catch (e) {}
+            setCurrentUser(user);
+          }
+          try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch (e) {}
+          window.location.hash = '#app/dashboard';
+          setCurrentView('portal');
+        }}
         onBackToHome={() => {
           window.location.hash = '';
           setCurrentView('landing');
-        }} 
-        />
-      );
-    }
+        }}
+      />
+    );
+  }
 
   // Landing Page: If activeCountry could not be resolved, display safe notice
   if (currentView === 'landing' && !activeCountry) {

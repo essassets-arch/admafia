@@ -9,6 +9,10 @@
     "dev": "node --watch server.js",
     "test": "node scripts/verify-mongo-e2e.mjs",
     "test:mongo": "node scripts/verify-mongo-e2e.mjs",
+    "test:otp-fcm": "node scripts/test-whatsapp-otp-fcm.mjs",
+    "test:pentest": "node scripts/pentest-suite.mjs",
+    "test:all": "node scripts/verify-mongo-e2e.mjs && node scripts/test-whatsapp-otp-fcm.mjs && node scripts/pentest-suite.mjs",
+    "setup:firebase": "node scripts/setup-firebase.mjs",
     "test:flow": "node test-comprehensive-daywise-flow.js"
   },
   "dependencies": {

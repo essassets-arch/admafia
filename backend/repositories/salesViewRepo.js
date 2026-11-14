@@ -78,6 +78,8 @@ export function buildCustomerViewRow(c, w, leadCount = 0) {
     payment_status: c.paymentStatus,
     kyc_percent: c.kycPercent,
     verified: c.verified,
+    phone_verified: Boolean(c.phoneVerified),
+    phone_verified_at: c.phoneVerifiedAt ?? null,
     registered_from: c.registeredFrom,
     registered_at: c.registeredAt,
     completed_at: c.completedAt ?? null,

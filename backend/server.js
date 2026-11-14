@@ -20,7 +20,32 @@ import {
   MasterLead,
   LeadAssignment,
   DeletedFailedTransaction,
+  SecurityEventLog,
 } from './models/index.js';
+import { hashPassword, verifyPassword } from './utils/passwordCrypto.js';
+import { consumeOtpVerificationToken } from './services/whatsappOtpService.js';
+import { otpAuthRouter } from './routes/otpAuth.js';
+import { notificationsRouter } from './routes/notifications.js';
+import { superadminOpsRouter } from './routes/superadminOps.js';
+import {
+  attachOptionalAuth,
+  requireAuth,
+  requireStaff,
+  requireSuperAdmin,
+  requireCustomerSelfOrStaff,
+  issueCustomerSession,
+  issueStaffSession,
+  clearAuthCookie,
+} from './middleware/authMiddleware.js';
+import {
+  securityHeadersMiddleware,
+  strictCorsMiddleware,
+  mongoSanitizeMiddleware,
+  createRateLimiter,
+  getClientIp,
+} from './middleware/securityMiddleware.js';
+import { getRedisHealth } from './services/redisStore.js';
+import { withDistributedCronLock } from './services/cronLock.js';
 import {
   ciExact,
   customerIdentifierFilter,
@@ -59,7 +84,7 @@ import {
   deleteCustomerCascade,
 } from './repositories/salesLedgerRepo.js';
 import { seedBaselineData, purgeLegacyTestLedgerRows } from './repositories/bootstrapRepo.js';
-import { startOutboxWorker } from './services/outboxWorker.js';
+import { startOutboxWorker, recordOutboxEvent } from './services/outboxWorker.js';
 import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
@@ -121,9 +146,13 @@ const __dirname = path.dirname(__filename);
 
 const explicitProcessEnv = { ...process.env };
 const backendEnvPath = path.join(__dirname, '.env');
+const backendEnvLocalPath = path.join(__dirname, '.env.local');
 const rootEnvPath = path.join(__dirname, '..', '.env');
 if (fs.existsSync(backendEnvPath)) {
   dotenv.config({ path: backendEnvPath });
+}
+if (process.env.NODE_ENV !== 'production' && fs.existsSync(backendEnvLocalPath)) {
+  dotenv.config({ path: backendEnvLocalPath, override: true });
 }
 if (fs.existsSync(rootEnvPath)) {
   dotenv.config({ path: rootEnvPath, override: true });
@@ -134,13 +163,35 @@ const app = express();
 const PORT = Number(process.env.PORT || 5000);
 let databaseReady = null;
 
-app.use(cors());
-app.use(express.json({
-  limit: '25mb',
-  verify: (req, res, buf) => {
-    req.rawBody = buf;
-  },
-}));
+// 1. Enterprise Defense-in-Depth Headers & Strict CORS Allowlist
+app.use(securityHeadersMiddleware);
+app.use(strictCorsMiddleware);
+
+// 2. Route-Scoped 20MB JSON Parser ONLY for Verified Creative Media Uploads; 512KB Everywhere Else
+const mediaUploadJsonParser = express.json({ limit: '20mb' });
+app.use('/api/marketing/media/upload', mediaUploadJsonParser);
+app.use('/api/graphics', mediaUploadJsonParser);
+app.use(
+  express.json({
+    limit: '512kb',
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
+
+// 3. Recursive NoSQL Operator Sanitizer & Optional JWT Cookie/Bearer Hydration
+app.use(mongoSanitizeMiddleware);
+app.use(attachOptionalAuth);
+
+// 4. Multi-Tier Distributed Rate Limiters (Redis-backed with automatic memory fallback)
+const globalApiLimiter = createRateLimiter({ name: 'api_global', maxRequests: 300, windowSeconds: 60 });
+const loginBruteForceLimiter = createRateLimiter({ name: 'auth_login', maxRequests: 10, windowSeconds: 300 });
+app.use('/api', globalApiLimiter);
+
+// 5. Universal WhatsApp OTP Auth & Real-Time Notifications Routers
+app.use('/api', otpAuthRouter);
+app.use('/api/notifications', notificationsRouter);
 
 const razorpayKeyId = (process.env.RAZORPAY_KEY_ID || '').trim();
 const razorpayKeySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
@@ -197,7 +248,7 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     phone: (row.phone || '').trim(),
     email: row.email || '',
     personalEmail: row.personal_email || '',
-    password: passwordPlain,
+    password: '••••••••••••',
     passwordMasked: '••••••••••••',
     category: row.category || 'IT & Software',
     industry: row.industry || 'Other',
@@ -216,6 +267,8 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     payment_status: row.payment_status || (balance > 0 ? 'paid' : 'pending'),
     kycPercent: Number(row.kyc_percent ?? (row.profile_status === 'complete' ? 100 : 25)),
     verified: Boolean(row.verified || row.profile_status === 'complete'),
+    phoneVerified: Boolean(row.phone_verified),
+    phoneVerifiedAt: row.phone_verified_at || null,
     adCampaignActive: Boolean(row.ad_campaign_active),
     activeDays: (() => {
       const kDow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay();
@@ -840,10 +893,12 @@ app.get('/api/health', async (req, res) => {
       LeadAssignment.countDocuments({}),
     ]);
     const mongoStatus = getMongoStatus();
+    const redisStatus = await getRedisHealth();
     res.json({
       ok: true,
       db: mongoStatus,
       mongo: mongoStatus,
+      redis: redisStatus,
       counts: {
         customers_count: customersCount,
         leads_count: leadsCount,
@@ -859,7 +914,68 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-app.get('/api/state', async (req, res) => {
+// 10k-Scale Paginated Customer Self-Workspace Hydration (Replaces Unbounded Landing-Page /api/state)
+app.get('/api/me/workspace', requireAuth, async (req, res) => {
+  try {
+    const targetCustomerId =
+      req.auth.actorType === 'customer'
+        ? String(req.auth.customerId || req.auth.sub)
+        : String(req.query.customerId || req.auth.customerId || '');
+
+    if (!targetCustomerId) {
+      return res.status(400).json({ ok: false, error: 'No associated customer workspace ID.' });
+    }
+
+    const viewRow = await getCustomerViewRowByIdentifier(targetCustomerId);
+    if (!viewRow) {
+      return res.status(404).json({ ok: false, error: 'Customer workspace not found.' });
+    }
+
+    const customer = mapCustomerRow(viewRow);
+    const leadsLimit = Math.min(200, Math.max(10, Number(req.query.leadsLimit || 60)));
+    const txLimit = Math.min(200, Math.max(10, Number(req.query.txLimit || 60)));
+    const leadsPage = Math.max(1, Number(req.query.leadsPage || 1));
+    const txPage = Math.max(1, Number(req.query.txPage || 1));
+
+    const leadFilter = [{ customerId: customer.id }];
+    if (customer.phone) leadFilter.push({ customerPhone: customer.phone });
+
+    const [leadDocs, leadsTotal, txDocs, transactionsTotal, invDocs] = await Promise.all([
+      Lead.find({ $or: leadFilter })
+        .sort({ assignedAt: -1 })
+        .skip((leadsPage - 1) * leadsLimit)
+        .limit(leadsLimit)
+        .lean(),
+      Lead.countDocuments({ $or: leadFilter }),
+      WalletTransaction.find({ customerId: customer.id })
+        .sort({ createdAt: -1 })
+        .skip((txPage - 1) * txLimit)
+        .limit(txLimit)
+        .lean(),
+      WalletTransaction.countDocuments({ customerId: customer.id }),
+      TaxInvoice.find({ customerId: customer.id }).sort({ createdAt: -1 }).limit(100).lean(),
+    ]);
+
+    const custForLeads = [
+      { _id: viewRow.id, username: viewRow.username, phone: viewRow.phone, companyName: viewRow.company_name },
+    ];
+
+    return res.json({
+      ok: true,
+      customer,
+      leads: leadsToRows(leadDocs, custForLeads).map(mapLeadRow),
+      leadsTotal,
+      transactions: txDocs.map(walletTxToRow).map(mapWalletTxRow),
+      transactionsTotal,
+      invoices: invDocs.map(invoiceToRow).map(mapInvoiceRow),
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// CRIT-03 REMEDIATED: Full CRM state sync is strictly restricted to authenticated internal staff desks
+app.get('/api/state', requireStaff(), async (req, res) => {
   try {
     // MongoDB: all collections loaded & converted to the legacy row shape (see repositories/salesViewRepo.js)
     const state = await loadSalesStateRows();
@@ -1002,6 +1118,11 @@ app.get('/api/state', async (req, res) => {
 // =============================================================================
 // 2. AUTHENTICATION & CUSTOMER REGISTRATION (/api/auth/register & /api/auth/login)
 // =============================================================================
+app.post('/api/auth/logout', (_req, res) => {
+  clearAuthCookie(res);
+  res.json({ ok: true, message: 'Signed out successfully.' });
+});
+
 app.post('/api/auth/register', async (req, res) => {
   let cleanUsername = '';
   try {
@@ -1010,7 +1131,8 @@ app.post('/api/auth/register', async (req, res) => {
       phone,
       mobile,
       email = '',
-      password = 'Password123!',
+      password,
+      otpVerificationToken,
       companyName,
       contactPerson,
       city = '',
@@ -1025,6 +1147,16 @@ app.post('/api/auth/register', async (req, res) => {
     void country;
     void countryCode;
     void currency;
+    void deposit;
+    void reqInitialDeposit;
+
+    const rawPassword = String(password || '').trim();
+    if (rawPassword.length < 6) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Password is required and must be at least 6 characters long.',
+      });
+    }
 
     // New accounts use the server-detected IP pricing. Browser submitted country
     // and currency are not authoritative. Existing accounts retain their billing currency.
@@ -1039,8 +1171,8 @@ app.post('/api/auth/register', async (req, res) => {
 
     let cleanPhone = cleanDigits;
     if (cleanCountryCode === 'IN') {
-      cleanPhone = cleanDigits.slice(-10);
-      if (cleanPhone.length !== 10) {
+      cleanPhone = cleanDigits.length === 12 && cleanDigits.startsWith('91') ? cleanDigits.slice(2) : cleanDigits.slice(-10);
+      if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
         return res.status(400).json({ ok: false, error: 'Valid 10-digit mobile number is required for Indian registration.' });
       }
     } else {
@@ -1049,13 +1181,73 @@ app.post('/api/auth/register', async (req, res) => {
       }
     }
 
+    // CRIT-06 REMEDIATED: Never overwrite an existing account by phone!
+    const existingPhoneAccount = await Customer.exists({ phone: cleanPhone });
+    if (existingPhoneAccount) {
+      return res.status(409).json({
+        ok: false,
+        code: 'PHONE_ALREADY_EXISTS',
+        error: 'An account with this WhatsApp number already exists. Please sign in to your workspace.',
+      });
+    }
+
+    // Validate optional email format & username availability BEFORE consuming single-use OTP token
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (cleanEmail) {
+      const strictEmailRegex =
+        /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,24}$/;
+      if (!strictEmailRegex.test(cleanEmail) || cleanEmail.includes('..')) {
+        return res.status(400).json({
+          ok: false,
+          code: 'INVALID_EMAIL',
+          error: 'Please enter a valid email address (for example, name@company.com) or leave it blank.',
+        });
+      }
+    }
+
+    cleanUsername = (username || `user_${cleanPhone.slice(-4)}`).trim().replace(/^@/, '');
+    if (cleanUsername.length < 3) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Workspace username must be at least 3 characters long.',
+      });
+    }
+
+    try {
+      const existingUser = await Customer.findOne({ username: ciExact(cleanUsername) })
+        .select('_id username phone')
+        .lean();
+      if (existingUser) {
+        return res.status(409).json({
+          ok: false,
+          code: 'USERNAME_TAKEN',
+          error: `The username "${cleanUsername}" is already taken. Please choose another username.`,
+        });
+      }
+    } catch (checkErr) {
+      console.warn('[POST /api/auth/register] Username pre-check note:', checkErr.message);
+    }
+
+    // MANDATORY UNIVERSAL WHATSAPP OTP GATE ("Every Single User")
+    const otpVerified = await consumeOtpVerificationToken({
+      token: otpVerificationToken,
+      cleanPhone,
+      purpose: 'register',
+    });
+    if (!otpVerified.valid) {
+      return res.status(403).json({
+        ok: false,
+        code: 'WHATSAPP_OTP_REQUIRED',
+        error: otpVerified.error,
+      });
+    }
+
     // Determine country pricing, currency and daily starting budget
     const pricing = getPricingForCountryCode(cleanCountryCode);
     const dailyBudget = pricing.daily_min_budget;
     const registeredCurrency = pricing.currency_code;
     const registeredCountryName = pricing.country_name;
 
-    cleanUsername = (username || `user_${cleanPhone.slice(-4)}`).trim().replace(/^@/, '');
     const isGeneric = (str) =>
       !str ||
       str.trim().toLowerCase() === 'registered business' ||
@@ -1073,87 +1265,42 @@ app.post('/api/auth/register', async (req, res) => {
     const initialDeposit = 0;
     const payStatus = 'pending';
 
-    // Proactively verify if username is already taken by another account
-    try {
-      const existingUser = await Customer.findOne({ username: ciExact(cleanUsername) })
-        .select('_id username phone')
-        .lean();
-      if (existingUser) {
-        const existingDigits = String(existingUser.phone || '').replace(/\D/g, '');
-        if (existingDigits !== cleanPhone) {
-          return res.status(409).json({
-            ok: false,
-            error: `The username "${cleanUsername}" is already taken. Please choose another username.`,
-          });
-        }
-      }
-    } catch (checkErr) {
-      console.warn('[POST /api/auth/register] Username pre-check note:', checkErr.message);
-    }
-
-    const storedPassword = String(password ?? '') || 'Password123!';
+    const storedPassword = await hashPassword(rawPassword);
     const now = new Date();
     const queueType = initialDeposit >= dailyBudget ? 'Completed' : 'Payment Pending';
 
-    // Customer upsert (by phone) + wallet + verification queue entry in ONE MongoDB transaction
+    // Strict new Customer creation + wallet + verification queue + real-time Outbox event in ONE MongoDB transaction
     const effectiveCustId = await withMongoTransaction(async (session) => {
-      let targetCustId = custId;
-      const existingByPhone = await Customer.findOne({ phone: cleanPhone }).session(session).select('_id').lean();
-      if (existingByPhone) {
-        // Equivalent of `ON CONFLICT (phone) DO UPDATE` (country/currency/category etc. are kept as-is)
-        targetCustId = existingByPhone._id;
-        await Customer.updateOne(
-          { _id: targetCustId },
-          {
-            $set: {
-              username: cleanUsername,
-              email: email.trim(),
-              passwordHash: storedPassword,
-              companyName: formattedName,
-              profileStatus: 'complete',
-              kycPercent: 100,
-              verified: true,
-              updatedAt: now,
-            },
-          },
-          { session, timestamps: false }
-        );
-        // completed_at = COALESCE(completed_at, NOW())
-        await Customer.updateOne(
-          { _id: targetCustId, completedAt: null },
-          { $set: { completedAt: now } },
-          { session, timestamps: false }
-        );
-      } else {
-        await Customer.create(
-          [{
-            _id: custId,
-            username: cleanUsername,
-            phone: cleanPhone,
-            email: email.trim(),
-            passwordHash: storedPassword,
-            companyName: formattedName,
-            category,
-            contactPerson: contactName,
-            city,
-            state: state || '',
-            country: registeredCountryName,
-            countryCode: cleanCountryCode,
-            currency: registeredCurrency,
-            status: 'active',
-            profileStatus: 'complete',
-            paymentStatus: payStatus,
-            kycPercent: 100,
-            verified: true,
-            completedAt: now,
-          }],
-          { session }
-        );
-      }
+      await Customer.create(
+        [{
+          _id: custId,
+          username: cleanUsername,
+          phone: cleanPhone,
+          email: email.trim(),
+          passwordHash: storedPassword,
+          companyName: formattedName,
+          category,
+          contactPerson: contactName,
+          city,
+          state: state || '',
+          country: registeredCountryName,
+          countryCode: cleanCountryCode,
+          currency: registeredCurrency,
+          status: 'active',
+          profileStatus: 'complete',
+          paymentStatus: payStatus,
+          kycPercent: 100,
+          verified: true,
+          phoneVerified: true,
+          phoneVerifiedAt: now,
+          completedAt: now,
+        }],
+        { session }
+      );
 
       // Wallet (created once; registration never credits money - initialDeposit is always 0)
       await Wallet.updateOne(
-        { customerId: targetCustId },
+        { customerId: custId },
         {
           $setOnInsert: {
             _id: walId,
@@ -1176,7 +1323,7 @@ app.post('/api/auth/register', async (req, res) => {
 
       // Sales verification queue entry
       await PendingVerification.updateOne(
-        { customerId: targetCustId },
+        { customerId: custId },
         {
           $set: { profileStatus: 'complete', queueType },
           $setOnInsert: {
@@ -1196,13 +1343,27 @@ app.post('/api/auth/register', async (req, res) => {
         { upsert: true, session }
       );
 
-      return targetCustId;
+      await recordOutboxEvent(session, {
+        aggregateType: 'customer',
+        aggregateId: custId,
+        eventType: 'NEW_CUSTOMER_REGISTERED',
+        payload: {
+          customerId: custId,
+          companyName: formattedName,
+          contactPerson: contactName,
+          phone: cleanPhone,
+          username: cleanUsername,
+        },
+      });
+
+      return custId;
     });
 
     const viewRow = await getCustomerViewRowById(effectiveCustId);
-    const customer = mapCustomerRow(viewRow, password);
+    const customer = mapCustomerRow(viewRow);
+    const token = issueCustomerSession(res, customer);
 
-    res.status(201).json({ ok: true, customer });
+    res.status(201).json({ ok: true, token, customer });
   } catch (err) {
     console.error('[POST /api/auth/register]', err);
     const msg = String(err.message || '');
@@ -1231,19 +1392,23 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginBruteForceLimiter, async (req, res) => {
   try {
     const { identifier, username, password } = req.body || {};
     const q = String(identifier || username || '').trim().toLowerCase();
     if (!q) {
       return res.status(400).json({ ok: false, error: 'Username, mobile number, or email is required.' });
     }
+    const cleanInputPassword = String(password || '').trim();
+    if (!cleanInputPassword) {
+      return res.status(400).json({ ok: false, error: 'Password is required to sign in.' });
+    }
 
     const cleanPhone = q.replace(/\D/g, '').slice(-10);
 
     // 1. Check customers collection (Business Account login by username, email, or 10-digit mobile)
     const custOr = [{ username: ciExact(q) }, { email: ciExact(q) }];
-    if (cleanPhone) custOr.push({ phone: cleanPhone });
+    if (cleanPhone && cleanPhone.length === 10) custOr.push({ phone: cleanPhone });
     const custDoc = await Customer.findOne({ $or: custOr }).select('_id passwordHash status').lean();
 
     let targetCustomerId = null;
@@ -1275,6 +1440,7 @@ app.post('/api/auth/login', async (req, res) => {
         username: uRow.username,
         phone: uRow.phone,
         role: uRow.role,
+        department: uRow.department || 'Customer Portal',
         permissions: Array.isArray(uRow.permissions) ? JSON.stringify(uRow.permissions) : uRow.permissions,
         customerId: uRow.customer_id,
       };
@@ -1290,10 +1456,27 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    const cleanInputPassword = String(password || '').trim();
-    const cleanStoredPassword = String(expectedPasswordHash || '').trim();
-    if (cleanInputPassword && cleanStoredPassword && cleanStoredPassword !== cleanInputPassword) {
+    // CRIT-05 REMEDIATED: Strict constant-time scrypt verification (empty password NEVER bypasses!)
+    const pwdCheck = await verifyPassword(cleanInputPassword, expectedPasswordHash);
+    if (!pwdCheck.match) {
+      await SecurityEventLog.create({
+        category: 'AUTH_FAILURE',
+        ipAddress: getClientIp(req),
+        path: '/api/auth/login',
+        method: 'POST',
+        detail: `Failed customer login for identifier "${q.slice(0, 32)}"`,
+      }).catch(() => {});
       return res.status(401).json({ ok: false, error: 'Incorrect password for this account.' });
+    }
+
+    // Zero-downtime transparent auto-upgrade of legacy plaintext password to salted scrypt
+    if (pwdCheck.needsUpgrade) {
+      const upgradedHash = await hashPassword(cleanInputPassword);
+      if (custDoc) {
+        await Customer.updateOne({ _id: custDoc._id }, { $set: { passwordHash: upgradedHash } }, { timestamps: false }).catch(() => {});
+      } else if (authUser?.id) {
+        await SystemUser.updateOne({ _id: authUser.id }, { $set: { passwordHash: upgradedHash } }, { timestamps: false }).catch(() => {});
+      }
     }
 
     if (accountStatus === 'suspended' || accountStatus === 'blocked') {
@@ -1319,21 +1502,27 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Customer workspace record not found.' });
     }
 
-    const customer = mapCustomerRow(viewRow, expectedPasswordHash);
+    const customer = mapCustomerRow(viewRow);
     if (authUser) {
       customer.authUser = authUser;
     }
 
+    const token = authUser
+      ? issueStaffSession(res, { ...authUser, customerId: targetCustomerId })
+      : issueCustomerSession(res, customer);
+
     const [leadDocs, txDocs, invDocs] = await Promise.all([
-      Lead.find({ customerId: targetCustomerId }).sort({ assignedAt: -1 }).lean(),
-      WalletTransaction.find({ customerId: targetCustomerId }).sort({ createdAt: -1 }).lean(),
-      TaxInvoice.find({ customerId: targetCustomerId }).sort({ createdAt: -1 }).lean(),
+      Lead.find({ customerId: targetCustomerId }).sort({ assignedAt: -1 }).limit(100).lean(),
+      WalletTransaction.find({ customerId: targetCustomerId }).sort({ createdAt: -1 }).limit(100).lean(),
+      TaxInvoice.find({ customerId: targetCustomerId }).sort({ createdAt: -1 }).limit(100).lean(),
     ]);
     const custForLeads = [{ _id: viewRow.id, username: viewRow.username, phone: viewRow.phone, companyName: viewRow.company_name }];
 
     res.json({
       ok: true,
+      token,
       customer,
+      requiresPhoneVerification: !customer.phoneVerified && !authUser,
       user: authUser || null,
       leads: leadsToRows(leadDocs, custForLeads).map(mapLeadRow),
       transactions: txDocs.map(walletTxToRow).map(mapWalletTxRow),
@@ -1362,12 +1551,13 @@ app.get('/api/auth/admin-departments', (req, res) => {
         defaultUser: {
           username: 'superadmin',
           email: 'admin@admafia.marketing',
-          password: 'SuperAdmin@2026!',
           role: 'Super Admin',
           title: 'Founders, Platform Owners & Finance Directors',
         },
         desks: [
           'Dashboard',
+          'Growth & Funnel',
+          'Database & Snapshots',
           'Check Queries',
           'Manage Finance',
           'Check Refunds',
@@ -1386,7 +1576,6 @@ app.get('/api/auth/admin-departments', (req, res) => {
         defaultUser: {
           username: 'marketing',
           email: 'marketing@admafia.marketing',
-          password: 'Marketing@2026!',
           role: 'Marketing Manager',
           title: 'Marketing Managers, Planners & Media Buyers',
         },
@@ -1409,7 +1598,6 @@ app.get('/api/auth/admin-departments', (req, res) => {
         defaultUser: {
           username: 'graphics',
           email: 'graphics@admafia.marketing',
-          password: 'Graphics@2026!',
           role: 'Senior Graphics Designer',
           title: 'Graphic Designers & Creative Artists',
         },
@@ -1430,7 +1618,6 @@ app.get('/api/auth/admin-departments', (req, res) => {
         defaultUser: {
           username: 'sales',
           email: 'sales@admafia.marketing',
-          password: 'Sales@2026!',
           role: 'Sales Executive',
           title: 'Sales Executives, Telecallers & Closers',
         },
@@ -1444,14 +1631,15 @@ app.get('/api/auth/admin-departments', (req, res) => {
   });
 });
 
-app.post('/api/auth/admin-login', async (req, res) => {
+app.post('/api/auth/admin-login', loginBruteForceLimiter, async (req, res) => {
   try {
     const { identifier, username, password } = req.body || {};
     const q = String(identifier || username || '').trim().toLowerCase();
     if (!q) {
       return res.status(400).json({ ok: false, error: 'Username, employee email, or mobile number is required.' });
     }
-    if (!password) {
+    const cleanInputPassword = String(password || '').trim();
+    if (!cleanInputPassword) {
       return res.status(400).json({ ok: false, error: 'Password is required.' });
     }
 
@@ -1466,8 +1654,21 @@ app.post('/api/auth/admin-login', async (req, res) => {
       });
     }
 
-    if (uRow.password_hash !== password) {
+    const pwdCheck = await verifyPassword(cleanInputPassword, uRow.password_hash);
+    if (!pwdCheck.match) {
+      await SecurityEventLog.create({
+        category: 'AUTH_FAILURE',
+        ipAddress: getClientIp(req),
+        path: '/api/auth/admin-login',
+        method: 'POST',
+        detail: `Failed staff login for "${q.slice(0, 32)}"`,
+      }).catch(() => {});
       return res.status(401).json({ ok: false, error: 'Incorrect password for this administrator account.' });
+    }
+
+    if (pwdCheck.needsUpgrade) {
+      const upgraded = await hashPassword(cleanInputPassword);
+      await SystemUser.updateOne({ _id: uRow.id }, { $set: { passwordHash: upgraded } }, { timestamps: false }).catch(() => {});
     }
 
     if (uRow.status === 'suspended' || uRow.status === 'inactive') {
@@ -1510,24 +1711,26 @@ app.post('/api/auth/admin-login', async (req, res) => {
       parsedPermissions = [uRow.permissions];
     }
 
-    const token = `adm_token_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const userPayload = {
+      id: uRow.id,
+      fullName: uRow.full_name,
+      username: uRow.username,
+      email: uRow.email,
+      phone: uRow.phone,
+      role: uRow.role,
+      department,
+      permissions: parsedPermissions,
+      customerId: uRow.customer_id,
+    };
+
+    const token = issueStaffSession(res, userPayload);
 
     res.json({
       ok: true,
       token,
       targetUrl,
       department,
-      user: {
-        id: uRow.id,
-        fullName: uRow.full_name,
-        username: uRow.username,
-        email: uRow.email,
-        phone: uRow.phone,
-        role: uRow.role,
-        department,
-        permissions: parsedPermissions,
-        customerId: uRow.customer_id,
-      },
+      user: userPayload,
     });
   } catch (err) {
     console.error('[POST /api/auth/admin-login]', err);
@@ -1535,27 +1738,13 @@ app.post('/api/auth/admin-login', async (req, res) => {
   }
 });
 
-app.get('/api/auth/admin-session', async (req, res) => {
+// CRIT-05 REMEDIATED: Strictly verify cryptographic JWT instead of returning arbitrary active admin
+app.get('/api/auth/admin-session', requireStaff(), async (req, res) => {
   try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.replace('Bearer ', '').trim();
-    const userId = req.headers['x-admin-id'] || req.query.userId;
+    const userRow = systemUserToRow(await SystemUser.findById(String(req.auth.sub)).lean());
 
-    if (!userId && !token) {
-      return res.status(401).json({ ok: false, error: 'No active session token provided.' });
-    }
-
-    let userRow = null;
-    if (userId) {
-      userRow = systemUserToRow(await SystemUser.findById(String(userId)).lean());
-    } else {
-      userRow = systemUserToRow(
-        await SystemUser.findOne({ status: 'active' }).sort({ lastLoginAt: -1 }).lean()
-      );
-    }
-
-    if (!userRow) {
-      return res.status(404).json({ ok: false, error: 'Session user record not found.' });
+    if (!userRow || userRow.status === 'suspended' || userRow.status === 'inactive') {
+      return res.status(401).json({ ok: false, error: 'Session user record is inactive or not found.' });
     }
 
     const u = userRow;
@@ -1580,7 +1769,7 @@ app.get('/api/auth/admin-session', async (req, res) => {
 // =============================================================================
 // 3. CUSTOMERS & ISOLATED WORKSPACE DATA (/api/customers)
 // =============================================================================
-app.get('/api/customers', async (req, res) => {
+app.get('/api/customers', requireStaff(), async (req, res) => {
   try {
     const rows = await getCustomerViewRows({});
     res.json({ ok: true, customers: rows.map((r) => mapCustomerRow(r)) });
@@ -1589,7 +1778,7 @@ app.get('/api/customers', async (req, res) => {
   }
 });
 
-app.get('/api/customers/:identifier', async (req, res) => {
+app.get('/api/customers/:identifier', requireCustomerSelfOrStaff((req) => req.params.identifier), async (req, res) => {
   try {
     const rawId = String(req.params.identifier || '').trim();
 
@@ -1603,9 +1792,9 @@ app.get('/api/customers/:identifier', async (req, res) => {
     const leadFilter = [{ customerId: customer.id }];
     if (customer.phone) leadFilter.push({ customerPhone: customer.phone });
     const [leadDocs, txDocs, invDocs] = await Promise.all([
-      Lead.find({ $or: leadFilter }).sort({ assignedAt: -1 }).lean(),
-      WalletTransaction.find({ customerId: customer.id }).sort({ createdAt: -1 }).lean(),
-      TaxInvoice.find({ customerId: customer.id }).sort({ createdAt: -1 }).lean(),
+      Lead.find({ $or: leadFilter }).sort({ assignedAt: -1 }).limit(200).lean(),
+      WalletTransaction.find({ customerId: customer.id }).sort({ createdAt: -1 }).limit(200).lean(),
+      TaxInvoice.find({ customerId: customer.id }).sort({ createdAt: -1 }).limit(100).lean(),
     ]);
     const custForLeads = [{ _id: viewRow.id, username: viewRow.username, phone: viewRow.phone, companyName: viewRow.company_name }];
 
@@ -1621,13 +1810,13 @@ app.get('/api/customers/:identifier', async (req, res) => {
   }
 });
 
-// Admin Lookup: Direct Customer Password & Credentials Retrieval
-app.get('/api/admin/customer-password/:identifier', async (req, res) => {
+// CRIT-02 REMEDIATED: Restricted strictly to Super Admin and NEVER leaks plaintext or password hashes
+app.get('/api/admin/customer-password/:identifier', requireSuperAdmin, async (req, res) => {
   try {
     const rawId = String(req.params.identifier || '').trim();
 
     const cust = await Customer.findOne(customerIdentifierFilter(rawId))
-      .select('_id username phone email passwordHash companyName contactPerson')
+      .select('_id username phone email companyName contactPerson phoneVerified')
       .lean();
 
     if (!cust) {
@@ -1641,7 +1830,8 @@ app.get('/api/admin/customer-password/:identifier', async (req, res) => {
       username: cust.username,
       phone: cust.phone,
       email: cust.email,
-      password: cust.passwordHash || 'Password123!',
+      phoneVerified: Boolean(cust.phoneVerified),
+      password: '•••••••••••• (Protected by salted scrypt — use Reset Password)',
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1649,7 +1839,7 @@ app.get('/api/admin/customer-password/:identifier', async (req, res) => {
 });
 
 // Sales Desk: Direct Client Wallet Top-Up (Assisted by Sales Executive)
-app.post('/api/sales/wallet/topup', async (req, res) => {
+app.post('/api/sales/wallet/topup', requireStaff(['sales', 'super admin']), async (req, res) => {
   try {
     const {
       customerId,
@@ -1766,7 +1956,7 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
 
 
 // Sales Desk: Unified Master Transaction Logs (Verified, Failed, Pending, Top-Ups, Debits)
-app.get('/api/sales/transactions', async (req, res) => {
+app.get('/api/sales/transactions', requireStaff(['sales', 'super admin']), async (req, res) => {
   try {
     const { wtRows, prRows, customerRows } = await loadTransactionRows();
 
@@ -1872,7 +2062,7 @@ app.get('/api/sales/transactions', async (req, res) => {
 });
 
 // Sales Desk: Customer Balance Audit Logs (Tracks Previous Balance, Transaction Amount, New Balance, and Full History)
-app.get('/api/sales/balance-logs', async (req, res) => {
+app.get('/api/sales/balance-logs', requireStaff(['sales', 'super admin']), async (req, res) => {
   try {
     const rawCustomerId = req.query.customerId;
     const customerId = (rawCustomerId && rawCustomerId !== 'undefined' && rawCustomerId !== 'null' && rawCustomerId !== 'all') ? String(rawCustomerId).trim() : null;
@@ -2182,7 +2372,7 @@ app.get('/api/sales/balance-logs', async (req, res) => {
   }
 });
 // Sales Desk: Retrieve All Failed Transactions Across All Customers with Contact Numbers & Reason
-app.get('/api/sales/failed-transactions', async (req, res) => {
+app.get('/api/sales/failed-transactions', requireStaff(['sales', 'super admin']), async (req, res) => {
   try {
     // 1. Fetch deleted/archived IDs & refs so dismissed/cleared records are not shown in active list
     const { deletedRows, failedRows, unpaidRows } = await loadFailedTransactionData();
@@ -2277,7 +2467,7 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
 });
 
 // Sales Desk: Get Deleted Failed Transactions History (Desk 11 History Tab)
-app.get('/api/sales/failed-transactions/history', async (req, res) => {
+app.get('/api/sales/failed-transactions/history', requireStaff(['sales', 'super admin']), async (req, res) => {
   try {
     const rows = await listDeletedFailedTransactionRows();
     res.json({ ok: true, history: rows.map(mapDeletedFailedTxRow) });
@@ -2288,7 +2478,7 @@ app.get('/api/sales/failed-transactions/history', async (req, res) => {
 });
 
 // Sales Desk: Restore a Deleted Failed Transaction back to active ledger
-app.post('/api/sales/failed-transactions/history/restore', async (req, res) => {
+app.post('/api/sales/failed-transactions/history/restore', requireStaff(['sales', 'super admin']), async (req, res) => {
   try {
     const { id } = req.body || {};
     if (!id) return res.status(400).json({ ok: false, error: 'Missing id to restore' });
@@ -2305,7 +2495,7 @@ app.post('/api/sales/failed-transactions/history/restore', async (req, res) => {
 });
 
 // Sales Desk: Permanently Purge Deleted Failed Transactions History (single or all)
-app.delete('/api/sales/failed-transactions/history/:id', async (req, res) => {
+app.delete('/api/sales/failed-transactions/history/:id', requireStaff(['sales', 'super admin']), async (req, res) => {
   try {
     const rawId = decodeURIComponent(req.params.id || '').trim();
     if (rawId === 'all' || rawId === 'clear-all') {
@@ -2328,7 +2518,7 @@ async function archiveAndDeleteFailedTx(filter, txSnapshot) {
 }
 
 // Sales Desk: Delete / Remove a Failed Transaction (or 'all' / 'dismissed')
-app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
+app.delete('/api/sales/failed-transactions/:id', requireStaff(['sales', 'super admin']), async (req, res) => {
   try {
     const rawId = decodeURIComponent(req.params.id || '').trim();
     const { txSnapshot } = req.body || {};
@@ -2351,7 +2541,7 @@ app.delete('/api/sales/failed-transactions/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/sales/failed-transactions', async (req, res) => {
+app.delete('/api/sales/failed-transactions', requireStaff(['sales', 'super admin']), async (req, res) => {
   try {
     const { id, ids, type, txSnapshot } = req.body || req.query || {};
     if (type === 'all' || id === 'all') {
@@ -2386,7 +2576,7 @@ app.delete('/api/sales/failed-transactions', async (req, res) => {
 });
 
 
-app.put('/api/customers/:id/profile', async (req, res) => {
+app.put('/api/customers/:id/profile', requireCustomerSelfOrStaff((req) => req.params.id), async (req, res) => {
   try {
     const rawId = req.params.id;
     const {
@@ -2460,13 +2650,41 @@ const handleUpdateCustomerRecord = async (req, res) => {
       ...(rawUpdates.wallet || {}),
     };
 
-    const nextStatus = updates.status || cust.status;
+    const isStaffActor = req.auth?.actorType === 'staff';
+    const isSuperAdminActor =
+      isStaffActor &&
+      (String(req.auth?.department || '').toLowerCase().includes('super') ||
+        String(req.auth?.role || '').toLowerCase().includes('super'));
+
+    // CRIT-07 REMEDIATED: Customers can NEVER tamper with wallet balance, account status, or paymentStatus via PATCH!
+    if (!isStaffActor && updates.balance !== undefined) {
+      await SecurityEventLog.create({
+        category: 'RBAC_DENIED',
+        ipAddress: getClientIp(req),
+        path: req.originalUrl || req.path,
+        method: req.method,
+        actorId: req.auth?.sub || cust._id,
+        detail: `Blocked unauthorized wallet balance tamper attempt (${updates.balance}) on ${cust._id}`,
+      }).catch(() => {});
+      return res.status(403).json({
+        ok: false,
+        code: 'WALLET_TAMPER_BLOCKED',
+        error: 'Security Violation: Wallet balances can only be credited through verified payment gateways.',
+      });
+    }
+
+    const nextStatus = isStaffActor ? (updates.status || cust.status) : cust.status;
     const nextProfile = updates.profileStatus || updates.profile_status || cust.profileStatus;
-    const nextPayment = updates.paymentStatus || updates.payment_status || cust.paymentStatus;
+    const nextPayment = isStaffActor
+      ? (updates.paymentStatus || updates.payment_status || cust.paymentStatus)
+      : cust.paymentStatus;
     const nextKyc = updates.kycPercent !== undefined ? Number(updates.kycPercent) : Number(cust.kycPercent);
     const nextCompany = updates.companyName || updates.name || cust.companyName;
     const nextWebsite = updates.website ?? updates.domain ?? cust.website;
-    const nextPassword = (updates.password || updates.passwordPlain || updates.passwordHash || '').trim() || cust.passwordHash;
+    const rawSubmittedPassword = (updates.password || updates.passwordPlain || updates.passwordHash || '').trim();
+    const nextPassword = rawSubmittedPassword
+      ? await hashPassword(rawSubmittedPassword)
+      : cust.passwordHash;
     // Legacy SQL evaluated `verified` against the row values from BEFORE this update; kept as-is.
     const nextVerified = Number(cust.kycPercent) >= 100 || cust.profileStatus === 'complete';
 
@@ -2495,8 +2713,8 @@ const handleUpdateCustomerRecord = async (req, res) => {
         if (minimumDailySpend === null) return res.status(409).json({ ok: false, error: 'Unsupported wallet currency.' });
         const nextDaily = updates.dailyAdSpend !== undefined ? Math.max(minimumDailySpend, Number(updates.dailyAdSpend)) : Number(w.dailyAdSpend);
         const nextActive = updates.adCampaignActive !== undefined ? Boolean(updates.adCampaignActive) : Boolean(w.adCampaignActive);
-        // Only an explicit admin balance override is written; otherwise availableBalance is left untouched
-        const nextBal = updates.balance !== undefined ? Math.max(0, Number(updates.balance)) : undefined;
+        // Balance override is STRICTLY restricted to Super Admin only
+        const nextBal = isSuperAdminActor && updates.balance !== undefined ? Math.max(0, Number(updates.balance)) : undefined;
         if (!Number.isFinite(nextDaily) || (nextBal !== undefined && !Number.isFinite(nextBal))) {
           throw new Error('Invalid numeric value for wallet settings.');
         }
@@ -2559,18 +2777,17 @@ const handleUpdateCustomerRecord = async (req, res) => {
     const viewRow = await getCustomerViewRowById(cust._id);
     res.json({
       ok: true,
-      customer: mapCustomerRow(viewRow, nextPassword),
-      loginPassword: nextPassword,
+      customer: mapCustomerRow(viewRow),
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 };
 
-app.patch('/api/customers/:id', handleUpdateCustomerRecord);
-app.put('/api/customers/:id', handleUpdateCustomerRecord);
+app.patch('/api/customers/:id', requireCustomerSelfOrStaff((req) => req.params.id), handleUpdateCustomerRecord);
+app.put('/api/customers/:id', requireCustomerSelfOrStaff((req) => req.params.id), handleUpdateCustomerRecord);
 
-app.delete('/api/customers/:identifier', async (req, res) => {
+app.delete('/api/customers/:identifier', requireStaff(['super admin', 'sales']), async (req, res) => {
   try {
     const rawId = String(req.params.identifier || '').trim();
     const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
@@ -2629,7 +2846,7 @@ function customerSummaryFromDoc(c) {
   };
 }
 
-app.post('/api/payments/razorpay/order', async (req, res) => {
+app.post('/api/payments/razorpay/order', requireAuth, async (req, res) => {
   try {
     if (!razorpayKeyId || !razorpayKeySecret) {
       return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
@@ -2741,7 +2958,7 @@ app.get('/api/payments/razorpay/config', (req, res) => {
   });
 });
 
-app.post('/api/payments/razorpay/payment-link', async (req, res) => {
+app.post('/api/payments/razorpay/payment-link', requireAuth, async (req, res) => {
   try {
     if (!razorpayKeyId || !razorpayKeySecret) {
       return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
@@ -3021,7 +3238,7 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
   }
 });
 
-app.post('/api/payments/razorpay/verify', async (req, res) => {
+app.post('/api/payments/razorpay/verify', requireAuth, async (req, res) => {
   try {
     if (!razorpayKeySecret) return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
     const { orderId, paymentId, signature, customerId, phone, username, amount } = req.body || {};
@@ -3351,7 +3568,7 @@ app.post('/api/wallets/topup', async (req, res) => {
 });
 
 // Record failed / declined payment attempts into customer wallet transaction ledger
-app.post('/api/wallets/failed-transaction', async (req, res) => {
+app.post('/api/wallets/failed-transaction', requireAuth, async (req, res) => {
   try {
     const txDoc = await recordFailedTransaction(req.body || {});
     res.json({
@@ -3364,7 +3581,10 @@ app.post('/api/wallets/failed-transaction', async (req, res) => {
   }
 });
 
-app.post('/api/wallets/deduct', async (req, res) => {
+app.post(
+  '/api/wallets/deduct',
+  requireCustomerSelfOrStaff((req) => req.body?.customerId || req.body?.phone || req.body?.username),
+  async (req, res) => {
   try {
     const { customerId, phone, username, amount, activeDays, force, manual } = req.body || {};
     const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
@@ -3402,16 +3622,21 @@ app.post('/api/wallets/deduct', async (req, res) => {
 // =============================================================================
 // 5. LEADS PIPELINE (Strict Per-Account Isolation + Sales Desk 03 Dispatch)
 // =============================================================================
-app.get('/api/leads', async (req, res) => {
+app.get('/api/leads', requireAuth, async (req, res) => {
   try {
-    const rows = await listLeadRows(req.query || {});
+    // Enforce strict tenant isolation when queried by a customer
+    const scopedQuery =
+      req.auth.actorType === 'customer'
+        ? { ...req.query, customerId: req.auth.customerId || req.auth.sub }
+        : req.query || {};
+    const rows = await listLeadRows(scopedQuery);
     res.json({ ok: true, leads: rows.map(mapLeadRow) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.post('/api/leads', async (req, res) => {
+app.post('/api/leads', requireAuth, async (req, res) => {
   try {
     const { phone, name } = req.body || {};
     const buyerDigits = String(phone || name || '').replace(/\D/g, '').slice(-10);
@@ -3422,7 +3647,12 @@ app.post('/api/leads', async (req, res) => {
       });
     }
 
-    const out = await createDirectLeadRow(req.body || {});
+    const scopedBody =
+      req.auth.actorType === 'customer'
+        ? { ...req.body, customerId: req.auth.customerId || req.auth.sub, customerPhone: req.auth.phone }
+        : req.body || {};
+
+    const out = await createDirectLeadRow(scopedBody);
     if (out.notFound) {
       return res.status(404).json({
         ok: false,
@@ -3437,8 +3667,18 @@ app.post('/api/leads', async (req, res) => {
   }
 });
 
-app.patch('/api/leads/:id', async (req, res) => {
+app.patch('/api/leads/:id', requireAuth, async (req, res) => {
   try {
+    if (req.auth.actorType === 'customer') {
+      const targetLead = await Lead.findById(req.params.id).select('customerId customerPhone').lean();
+      if (targetLead) {
+        const selfId = String(req.auth.customerId || req.auth.sub);
+        const selfPhone = String(req.auth.phone || '').slice(-10);
+        if (targetLead.customerId !== selfId && (!selfPhone || targetLead.customerPhone !== selfPhone)) {
+          return res.status(403).json({ ok: false, error: 'Access denied: lead belongs to another workspace.' });
+        }
+      }
+    }
     const updatedRow = await updateLeadAndSyncAssignment(req.params.id, req.body || {});
     if (!updatedRow) {
       return res.status(404).json({ ok: false, error: 'Lead not found' });
@@ -3452,7 +3692,7 @@ app.patch('/api/leads/:id', async (req, res) => {
 // =============================================================================
 // 6. PAYMENTS, INVOICES, VERIFICATIONS, QUERIES, TASKS & GROUPS
 // =============================================================================
-app.get('/api/payments', async (req, res) => {
+app.get('/api/payments', requireStaff(), async (req, res) => {
   try {
     const rows = await listPaymentRecordRows();
     res.json({ ok: true, payments: rows.map(mapPaymentRecordRow) });
@@ -3462,7 +3702,7 @@ app.get('/api/payments', async (req, res) => {
 });
 
 // Delete payment record by ID, receipt number, or UTR (with wallet adjustment)
-app.delete('/api/payments/:id', async (req, res) => {
+app.delete('/api/payments/:id', requireStaff(['super admin', 'sales']), async (req, res) => {
   try {
     const rawId = decodeURIComponent(req.params.id || '').trim();
     if (!rawId) return res.status(400).json({ ok: false, error: 'Payment ID or Receipt Number required' });
@@ -3475,16 +3715,20 @@ app.delete('/api/payments/:id', async (req, res) => {
   }
 });
 
-app.get('/api/invoices', async (req, res) => {
+app.get('/api/invoices', requireAuth, async (req, res) => {
   try {
-    const rows = await listTaxInvoiceRows(req.query?.customerId);
+    const scopedCustId =
+      req.auth.actorType === 'customer'
+        ? (req.auth.customerId || req.auth.sub)
+        : req.query?.customerId;
+    const rows = await listTaxInvoiceRows(scopedCustId);
     res.json({ ok: true, invoices: rows.map(mapInvoiceRow) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.get('/api/verifications', async (req, res) => {
+app.get('/api/verifications', requireStaff(), async (req, res) => {
   try {
     const rows = await listPendingVerificationRows();
     const verifications = rows.map((r) => ({
@@ -3520,18 +3764,26 @@ app.get('/api/verifications', async (req, res) => {
   }
 });
 
-app.get('/api/queries', async (req, res) => {
+app.get('/api/queries', requireAuth, async (req, res) => {
   try {
-    const rows = await listSupportQueryRows(req.query?.customerId);
+    const scopedCustId =
+      req.auth.actorType === 'customer'
+        ? (req.auth.customerId || req.auth.sub)
+        : req.query?.customerId;
+    const rows = await listSupportQueryRows(scopedCustId);
     res.json({ ok: true, queries: rows.map(mapQueryRow) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.post('/api/queries', async (req, res) => {
+app.post('/api/queries', requireAuth, async (req, res) => {
   try {
-    const row = await createSupportQueryRow(req.body || {});
+    const scopedBody =
+      req.auth.actorType === 'customer'
+        ? { ...req.body, customerId: req.auth.customerId || req.auth.sub }
+        : req.body || {};
+    const row = await createSupportQueryRow(scopedBody);
     res.status(201).json({ ok: true, query: mapQueryRow(row) });
   } catch (err) {
     console.error('[POST /api/queries]', err);
@@ -3539,7 +3791,7 @@ app.post('/api/queries', async (req, res) => {
   }
 });
 
-app.patch('/api/queries/:id', async (req, res) => {
+app.patch('/api/queries/:id', requireStaff(), async (req, res) => {
   try {
     const out = await updateSupportQueryRow(req.params.id, req.body || {});
     if (out.notFound) {
@@ -3552,7 +3804,7 @@ app.patch('/api/queries/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/queries/:id', async (req, res) => {
+app.delete('/api/queries/:id', requireStaff(), async (req, res) => {
   try {
     const deletedCount = await deleteSupportQueryById(req.params.id);
     res.json({ ok: true, deletedCount });
@@ -3562,7 +3814,7 @@ app.delete('/api/queries/:id', async (req, res) => {
   }
 });
 
-app.post('/api/tasks', async (req, res) => {
+app.post('/api/tasks', requireStaff(), async (req, res) => {
   try {
     const task = await createSalesTaskRow(req.body || {});
     res.status(201).json({ ok: true, task });
@@ -3576,7 +3828,7 @@ app.post('/api/tasks', async (req, res) => {
 // =============================================================================
 
 // List all Customer Groups with dynamic counts
-app.get('/api/groups', async (req, res) => {
+app.get('/api/groups', requireStaff(), async (req, res) => {
   try {
     const groups = await getGroupEligibilityCounts();
     res.json({ ok: true, groups: groups.map(mapGroupRow) });
@@ -3587,7 +3839,7 @@ app.get('/api/groups', async (req, res) => {
 });
 
 // List all categories and customer groups with live eligible customer counts
-app.get('/api/categories', async (req, res) => {
+app.get('/api/categories', requireStaff(), async (req, res) => {
   try {
     const { categories, groups } = await getCategoryEligibilityCounts();
     res.json({
@@ -3602,7 +3854,7 @@ app.get('/api/categories', async (req, res) => {
 });
 
 // Preview eligible recipients by category or group
-app.get('/api/categories/preview', async (req, res) => {
+app.get('/api/categories/preview', requireStaff(), async (req, res) => {
   try {
     const targetCat = String(req.query.category || '').trim();
     const targetGroupId = String(req.query.groupId || '').trim();
@@ -3636,7 +3888,7 @@ app.get('/api/categories/preview', async (req, res) => {
 });
 
 // Create a new Customer Group
-app.post('/api/groups', async (req, res) => {
+app.post('/api/groups', requireStaff(), async (req, res) => {
   try {
     const { name } = req.body || {};
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -3653,7 +3905,7 @@ app.post('/api/groups', async (req, res) => {
 });
 
 // Update an existing Customer Group
-app.put('/api/groups/:id', async (req, res) => {
+app.put('/api/groups/:id', requireStaff(), async (req, res) => {
   try {
     const row = await updateCustomerGroupRow(req.params.id, req.body || {});
     if (!row) {
@@ -3669,7 +3921,7 @@ app.put('/api/groups/:id', async (req, res) => {
 });
 
 // Delete a Customer Group
-app.delete('/api/groups/:id', async (req, res) => {
+app.delete('/api/groups/:id', requireStaff(), async (req, res) => {
   try {
     await deleteCustomerGroupCascade(req.params.id);
     res.json({ ok: true, message: 'Group deleted successfully' });
@@ -3679,7 +3931,7 @@ app.delete('/api/groups/:id', async (req, res) => {
 });
 
 // List members of a Customer Group
-app.get('/api/groups/:id/members', async (req, res) => {
+app.get('/api/groups/:id/members', requireStaff(), async (req, res) => {
   try {
     const members = await listGroupMembers(req.params.id);
     res.json({ ok: true, members });
@@ -3689,7 +3941,7 @@ app.get('/api/groups/:id/members', async (req, res) => {
 });
 
 // Assign customers to a Customer Group (Batch assignment)
-app.post('/api/groups/:id/members', async (req, res) => {
+app.post('/api/groups/:id/members', requireStaff(), async (req, res) => {
   try {
     const { customerIds = [] } = req.body || {};
     if (!Array.isArray(customerIds) || customerIds.length === 0) {
@@ -3713,7 +3965,7 @@ app.post('/api/groups/:id/members', async (req, res) => {
 });
 
 // Remove customer from a Customer Group
-app.delete('/api/groups/:id/members/:customerId', async (req, res) => {
+app.delete('/api/groups/:id/members/:customerId', requireStaff(), async (req, res) => {
   try {
     await removeGroupMember(req.params.id, req.params.customerId);
     res.json({ ok: true, message: 'Customer removed from group successfully' });
@@ -3723,7 +3975,7 @@ app.delete('/api/groups/:id/members/:customerId', async (req, res) => {
 });
 
 // Preview distribution recipients for a group
-app.get('/api/groups/:id/preview-recipients', async (req, res) => {
+app.get('/api/groups/:id/preview-recipients', requireStaff(), async (req, res) => {
   try {
     const groupId = req.params.id;
     const masterLeadId = String(req.query.masterLeadId || '').trim() || null;
@@ -3755,7 +4007,7 @@ app.get('/api/groups/:id/preview-recipients', async (req, res) => {
 });
 
 // CORE ACTION: Distribute One Lead to All Customers in Target Category or Group
-app.post('/api/leads/distribute', async (req, res) => {
+app.post('/api/leads/distribute', requireStaff(['sales', 'marketing', 'super admin']), async (req, res) => {
   try {
     const {
       groupId,
@@ -3877,7 +4129,7 @@ app.post('/api/leads/distribute', async (req, res) => {
 });
 
 // Lead Distribution History & Tracking
-app.get('/api/leads/distribution-history', async (req, res) => {
+app.get('/api/leads/distribution-history', requireStaff(), async (req, res) => {
   try {
     const history = await listDistributionHistory();
     res.json({ ok: true, history });
@@ -3887,7 +4139,7 @@ app.get('/api/leads/distribution-history', async (req, res) => {
 });
 
 // Inspect a specific distribution's recipient-level status
-app.get('/api/leads/distribution-history/:id', async (req, res) => {
+app.get('/api/leads/distribution-history/:id', requireStaff(), async (req, res) => {
   try {
     const detail = await getDistributionDetail(req.params.id);
     if (!detail) {
@@ -3904,8 +4156,14 @@ app.get('/api/leads/distribution-history/:id', async (req, res) => {
 });
 
 // Update recipient status / response (from customer or admin)
-app.patch('/api/lead-assignments/:id', async (req, res) => {
+app.patch('/api/lead-assignments/:id', requireAuth, async (req, res) => {
   try {
+    if (req.auth.actorType === 'customer') {
+      const existingAsgn = await LeadAssignment.findById(req.params.id).select('customerId').lean();
+      if (existingAsgn && existingAsgn.customerId !== (req.auth.customerId || req.auth.sub)) {
+        return res.status(403).json({ ok: false, error: 'Access denied: assignment belongs to another workspace.' });
+      }
+    }
     const updated = await updateLeadAssignmentAndSync(req.params.id, req.body || {});
     if (!updated) {
       return res.status(404).json({ ok: false, error: 'Lead assignment not found' });
@@ -3919,17 +4177,18 @@ app.patch('/api/lead-assignments/:id', async (req, res) => {
 // =============================================================================
 // 6B. MARKETING DEPARTMENT API ROUTER (/api/marketing/*)
 // =============================================================================
-app.use('/api/marketing', marketingRouter);
+app.use('/api/marketing', requireStaff(['marketing', 'graphics', 'super admin']), marketingRouter);
 
 // =============================================================================
 // 6C. GRAPHICS DEPARTMENT API ROUTER (/api/graphics/*)
 // =============================================================================
-app.use('/api/graphics', graphicsRouter);
+app.use('/api/graphics', requireStaff(['graphics', 'marketing', 'super admin']), graphicsRouter);
 
 // =============================================================================
 // 6D. SUPER ADMIN CONTROL CENTER API ROUTER (/api/superadmin/*)
 // =============================================================================
-app.use('/api/superadmin', superadminRouter);
+app.use('/api/superadmin', requireSuperAdmin, superadminOpsRouter);
+app.use('/api/superadmin', requireSuperAdmin, superadminRouter);
 
 // =============================================================================
 // 6E. PUBLIC COUNTRY PRICING & LOCALIZATION API ROUTER (/api/public/*)
@@ -3939,7 +4198,7 @@ app.use('/api/public', countryPricingRouter);
 // =============================================================================
 // 6F. SUPER ADMIN COUNTRY PRICING CONFIGURATION ROUTER (/api/superadmin/country-pricing)
 // =============================================================================
-app.use('/api/superadmin/country-pricing', superadminCountryPricingRouter);
+app.use('/api/superadmin/country-pricing', requireSuperAdmin, superadminCountryPricingRouter);
 
 // =============================================================================
 // 7. PRODUCTION STATIC FRONTEND SERVING (When frontend/dist is built on VPS)
@@ -4042,18 +4301,26 @@ app.listen(PORT, () => {
       // Start background transactional outbox relay worker
       startOutboxWorker(2500);
 
-      // Run daily ad spend pacing evaluation 3s after startup, then every 30 minutes
+      // Run daily ad spend pacing evaluation 3s after startup, then every 30 minutes (protected by distributed MongoDB TTL lease lock)
       setTimeout(() => {
-        processDailyAdSpendPacing()
-          .then((res) => console.log(`[Daily Ad Spend Pacing] Initial run completed (${res.processedCount || 0} deducted, ${res.autoPausedCount || 0} paused)`))
+        withDistributedCronLock('daily_ad_spend_pacing', 10 * 60 * 1000, () => processDailyAdSpendPacing())
+          .then((lockRes) => {
+            if (!lockRes.skipped) {
+              const res = lockRes.result || {};
+              console.log(`[Daily Ad Spend Pacing] Initial run completed (${res.processedCount || 0} deducted, ${res.autoPausedCount || 0} paused)`);
+            }
+          })
           .catch((err) => console.warn('[Daily Ad Spend Pacing] Initial run warning:', err.message));
       }, 3000);
 
       setInterval(() => {
-        processDailyAdSpendPacing()
-          .then((res) => {
-            if (res.processedCount > 0 || res.autoPausedCount > 0) {
-              console.log(`[Daily Ad Spend Pacing] Auto-run completed (${res.processedCount} deducted, ${res.autoPausedCount} paused)`);
+        withDistributedCronLock('daily_ad_spend_pacing', 10 * 60 * 1000, () => processDailyAdSpendPacing())
+          .then((lockRes) => {
+            if (!lockRes.skipped) {
+              const res = lockRes.result || {};
+              if (res.processedCount > 0 || res.autoPausedCount > 0) {
+                console.log(`[Daily Ad Spend Pacing] Auto-run completed (${res.processedCount} deducted, ${res.autoPausedCount} paused)`);
+              }
             }
           })
           .catch((err) => console.warn('[Daily Ad Spend Pacing] Auto-run warning:', err.message));

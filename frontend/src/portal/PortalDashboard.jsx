@@ -28,6 +28,7 @@ import {
   BusinessProfileModal,
 } from './PortalModals';
 import crmApi from '../services/crmApi';
+import NotificationBell from '../components/NotificationBell';
 import Swal from 'sweetalert2';
 
 export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab }) {
@@ -198,12 +199,11 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     return customer.walletBalance || customer.balance || 0;
   });
 
-  // Real-time synchronization with PostgreSQL Backend & Sales Desk (strictly filtered for active customer)
+  // Real-time synchronization with MongoDB Backend (paginated & tenant-isolated via /api/me/workspace)
   useEffect(() => {
     const identifier = customer?.id || customer?.phone || customer?.username;
-    if (identifier) {
-      crmApi
-        .getCustomerWorkspace(identifier)
+    if (identifier || crmApi.getCustomerToken()) {
+      (crmApi.getCustomerToken() ? crmApi.getMyWorkspace() : crmApi.getCustomerWorkspace(identifier))
         .then((res) => {
           if (res?.customer) {
             setCustomer((prev) => {
@@ -1659,6 +1659,71 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
 
       {/* MAIN CONTENT AREA */}
       <div className="portal-main-area">
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 22px',
+            background: '#ffffff',
+            borderBottom: '1px solid #e2e8f0',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#475569' }}>
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: '#10b981',
+                display: 'inline-block',
+              }}
+            />
+            <strong style={{ color: '#0f172a' }}>{customer.companyName || customer.username || 'Business Workspace'}</strong>
+            <span
+              style={{
+                background: '#dcfce7',
+                color: '#15803d',
+                border: '1px solid #bbf7d0',
+                padding: '1px 8px',
+                borderRadius: '999px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+              }}
+            >
+              WhatsApp Verified ✓
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => handleSwitchTab('wallet')}
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                borderRadius: '9px',
+                padding: '6px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                color: '#0f172a',
+                cursor: 'pointer',
+              }}
+            >
+              Wallet: {currencySymbol}{walletBalance.toFixed(0)}
+            </button>
+            <NotificationBell
+              variant="light"
+              onNavigateLink={(link) => {
+                if (link.includes('wallet')) handleSwitchTab('wallet');
+                else if (link.includes('lead')) handleSwitchTab('leads');
+                else if (link.includes('profile')) handleSwitchTab('profile');
+                else handleSwitchTab('dashboard');
+              }}
+            />
+          </div>
+        </div>
         <div className="portal-content-body">
           {activeTab === 'dashboard' && (
             <LeadHubOverview

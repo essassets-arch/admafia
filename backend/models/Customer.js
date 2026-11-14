@@ -50,6 +50,8 @@ const CustomerSchema = new mongoose.Schema({
   },
   kycPercent: { type: Number, min: 0, max: 100, default: 100 },
   verified: { type: Boolean, default: true },
+  phoneVerified: { type: Boolean, default: false, index: true },
+  phoneVerifiedAt: { type: Date, default: null },
   isSelfRegistered: { type: Boolean, default: true },
   registeredFrom: { type: String, default: 'http://localhost:5173/#register' },
 
@@ -74,6 +76,8 @@ const CustomerSchema = new mongoose.Schema({
 
 CustomerSchema.index({ phone: 1, status: 1 });
 CustomerSchema.index({ category: 1, status: 1 });
+CustomerSchema.index({ status: 1, paymentStatus: 1, registeredAt: -1 });
+CustomerSchema.index({ category: 1, city: 1, status: 1 });
 
 export const Customer = mongoose.models.Customer || mongoose.model('Customer', CustomerSchema);
 export default Customer;

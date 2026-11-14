@@ -4,6 +4,7 @@ import {
   WalletTransaction,
   PaymentRecord,
 } from '../models/index.js';
+import { hashPassword, isPasswordHashed } from '../utils/passwordCrypto.js';
 
 /**
  * MongoDB startup bootstrap (replaces the data-seeding / cleanup half of PostgreSQL initDatabase()).
@@ -30,24 +31,37 @@ export async function seedBaselineData() {
 
   for (const u of DEFAULT_SYSTEM_USERS) {
     try {
-      // Mirrors legacy `ON CONFLICT (username) DO UPDATE SET password, role, department, status='active'`
-      await SystemUser.updateOne(
-        { username: u.username },
-        {
-          $set: { passwordHash: u.password, role: u.role, department: u.department, status: 'active', updatedAt: now },
-          $setOnInsert: {
-            _id: u._id,
-            customerId: null,
-            fullName: u.fullName,
-            email: u.email,
-            phone: u.phone,
-            permissions: u.permissions,
-            lastLoginAt: null,
-            createdAt: now,
-          },
-        },
-        { upsert: true, timestamps: false }
-      );
+      const existing = await SystemUser.findOne({ username: u.username }).select('_id passwordHash').lean();
+      const hashedDefault = await hashPassword(u.password);
+      if (!existing) {
+        await SystemUser.create({
+          _id: u._id,
+          customerId: null,
+          fullName: u.fullName,
+          email: u.email,
+          username: u.username,
+          phone: u.phone,
+          passwordHash: hashedDefault,
+          role: u.role,
+          department: u.department,
+          status: 'active',
+          permissions: u.permissions,
+          lastLoginAt: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } else {
+        const updateSet = { role: u.role, department: u.department, status: 'active', updatedAt: now };
+        // Upgrade any legacy plaintext password automatically without overwriting custom scrypt passwords
+        if (!isPasswordHashed(existing.passwordHash)) {
+          updateSet.passwordHash = await hashPassword(existing.passwordHash || u.password);
+        }
+        await SystemUser.updateOne(
+          { _id: existing._id },
+          { $set: updateSet },
+          { timestamps: false }
+        );
+      }
       result.systemUsers += 1;
     } catch (err) {
       result.warnings.push(`system user ${u.username}: ${err.message}`);

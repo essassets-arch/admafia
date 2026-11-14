@@ -1,0 +1,117 @@
+name: admafia-local
+
+services:
+  # 1. Isolated Local MongoDB 7.0 Replica Set (`rs0`) — Exposed on 127.0.0.1:27018 for MongoDB Compass
+  mongo-local:
+    image: mongo:7.0-jammy
+    container_name: admafia-mongo-local
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo_local_data:/data/db
+    ports:
+      - "127.0.0.1:27018:27017"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"try { rs.status().ok } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo-local:27017'}]}).ok }\""]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks:
+      admafia-local-net:
+        aliases:
+          - mongo
+
+  # 2. Isolated Local Redis 7 — Distributed Rate Limiting, OTP Cooldowns & Session Cache
+  redis-local:
+    image: redis:7-alpine
+    container_name: admafia-redis-local
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_local_data:/data
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      admafia-local-net:
+        aliases:
+          - redis
+
+  # 3. Mongo Express Local Web GUI (Optional Browser DB Inspector on http://127.0.0.1:8081)
+  mongo-express-local:
+    image: mongo-express:1.0.2-20-alpine3.19
+    container_name: admafia-mongo-express-local
+    restart: unless-stopped
+    depends_on:
+      mongo-local:
+        condition: service_healthy
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo-local:27017/?directConnection=true
+      ME_CONFIG_BASICAUTH_USERNAME: ${ME_ADMIN_USER:-admafia_admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ME_ADMIN_PASS:-AdMafiaLocalDB@2026!}
+    ports:
+      - "127.0.0.1:8081:8081"
+    networks:
+      - admafia-local-net
+
+  # 4. Isolated Local Node.js Express Backend API (http://127.0.0.1:5001)
+  backend-local:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: admafia-backend-local
+    restart: unless-stopped
+    env_file:
+      - path: ./backend/.env.local
+        required: false
+    depends_on:
+      mongo-local:
+        condition: service_healthy
+      redis-local:
+        condition: service_healthy
+    environment:
+      PORT: 5000
+      NODE_ENV: development
+      LOCAL_DEV_COUNTRY: IN
+      TRUST_PROXY_HEADERS: "true"
+      MONGO_URI: mongodb://mongo-local:27017/admafia_crm?directConnection=true
+      REDIS_URL: redis://redis-local:6379
+      BACKUP_DIR: /backups
+    ports:
+      - "127.0.0.1:5001:5000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/uploads:/app/uploads
+      - ./backups:/backups
+    networks:
+      admafia-local-net:
+        aliases:
+          - backend
+
+  # 5. Isolated Local React 19 + Vite Nginx Frontend SPA (http://127.0.0.1:5051)
+  frontend-local:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: admafia-frontend-local
+    restart: unless-stopped
+    depends_on:
+      - backend-local
+    ports:
+      - "127.0.0.1:5051:80"
+    networks:
+      - admafia-local-net
+
+volumes:
+  mongo_local_data:
+  redis_local_data:
+
+networks:
+  admafia-local-net:
+    driver: bridge
+

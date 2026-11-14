@@ -7,6 +7,7 @@ import {
   syncReviewToMongo,
   recordTelemetryEvent
 } from './marketingStorage.js';
+import { dispatchOutboxNotification } from './firebasePushService.js';
 
 let isWorkerRunning = false;
 let workerInterval = null;
@@ -71,10 +72,13 @@ async function dispatchEvent(event) {
           _id: event.aggregateId,
           'revisions.revisionId': payload.revision_id,
         });
-        if (alreadyStored) return;
+        if (!alreadyStored) {
+          await syncRevisionToMongo(event.aggregateId, payload);
+        }
+      } else {
+        await syncRevisionToMongo(event.aggregateId, payload);
       }
-      // syncRevisionToMongo merges into an existing revision (never discards stored data)
-      await syncRevisionToMongo(event.aggregateId, payload);
+      await dispatchOutboxNotification(event).catch(() => {});
       return;
     }
 
@@ -92,6 +96,7 @@ async function dispatchEvent(event) {
         },
       });
       if (!alreadyStored) await syncReviewToMongo(event.aggregateId, payload);
+      await dispatchOutboxNotification(event).catch(() => {});
       return;
     }
 
@@ -106,7 +111,8 @@ async function dispatchEvent(event) {
     case 'LEAD_DISPATCHED':
     case 'ARTWORK_REVIEWED':
     case 'CAMPAIGN_STARTED':
-      // Informational events: hooks for external webhooks / notifications; nothing to replicate.
+    case 'NEW_CUSTOMER_REGISTERED':
+      await dispatchOutboxNotification(event);
       return;
 
     default:

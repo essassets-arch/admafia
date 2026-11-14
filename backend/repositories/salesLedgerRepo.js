@@ -21,6 +21,7 @@ import {
   MarketingAuditEvent,
 } from '../models/index.js';
 import { withMongoTransaction, genId } from './tx.js';
+import { recordOutboxEvent } from '../services/outboxWorker.js';
 import {
   getCustomerViewRows,
   makeCustomerMatcher,
@@ -520,6 +521,20 @@ export async function creditSalesTopup({
         currency: custCurrency,
         createdAt: now,
       }).save({ session });
+
+      await recordOutboxEvent(session, {
+        aggregateType: 'wallet',
+        aggregateId: wallet._id,
+        eventType: 'WALLET_CREDITED',
+        payload: {
+          customerId: targetCustId,
+          companyName: customer.companyName || '',
+          amount: creditAmount,
+          balanceAfter: newBalance,
+          currency: custCurrency,
+          referenceUtr: cleanUtr,
+        },
+      });
 
       return { walletId: wallet._id, newBalance, oldBalance, receiptNo };
     });

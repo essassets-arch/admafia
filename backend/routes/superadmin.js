@@ -42,6 +42,7 @@ import {
   creditWalletLedger,
   debitWalletForRefund,
 } from '../repositories/superadminRepo.js';
+import { hashPassword } from '../utils/passwordCrypto.js';
 
 export const superadminRouter = express.Router();
 
@@ -2187,6 +2188,7 @@ superadminRouter.post('/businesses', async (req, res) => {
     const custId = genId('cust');
     const walletId = genId('wlt');
     const parsedInitialBalance = Math.max(0, parseFloat(initialBalance) || 0);
+    const hashedBusinessPassword = await hashPassword(finalPassword);
 
     try {
       await withMongoTransaction(async (session) => {
@@ -2200,7 +2202,7 @@ superadminRouter.post('/businesses', async (req, res) => {
               username: finalUsername,
               phone: cleanPhone,
               email: email.trim() || '',
-              passwordHash: finalPassword,
+              passwordHash: hashedBusinessPassword,
               companyName: companyName.trim(),
               category: category.trim(),
               contactPerson: contactPerson.trim(),
@@ -2340,6 +2342,7 @@ superadminRouter.post('/users', async (req, res) => {
 
     const userId = genId('usr');
     const now = new Date();
+    const hashedUserPassword = await hashPassword(finalPassword);
 
     try {
       await SystemUser.create({
@@ -2349,7 +2352,7 @@ superadminRouter.post('/users', async (req, res) => {
         email: cleanEmail,
         username: cleanUsername,
         phone: cleanPhone || '',
-        passwordHash: finalPassword,
+        passwordHash: hashedUserPassword,
         role,
         department: userDept,
         permissions: Array.isArray(permissions) ? permissions : ['all'],
@@ -2404,7 +2407,8 @@ superadminRouter.post('/accounts/:id/reset-password', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Customer business not found.' });
     }
 
-    await Customer.updateOne({ _id: id }, { $set: { passwordHash: newPassword.trim(), updatedAt: new Date() } });
+    const hashedResetCustPwd = await hashPassword(newPassword.trim());
+    await Customer.updateOne({ _id: id }, { $set: { passwordHash: hashedResetCustPwd, updatedAt: new Date() } });
 
     await logSuperAdminAudit({
       actorId: 'superadmin',
@@ -2442,7 +2446,8 @@ superadminRouter.post('/users/:id/reset-password', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'User not found.' });
     }
 
-    await SystemUser.updateOne({ _id: id }, { $set: { passwordHash: newPassword.trim(), updatedAt: new Date() } });
+    const hashedResetUserPwd = await hashPassword(newPassword.trim());
+    await SystemUser.updateOne({ _id: id }, { $set: { passwordHash: hashedResetUserPwd, updatedAt: new Date() } });
 
     await logSuperAdminAudit({
       actorId: 'superadmin',

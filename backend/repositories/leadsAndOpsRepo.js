@@ -26,6 +26,7 @@ import {
   makeCustomerMatcher,
 } from './salesViewRepo.js';
 import { getEvaluatedRecipients } from '../services/leadEligibility.js';
+import { recordOutboxEvent } from '../services/outboxWorker.js';
 
 const scalar = (v) => (typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : '');
 
@@ -132,6 +133,19 @@ export async function createDirectLeadRow(body = {}) {
     assignedAt: now,
     updatedAt: now,
   });
+
+  await recordOutboxEvent(null, {
+    aggregateType: 'lead',
+    aggregateId: leadId,
+    eventType: 'LEAD_DISPATCHED',
+    payload: {
+      leadId,
+      customerId: cust._id,
+      buyerName: scalar(name).trim() || displayPhone,
+      city: scalar(city) || cust.city || '',
+      category: cust.category || 'Other',
+    },
+  }).catch(() => {});
 
   return { row: leadToRow(created.toObject(), cust) };
 }
@@ -830,6 +844,20 @@ export async function distributeMasterLeadAtomic({
         status: 'new',
         responseInterest: 'Pending',
         notificationStatus: 'Delivered',
+      });
+
+      await recordOutboxEvent(session, {
+        aggregateType: 'lead',
+        aggregateId: custLeadId,
+        eventType: 'LEAD_DISPATCHED',
+        payload: {
+          leadId: custLeadId,
+          masterLeadId,
+          customerId: cust.customerId,
+          buyerName: bName || displayPhone,
+          city: city || cust.city || '',
+          category: finalCategory,
+        },
       });
     }
 

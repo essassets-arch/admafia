@@ -7,11 +7,17 @@ const BASE_URL = import.meta.env?.VITE_API_URL || '/api';
 
 async function request(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
+  let token = '';
+  try {
+    token = typeof window !== 'undefined' ? localStorage.getItem('admafia_admin_token') || '' : '';
+  } catch (e) {}
   const defaultHeaders = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
   const response = await fetch(url, {
+    credentials: 'include',
     ...options,
     headers: {
       ...defaultHeaders,
@@ -140,6 +146,24 @@ export const superadminApi = {
 
   // 8. Audit Logs
   getAuditLogs: (params) => request(`/superadmin/audit-logs${buildQuery(params)}`),
+
+  // 9. Database Health, Compass Connection & Encrypted 3-2-1 Snapshots
+  getDatabaseStatus: () => request('/superadmin/database/status'),
+  triggerDatabaseSnapshot: (encrypt = true) =>
+    request('/superadmin/database/snapshot', {
+      method: 'POST',
+      body: JSON.stringify({ encrypt }),
+    }),
+  getSnapshotDownloadUrl: (filename) => {
+    let token = '';
+    try {
+      token = typeof window !== 'undefined' ? localStorage.getItem('admafia_admin_token') || '' : '';
+    } catch (e) {}
+    return `${BASE_URL}/superadmin/database/snapshots/${encodeURIComponent(filename)}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
+
+  // 10. High-Growth Analytics, Conversion Funnel & Churn Radar
+  getGrowthAnalytics: () => request('/superadmin/growth-analytics'),
 };
 
 export default superadminApi;

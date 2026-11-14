@@ -20,6 +20,7 @@ import VerifyPostsDesk from './VerifyPostsDesk';
 import CustomerMarketingControlDesk from './CustomerMarketingControlDesk';
 import marketingApi from '../services/marketingApi';
 import adminAuthApi from '../services/adminAuthApi';
+import NotificationBell from '../components/NotificationBell';
 import './marketing.css';
 
 export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
@@ -252,6 +253,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
           </div>
 
           <div className="marketing-top-actions">
+            <NotificationBell variant="dark" />
             <div className="marketing-live-pill">
               <span className="marketing-live-dot" />
               <span>MongoDB Live Sync</span>

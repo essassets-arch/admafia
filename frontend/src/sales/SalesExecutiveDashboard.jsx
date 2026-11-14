@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import BalanceLogsDesk from './BalanceLogsDesk';
+import NotificationBell from '../components/NotificationBell';
 import {
   INITIAL_CUSTOMERS,
   INITIAL_REGISTERED_CUSTOMERS,
@@ -945,6 +946,8 @@ return (
               LIVE
             </span>
           </div>
+
+          <NotificationBell variant="light" />
 
           <button
             type="button"

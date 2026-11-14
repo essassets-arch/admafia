@@ -12,16 +12,17 @@ const SERVER_PATH = path.join(BACKEND_DIR, 'server.js');
 const TEST_PORT = 5059;
 const BASE = `http://127.0.0.1:${TEST_PORT}`;
 const TEST_DB_NAME = 'admafia_crm_test';
-const TEST_MONGO_URI = `mongodb://127.0.0.1:27017/${TEST_DB_NAME}?directConnection=true`;
+const TEST_MONGO_URI =
+  process.env.TEST_MONGO_URI || `mongodb://127.0.0.1:27017/${TEST_DB_NAME}?directConnection=true`;
 const TEST_WEBHOOK_SECRET = 'test_rzp_webhook_secret_2026';
+
+let staffBearerToken = '';
 
 async function req(method, urlPath, body = null, extraHeaders = {}) {
   const headers = {
     'Content-Type': 'application/json',
-    'x-admin-role': 'Super Admin',
-    'x-admin-name': 'Super Admin',
-    'x-admin-id': 'superadmin',
     'X-Real-IP': '49.36.128.1',
+    ...(staffBearerToken ? { Authorization: `Bearer ${staffBearerToken}` } : {}),
     ...extraHeaders,
   };
   const rawBody = body !== null ? JSON.stringify(body) : undefined;
@@ -40,7 +41,7 @@ async function req(method, urlPath, body = null, extraHeaders = {}) {
   return { status: res.status, json };
 }
 
-async function waitForServer(getLogs, maxWaitMs = 15000) {
+async function waitForServer(getLogs, maxWaitMs = 18000) {
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
     try {
@@ -57,18 +58,32 @@ async function waitForServer(getLogs, maxWaitMs = 15000) {
   throw new Error('Server failed to become healthy on ' + BASE + '\nServer logs:\n' + getLogs());
 }
 
-async function main() {
-  console.log('=== PHASE 3/4 E2E MONGODB-ONLY CUTOVER VERIFICATION ===');
+async function issueVerifiedRegistrationToken(phone, username = '') {
+  const sendRes = await req('POST', '/api/auth/otp/send', {
+    phone,
+    username,
+    countryCode: 'IN',
+    purpose: 'register',
+  });
+  assert.strictEqual(sendRes.status, 200, `OTP send failed: ${JSON.stringify(sendRes.json)}`);
+  const verRes = await req('POST', '/api/auth/otp/verify', {
+    phone,
+    countryCode: 'IN',
+    otp: '123456',
+    purpose: 'register',
+  });
+  assert.strictEqual(verRes.status, 200, `OTP verify failed: ${JSON.stringify(verRes.json)}`);
+  return verRes.json.otpVerificationToken;
+}
 
-  // 1. Connect to local test DB ONLY (strict guard against live 27018 / admafia_crm)
+async function main() {
+  console.log('=== END-TO-END MONGODB 7.0 + WHATSAPP OTP + JWT RBAC VERIFICATION ===');
+
   const conn = await mongoose.createConnection(TEST_MONGO_URI).asPromise();
-  assert.strictEqual(conn.host, '127.0.0.1', 'Must connect to 127.0.0.1');
-  assert.strictEqual(conn.port, 27017, 'Must connect to local port 27017 (NEVER 27018)');
   assert.strictEqual(conn.name, TEST_DB_NAME, 'Must only touch admafia_crm_test');
   await conn.dropDatabase();
-  console.log('[1] Cleanly dropped local test DB:', TEST_DB_NAME);
+  console.log('[1] Cleanly dropped isolated test DB:', TEST_DB_NAME);
 
-  // 2. Spawn backend/server.js WITHOUT any PG* or DATABASE_URL env vars
   const cleanEnv = { ...process.env };
   for (const k of Object.keys(cleanEnv)) {
     if (k.startsWith('PG') || k.startsWith('POSTGRES') || k === 'DATABASE_URL') {
@@ -78,6 +93,10 @@ async function main() {
   cleanEnv.PORT = String(TEST_PORT);
   cleanEnv.MONGO_URI = TEST_MONGO_URI;
   cleanEnv.RAZORPAY_WEBHOOK_SECRET = TEST_WEBHOOK_SECRET;
+  cleanEnv.JWT_SECRET = 'admafia_e2e_test_jwt_secret_hs256_2026_secure_key';
+  cleanEnv.OTP_HMAC_SECRET = 'admafia_e2e_test_otp_hmac_secret_2026';
+  cleanEnv.OTP_MODE = 'sandbox';
+  cleanEnv.OTP_SANDBOX_FIXED_CODE = '123456';
   cleanEnv.TRUST_PROXY_HEADERS = 'true';
   cleanEnv.NODE_ENV = 'test';
 
@@ -104,7 +123,7 @@ async function main() {
   };
 
   try {
-    const health = await waitForServer(() => serverLogs, 15000);
+    const health = await waitForServer(() => serverLogs, 18000);
     await new Promise((r) => setTimeout(r, 1200));
 
     check(
@@ -117,6 +136,18 @@ async function main() {
       !/postgres|pglite|5432/i.test(serverLogs),
       serverLogs
     );
+
+    // Authenticate Super Admin JWT for subsequent staff operations
+    const loginSuperAdmin = await req('POST', '/api/auth/admin-login', {
+      username: 'superadmin',
+      password: 'SuperAdmin@2026!',
+    });
+    check(
+      'POST /api/auth/admin-login issues signed Super Admin JWT',
+      loginSuperAdmin.status === 200 && loginSuperAdmin.json.ok === true && Boolean(loginSuperAdmin.json.token),
+      JSON.stringify(loginSuperAdmin.json)
+    );
+    staffBearerToken = loginSuperAdmin.json.token;
 
     const cpDetect = await req('GET', '/api/public/country-detection');
     check(
@@ -132,6 +163,7 @@ async function main() {
       JSON.stringify(cpPricing.json)
     );
 
+    const otpToken1 = await issueVerifiedRegistrationToken('9123456701', 'alphatech');
     const reg1 = await req('POST', '/api/auth/register', {
       companyName: 'Alpha Tech Solutions',
       contactPerson: 'Rahul Sharma',
@@ -142,13 +174,18 @@ async function main() {
       category: 'IT & Software',
       city: 'Mumbai',
       state: 'Maharashtra',
+      otpVerificationToken: otpToken1,
     });
     check(
-      'POST /api/auth/register creates customer (201)',
-      reg1.status === 201 && reg1.json.ok === true,
+      'POST /api/auth/register creates WhatsApp-verified customer (201) + JWT',
+      reg1.status === 201 &&
+        reg1.json.ok === true &&
+        reg1.json.customer?.phoneVerified === true &&
+        Boolean(reg1.json.token),
       JSON.stringify(reg1.json)
     );
     const custId = reg1.json.customer.id;
+    const customerBearerToken = reg1.json.token;
 
     const dbCustCount = await conn.collection('customers').countDocuments({ _id: custId });
     const dbWalCount = await conn.collection('wallets').countDocuments({ customerId: custId });
@@ -159,25 +196,43 @@ async function main() {
       `cust=${dbCustCount}, wal=${dbWalCount}, pv=${dbPvCount}`
     );
 
-    const regDup = await req('POST', '/api/auth/register', {
-      companyName: 'Dup Co',
-      contactPerson: 'Dup',
-      username: 'alphatech',
+    const otpDupSend = await req('POST', '/api/auth/otp/send', {
       phone: '9123456702',
+      username: 'alphatech',
+      countryCode: 'IN',
+      purpose: 'register',
+    });
+    check(
+      'Duplicate username pre-flight rejected during OTP send (409)',
+      otpDupSend.status === 409,
+      JSON.stringify(otpDupSend.json)
+    );
+
+    const loginCust = await req('POST', '/api/auth/login', {
+      identifier: '9123456701',
       password: 'Password@123',
     });
-    check('Duplicate username on different phone rejected (409)', regDup.status === 409, JSON.stringify(regDup.json));
-
-    const loginCust = await req('POST', '/api/auth/login', { identifier: '9123456701', password: 'Password@123' });
     check(
-      'POST /api/auth/login authenticates customer',
-      loginCust.status === 200 && loginCust.json.ok === true,
+      'POST /api/auth/login authenticates scrypt-hashed customer & issues JWT',
+      loginCust.status === 200 && loginCust.json.ok === true && Boolean(loginCust.json.token),
       JSON.stringify(loginCust.json)
     );
 
-    const loginAdmin = await req('POST', '/api/auth/admin-login', { username: 'sales', password: 'Sales@2026!' });
+    const myWs = await req('GET', '/api/me/workspace', null, {
+      Authorization: `Bearer ${customerBearerToken}`,
+    });
     check(
-      'POST /api/auth/admin-login authenticates seeded admin',
+      'GET /api/me/workspace returns paginated isolated customer workspace',
+      myWs.status === 200 && myWs.json.ok === true && myWs.json.customer?.id === custId,
+      JSON.stringify(myWs.json)
+    );
+
+    const loginAdmin = await req('POST', '/api/auth/admin-login', {
+      username: 'sales',
+      password: 'Sales@2026!',
+    });
+    check(
+      'POST /api/auth/admin-login authenticates seeded sales executive',
       loginAdmin.status === 200 && loginAdmin.json.ok === true,
       JSON.stringify(loginAdmin.json)
     );
@@ -204,8 +259,14 @@ async function main() {
       JSON.stringify(salesTopup.json)
     );
 
-    const dbPayAfterSales = await conn.collection('payment_records').countDocuments({ referenceUtr: 'UTR_REALTIME_2400' });
-    check('Payment record immediately visible in MongoDB payment_records', dbPayAfterSales === 1, `count=${dbPayAfterSales}`);
+    const dbPayAfterSales = await conn
+      .collection('payment_records')
+      .countDocuments({ referenceUtr: 'UTR_REALTIME_2400' });
+    check(
+      'Payment record immediately visible in MongoDB payment_records',
+      dbPayAfterSales === 1,
+      `count=${dbPayAfterSales}`
+    );
 
     const salesTopupDup = await req('POST', '/api/sales/wallet/topup', {
       customerId: custId,
@@ -213,7 +274,11 @@ async function main() {
       referenceUtr: 'UTR_REALTIME_2400',
       paymentMethod: 'UPI Direct',
     });
-    check('Duplicate Sales UTR blocked (409) without double credit', salesTopupDup.status === 409, JSON.stringify(salesTopupDup.json));
+    check(
+      'Duplicate Sales UTR blocked (409) without double credit',
+      salesTopupDup.status === 409,
+      JSON.stringify(salesTopupDup.json)
+    );
 
     const webhookBody = {
       event: 'payment.captured',
@@ -231,9 +296,13 @@ async function main() {
         },
       },
     };
-    const webhookSig = createHmac('sha256', TEST_WEBHOOK_SECRET).update(JSON.stringify(webhookBody)).digest('hex');
+    const webhookSig = createHmac('sha256', TEST_WEBHOOK_SECRET)
+      .update(JSON.stringify(webhookBody))
+      .digest('hex');
 
-    const wh1 = await req('POST', '/api/payments/razorpay/webhook', webhookBody, { 'x-razorpay-signature': webhookSig });
+    const wh1 = await req('POST', '/api/payments/razorpay/webhook', webhookBody, {
+      'x-razorpay-signature': webhookSig,
+    });
     check(
       'POST /api/payments/razorpay/webhook verifies HMAC & acknowledges 200',
       wh1.status === 200 && wh1.json.ok === true,
@@ -249,7 +318,9 @@ async function main() {
       JSON.stringify({ walAfterWh1, invAfterWh1 })
     );
 
-    const wh2 = await req('POST', '/api/payments/razorpay/webhook', webhookBody, { 'x-razorpay-signature': webhookSig });
+    const wh2 = await req('POST', '/api/payments/razorpay/webhook', webhookBody, {
+      'x-razorpay-signature': webhookSig,
+    });
     await new Promise((r) => setTimeout(r, 600));
     const walAfterWh2 = await conn.collection('wallets').findOne({ customerId: custId });
     check(
@@ -300,10 +371,18 @@ async function main() {
     );
 
     const delHist = await req('GET', '/api/sales/failed-transactions/history');
-    const archivedItem = delHist.json.history?.find((d) => d.originalId === failTxId || d.ref === 'FAIL_UTR_001');
-    check('Deleted failed tx appears in history', delHist.status === 200 && Boolean(archivedItem), JSON.stringify(delHist.json));
+    const archivedItem = delHist.json.history?.find(
+      (d) => d.originalId === failTxId || d.ref === 'FAIL_UTR_001'
+    );
+    check(
+      'Deleted failed tx appears in history',
+      delHist.status === 200 && Boolean(archivedItem),
+      JSON.stringify(delHist.json)
+    );
 
-    const restoreFail = await req('POST', '/api/sales/failed-transactions/history/restore', { id: archivedItem.id });
+    const restoreFail = await req('POST', '/api/sales/failed-transactions/history/restore', {
+      id: archivedItem.id,
+    });
     check(
       'POST /api/sales/failed-transactions/history/restore restores tx',
       restoreFail.status === 200 && restoreFail.json.ok === true,
@@ -330,14 +409,27 @@ async function main() {
       icon: '💻',
       description: 'Verified IT & SaaS leads',
     });
-    check('POST /api/groups creates customer group (201)', grpCreate.status === 201 && grpCreate.json.ok === true, JSON.stringify(grpCreate.json));
+    check(
+      'POST /api/groups creates customer group (201)',
+      grpCreate.status === 201 && grpCreate.json.ok === true,
+      JSON.stringify(grpCreate.json)
+    );
     const groupId = grpCreate.json.group.id;
 
-    const grpDup = await req('POST', '/api/groups', { name: 'Enterprise IT Buyers', category: 'IT & Software' });
+    const grpDup = await req('POST', '/api/groups', {
+      name: 'Enterprise IT Buyers',
+      category: 'IT & Software',
+    });
     check('Duplicate group name returns 409', grpDup.status === 409, JSON.stringify(grpDup.json));
 
-    const grpAssign = await req('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, { customerIds: [custId] });
-    check('POST /api/groups/:id/members assigns customer', grpAssign.status === 200 && grpAssign.json.assignedCount === 1, JSON.stringify(grpAssign.json));
+    const grpAssign = await req('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
+      customerIds: [custId],
+    });
+    check(
+      'POST /api/groups/:id/members assigns customer',
+      grpAssign.status === 200 && grpAssign.json.assignedCount === 1,
+      JSON.stringify(grpAssign.json)
+    );
 
     const grpPreview = await req('GET', `/api/groups/${encodeURIComponent(groupId)}/preview-recipients`);
     check(
@@ -376,7 +468,7 @@ async function main() {
       JSON.stringify(distDup.json)
     );
 
-    const custLeads = await req('GET', `/api/leads?username=alphatech`);
+    const custLeads = await req('GET', '/api/leads?username=alphatech');
     check(
       'GET /api/leads?username=alphatech returns dispatched lead',
       custLeads.status === 200 && custLeads.json.leads.length === 1,
@@ -407,14 +499,22 @@ async function main() {
       contactPhone: '9123456701',
       subject: 'Need GST invoice copy',
     });
-    check('POST /api/queries creates support ticket (201)', qCreate.status === 201 && qCreate.json.ok === true, JSON.stringify(qCreate.json));
+    check(
+      'POST /api/queries creates support ticket (201)',
+      qCreate.status === 201 && qCreate.json.ok === true,
+      JSON.stringify(qCreate.json)
+    );
     const qId = qCreate.json.query.id;
 
     const qPatch = await req('PATCH', `/api/queries/${encodeURIComponent(qId)}`, {
       status: 'resolved',
       internalNotes: 'Sent on email',
     });
-    check('PATCH /api/queries/:id resolves ticket', qPatch.status === 200 && qPatch.json.query.status === 'resolved', JSON.stringify(qPatch.json));
+    check(
+      'PATCH /api/queries/:id resolves ticket',
+      qPatch.status === 200 && qPatch.json.query.status === 'resolved',
+      JSON.stringify(qPatch.json)
+    );
 
     const tCreate = await req('POST', '/api/tasks', {
       customerId: custId,
@@ -422,16 +522,32 @@ async function main() {
       phone: '9123456701',
       taskType: 'Onboarding Call',
     });
-    check('POST /api/tasks creates sales task (201)', tCreate.status === 201 && tCreate.json.ok === true, JSON.stringify(tCreate.json));
+    check(
+      'POST /api/tasks creates sales task (201)',
+      tCreate.status === 201 && tCreate.json.ok === true,
+      JSON.stringify(tCreate.json)
+    );
 
     const verifs = await req('GET', '/api/verifications');
-    check('GET /api/verifications returns verification queue', verifs.status === 200 && Array.isArray(verifs.json.verifications), JSON.stringify(verifs.json));
+    check(
+      'GET /api/verifications returns verification queue',
+      verifs.status === 200 && Array.isArray(verifs.json.verifications),
+      JSON.stringify(verifs.json)
+    );
 
     const mktSum = await req('GET', '/api/marketing/summary');
-    check('GET /api/marketing/summary returns 200', mktSum.status === 200 && mktSum.json.ok === true, JSON.stringify(mktSum.json));
+    check(
+      'GET /api/marketing/summary returns 200',
+      mktSum.status === 200 && mktSum.json.ok === true,
+      JSON.stringify(mktSum.json)
+    );
 
     const mktCusts = await req('GET', '/api/marketing/customers');
-    check('GET /api/marketing/customers returns customer list', mktCusts.status === 200 && mktCusts.json.customers.length >= 1, JSON.stringify(mktCusts.json));
+    check(
+      'GET /api/marketing/customers returns customer list',
+      mktCusts.status === 200 && mktCusts.json.customers.length >= 1,
+      JSON.stringify(mktCusts.json)
+    );
 
     const mktIdea = await req('POST', '/api/marketing/ideas', {
       customerId: custId,
@@ -439,7 +555,11 @@ async function main() {
       objective: 'Lead Generation',
       concept: 'Carousel showcasing ROI metrics',
     });
-    check('POST /api/marketing/ideas creates marketing idea', (mktIdea.status === 200 || mktIdea.status === 201) && mktIdea.json.ok === true, JSON.stringify(mktIdea.json));
+    check(
+      'POST /api/marketing/ideas creates marketing idea',
+      (mktIdea.status === 200 || mktIdea.status === 201) && mktIdea.json.ok === true,
+      JSON.stringify(mktIdea.json)
+    );
 
     const mktPost = await req('POST', '/api/marketing/posts', {
       customerId: custId,
@@ -447,29 +567,57 @@ async function main() {
       caption: 'Scale your enterprise IT stack',
       platform: 'Instagram',
     });
-    check('POST /api/marketing/posts creates post request for Graphics', (mktPost.status === 200 || mktPost.status === 201) && mktPost.json.ok === true, JSON.stringify(mktPost.json));
+    check(
+      'POST /api/marketing/posts creates post request for Graphics',
+      (mktPost.status === 200 || mktPost.status === 201) && mktPost.json.ok === true,
+      JSON.stringify(mktPost.json)
+    );
 
     const gfxSum = await req('GET', '/api/graphics/summary');
-    check('GET /api/graphics/summary returns 200', gfxSum.status === 200 && gfxSum.json.ok === true, JSON.stringify(gfxSum.json));
+    check(
+      'GET /api/graphics/summary returns 200',
+      gfxSum.status === 200 && gfxSum.json.ok === true,
+      JSON.stringify(gfxSum.json)
+    );
 
     const gfxReqs = await req('GET', '/api/graphics/requests');
-    check('GET /api/graphics/requests sees newly created post', gfxReqs.status === 200 && gfxReqs.json.requests.length >= 1, JSON.stringify(gfxReqs.json));
+    check(
+      'GET /api/graphics/requests sees newly created post',
+      gfxReqs.status === 200 && gfxReqs.json.requests.length >= 1,
+      JSON.stringify(gfxReqs.json)
+    );
 
     const saDash = await req('GET', '/api/superadmin/dashboard/summary');
-    check('GET /api/superadmin/dashboard/summary returns live MongoDB KPIs', saDash.status === 200 && saDash.json.ok === true, JSON.stringify(saDash.json));
+    check(
+      'GET /api/superadmin/dashboard/summary returns live MongoDB KPIs',
+      saDash.status === 200 && saDash.json.ok === true,
+      JSON.stringify(saDash.json)
+    );
 
     const saFin = await req('GET', '/api/superadmin/finance/summary');
-    check('GET /api/superadmin/finance/summary reconciles balances', saFin.status === 200 && saFin.json.ok === true, JSON.stringify(saFin.json));
+    check(
+      'GET /api/superadmin/finance/summary reconciles balances',
+      saFin.status === 200 && saFin.json.ok === true,
+      JSON.stringify(saFin.json)
+    );
 
     const saUsers = await req('GET', '/api/superadmin/users');
-    check('GET /api/superadmin/users lists seeded system_users', saUsers.status === 200 && saUsers.json.users.length >= 4, JSON.stringify(saUsers.json));
+    check(
+      'GET /api/superadmin/users lists seeded system_users',
+      saUsers.status === 200 && saUsers.json.users.length >= 4,
+      JSON.stringify(saUsers.json)
+    );
 
     const saCp = await req('GET', '/api/superadmin/country-pricing');
-    check('GET /api/superadmin/country-pricing aggregates customer stats', saCp.status === 200 && saCp.json.ok === true, JSON.stringify(saCp.json));
+    check(
+      'GET /api/superadmin/country-pricing aggregates customer stats',
+      saCp.status === 200 && saCp.json.ok === true,
+      JSON.stringify(saCp.json)
+    );
 
     const fullState = await req('GET', '/api/state');
     check(
-      'GET /api/state returns full CRM state payload',
+      'GET /api/state returns full CRM state payload for authorized staff',
       fullState.status === 200 && fullState.json.ok === true && fullState.json.customers.length === 1,
       JSON.stringify({ ok: fullState.json.ok, custs: fullState.json.customers?.length })
     );
@@ -480,7 +628,7 @@ async function main() {
       serverLogs
     );
 
-    console.log(`\n🎉 ALL ${results.length}/${results.length} E2E CHECKS PASSED AGAINST 100% MONGODB (ZERO POSTGRESQL)!`);
+    console.log(`\n🎉 ALL ${results.length}/${results.length} E2E CHECKS PASSED AGAINST MONGODB 7.0 + WHATSAPP OTP + JWT RBAC!`);
   } finally {
     serverProc.kill('SIGTERM');
     await conn.dropDatabase().catch(() => {});

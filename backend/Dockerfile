@@ -10,6 +10,8 @@ RUN npm run build:ssr
 
 FROM node:20-alpine AS backend
 
+RUN apk add --no-cache mongodb-tools openssl bash
+
 WORKDIR /app
 
 # Install dependencies

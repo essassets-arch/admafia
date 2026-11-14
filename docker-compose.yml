@@ -19,7 +19,23 @@ services:
     networks:
       - admafia-net
 
-  # 2. Node.js Express REST API Backend (100% MongoDB / Mongoose)
+  # 2. Redis 7 — Distributed Rate Limiting, OTP Cooldowns & Session Cache (Internal Network Only)
+  redis:
+    image: redis:7-alpine
+    container_name: admafia-redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - admafia-net
+
+  # 3. Node.js Express REST API Backend (100% MongoDB / Mongoose + Redis + FCM + WhatsApp OTP)
   backend:
     build:
       context: .
@@ -34,22 +50,26 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       PORT: 5000
       NODE_ENV: production
       TRUST_PROXY_HEADERS: "true"
       MONGO_URI: ${DOCKER_MONGO_URI:-mongodb://mongo:27017/admafia_crm?directConnection=true}
+      REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379}
+      BACKUP_DIR: /backups
     ports:
       - "127.0.0.1:5000:5000"
     volumes:
       - ./backend:/app
       - /app/node_modules
       - ./backend/uploads:/app/uploads
-      - ./frontend/dist:/frontend/dist:ro
+      - ./backups:/backups
     networks:
       - admafia-net
 
-  # 3. React 19 + Vite Frontend SPA (Nginx)
+  # 4. React 19 + Vite Frontend SPA (Nginx)
   frontend:
     build:
       context: ./frontend
@@ -60,13 +80,12 @@ services:
       - backend
     ports:
       - "127.0.0.1:5050:80"
-    volumes:
-      - ./frontend/dist:/usr/share/nginx/html:ro
     networks:
       - admafia-net
 
 volumes:
   mongo_data:
+  redis_data:
 
 networks:
   admafia-net:

@@ -20,9 +20,13 @@ import {
   Palette,
   Briefcase,
   Globe,
+  TrendingUp,
+  Database,
 } from 'lucide-react';
 
 import SuperAdminDashboardDesk from './SuperAdminDashboardDesk';
+import SuperAdminGrowthAnalyticsDesk from './SuperAdminGrowthAnalyticsDesk';
+import SuperAdminDatabaseDesk from './SuperAdminDatabaseDesk';
 import SuperAdminQueriesDesk from './SuperAdminQueriesDesk';
 import SuperAdminFinanceDesk from './SuperAdminFinanceDesk';
 import SuperAdminRefundsDesk from './SuperAdminRefundsDesk';
@@ -33,6 +37,7 @@ import SuperAdminCountryPricingDesk from './SuperAdminCountryPricingDesk';
 
 import superadminApi from '../services/superadminApi';
 import adminAuthApi from '../services/adminAuthApi';
+import NotificationBell from '../components/NotificationBell';
 import './superadmin.css';
 
 export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
@@ -46,6 +51,8 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
       const p = (window.location.pathname || '').toLowerCase();
       const h = (window.location.hash || '').toLowerCase();
 
+      if (p.includes('/superadmin/growth-analytics') || h.includes('growth-analytics') || h.includes('growth_analytics')) return 'growth_analytics';
+      if (p.includes('/superadmin/database-backups') || p.includes('/superadmin/database') || h.includes('database')) return 'database_backups';
       if (p.includes('/superadmin/queries') || h.includes('superadmin/queries') || h.includes('queries')) return 'queries';
       if (p.includes('/superadmin/finance') || h.includes('superadmin/finance') || h.includes('finance')) return 'finance';
       if (p.includes('/superadmin/refunds') || h.includes('superadmin/refunds') || h.includes('refunds')) return 'refunds';
@@ -126,6 +133,18 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
       badge: null,
     },
     {
+      id: 'growth_analytics',
+      label: 'Growth & Churn Radar',
+      icon: TrendingUp,
+      badge: null,
+    },
+    {
+      id: 'database_backups',
+      label: 'DB Compass & Backups',
+      icon: Database,
+      badge: null,
+    },
+    {
       id: 'queries',
       label: 'Check Queries',
       icon: HelpCircle,
@@ -176,6 +195,10 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
     switch (activeDesk) {
       case 'dashboard':
         return { title: 'Super Admin Dashboard', subtitle: 'Live command center and operational metrics' };
+      case 'growth_analytics':
+        return { title: '10k-Scale Growth, Conversion Funnel & Churn Radar', subtitle: 'Onboarding drop-off funnel, WhatsApp close queue, low-runway alerts & security shield' };
+      case 'database_backups':
+        return { title: 'MongoDB Replica Set, Compass & Snapshot Vault', subtitle: 'Live DB telemetry, Compass SSH/local URIs, and AES-256 encrypted oplog backups' };
       case 'queries':
         return { title: 'Customer & Business Queries', subtitle: 'Support desk triage and administrative responses' };
       case 'finance':
@@ -371,6 +394,9 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
               <RefreshCw size={16} className={syncing ? 'sa-spin' : ''} />
             </button>
 
+            {/* Real-Time FCM & SSE Notification Bell */}
+            <NotificationBell variant="light" />
+
             {/* Super Admin User Profile Pill */}
             <div className="sa-admin-pill" title={`Logged in as ${activeUser.fullName || 'Super Admin'} (${activeUser.email || activeUser.username || ''})`}>
               <div className="sa-admin-avatar">
@@ -388,6 +414,14 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
         <main className="sa-content-area">
           {activeDesk === 'dashboard' && (
             <SuperAdminDashboardDesk onNavigate={navigateToDesk} />
+          )}
+
+          {activeDesk === 'growth_analytics' && (
+            <SuperAdminGrowthAnalyticsDesk />
+          )}
+
+          {activeDesk === 'database_backups' && (
+            <SuperAdminDatabaseDesk />
           )}
 
           {activeDesk === 'queries' && (

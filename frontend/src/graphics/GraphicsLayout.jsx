@@ -17,6 +17,7 @@ import GraphicsApprovedPostsDesk from './GraphicsApprovedPostsDesk';
 import GraphicsRejectedPostsDesk from './GraphicsRejectedPostsDesk';
 import graphicsApi from '../services/graphicsApi';
 import adminAuthApi from '../services/adminAuthApi';
+import NotificationBell from '../components/NotificationBell';
 import './graphics.css';
 
 export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
@@ -305,6 +306,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
           </div>
 
           <div className="graphics-top-actions">
+            <NotificationBell variant="dark" />
             <div className="graphics-live-pill">
               <span className="graphics-live-dot" />
               <span>MongoDB Live Sync</span>

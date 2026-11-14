@@ -211,6 +211,14 @@ export function detectCountryCode(req) {
     }
   }
 
+  // 3. Local Docker / localhost private-IP fallback ONLY when LOCAL_DEV_COUNTRY is explicitly set
+  if (process.env.NODE_ENV !== 'production' && isPrivateOrLocalIp(clientIp)) {
+    const devCountry = String(process.env.LOCAL_DEV_COUNTRY || '').trim().toUpperCase();
+    if (/^[A-Z]{2}$/.test(devCountry)) {
+      return devCountry;
+    }
+  }
+
   return null;
 }
 

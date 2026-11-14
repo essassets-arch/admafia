@@ -4705,7 +4705,11 @@ export function PaymentCollectionDesk({
   const fetchPayments = async (showToast = false) => {
     setIsRefreshing(true);
     try {
-      const res = await fetch('/api/payments?t=' + Date.now());
+      const staffToken = adminAuthApi.getToken();
+      const res = await fetch('/api/payments?t=' + Date.now(), {
+        credentials: 'include',
+        headers: staffToken ? { Authorization: `Bearer ${staffToken}` } : {},
+      });
       const data = await res.json();
       if (data && data.ok && Array.isArray(data.payments)) {
         const clean = data.payments

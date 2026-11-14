@@ -1,148 +1,86 @@
 # AdMafia / Growthline B2B Lead Generation CRM
 
-Enterprise B2B Lead Generation, Campaign Operations & Multi-Department CRM platform powered by **MongoDB 7.0 Replica Set (`rs0`)**, **Node.js Express**, and **React 19 + Vite**.
+Enterprise B2B Lead Generation, Campaign Operations & Multi-Department CRM platform engineered for **10,000+ active business accounts**, powered by **MongoDB 7.0 Replica Set (`rs0`)**, **Redis 7**, **Node.js Express**, and **React 19 + Vite**.
 
 ---
 
-## 1. Architecture Overview
+## 1. Architecture & Security Highlights
 
-- **Database Engine**: MongoDB 7.0 Replica Set (`rs0`) with native multi-document ACID transactions (`withTransaction`) and Transactional Outbox.
-- **Backend API**: Node.js (ES Modules) + Express REST API + Mongoose ODM (Port `5000`).
-- **Frontend SPA**: React 19 + Vite + Tailwind/Modern CSS (Port `5173` local, Port `5050` Docker Nginx).
-- **Payment & Invoicing**: Razorpay payment gateway integration, automated 18% GST tax invoices, and idempotent immutable wallet transaction ledger.
-- **Portals & Desks**:
-  - **Customer Portal (`/portal` / `/app/lead`)**: Self-service lead inbox, Kanban pipeline, call/WhatsApp triggers, daily ad spend pacing, schedule lock, and marketing wallet.
-  - **Sales Operations Desks (`/sales`)**: 9 operational command desks (Customers, Dual-Gate Verifications, Lead Dispatch, KYC Dossiers, Payment Settlements, Marketing Wallets, Support Queries, Sales Tasks, Customer Groups).
-  - **Marketing Desk (`/marketing`)**: Marketing ideas capture, ad post creation, campaign pacing, and customer spend controls.
-  - **Graphics Desk (`/graphics`)**: Creative asset upload, multi-stage approval queue, and revision management.
-  - **Super Admin Operations (`/superadmin` / `/admin`)**: Multi-currency country pricing rules (INR, AED, USD), system staff RBAC, manual ledger adjustments, refunds, and telemetry logs.
-
----
-
-## 2. Folder Structure
-
-```text
-d:\projects\admafia\
-├── frontend/                        # React 19 + Vite Frontend SPA (Port 5173)
-│   ├── public/                      # Static assets & brand media
-│   ├── src/
-│   │   ├── portal/                  # Customer Self-Service Portal (/portal, /app/lead)
-│   │   ├── sales/                   # Sales Operations & 9 Sub-Admin Desks (/sales)
-│   │   ├── marketing/               # Marketing Campaign & Idea Desks (/marketing)
-│   │   ├── graphics/                # Creative Assets & Graphics Approval Desks (/graphics)
-│   │   ├── superadmin/              # Executive Governance, Pricing & RBAC (/superadmin)
-│   │   ├── admin/                   # Department Staff Login & Auth Gateway
-│   │   ├── services/                # API clients (crmApi, superadminApi, marketingApi, graphicsApi)
-│   │   ├── database/                # Client-side cache hydration
-│   │   ├── App.jsx                  # Main application router
-│   │   └── main.jsx                 # Client entry point
-│   ├── .env                         # VITE_API_BASE_URL=/api
-│   ├── vite.config.js               # Dev server proxy configuration
-│   └── package.json
-│
-├── backend/                         # Node.js + Express + MongoDB REST API (Port 5000)
-│   ├── mongo.js                     # MongoDB 7.0 Replica Set connector & connection pooling
-│   ├── server.js                    # Express application entry & REST API routes
-│   ├── models/                      # Mongoose Document Schemas & Indexes
-│   │   ├── Customer.js              # Customer accounts, profiles & status history
-│   │   ├── Finance.js               # Wallet, WalletTransaction, PaymentRecord, TaxInvoice
-│   │   ├── Leads.js                 # MasterLead, Lead, LeadAssignment, SalesTask, SupportQuery
-│   │   ├── CampaignsAndPricing.js   # MarketingCampaign, CountryPricing, OutboxEvent
-│   │   ├── MarketingPost.js         # Creative posts, review states & schedule
-│   │   ├── MarketingIdea.js         # Campaign ideation & drafts
-│   │   ├── PendingVerification.js   # Dual-gate intake verification queue
-│   │   ├── SystemUser.js            # Internal staff RBAC & CustomerGroups
-│   │   └── TelemetryAudit.js        # Audit logging & event tracking
-│   ├── repositories/                # Database query layer & transactions
-│   │   ├── tx.js                    # Multi-document transaction wrapper (withTransaction)
-│   │   ├── mongoRepository.js       # Core customer, lead & state queries
-│   │   ├── bootstrapRepo.js         # Automated schema init & default seed data
-│   │   ├── salesLedgerRepo.js       # Wallet credit/debit & accounting ledger
-│   │   ├── salesViewRepo.js         # Unified desk aggregation & row views
-│   │   ├── leadsAndOpsRepo.js       # Lead ingestion, deduplication & distribution
-│   │   ├── countryPricingRepo.js    # Multi-currency localization rules
-│   │   └── razorpayRepo.js          # Payment verification & wallet auto-credit
-│   ├── routes/                      # Modular API route controllers
-│   ├── services/                    # Background workers, outbox processor & GeoIP
-│   ├── scripts/                     # Production migration & E2E verification suites
-│   ├── .env                         # PORT=5000, MONGO_URI, RAZORPAY credentials
-│   └── package.json
-│
-├── docs/                            # Production Architecture Documentation
-│   ├── DATABASE_DESIGN.md           # MongoDB 7.0 Schema, Indexes & ERD
-│   ├── SALES_EXECUTIVE_DOCUMENTATION.md # Sales Desk SOPs & Controller APIs
-│   └── SUBADMIN_DESKS_AND_PAGES_REFERENCE.md # Desks 01–09 operational flow
-│
-├── docker-compose.yml               # MongoDB 7.0 (rs0) + Backend + Frontend stack
-├── deploy-docker.sh                 # 1-command Docker deployment script
-├── update-vps.sh                    # 1-command VPS update and zero-downtime rebuild
-└── README.md
-```
+- **Database Engine**: MongoDB 7.0 Replica Set (`rs0`) with multi-document ACID transactions (`withTransaction`), compound 10k-scale indexes, distributed cron lease locks (`cron_locks`), and Transactional Outbox (`outbox_events`).
+- **Universal WhatsApp OTP Verification**: Every single user account is verified via **Meta WhatsApp Cloud API (`v26.0`, `authentication` template)** using HMAC-SHA256 hashed 6-digit challenges, 5-attempt lockout, 60s resend cooldowns, single-use verification tokens, Forgot Password via WhatsApp OTP, and First-Login verification gating.
+- **Real-Time Notifications (Firebase FCM + SSE)**: Dual-channel push architecture combining `<100ms` Server-Sent Events (`/api/notifications/stream`) with **Google Firebase Cloud Messaging (FCM HTTP v1)** Web Push (`firebase-messaging-sw.js`) and an interactive `<NotificationBell />` across all 5 portals.
+- **Defense-in-Depth Security**:
+  - Signed HS256 JWTs (`HttpOnly; SameSite=Lax` cookies + `Bearer` headers) + strict tenant isolation (`requireCustomerSelfOrStaff`) & department RBAC (`requireStaff`, `requireSuperAdmin`).
+  - Salted `crypto.scrypt` password hashing with constant-time verification and transparent legacy login auto-upgrade.
+  - Redis-backed sliding-window rate limiters, recursive NoSQL `$` / `__proto__` sanitizer, strict CORS origin allowlist, CSP/HSTS/nosniff/DENY headers, `512kb` JSON payload cap, and binary magic-byte upload verification.
+- **Portals & Executive Desks**:
+  - **Customer Portal (`/portal` / `/app/lead`)**: Paginated tenant-isolated workspace (`/api/me/workspace`), lead inbox, Kanban pipeline, WhatsApp/Call triggers, daily ad spend pacing, and GST wallet ledger.
+  - **Super Admin Control Center (`/superadmin`)**: Executive Dashboard, **10k-Scale Growth & Churn Radar** (`$facet` funnel, 1-click WhatsApp drop-off close queue, `<= 2d` low-runway radar, category lead liquidity matrix, 24h security shield), **MongoDB Compass & Encrypted Snapshot Vault**, Finance, Refunds, Top-Ups, Country Pricing, and RBAC.
+  - **Sales (`/sales`)**, **Marketing (`/marketing`)**, and **Graphics (`/graphics`)** operational workspaces.
 
 ---
 
-## 3. Running with Docker (Recommended)
+## 2. Running the Isolated Local Docker Stack (Recommended for E2E Testing)
 
-Start the entire production stack (MongoDB 7.0 Replica Set + Express Backend + React/Vite Frontend Nginx) in a single command:
+Test the entire production-grade topology locally without touching live production (`admafia.marketing`) or default host ports:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
-### Services Started:
-- **Frontend Web Portal**: `http://localhost:5050`
-- **Backend REST API**: `http://localhost:5000/api`
-- **MongoDB 7.0 (Replica Set `rs0`)**: `localhost:27017` (`admafia_crm`)
+### Local Docker Endpoints:
+| Service | Local URL / URI | Purpose |
+| :--- | :--- | :--- |
+| **Frontend Nginx SPA** | `http://127.0.0.1:5051` | Full Customer, Sales, Marketing, Graphics & Super Admin UI |
+| **Backend REST API** | `http://127.0.0.1:5001/api/health` | Express API + SSE Stream + Outbox Worker |
+| **MongoDB Compass URI** | `mongodb://127.0.0.1:27018/admafia_crm?directConnection=true` | Direct visual DB inspection in MongoDB Compass |
+| **Mongo Express Web UI** | `http://127.0.0.1:8081` | Browser-based MongoDB viewer (`admin` / `admafia_local_2026`) |
+| **Redis 7** | `127.0.0.1:6380` | Rate limiting & ephemeral state |
 
 ---
 
-## 4. Running Locally Without Docker
+## 3. Automated Verification & Penetration Testing Suites
 
-### Prerequisites
-- **Node.js**: v20+
-- **MongoDB**: 7.0+ (running locally with replica set enabled on port `27017`)
+Run all three verification suites (100% isolated test databases — never touches `admafia_crm`):
 
-### 1. Configure Backend Environment
-Create `backend/.env` with your settings:
-```env
-PORT=5000
-NODE_ENV=development
-MONGO_URI=mongodb://127.0.0.1:27017/admafia_crm?directConnection=true
-RAZORPAY_KEY_ID=rzp_test_your_key_id
-RAZORPAY_KEY_SECRET=your_key_secret
-```
-
-### 2. Start Backend Server
 ```bash
-cd backend
-npm install
-npm start
-```
-*Note: Database collections, indexes, and initial admin accounts are bootstrapped automatically on first startup.*
+# Inside local Docker container:
+docker exec admafia-backend-local sh -c "TEST_MONGO_URI='mongodb://mongo-local:27017/admafia_crm_test?directConnection=true' npm run test:all"
 
-### 3. Start Frontend Development Server
-```bash
-cd frontend
-npm install
-npm run dev
+# Or individually inside backend/:
+npm run test:mongo      # Full MongoDB 7.0 CRM, Wallet, Razorpay Webhook, GST & Lead Distribution E2E
+npm run test:otp-fcm    # Meta WhatsApp OTP, Lockouts, Reset, Outbox -> SSE/FCM Push, Encrypted Snapshots & Growth Analytics
+npm run test:pentest    # 35+ Adversarial OWASP Penetration Tests (RBAC, IDOR, Wallet Tamper, NoSQLi, CORS, Magic-Bytes, DoS, Rate-Limits)
 ```
-Access the application at `http://localhost:5173`.
 
 ---
 
-## 5. Verification & Testing
+## 4. Provisioning Firebase Cloud Messaging (FCM) From Scratch
 
-Run the automated MongoDB end-to-end verification suite:
+Run the interactive provisioning helper to link Google Firebase Web Push + Service Account credentials into `backend/.env.local`:
 
 ```bash
 cd backend
-npm test
+npm run setup:firebase
 ```
 
-This verifies:
-- Active connection to MongoDB 7.0 Replica Set.
-- Zero residual PostgreSQL connection attempts.
-- Complete customer registration, KYC, and profile flow.
-- Wallet top-up, 18% GST calculation, and idempotent transaction ledger.
-- Daily ad spend pacing and auto-deductions.
-- Master lead ingestion and tenant-isolated distribution.
+*(Even prior to linking external Firebase credentials, real-time in-app and browser desktop notifications work out-of-the-box via `/api/notifications/stream` SSE!)*
+
+---
+
+## 5. Point-in-Time Encrypted Database Backups & Restore
+
+- **UI**: Super Admin ➔ **DB Compass & Backups** (`/superadmin/database-backups`) ➔ **Trigger Snapshot Now** (creates `mongodump --oplog --gzip` + AES-256-CBC `.enc` archive + `.sha256` checksum).
+- **CLI Scripts**:
+  - `bash backend/scripts/snapshot-backup.sh` — Automated `--oplog` + `openssl aes-256-cbc` backup + optional `rclone` offsite sync to Cloudflare R2 / S3.
+  - `bash backend/scripts/restore-snapshot.sh <snapshot-file>` — Checksum-verified decrypt & `mongorestore --oplogReplay`.
+  - `bash backend/scripts/verify-backup-restore.sh <snapshot-file>` — Non-destructive restore drill into `admafia_restore_verify_tmp`.
+
+---
+
+## 6. Key Documentation Reference (`docs/`)
+
+- `docs/MASTER_MEMORY_MAP.md` — Master architecture, integration registry, security audit ledger & engineering log.
+- `docs/DATABASE_DESIGN.md` — Complete Mongoose schemas, compound indexes, tenant isolation & Compass/Atlas guide.
+- `docs/CLOUDFLARE_WAF_AND_EDGE_PLAYBOOK.md` — Exact Cloudflare DNS, SSL/TLS, WAF, Rate-Limiting & Origin Lockdown rules for `admafia.marketing`.
+- `docs/SALES_EXECUTIVE_DOCUMENTATION.md` & `docs/SUBADMIN_DESKS_AND_PAGES_REFERENCE.md` — Operational desk SOPs.

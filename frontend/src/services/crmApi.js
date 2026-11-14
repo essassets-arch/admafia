@@ -1,33 +1,105 @@
 /**
  * Growthline / AdMafia CRM — Frontend <-> MongoDB Backend API Client
- * Connects the React Frontend (Customer CRM & Sales Desks) to http://localhost:5000/api
+ * Supports HttpOnly Session Cookies + Bearer JWT RBAC + Tenant Isolation
  */
 
-const isLocalhost =
-  typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+export const CUSTOMER_TOKEN_KEY = 'admafia_customer_token';
+const ADMIN_TOKEN_KEY = 'admafia_admin_token';
 
-const API_BASE = isLocalhost
-  ? (import.meta.env?.VITE_API_BASE_URL || 'http://localhost:5000/api')
-  : '/api';
+const isViteDevServer =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+  window.location.port === '5173';
+
+const API_BASE =
+  import.meta.env?.VITE_API_BASE_URL || (isViteDevServer ? 'http://localhost:5000/api' : '/api');
+
+export function getActiveAuthToken() {
+  if (typeof window === 'undefined') return '';
+  try {
+    const p = (window.location.pathname || '').toLowerCase();
+    const h = (window.location.hash || '').toLowerCase();
+    const isStaffSurface =
+      p.startsWith('/superadmin') ||
+      p.startsWith('/admin') ||
+      p.startsWith('/sales') ||
+      p.startsWith('/marketing') ||
+      p.startsWith('/graphics') ||
+      h.startsWith('#superadmin') ||
+      h.startsWith('#/superadmin') ||
+      h.startsWith('#sales') ||
+      h.startsWith('#marketing') ||
+      h.startsWith('#graphics');
+
+    const adminTok = localStorage.getItem(ADMIN_TOKEN_KEY) || '';
+    const custTok = localStorage.getItem(CUSTOMER_TOKEN_KEY) || '';
+    if (isStaffSurface) {
+      return adminTok || custTok;
+    }
+    return custTok || adminTok;
+  } catch (e) {
+    return '';
+  }
+}
 
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const token = getActiveAuthToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
+  };
+
   const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
+    credentials: 'include',
     ...options,
+    headers,
   });
-  const data = await response.json();
+
+  const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
-    throw new Error(data.error || `API Error (${response.status})`);
+    const err = new Error(data.error || `API Error (${response.status})`);
+    err.status = response.status;
+    err.code = data.code || null;
+    err.payload = data;
+    throw err;
   }
   return data;
 }
 
 export const crmApi = {
+  getCustomerToken() {
+    try {
+      return typeof window !== 'undefined' ? localStorage.getItem(CUSTOMER_TOKEN_KEY) || '' : '';
+    } catch (e) {
+      return '';
+    }
+  },
+
+  saveCustomerToken(token) {
+    try {
+      if (typeof window !== 'undefined' && token) {
+        localStorage.setItem(CUSTOMER_TOKEN_KEY, token);
+      }
+    } catch (e) {}
+  },
+
+  async logout() {
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {});
+    } finally {
+      try {
+        localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+        localStorage.removeItem('growthline_active_user');
+      } catch (e) {}
+    }
+  },
+
   /**
    * Check backend & MongoDB health
    */
@@ -36,12 +108,49 @@ export const crmApi = {
   },
 
   /**
-   * Fetch full CRM state from MongoDB and hydrate localStorage + UI
+   * Synchronize CRM state safely based on active role:
+   * - Staff (Admin/Sales/Marketing/Graphics): fetches /api/state
+   * - Customer: fetches tenant-isolated /api/me/workspace (never exposes other tenants)
+   * - Anonymous visitor: no-op (zero payload / zero DB scan)
    */
   async syncStateFromPostgres() {
+    if (typeof window === 'undefined') return null;
     try {
-      // Fetch authoritative state directly from MongoDB
-      const fresh = await apiRequest('/state');
+      const adminTok = localStorage.getItem(ADMIN_TOKEN_KEY) || '';
+      const custTok = localStorage.getItem(CUSTOMER_TOKEN_KEY) || '';
+      const p = (window.location.pathname || '').toLowerCase();
+      const h = (window.location.hash || '').toLowerCase();
+      const isCustomerPortal = p.startsWith('/app') || h.includes('#app') || (!adminTok && Boolean(custTok));
+
+      if (!adminTok && !custTok) {
+        return null;
+      }
+
+      if (isCustomerPortal && custTok) {
+        const ws = await this.getMyWorkspace();
+        if (ws?.customer) {
+          localStorage.setItem('growthline_active_user', JSON.stringify(ws.customer));
+          window.dispatchEvent(new CustomEvent('growthline_active_user_changed', { detail: ws.customer }));
+        }
+        if (Array.isArray(ws?.leads)) {
+          localStorage.setItem('growthline_all_leads', JSON.stringify(ws.leads));
+        }
+        if (Array.isArray(ws?.transactions)) {
+          localStorage.setItem('growthline_wallet_transactions', JSON.stringify(ws.transactions));
+        }
+        if (Array.isArray(ws?.invoices)) {
+          localStorage.setItem('growthline_wallet_invoices', JSON.stringify(ws.invoices));
+        }
+        window.dispatchEvent(new CustomEvent('growthline_postgres_synced', { detail: ws }));
+        window.dispatchEvent(new CustomEvent('growthline_database_synced', { detail: ws }));
+        window.dispatchEvent(new CustomEvent('growthline_mongo_synced', { detail: ws }));
+        return ws;
+      }
+
+      // Staff full operational state sync
+      const fresh = await apiRequest('/state', {
+        headers: adminTok ? { Authorization: `Bearer ${adminTok}` } : {},
+      });
 
       if (Array.isArray(fresh.customers)) {
         localStorage.setItem('growthline_registered_customers', JSON.stringify(fresh.customers));
@@ -84,9 +193,6 @@ export const crmApi = {
     }
   },
 
-  /**
-   * MongoDB alias for syncStateFromPostgres
-   */
   async syncStateFromMongo() {
     return this.syncStateFromPostgres();
   },
@@ -96,35 +202,119 @@ export const crmApi = {
   },
 
   /**
-   * Register a new customer in PostgreSQL (/api/auth/register)
+   * Meta WhatsApp Cloud API v26.0 OTP Endpoints
+   */
+  async sendWhatsAppOtp(payload) {
+    return apiRequest('/auth/otp/send', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async verifyWhatsAppOtp(payload) {
+    return apiRequest('/auth/otp/verify', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async checkUsernameAvailability(username) {
+    return apiRequest(`/auth/check-username?username=${encodeURIComponent(String(username || '').trim())}`);
+  },
+
+  async resetPasswordWithOtp(payload) {
+    return apiRequest('/auth/password/reset-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async verifyExistingPhone(payload) {
+    return apiRequest('/auth/verify-existing-phone', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Register a new WhatsApp-verified customer in MongoDB (/api/auth/register)
    */
   async registerCustomer(payload) {
     const res = await apiRequest('/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    if (res.token) {
+      this.saveCustomerToken(res.token);
+    }
     return res.customer;
   },
 
   /**
-   * Authenticate customer against PostgreSQL (/api/auth/login)
+   * Authenticate customer against MongoDB (/api/auth/login)
    */
   async loginCustomer(identifier, password) {
-    return apiRequest('/auth/login', {
+    const res = await apiRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ identifier, password }),
     });
+    if (res.token) {
+      this.saveCustomerToken(res.token);
+    }
+    return res;
   },
 
   /**
-   * Fetch isolated customer workspace from PostgreSQL (/api/customers/:identifier)
+   * Fetch paginated, tenant-isolated customer workspace (/api/me/workspace)
+   */
+  async getMyWorkspace(params = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') qs.append(k, v);
+    });
+    const queryStr = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/me/workspace${queryStr}`);
+  },
+
+  /**
+   * Fetch isolated customer workspace from MongoDB (/api/customers/:identifier)
    */
   async getCustomerWorkspace(identifier) {
     return apiRequest(`/customers/${encodeURIComponent(identifier)}`);
   },
 
   /**
-   * Update customer profile in PostgreSQL (/api/customers/:id/profile)
+   * Real-Time Notifications & Firebase Cloud Messaging (FCM)
+   */
+  async getNotificationConfig() {
+    return apiRequest('/notifications/config');
+  },
+
+  async getNotifications(limit = 30) {
+    return apiRequest(`/notifications?limit=${encodeURIComponent(limit)}`);
+  },
+
+  async markNotificationRead(id) {
+    return apiRequest(`/notifications/${encodeURIComponent(id)}/read`, {
+      method: 'PATCH',
+    });
+  },
+
+  async markAllNotificationsRead() {
+    return apiRequest('/notifications/read-all', {
+      method: 'POST',
+    });
+  },
+
+  async registerFcmToken(token, platform = 'web') {
+    return apiRequest('/notifications/fcm-token', {
+      method: 'POST',
+      body: JSON.stringify({ token, platform }),
+    });
+  },
+
+  /**
+   * Update customer profile in MongoDB (/api/customers/:id/profile)
    */
   async updateCustomerProfile(idOrPhone, profilePayload) {
     const res = await apiRequest(`/customers/${encodeURIComponent(idOrPhone)}/profile`, {
@@ -135,7 +325,7 @@ export const crmApi = {
   },
 
   /**
-   * Patch customer status / flags in PostgreSQL (/api/customers/:id)
+   * Patch customer status / flags in MongoDB (/api/customers/:id)
    */
   async patchCustomer(idOrPhone, updates) {
     const res = await apiRequest(`/customers/${encodeURIComponent(idOrPhone)}`, {
@@ -146,8 +336,7 @@ export const crmApi = {
   },
 
   /**
-   * Permanently delete customer from PostgreSQL (/api/customers/:identifier)
-   * Cascades to all wallets, transactions, campaigns, leads, invoices, etc.
+   * Permanently delete customer from MongoDB (/api/customers/:identifier)
    */
   async deleteCustomer(idOrPhone) {
     const res = await apiRequest(`/customers/${encodeURIComponent(idOrPhone)}`, {
@@ -171,7 +360,7 @@ export const crmApi = {
   },
 
   /**
-   * Top up customer wallet in PostgreSQL (/api/wallets/topup)
+   * Top up customer wallet in MongoDB (/api/wallets/topup)
    */
   async topUpWallet(payload) {
     return apiRequest('/wallets/topup', {
@@ -217,7 +406,7 @@ export const crmApi = {
   },
 
   /**
-   * Retrieve Customer Balance Audit Logs (Previous Balance, Transaction Amount, New Balance, and Full History)
+   * Retrieve Customer Balance Audit Logs
    */
   async getBalanceLogs(params = {}) {
     const cleanParams = {};
@@ -234,16 +423,10 @@ export const crmApi = {
     });
   },
 
-  /**
-   * Retrieve all failed transactions across all customers for Sales desk
-   */
   async getFailedTransactions() {
     return apiRequest('/sales/failed-transactions');
   },
 
-  /**
-   * Delete a specific failed transaction or all failed transactions (with snapshot archiving)
-   */
   async deleteFailedTransaction(id, txSnapshot = null) {
     return apiRequest(`/sales/failed-transactions/${encodeURIComponent(id)}`, {
       method: 'DELETE',
@@ -258,9 +441,6 @@ export const crmApi = {
     });
   },
 
-  /**
-   * Desk 11: Deleted Failed Transactions History APIs
-   */
   async getFailedTransactionsHistory() {
     return apiRequest('/sales/failed-transactions/history', { method: 'GET' });
   },
@@ -284,9 +464,6 @@ export const crmApi = {
     });
   },
 
-  /**
-   * Desk 07: Query & Support APIs
-   */
   async getQueries(params = {}) {
     const queryStr = new URLSearchParams(params).toString();
     return apiRequest(`/queries${queryStr ? `?${queryStr}` : ''}`);
@@ -328,9 +505,6 @@ export const crmApi = {
     return apiRequest('/payments/razorpay/verify', { method: 'POST', body: JSON.stringify(payload) });
   },
 
-  /**
-   * Deduct daily ad spend from customer wallet in PostgreSQL (/api/wallets/deduct)
-   */
   async deductDailyAdSpend(payload) {
     return apiRequest('/wallets/deduct', {
       method: 'POST',
@@ -338,9 +512,6 @@ export const crmApi = {
     });
   },
 
-  /**
-   * Dispatch a new buyer lead to a customer in PostgreSQL (/api/leads)
-   */
   async createLead(leadPayload) {
     const res = await apiRequest('/leads', {
       method: 'POST',
@@ -349,9 +520,6 @@ export const crmApi = {
     return res.lead;
   },
 
-  /**
-   * Update a lead status / read state in PostgreSQL (/api/leads/:id)
-   */
   async updateLead(leadId, updates) {
     const res = await apiRequest(`/leads/${encodeURIComponent(leadId)}`, {
       method: 'PATCH',
@@ -360,9 +528,6 @@ export const crmApi = {
     return res.lead;
   },
 
-  /**
-   * Customer Groups & Category-Based Lead Distribution APIs
-   */
   async getCategories() {
     const res = await apiRequest('/categories');
     return res.categories || [];
@@ -450,4 +615,3 @@ export const crmApi = {
 };
 
 export default crmApi;
-

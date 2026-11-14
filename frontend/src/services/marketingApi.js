@@ -7,11 +7,17 @@ const BASE_URL = import.meta.env?.VITE_API_URL || '/api/marketing';
 
 async function request(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
+  let token = '';
+  try {
+    token = typeof window !== 'undefined' ? localStorage.getItem('admafia_admin_token') || '' : '';
+  } catch (e) {}
   const defaultHeaders = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
   const response = await fetch(url, {
+    credentials: 'include',
     ...options,
     headers: {
       ...defaultHeaders,

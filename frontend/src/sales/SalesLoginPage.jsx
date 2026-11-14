@@ -1,37 +1,46 @@
 import React, { useState } from 'react';
+import adminAuthApi from '../services/adminAuthApi';
 import './sales.css';
 
 export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchToCustomerPortal }) {
-  const [empId, setEmpId] = useState('sales.rahul@growthline.in');
-  const [role, setRole] = useState('Senior Sales Executive');
-  const [password, setPassword] = useState('••••••••••••');
+  const [empId, setEmpId] = useState('sales@admafia.marketing');
+  const [role, setRole] = useState('Sales Executive');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!empId.trim()) {
-      setError('Please enter your Sales Employee ID or Work Email.');
+    if (!empId.trim() || !password) {
+      setError('Please enter your Sales Employee Email/Username and Password.');
       return;
     }
     setError('');
-    onLoggedIn({
-      empId,
-      name: 'Rahul Sharma',
-      role,
-    });
-  };
-
-  const handleFillDemo = (repName, repEmail, repRole) => {
-    setEmpId(repEmail);
-    setRole(repRole);
-    setError('');
+    setIsLoading(true);
+    try {
+      const res = await adminAuthApi.login({
+        identifier: empId.trim(),
+        password,
+      });
+      if (onLoggedIn) {
+        onLoggedIn({
+          empId: res.user?.email || empId.trim(),
+          name: res.user?.fullName || 'Sales Executive',
+          role: res.user?.role || role,
+          user: res.user,
+        });
+      }
+    } catch (err) {
+      setError(err.message || 'Authentication failed. Please check your credentials.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="sales-auth-bg">
       <div className="sales-auth-card">
-        {/* Top Department Identifier */}
         <div style={{ textAlign: 'center' }}>
           <div className="sales-dept-badge">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -43,38 +52,12 @@ export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchTo
 
         <div className="sales-auth-header">
           <div className="sales-brand-logo">
-            Growth<b>line</b> <span>SALES DESK</span>
+            Ad<b>Mafia</b> <span>SALES DESK</span>
           </div>
           <h2>Sales Executive Portal</h2>
           <p>
-            Sign in to access inbound qualified buyer inquiries, deal stage Kanban &amp; proposal tools.
+            Sign in with your authoritative staff credentials to access inbound buyer inquiries, wallets &amp; lead distribution.
           </p>
-        </div>
-
-        {/* Demo Fast Fill Presets */}
-        <div className="sales-demo-credentials-box">
-          <div className="demo-title">
-            <span>Demo Sales Credentials:</span>
-            <span style={{ color: '#6366f1', fontWeight: 600 }}>Click to auto-fill</span>
-          </div>
-          <div
-            className="demo-row"
-            onClick={() => handleFillDemo('Rahul Sharma', 'rahul.sharma@growthline.in', 'Senior Sales Executive')}
-            style={{ cursor: 'pointer', padding: '4px 0', borderBottom: '1px dashed #e2e8f0' }}
-            title="Click to select Rahul Sharma"
-          >
-            <strong>Rahul Sharma (Sr. Exec)</strong>
-            <span>rahul.sharma@growthline.in</span>
-          </div>
-          <div
-            className="demo-row"
-            onClick={() => handleFillDemo('Priya Mehta', 'priya.mehta@growthline.in', 'Inbound Sales Specialist')}
-            style={{ cursor: 'pointer', padding: '4px 0' }}
-            title="Click to select Priya Mehta"
-          >
-            <strong>Priya Mehta (Specialist)</strong>
-            <span>priya.mehta@growthline.in</span>
-          </div>
         </div>
 
         {error && (
@@ -85,14 +68,14 @@ export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchTo
 
         <form onSubmit={handleSubmit}>
           <div className="sales-form-group">
-            <label htmlFor="salesEmpId">Employee Work Email / ID</label>
+            <label htmlFor="salesEmpId">Employee Work Email / Username</label>
             <input
               id="salesEmpId"
               type="text"
               required
               value={empId}
               onChange={(e) => setEmpId(e.target.value)}
-              placeholder="e.g. rahul.sharma@growthline.in"
+              placeholder="sales@admafia.marketing or sales"
             />
           </div>
 
@@ -103,15 +86,15 @@ export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchTo
               value={role}
               onChange={(e) => setRole(e.target.value)}
             >
+              <option value="Sales Executive">Sales Executive (Inbound &amp; Wallets)</option>
               <option value="Senior Sales Executive">Senior Sales Executive (Tier 1 Inbound)</option>
-              <option value="Inbound Sales Specialist">Inbound Sales Specialist (Rapid Response)</option>
               <option value="Sales Team Lead">Sales Team Lead (Escalations)</option>
             </select>
           </div>
 
           <div className="sales-form-group">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <label htmlFor="salesPwd" style={{ margin: 0 }}>Password</label>
+              <label htmlFor="salesPwd" style={{ margin: 0 }}>Staff Password</label>
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
@@ -126,12 +109,12 @@ export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchTo
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••••••"
+              placeholder="Enter authoritative password"
             />
           </div>
 
-          <button type="submit" className="btn-sales-primary">
-            <span>Sign In to Sales Desk</span>
+          <button type="submit" className="btn-sales-primary" disabled={isLoading}>
+            <span>{isLoading ? 'Verifying Credentials...' : 'Sign In to Sales Desk'}</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M5 12h14"/>
               <path d="M12 5l7 7-7 7"/>
