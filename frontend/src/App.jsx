@@ -158,51 +158,193 @@ const platformPages = [
   },
 ];
 
-export default function App({ initialCountry = null } = {}) {
-  const [activeCountry, setActiveCountry] = useState(() => initialCountry || countryService.getCurrentCountry());
+const resolveView = () => {
+  if (typeof window === 'undefined') return 'landing';
+  const h = (window.location.hash || '').toLowerCase();
+  const p = (window.location.pathname || '').toLowerCase();
 
-  useEffect(() => {
-    return countryService.subscribe((country) => setActiveCountry(country || null));
-  }, []);
-
-  if (!activeCountry) {
-    return <main className="country-pricing-unavailable" role="status">Pricing is unavailable because we could not determine your location. Please try again from a network with a public IP.</main>;
+  // 1. Direct redirect to normal website if on /app/lead#login or any /app with #login, #signout, or #logout
+  // Per User Request: "on https://admafia.marketing/app/lead#login sign out redirect to direct normal website"
+  if ((p.includes('/app') || h.includes('app')) && (h.includes('login') || h.includes('signout') || h.includes('logout'))) {
+    try {
+      localStorage.removeItem('growthline_active_user');
+      sessionStorage.clear();
+      window.history.replaceState({}, '', '/');
+    } catch (e) {}
+    window.location.hash = '';
+    window.location.href = '/';
+    return 'landing';
   }
 
-  const dailyRate = formatDailyRate(activeCountry);
-  const dailyRateLower = dailyRate.toLowerCase();
-  const dailyBudget = formatDailyBudget(activeCountry);
-  const currencySymbol = activeCountry.currency_symbol;
+  // 2. Explicit Register Request (#register or /register or #create-account)
+  // MUST ALWAYS OPEN REGISTER FORM, NEVER DASHBOARD!
+  // Per User Request: "on create account open register form not dashbaord"
+  if (
+    h.includes('#register') ||
+    h.includes('register') ||
+    h.includes('create-account') ||
+    p.startsWith('/register') ||
+    p === '/register'
+  ) {
+    if (p.includes('/app')) {
+      try { window.history.replaceState({}, '', '/#register'); } catch (e) {}
+    }
+    return 'register';
+  }
 
-  const dynamicGets = [
-    ['Affordable Starting Budget', `Get started with a minimum budget of ${dailyBudget} per day.`],
-    ['Qualified Customer Leads', 'Connect with potential customers relevant to your business offerings.'],
-    ['Customer Contact Details', 'Receive available customer information, including names and phone numbers.'],
-    ['Targeted Audience Reach', 'Connect with potential customers based on your business category and preferred locations.'],
-    ['Direct Customer Communication', 'Contact your leads and discuss their requirements directly.'],
-    ['Business Growth Opportunities', 'Build your customer pipeline and work towards increasing sales.'],
-  ];
+  // 3. Explicit Customer Login Request (#login or /login)
+  if (h.includes('#login') || p.startsWith('/login')) {
+    if (p.includes('/app')) {
+      try {
+        localStorage.removeItem('growthline_active_user');
+        sessionStorage.clear();
+        window.history.replaceState({}, '', '/');
+      } catch (e) {}
+      window.location.hash = '';
+      window.location.href = '/';
+      return 'landing';
+    }
+    // If customer is already logged in, redirect directly to dashboard
+    try {
+      const raw = localStorage.getItem('growthline_active_user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u && (u.companyName || u.name || u.phone || u.username)) {
+          return 'portal';
+        }
+      }
+    } catch (e) {}
+    return 'login';
+  }
 
-  const dynamicWhy = [
-    ['Quality-Focused Lead Generation', 'Our approach focuses on connecting businesses with relevant potential customers instead of simply increasing website visits or online engagement.'],
-    ['Affordable Starting Budget', `Start generating customer enquiries with a minimum starting budget of ${dailyBudget} per day.`],
-    ['Direct Customer Contact', 'Receive available customer contact information and communicate with potential customers directly.'],
-    ['Business-Specific Lead Generation', 'Every business has different customer requirements. We consider your business category, services and preferred audience when planning lead generation.'],
-    ['Location-Based Opportunities', 'Connect with potential customers in your preferred cities and service areas.'],
-    ['Simple and Transparent Process', 'A straightforward process that helps you receive enquiries and manage your own customer relationships.'],
-  ];
+  // 4. Dedicated Department & Admin Unified Authentication (/admin/login or /superadmin/login or #admin/login)
+  if (
+    p === '/admin/login' ||
+    p.startsWith('/admin/login') ||
+    p === '/superadmin/login' ||
+    p.startsWith('/superadmin/login') ||
+    h.includes('admin/login') ||
+    h.includes('superadmin/login') ||
+    p === '/staff/login' ||
+    h.includes('staff/login')
+  ) {
+    return 'admin-login';
+  }
 
-  const dynamicFaqs = [
-    ['What is AdMafia Marketing?', 'AdMafia Marketing is a lead generation platform that helps businesses connect with potential customers by providing relevant customer enquiries and available contact details.'],
-    ['What type of leads will I receive?', 'You can receive customer enquiries relevant to your business category, products or services. The available information may include customer names, phone numbers and details submitted with their enquiry.'],
-    ['What is the minimum starting price?', `You can start with a minimum budget of ${dailyBudget} per day. The actual lead generation results depend on your business category, target location, audience demand and campaign performance.`],
-    ['Are the leads suitable for my business?', 'Our lead generation approach focuses on your business category, target audience and preferred location to find relevant potential customers. However, no lead generation service can guarantee that every enquiry will become a qualified sales opportunity or paying customer.'],
-    ['Can I choose the location for my leads?', 'Yes. You can specify your preferred city, area or service location when sharing your business requirements.'],
-    ['Which types of businesses can use AdMafia Marketing?', 'Our platform supports different business categories, including real estate, education, healthcare, home services, automobile businesses, beauty services, retail and professional services, subject to applicable eligibility requirements.'],
-    ['Will AdMafia Marketing close sales for my business?', 'No. Our primary service is generating and providing customer enquiries. You will communicate with the leads, understand their requirements, handle follow-ups and convert them into customers.'],
-    ['How can I get started?', 'Simply share your business details, products or services, target audience and preferred location. Our team will help you understand the process and get started with lead generation.'],
-  ];
+  // 4A. Super Admin Operations Control Center (/superadmin or /admin)
+  if (
+    p.startsWith('/superadmin') ||
+    h.startsWith('#superadmin') ||
+    h.startsWith('#/superadmin') ||
+    p === '/admin' ||
+    p.startsWith('/admin/') ||
+    h.startsWith('#admin') ||
+    h.startsWith('#/admin')
+  ) {
+    const adminUser = adminAuthApi.getCurrentUser();
+    if (!adminUser || !adminAuthApi.hasAccessTo('Super Admin')) {
+      try {
+        window.history.replaceState({}, '', '/admin/login?dept=superadmin');
+      } catch (e) {}
+      return 'admin-login';
+    }
+    return 'superadmin-portal';
+  }
 
+  // 4B. Sales Operations Desks (/sales)
+  if (p.startsWith('/sales') || h.startsWith('#sales')) {
+    if (h.includes('login') || h === '#sales/login') {
+      try {
+        window.history.replaceState({}, '', '/admin/login?dept=sales');
+      } catch (e) {}
+      return 'admin-login';
+    }
+    const adminUser = adminAuthApi.getCurrentUser();
+    if (!adminUser || !adminAuthApi.hasAccessTo('Sales')) {
+      try {
+        window.history.replaceState({}, '', '/admin/login?dept=sales');
+      } catch (e) {}
+      return 'admin-login';
+    }
+    return 'sales-portal';
+  }
+
+  // 4C. Marketing Department Operations Panel (/marketing)
+  if (p.startsWith('/marketing') || h.startsWith('#marketing') || h.startsWith('#/marketing')) {
+    const adminUser = adminAuthApi.getCurrentUser();
+    if (!adminUser || !adminAuthApi.hasAccessTo('Marketing')) {
+      try {
+        window.history.replaceState({}, '', '/admin/login?dept=marketing');
+      } catch (e) {}
+      return 'admin-login';
+    }
+    return 'marketing-portal';
+  }
+
+  // 4D. Graphics Department Creative Ops Panel (/graphics)
+  if (p.startsWith('/graphics') || h.startsWith('#graphics') || h.startsWith('#/graphics')) {
+    const adminUser = adminAuthApi.getCurrentUser();
+    if (!adminUser || !adminAuthApi.hasAccessTo('Graphics')) {
+      try {
+        window.history.replaceState({}, '', '/admin/login?dept=graphics');
+      } catch (e) {}
+      return 'admin-login';
+    }
+    return 'graphics-portal';
+  }
+
+  // 5. Customer Portal (/app or /app/lead)
+  if (h.includes('#app') || p.startsWith('/app')) {
+    let activeUser = null;
+    try {
+      const raw = localStorage.getItem('growthline_active_user');
+      if (raw) activeUser = JSON.parse(raw);
+    } catch (e) {}
+    if (!activeUser) {
+      // Unauthenticated customer visiting portal: redirect to normal website
+      try {
+        window.history.replaceState({}, '', '/');
+      } catch (e) {}
+      window.location.hash = '';
+      window.location.href = '/';
+      return 'landing';
+    }
+    return 'portal';
+  }
+
+  // 6. Dedicated Standalone Workspace Configuration Page (#workspace-setup)
+  if (h.includes('#workspace-setup') || h.includes('#profile-setup') || h.includes('#setup') || p.startsWith('/workspace-setup') || p.startsWith('/profile-setup') || p.startsWith('/setup')) return 'workspace-setup';
+
+  // 7. Commercial Package & Payment Funnel (/onboarding/checkout)
+  if (h.includes('#checkout') || h.includes('#onboarding') || p.startsWith('/checkout') || p.startsWith('/onboarding')) return 'checkout';
+
+  // 8. Auth
+  if (h.includes('#auth') || p.startsWith('/auth')) return 'auth';
+
+  // 9. Root Landing / Homepage Check:
+  // If the customer has already registered or logged in, navigate straight to their Dashboard!
+  // Per User Request: "https://admafia.marketing/ in this if already created account or login so just show dashbaord not again button"
+  if ((p === '/' || p === '') && (!h || h === '' || h === '#')) {
+    try {
+      const raw = localStorage.getItem('growthline_active_user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u && (u.companyName || u.name || u.phone || u.username)) {
+          try {
+            window.history.replaceState({}, '', '/app/lead#app/dashboard');
+          } catch (e) {}
+          return 'portal';
+        }
+      }
+    } catch (e) {}
+  }
+
+  return 'landing';
+};
+
+export default function App({ initialCountry = null } = {}) {
+  // All Hooks declared unconditionally at the very top of component
+  const [activeCountry, setActiveCountry] = useState(() => initialCountry || countryService.getCurrentCountry());
   const [formData, setFormData] = useState({
     csrf: 'csrf_admafia_marketing_token',
     website: '',
@@ -213,193 +355,10 @@ export default function App({ initialCountry = null } = {}) {
   });
   const [errors, setErrors] = useState([]);
   const [sent, setSent] = useState(false);
-  const resolveView = () => {
-    const h = (window.location.hash || '').toLowerCase();
-    const p = (window.location.pathname || '').toLowerCase();
-
-    // 1. Direct redirect to normal website if on /app/lead#login or any /app with #login, #signout, or #logout
-    // Per User Request: "on https://admafia.marketing/app/lead#login sign out redirect to direct normal website"
-    if ((p.includes('/app') || h.includes('app')) && (h.includes('login') || h.includes('signout') || h.includes('logout'))) {
-      try {
-        localStorage.removeItem('growthline_active_user');
-        sessionStorage.clear();
-        window.history.replaceState({}, '', '/');
-      } catch (e) {}
-      window.location.hash = '';
-      window.location.href = '/';
-      return 'landing';
-    }
-
-    // 2. Explicit Register Request (#register or /register or #create-account)
-    // MUST ALWAYS OPEN REGISTER FORM, NEVER DASHBOARD!
-    // Per User Request: "on create account open register form not dashbaord"
-    if (
-      h.includes('#register') ||
-      h.includes('register') ||
-      h.includes('create-account') ||
-      p.startsWith('/register') ||
-      p === '/register'
-    ) {
-      if (p.includes('/app')) {
-        try { window.history.replaceState({}, '', '/#register'); } catch (e) {}
-      }
-      return 'register';
-    }
-
-    // 3. Explicit Customer Login Request (#login or /login)
-    if (h.includes('#login') || p.startsWith('/login')) {
-      if (p.includes('/app')) {
-        try {
-          localStorage.removeItem('growthline_active_user');
-          sessionStorage.clear();
-          window.history.replaceState({}, '', '/');
-        } catch (e) {}
-        window.location.hash = '';
-        window.location.href = '/';
-        return 'landing';
-      }
-      // If customer is already logged in, redirect directly to dashboard
-      try {
-        const raw = localStorage.getItem('growthline_active_user');
-        if (raw) {
-          const u = JSON.parse(raw);
-          if (u && (u.companyName || u.name || u.phone || u.username)) {
-            return 'portal';
-          }
-        }
-      } catch (e) {}
-      return 'login';
-    }
-
-    // 4. Dedicated Department & Admin Unified Authentication (/admin/login or /superadmin/login or #admin/login)
-    if (
-      p === '/admin/login' ||
-      p.startsWith('/admin/login') ||
-      p === '/superadmin/login' ||
-      p.startsWith('/superadmin/login') ||
-      h.includes('admin/login') ||
-      h.includes('superadmin/login') ||
-      p === '/staff/login' ||
-      h.includes('staff/login')
-    ) {
-      return 'admin-login';
-    }
-
-    // 4A. Super Admin Operations Control Center (/superadmin or /admin)
-    if (
-      p.startsWith('/superadmin') ||
-      h.startsWith('#superadmin') ||
-      h.startsWith('#/superadmin') ||
-      p === '/admin' ||
-      p.startsWith('/admin/') ||
-      h.startsWith('#admin') ||
-      h.startsWith('#/admin')
-    ) {
-      const adminUser = adminAuthApi.getCurrentUser();
-      if (!adminUser || !adminAuthApi.hasAccessTo('Super Admin')) {
-        try {
-          window.history.replaceState({}, '', '/admin/login?dept=superadmin');
-        } catch (e) {}
-        return 'admin-login';
-      }
-      return 'superadmin-portal';
-    }
-
-    // 4B. Sales Operations Desks (/sales)
-    if (p.startsWith('/sales') || h.startsWith('#sales')) {
-      if (h.includes('login') || h === '#sales/login') {
-        try {
-          window.history.replaceState({}, '', '/admin/login?dept=sales');
-        } catch (e) {}
-        return 'admin-login';
-      }
-      const adminUser = adminAuthApi.getCurrentUser();
-      if (!adminUser || !adminAuthApi.hasAccessTo('Sales')) {
-        try {
-          window.history.replaceState({}, '', '/admin/login?dept=sales');
-        } catch (e) {}
-        return 'admin-login';
-      }
-      return 'sales-portal';
-    }
-
-    // 4C. Marketing Department Operations Panel (/marketing)
-    if (p.startsWith('/marketing') || h.startsWith('#marketing') || h.startsWith('#/marketing')) {
-      const adminUser = adminAuthApi.getCurrentUser();
-      if (!adminUser || !adminAuthApi.hasAccessTo('Marketing')) {
-        try {
-          window.history.replaceState({}, '', '/admin/login?dept=marketing');
-        } catch (e) {}
-        return 'admin-login';
-      }
-      return 'marketing-portal';
-    }
-
-    // 4D. Graphics Department Creative Ops Panel (/graphics)
-    if (p.startsWith('/graphics') || h.startsWith('#graphics') || h.startsWith('#/graphics')) {
-      const adminUser = adminAuthApi.getCurrentUser();
-      if (!adminUser || !adminAuthApi.hasAccessTo('Graphics')) {
-        try {
-          window.history.replaceState({}, '', '/admin/login?dept=graphics');
-        } catch (e) {}
-        return 'admin-login';
-      }
-      return 'graphics-portal';
-    }
-
-    // 5. Customer Portal (/app or /app/lead)
-    if (h.includes('#app') || p.startsWith('/app')) {
-      let activeUser = null;
-      try {
-        const raw = localStorage.getItem('growthline_active_user');
-        if (raw) activeUser = JSON.parse(raw);
-      } catch (e) {}
-      if (!activeUser) {
-        // Unauthenticated customer visiting portal: redirect to normal website
-        try {
-          window.history.replaceState({}, '', '/');
-        } catch (e) {}
-        window.location.hash = '';
-        window.location.href = '/';
-        return 'landing';
-      }
-      return 'portal';
-    }
-
-    // 6. Dedicated Standalone Workspace Configuration Page (#workspace-setup)
-    if (h.includes('#workspace-setup') || h.includes('#profile-setup') || h.includes('#setup') || p.startsWith('/workspace-setup') || p.startsWith('/profile-setup') || p.startsWith('/setup')) return 'workspace-setup';
-
-    // 7. Commercial Package & Payment Funnel (/onboarding/checkout)
-    if (h.includes('#checkout') || h.includes('#onboarding') || p.startsWith('/checkout') || p.startsWith('/onboarding')) return 'checkout';
-
-    // 8. Auth
-    if (h.includes('#auth') || p.startsWith('/auth')) return 'auth';
-
-    // 9. Root Landing / Homepage Check:
-    // If the customer has already registered or logged in, navigate straight to their Dashboard!
-    // Per User Request: "https://admafia.marketing/ in this if already created account or login so just show dashbaord not again button"
-    if ((p === '/' || p === '') && (!h || h === '' || h === '#')) {
-      try {
-        const raw = localStorage.getItem('growthline_active_user');
-        if (raw) {
-          const u = JSON.parse(raw);
-          if (u && (u.companyName || u.name || u.phone || u.username)) {
-            try {
-              window.history.replaceState({}, '', '/app/lead#app/dashboard');
-            } catch (e) {}
-            return 'portal';
-          }
-        }
-      } catch (e) {}
-    }
-
-    return 'landing';
-  };
-
   const [currentView, setCurrentView] = useState(resolveView);
-
   const [currentUser, setCurrentUser] = useState(() => {
     try {
+      if (typeof window === 'undefined') return null;
       const raw = localStorage.getItem('growthline_active_user');
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -410,33 +369,18 @@ export default function App({ initialCountry = null } = {}) {
     } catch (e) {}
     return null;
   });
-
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navigateTo = (path, targetView) => {
-    try {
-      window.history.pushState({}, '', path);
-    } catch (e) {}
-    window.location.hash = path.startsWith('#') ? path : '';
-    const protectedViews = ['superadmin-portal', 'sales-portal', 'marketing-portal', 'graphics-portal', 'portal'];
-    const v = protectedViews.includes(targetView) ? resolveView() : (targetView || resolveView());
-    setCurrentView(v);
-    setMobileMenuOpen(false);
-
-    if (path.startsWith('#') && (!targetView || targetView === 'landing')) {
-      const targetId = path.replace('#', '');
-      const el = document.getElementById(targetId);
-      if (el) {
-        setTimeout(() => el.scrollIntoView({ behavior: 'smooth' }), 50);
-      }
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
+  useEffect(() => {
+    return countryService.subscribe((country) => {
+      setActiveCountry(country || null);
+    });
+  }, []);
 
   useEffect(() => {
     const syncUser = () => {
       try {
+        if (typeof window === 'undefined') return;
         const raw = localStorage.getItem('growthline_active_user');
         if (raw) {
           const parsed = JSON.parse(raw);
@@ -471,6 +415,61 @@ export default function App({ initialCountry = null } = {}) {
       window.removeEventListener('popstate', handleHashChange);
     };
   }, []);
+
+  const dailyRate = activeCountry ? formatDailyRate(activeCountry) : '₹300/Day';
+  const dailyRateLower = dailyRate.toLowerCase();
+  const dailyBudget = activeCountry ? formatDailyBudget(activeCountry) : '₹300';
+  const currencySymbol = activeCountry?.currency_symbol || '₹';
+
+  const dynamicGets = [
+    ['Affordable Starting Budget', `Get started with a minimum budget of ${dailyBudget} per day.`],
+    ['Qualified Customer Leads', 'Connect with potential customers relevant to your business offerings.'],
+    ['Customer Contact Details', 'Receive available customer information, including names and phone numbers.'],
+    ['Targeted Audience Reach', 'Connect with potential customers based on your business category and preferred locations.'],
+    ['Direct Customer Communication', 'Contact your leads and discuss their requirements directly.'],
+    ['Business Growth Opportunities', 'Build your customer pipeline and work towards increasing sales.'],
+  ];
+
+  const dynamicWhy = [
+    ['Quality-Focused Lead Generation', 'Our approach focuses on connecting businesses with relevant potential customers instead of simply increasing website visits or online engagement.'],
+    ['Affordable Starting Budget', `Start generating customer enquiries with a minimum starting budget of ${dailyBudget} per day.`],
+    ['Direct Customer Contact', 'Receive available customer contact information and communicate with potential customers directly.'],
+    ['Business-Specific Lead Generation', 'Every business has different customer requirements. We consider your business category, services and preferred audience when planning lead generation.'],
+    ['Location-Based Opportunities', 'Connect with potential customers in your preferred cities and service areas.'],
+    ['Simple and Transparent Process', 'A straightforward process that helps you receive enquiries and manage your own customer relationships.'],
+  ];
+
+  const dynamicFaqs = [
+    ['What is AdMafia Marketing?', 'AdMafia Marketing is a lead generation platform that helps businesses connect with potential customers by providing relevant customer enquiries and available contact details.'],
+    ['What type of leads will I receive?', 'You can receive customer enquiries relevant to your business category, products or services. The available information may include customer names, phone numbers and details submitted with their enquiry.'],
+    ['What is the minimum starting price?', `You can start with a minimum budget of ${dailyBudget} per day. The actual lead generation results depend on your business category, target location, audience demand and campaign performance.`],
+    ['Are the leads suitable for my business?', 'Our lead generation approach focuses on your business category, target audience and preferred location to find relevant potential customers. However, no lead generation service can guarantee that every enquiry will become a qualified sales opportunity or paying customer.'],
+    ['Can I choose the location for my leads?', 'Yes. You can specify your preferred city, area or service location when sharing your business requirements.'],
+    ['Which types of businesses can use AdMafia Marketing?', 'Our platform supports different business categories, including real estate, education, healthcare, home services, automobile businesses, beauty services, retail and professional services, subject to applicable eligibility requirements.'],
+    ['Will AdMafia Marketing close sales for my business?', 'No. Our primary service is generating and providing customer enquiries. You will communicate with the leads, understand their requirements, handle follow-ups and convert them into customers.'],
+    ['How can I get started?', 'Simply share your business details, products or services, target audience and preferred location. Our team will help you understand the process and get started with lead generation.'],
+  ];
+
+  const navigateTo = (path, targetView) => {
+    try {
+      window.history.pushState({}, '', path);
+    } catch (e) {}
+    window.location.hash = path.startsWith('#') ? path : '';
+    const protectedViews = ['superadmin-portal', 'sales-portal', 'marketing-portal', 'graphics-portal', 'portal'];
+    const v = protectedViews.includes(targetView) ? resolveView() : (targetView || resolveView());
+    setCurrentView(v);
+    setMobileMenuOpen(false);
+
+    if (path.startsWith('#') && (!targetView || targetView === 'landing')) {
+      const targetId = path.replace('#', '');
+      const el = document.getElementById(targetId);
+      if (el) {
+        setTimeout(() => el.scrollIntoView({ behavior: 'smooth' }), 50);
+      }
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -765,6 +764,18 @@ export default function App({ initialCountry = null } = {}) {
         />
       );
     }
+
+  // Landing Page: If activeCountry could not be resolved, display safe notice
+  if (currentView === 'landing' && !activeCountry) {
+    return (
+      <main className="country-pricing-unavailable" role="status" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '2rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.75rem', color: '#111827' }}>Pricing Unavailable</h2>
+          <p style={{ color: '#4b5563', maxWidth: '500px', lineHeight: 1.6 }}>Pricing is unavailable because we could not determine your location. Please try again from a network with a public IP.</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <>
