@@ -354,8 +354,40 @@ export async function runFullMigration() {
       );
       payCount++;
     }
+
+    // Reconcile any credit transactions from wallet_transactions into payment_records
+    for (const tx of txRows.rows) {
+      if (tx.tx_type === 'Credit' && tx.reference_utr) {
+        const existing = await PaymentRecord.findOne({ referenceUtr: tx.reference_utr });
+        if (!existing) {
+          const fallbackPayId = `pay_tx_${tx.id}`;
+          await PaymentRecord.findByIdAndUpdate(
+            fallbackPayId,
+            {
+              $set: {
+                _id: fallbackPayId,
+                customerId: tx.customer_id,
+                walletId: tx.wallet_id,
+                amount: Number(tx.amount),
+                currency: tx.currency || 'INR',
+                paymentMethod: tx.payment_method || 'Direct Secure Payment',
+                referenceUtr: tx.reference_utr,
+                receiptNumber: `REC-${String(tx.reference_utr).slice(-6)}`,
+                notes: tx.description || 'Wallet Credit',
+                status: 'Verified ✓',
+                createdAt: tx.created_at ? new Date(tx.created_at) : new Date(),
+                updatedAt: tx.created_at ? new Date(tx.created_at) : new Date()
+              }
+            },
+            { upsert: true }
+          );
+          payCount++;
+        }
+      }
+    }
+
     report.entities.payment_records = { pgCount: payRows.rowCount, mongoCount: payCount, status: 'RECONCILED' };
-    console.log(`  ✓ Migrated ${payCount}/${payRows.rowCount} payment records.`);
+    console.log(`  ✓ Migrated & reconciled ${payCount} payment records.`);
 
     // -------------------------------------------------------------------------
     // ENTITY 8: Tax Invoices (GST Breakdown)

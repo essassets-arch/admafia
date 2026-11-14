@@ -203,7 +203,14 @@ export async function listSalesCustomerAccounts(filters = {}) {
 }
 
 // 4. ATOMIC WALLET TOP-UP (ACID Session with Outbox)
-export async function creditWalletAtomic({ customerId, amount, referenceUtr, paymentMethod = 'Razorpay', description = 'Wallet Recharge' }) {
+export async function creditWalletAtomic({
+  customerId,
+  amount,
+  referenceUtr,
+  paymentMethod = 'Razorpay',
+  description = 'Wallet Recharge',
+  receiptNumber = null
+}) {
   // Try using session transaction if supported
   let session = null;
   try {
@@ -255,6 +262,41 @@ export async function creditWalletAtomic({ customerId, amount, referenceUtr, pay
     });
     await tx.save({ session });
 
+    // Create Payment Record in MongoDB
+    const payId = `pay_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const payDoc = new PaymentRecord({
+      _id: payId,
+      customerId,
+      walletId: wallet._id,
+      amount,
+      currency: wallet.currency || 'INR',
+      paymentMethod,
+      gatewayPaymentId: referenceUtr,
+      referenceUtr,
+      receiptNumber: receiptNumber || `REC-${Date.now().toString().slice(-6)}`,
+      status: 'Verified ✓',
+      notes: description,
+      createdAt: new Date()
+    });
+    await payDoc.save({ session });
+
+    // Create GST Tax Invoice
+    const invoiceNo = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+    const taxDoc = new TaxInvoice({
+      _id: `inv_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      customerId,
+      paymentRecordId: payId,
+      invoiceNumber: invoiceNo,
+      invoiceDate: new Date(),
+      subtotalAmount: amount,
+      taxAmount: 0,
+      totalAmount: amount,
+      currency: wallet.currency || 'INR',
+      status: 'Paid',
+      createdAt: new Date()
+    });
+    await taxDoc.save({ session });
+
     // Record in Transactional Outbox
     await recordMongoOutboxEvent(session, {
       aggregateType: 'wallet',
@@ -264,7 +306,7 @@ export async function creditWalletAtomic({ customerId, amount, referenceUtr, pay
     });
 
     if (session) await session.commitTransaction();
-    return { ok: true, wallet, transaction: tx };
+    return { ok: true, wallet, transaction: tx, paymentRecord: payDoc, invoice: taxDoc };
   } catch (err) {
     if (session) await session.abortTransaction();
     throw err;

@@ -16,6 +16,7 @@ import { superadminRouter, logSuperAdminAudit } from './routes/superadmin.js';
 import { countryPricingRouter, superadminCountryPricingRouter } from './routes/countryPricing.js';
 import { resolveVisitorCountry, getPricingForCountryCode } from './services/countryDetection.js';
 import { purgeSpecifiedTestUsers } from './scripts/purge-test-users.js';
+import { creditWalletAtomic } from './repositories/mongoRepository.js';
 
 // Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
 process.on('uncaughtException', (err) => {
@@ -1853,6 +1854,23 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
       },
     });
 
+    // Real-Time Authoritative MongoDB Write
+    try {
+      if (isMongoConnected()) {
+        await creditWalletAtomic({
+          customerId: targetCustId,
+          amount: creditAmount,
+          referenceUtr: cleanUtr,
+          paymentMethod,
+          description: `Direct Sales Top-Up: ${notes || 'Verified'}`,
+          receiptNumber: receiptNo,
+        });
+        console.log(`[MongoDB Real-Time] Sales Top-Up of ₹${creditAmount} saved immediately to MongoDB for ${targetCustId}`);
+      }
+    } catch (mErr) {
+      console.warn('[MongoDB Real-Time Sync Warning]:', mErr.message);
+    }
+
     // 9. Fetch updated customer row from view
     const viewRes = await query('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [targetCustId]);
     const updatedCustomer = viewRes.rowCount > 0 ? mapCustomerRow(viewRes.rows[0]) : null;
@@ -3597,6 +3615,23 @@ export async function creditCustomerWallet({
     );
 
     const viewRes = await txQuery('SELECT * FROM vw_sales_customer_accounts WHERE id = $1', [cust.id]);
+
+    // Real-Time Authoritative MongoDB Write
+    try {
+      if (isMongoConnected()) {
+        await creditWalletAtomic({
+          customerId: cust.id,
+          amount: cleanAmount,
+          referenceUtr: utr,
+          paymentMethod,
+          description: txDesc,
+          receiptNumber: receiptNo,
+        });
+        console.log(`[MongoDB Real-Time] Credited ₹${cleanAmount} to customer ${cust.id} (UTR: ${utr}) saved to MongoDB`);
+      }
+    } catch (mErr) {
+      console.warn('[MongoDB Real-Time Sync Warning]:', mErr.message);
+    }
 
     return {
       ok: true,
