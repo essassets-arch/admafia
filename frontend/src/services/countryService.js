@@ -29,18 +29,22 @@ export function formatCurrency(amount, country = currentCountry) {
  * Format daily starting rate from the server-provided pricing result.
  */
 export function formatDailyRate(country = currentCountry) {
-  const c = country;
-  if (!c) return '';
-  return `${c.currency_symbol}${Number(c.daily_min_budget).toLocaleString()}/Day`;
+  const c = country || currentCountry;
+  if (!c) return '₹300/Day';
+  const symbol = c.currency_symbol || (c.currency_code === 'USD' ? '$' : '₹');
+  const budget = c.daily_min_budget != null ? Number(c.daily_min_budget) : 300;
+  return `${symbol}${budget.toLocaleString()}/Day`;
 }
 
 /**
  * Format daily starting budget from the server-provided pricing result.
  */
 export function formatDailyBudget(country = currentCountry) {
-  const c = country;
-  if (!c) return '';
-  return `${c.currency_symbol}${Number(c.daily_min_budget).toLocaleString()}`;
+  const c = country || currentCountry;
+  if (!c) return '₹300';
+  const symbol = c.currency_symbol || (c.currency_code === 'USD' ? '$' : '₹');
+  const budget = c.daily_min_budget != null ? Number(c.daily_min_budget) : 300;
+  return `${symbol}${budget.toLocaleString()}`;
 }
 
 /**

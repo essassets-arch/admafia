@@ -628,6 +628,13 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
   const [suspensionError, setSuspensionError] = useState('');
   const [loginError, setLoginError] = useState('');
   const [resetNotice, setResetNotice] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState(() => countryService.getCurrentCountry());
+
+  useEffect(() => {
+    return countryService.subscribe((country) => {
+      if (country) setSelectedCountry(country);
+    });
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
