@@ -406,3 +406,88 @@ export async function getMongoSystemCounts() {
     master_leads_count: masterLeadsCount
   };
 }
+
+// 7. REAL-TIME CUSTOMER & WALLET CREATION
+export async function createOrUpdateCustomerMongo({
+  id,
+  username,
+  phone,
+  email = '',
+  passwordHash = 'Password123!',
+  companyName,
+  contactPerson,
+  category = 'IT & Software',
+  industry = 'Other',
+  website = '',
+  city = '',
+  state = 'Maharashtra',
+  country = 'India',
+  countryCode = 'IN',
+  currency = 'INR',
+  status = 'active',
+  profileStatus = 'complete',
+  paymentStatus = 'pending',
+  kycPercent = 100,
+  verified = true,
+  dailyBudget = 300,
+}) {
+  const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
+  const custId = id || `cust_reg_${cleanPhone}`;
+  const walId = `wal_${cleanPhone}`;
+
+  // Upsert Customer in MongoDB
+  const customer = await Customer.findOneAndUpdate(
+    { $or: [{ _id: custId }, { phone: cleanPhone }] },
+    {
+      $set: {
+        _id: custId,
+        username,
+        phone: cleanPhone,
+        email,
+        passwordHash,
+        companyName: companyName || `Business ${cleanPhone}`,
+        contactPerson: contactPerson || companyName || `Client ${cleanPhone}`,
+        category,
+        industry,
+        website,
+        city,
+        state,
+        country,
+        countryCode,
+        currency,
+        status,
+        profileStatus,
+        paymentStatus,
+        kycPercent,
+        verified,
+        updatedAt: new Date(),
+      },
+      $setOnInsert: {
+        registeredAt: new Date(),
+      }
+    },
+    { new: true, upsert: true }
+  );
+
+  // Upsert Wallet for Customer in MongoDB
+  const wallet = await Wallet.findOneAndUpdate(
+    { customerId: custId },
+    {
+      $setOnInsert: {
+        _id: walId,
+        customerId: custId,
+        availableBalance: 0,
+        currency,
+        dailyAdSpend: dailyBudget,
+        totalLifetimePaid: 0,
+        totalAdSpent: 0,
+        adCampaignActive: false,
+        createdAt: new Date(),
+      },
+      $set: { updatedAt: new Date() }
+    },
+    { new: true, upsert: true }
+  );
+
+  return { customer, wallet };
+}

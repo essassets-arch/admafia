@@ -16,7 +16,7 @@ import { superadminRouter, logSuperAdminAudit } from './routes/superadmin.js';
 import { countryPricingRouter, superadminCountryPricingRouter } from './routes/countryPricing.js';
 import { resolveVisitorCountry, getPricingForCountryCode } from './services/countryDetection.js';
 import { purgeSpecifiedTestUsers } from './scripts/purge-test-users.js';
-import { creditWalletAtomic } from './repositories/mongoRepository.js';
+import { creditWalletAtomic, createOrUpdateCustomerMongo } from './repositories/mongoRepository.js';
 
 // Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
 process.on('uncaughtException', (err) => {
@@ -1120,6 +1120,36 @@ app.post('/api/auth/register', async (req, res) => {
         payStatus,
       ]
     );
+
+    // Real-Time Authoritative MongoDB Customer Registration Write
+    try {
+      if (isMongoConnected()) {
+        await createOrUpdateCustomerMongo({
+          id: custId,
+          username: cleanUsername,
+          phone: cleanPhone,
+          email: email.trim(),
+          passwordHash: password,
+          companyName: formattedName,
+          contactPerson: contactName,
+          category,
+          city,
+          state: state || '',
+          country: registeredCountryName,
+          countryCode: cleanCountryCode,
+          currency: registeredCurrency,
+          status: 'active',
+          profileStatus: 'complete',
+          paymentStatus: payStatus,
+          kycPercent: 100,
+          verified: true,
+          dailyBudget,
+        });
+        console.log(`[MongoDB Real-Time] Customer ${custId} (${cleanUsername}) registered directly into MongoDB.`);
+      }
+    } catch (mRegErr) {
+      console.warn('[MongoDB Real-Time Registration Warning]:', mRegErr.message);
+    }
 
     await query(
       `INSERT INTO wallets (
@@ -3466,6 +3496,23 @@ export async function creditCustomerWallet({
         ]
       );
       custRes = await txQuery(`SELECT * FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`, [fallbackId, cleanPhone]);
+      try {
+        if (isMongoConnected()) {
+          await createOrUpdateCustomerMongo({
+            id: fallbackId,
+            phone: cleanPhone || '9999999999',
+            username: username || cleanPhone || fallbackId,
+            contactPerson: `Client ${cleanPhone || fallbackId}`,
+            companyName: `Business ${cleanPhone || fallbackId}`,
+            email: `${cleanPhone || fallbackId}@client.admafia.marketing`,
+            passwordHash: lockedCredentialHash,
+            currency: currency || 'INR',
+            paymentStatus: 'paid',
+          });
+        }
+      } catch (mFallbackErr) {
+        console.warn('[MongoDB Fallback Cust Reg Warning]:', mFallbackErr.message);
+      }
     }
 
     if (custRes.rowCount === 0) {
