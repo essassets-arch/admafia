@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion';
 
 // Helpers
 function formatMinimalMaskedPhone(phone, maskedPhone) {
@@ -50,7 +51,8 @@ export default function LeadPipelineInbox({
   const [unmaskedMap, setUnmaskedMap] = useState({});
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
-  const isProfileDone = customer.profileStatus === 'complete' || customer.profile_status === 'complete' || customer.kycPercent === 100;
+  const profEval = evaluateCustomerProfileCompletion(customer);
+  const isProfileDone = profEval.isComplete;
   const isFullyComplete = isPaymentDone && isProfileDone;
 
   // Active leads: not in follow-up, not callback, not dropped
@@ -169,10 +171,10 @@ export default function LeadPipelineInbox({
         </div>
 
         <div className="lead-header-actions-right">
-          {/* AD WALLET Card */}
+          {/* GROWTH WALLET Card */}
           <div
             className="header-ad-wallet-card"
-            title="Ad Wallet Balance"
+            title="Growth Wallet Balance"
             onClick={onOpenAddFunds}
           >
             <div className="header-wallet-icon-box">
@@ -182,7 +184,7 @@ export default function LeadPipelineInbox({
               </svg>
             </div>
             <div className="header-wallet-text-col">
-              <span className="header-wallet-tag">AD WALLET</span>
+              <span className="header-wallet-tag">GROWTH WALLET</span>
               <strong className="header-wallet-val">₹{walletBalance.toFixed(0)}</strong>
             </div>
             <button
@@ -323,7 +325,7 @@ export default function LeadPipelineInbox({
             filteredLeads.map((item) => {
               const raw10 = (item.phone || item.name || '').replace(/\D/g, '').slice(-10);
               const waPhone = raw10.length === 10 ? `91${raw10}` : (item.phone || '');
-              const targetCompany = item.company || item.assignedCompany || customer?.companyName || 'Growthline';
+              const targetCompany = item.company || item.assignedCompany || customer?.companyName || 'Ad Mafia';
               const waGreeting = `https://wa.me/${waPhone}?text=Hello,%20thank%20you%20for%20your%20inquiry%20with%20${encodeURIComponent(targetCompany)}.`;
               const isUnmasked = unmaskedMap[item.id] !== undefined ? unmaskedMap[item.id] : (item.unmasked || false);
               const displayPhone = formatMinimalMaskedPhone(item.phone, item.maskedPhone, isUnmasked);

@@ -2295,6 +2295,47 @@
 }
 
 /* ==========================================================================
+   TABLET BREAKPOINT (861px – 1024px)
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .sales-sidebar {
+    width: 240px;
+  }
+
+  .sales-main-viewport {
+    width: calc(100% - 240px);
+  }
+
+  .sales-topbar {
+    padding: 0 16px;
+  }
+
+  .sales-body-wrap,
+  .desk-page-container {
+    padding: 20px 16px 48px;
+  }
+
+  .sales-kpi-quad-grid,
+  .desk-kpi-grid,
+  .appr-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  .sales-desks-hub-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .desk-table-card,
+  .appr-table-card {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* ==========================================================================
    AUTHORITATIVE MOBILE RESPONSIVE SUITE (Phones & Tablets <= 860px)
    ========================================================================== */
 @media (max-width: 860px) {
@@ -2643,6 +2684,23 @@
   .tx-header-actions button {
     flex: 1 !important;
     justify-content: center !important;
+  }
+}
+
+/* Mobile Auth Card & Modal Helpers (<= 640px) */
+@media (max-width: 640px) {
+  .sales-auth-card {
+    padding: 20px 16px !important;
+    border-radius: 16px !important;
+  }
+
+  .sales-presets-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .sales-ref-hero {
+    padding: 20px 16px !important;
+    border-radius: 16px !important;
   }
 }
 

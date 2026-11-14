@@ -146,7 +146,7 @@ export async function sendMetaWhatsAppOtp({ e164Digits, maskedPhone, countryCode
   }
 
   if (!cfg.configured) {
-    throw new Error('WhatsApp OTP service is not configured on the server (missing WHATSAPP_ACCESS_TOKEN).');
+    throw new Error('WhatsApp OTP verification service temporarily unavailable');
   }
 
   const endpoint = `https://graph.facebook.com/${cfg.apiVersion}/${cfg.phoneNumberId}/messages`;
@@ -202,7 +202,7 @@ export async function sendMetaWhatsAppOtp({ e164Digits, maskedPhone, countryCode
     const latencyMs = Date.now() - startedAt;
 
     if (!response.ok) {
-      const errMsg = data?.error?.message || `Meta WhatsApp API HTTP ${response.status}`;
+      const errMsg = data?.error?.message || `WhatsApp OTP gateway HTTP ${response.status}`;
       await OtpDeliveryLog.create({
         phoneMasked: maskedPhone,
         countryCode,
@@ -216,7 +216,7 @@ export async function sendMetaWhatsAppOtp({ e164Digits, maskedPhone, countryCode
         ipAddress,
       }).catch(() => {});
 
-      throw new Error(`Unable to send WhatsApp verification code: ${errMsg}`);
+      throw new Error('WhatsApp OTP verification service temporarily unavailable');
     }
 
     const wamid = data?.messages?.[0]?.id || `wamid.accepted_${Date.now()}`;
@@ -247,10 +247,10 @@ export async function sendMetaWhatsAppOtp({ e164Digits, maskedPhone, countryCode
         httpStatus: 504,
         latencyMs: Date.now() - startedAt,
         status: 'failed',
-        errorMessage: 'Meta WhatsApp Cloud API timeout (12s)',
+        errorMessage: 'WhatsApp OTP delivery timed out (12s)',
         ipAddress,
       }).catch(() => {});
-      throw new Error('WhatsApp OTP gateway timed out. Please retry in a moment.');
+      throw new Error('WhatsApp OTP delivery timed out (12s)');
     }
     throw err;
   }

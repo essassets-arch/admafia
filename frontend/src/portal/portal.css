@@ -1,4 +1,4 @@
-/* Growthline CRM - Customer Portal Stylesheet */
+/* Ad Mafia CRM - Customer Portal Stylesheet */
 :root {
   --portal-bg: #f8fafc;
   --portal-card-bg: #ffffff;
@@ -1937,7 +1937,7 @@
 }
 
 /* ==========================================================================
-   GROWTHLINE CRM — COMPLETE CUSTOMER PORTAL AESTHETICS & COMPONENT STYLES
+   AD MAFIA CRM — COMPLETE CUSTOMER PORTAL AESTHETICS & COMPONENT STYLES
    ========================================================================== */
 
 /* Subtitle Header */
@@ -11179,7 +11179,7 @@
 
 
 /* ==========================================================================
-   GROWTHLINE AUTHENTICATION PAGES (REGISTER & LOGIN) - HIGH-END SAAS DESIGN
+   AD MAFIA AUTHENTICATION PAGES (REGISTER & LOGIN) - HIGH-END SAAS DESIGN
    ========================================================================== */
 
 .auth-fullscreen-bg {
@@ -12594,7 +12594,7 @@
 
 
 /* ==========================================================================
-   GROWTHLINE CRM - PROPER STYLING SYSTEM FOR CUSTOMER PORTAL (/app/)
+   AD MAFIA CRM - PROPER STYLING SYSTEM FOR CUSTOMER PORTAL (/app/)
    ========================================================================== */
 
 /* 1. Desktop Layout & Main Viewport (> 860px) */
@@ -14991,7 +14991,7 @@
 
 /* ==========================================================================
    PIXEL-PERFECT ONBOARDING WORKSPACE CONFIGURATION (MATCHING SCREENSHOT UI)
-   IN EMERALD / GROWTHLINE BRAND THEME
+   IN EMERALD / AD MAFIA BRAND THEME
    ========================================================================== */
 
 .onboard-page-wrapper {
@@ -17310,4 +17310,227 @@
     padding: 10px 4px 8px !important;
   }
 }
+
+/* ==========================================================================
+   MOBILE & TABLET RESPONSIVENESS OVERRIDES (360px - 1024px)
+   Subheader, Auth Topbar/Wizard, Workspace Setup, Profile Banner & All Modals
+   ========================================================================== */
+@media (max-width: 860px) {
+  .portal-subheader-wallet-btn {
+    display: none !important;
+  }
+
+  .portal-subheader-bar {
+    padding: 10px 14px !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    height: auto !important;
+  }
+}
+
+@media (max-width: 640px) {
+  /* WorkspaceSetupPage mobile responsiveness */
+  .onboard-page-wrapper {
+    padding: 20px 14px 48px !important;
+  }
+
+  .onboard-hero-title {
+    font-size: 1.65rem !important;
+    line-height: 1.22 !important;
+  }
+
+  .onboard-preview-perks-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .onboard-stepper-header {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .onboard-step-connector {
+    display: none !important;
+  }
+
+  .onboard-card-title-bar {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+
+  .onboard-fields-2col,
+  .onboard-success-summary-box {
+    grid-template-columns: 1fr !important;
+  }
+
+  .onboard-form-card,
+  .onboard-preview-card {
+    padding: 18px 14px !important;
+  }
+
+  /* LeadHubOverview Profile Completion Required Banner */
+  .am-profile-urgent-banner {
+    padding: 14px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .am-profile-urgent-cta-wrap,
+  .am-profile-urgent-cta-btn {
+    width: 100% !important;
+    text-align: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+
+  /* PortalModals mobile responsiveness (360px zero horizontal overflow) */
+  .portal-modal-box,
+  .payment-complete-modal-card,
+  .am-daily-limit-modal {
+    padding: 18px 16px !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .payment-modal-header-row {
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+
+  .payment-modal-header-left {
+    gap: 10px !important;
+    min-width: 0 !important;
+  }
+
+  .payment-modal-title-stack h2 {
+    font-size: 1.12rem !important;
+    line-height: 1.25 !important;
+  }
+
+  .payment-calc-split-row {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .calc-divider-pill-wrap {
+    height: auto !important;
+    padding: 2px 0 !important;
+    justify-content: center !important;
+  }
+
+  .duration-presets-unified-grid,
+  .duration-presets-grid-row1,
+  .am-daily-limit-presets-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .am-invoice-parties-grid,
+  .am-modal-2col-grid,
+  .support-direct-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    text-align: left !important;
+  }
+
+  .am-invoice-parties-grid > div {
+    text-align: left !important;
+  }
+
+  .am-invoice-header-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+
+  .am-invoice-table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+  }
+
+  .am-daily-limit-actions,
+  .am-invoice-actions-row,
+  .modal-actions-row {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .am-daily-limit-actions > button,
+  .am-invoice-actions-row > button,
+  .modal-actions-row > button {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* AuthPages topbar & wizard stepper compact layout */
+  .auth-fullpage-topbar-inner {
+    padding: 0 10px !important;
+    gap: 6px !important;
+  }
+
+  .auth-fullpage-topbar-actions {
+    gap: 6px !important;
+  }
+
+  .auth-topbar-Question {
+    display: none !important;
+  }
+
+  .auth-topbar-switch-btn,
+  .auth-topbar-back-btn {
+    padding: 6px 9px !important;
+    font-size: 0.73rem !important;
+    white-space: nowrap !important;
+  }
+
+  .am-wizard-stepper {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    padding: 8px 10px !important;
+  }
+
+  .am-wizard-divider {
+    display: none !important;
+  }
+
+  .am-wizard-step {
+    flex: 1 1 auto !important;
+    gap: 5px !important;
+  }
+
+  .am-wizard-step-num {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 0.72rem !important;
+  }
+
+  .am-wizard-step-label {
+    font-size: 0.72rem !important;
+  }
+
+  .am-inline-otp-grid {
+    gap: 5px !important;
+  }
+
+  .am-inline-otp-digit {
+    height: 44px !important;
+    font-size: 1.1rem !important;
+  }
+
+  /* SetDailyLimitModal 7-day grid -> 4 columns on <= 480px */
+  .am-daily-limit-days-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .am-daily-limit-balance-box {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+}
+
 

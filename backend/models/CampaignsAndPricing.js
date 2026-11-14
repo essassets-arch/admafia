@@ -7,7 +7,7 @@ const MarketingCampaignSchema = new mongoose.Schema({
   postId: { type: String, default: null, index: true },
   campaignName: { type: String, required: true },
   objective: { type: String, default: 'lead_generation' },
-  platform: { type: String, default: 'Meta Ads' },
+  platform: { type: String, default: 'Verified Lead Delivery' },
   targetAudience: { type: String, default: '' },
   dailyBudget: { type: Number, required: true, default: 300 },
   totalSpend: { type: Number, default: 0 },

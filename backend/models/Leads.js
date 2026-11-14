@@ -12,7 +12,7 @@ const MasterLeadSchema = new mongoose.Schema({
   city: { type: String, default: '' },
   state: { type: String, default: '' },
   country: { type: String, default: 'India' },
-  source: { type: String, default: 'Meta Ads' },
+  source: { type: String, default: 'Verified Business Enquiry' },
   requirement: { type: String, default: '' },
   budget: { type: String, default: '' },
   status: { type: String, default: 'Unassigned', index: true },

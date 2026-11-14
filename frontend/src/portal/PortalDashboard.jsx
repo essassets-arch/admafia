@@ -30,6 +30,10 @@ import {
 import crmApi from '../services/crmApi';
 import NotificationBell from '../components/NotificationBell';
 import Swal from 'sweetalert2';
+import {
+  evaluateCustomerProfileCompletion,
+  sanitizeCustomerProfileFields,
+} from '../utils/profileCompletion';
 
 export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab }) {
   const getTabFromHash = () => {
@@ -108,6 +112,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       const activeUser = localStorage.getItem('growthline_active_user');
       if (activeUser) {
         const u = JSON.parse(activeUser);
+        const clean = sanitizeCustomerProfileFields(u);
+        const initEval = evaluateCustomerProfileCompletion(u);
         return {
           ...initialCustomer,
           id: u.id || '',
@@ -119,19 +125,19 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           personalEmail: u.personalEmail || '',
           website: u.website || u.domain || '',
           domain: u.website || u.domain || '',
-          category: u.category || '',
-          industry: u.industry || '',
-          city: u.city || '',
-          state: u.state || '',
+          category: clean.category,
+          industry: clean.industry,
+          city: clean.city,
+          state: clean.state,
           country: u.country || 'India',
           countryCode: u.countryCode || u.country_code || '',
           currency: String(u.currency || 'INR').toUpperCase(),
           currencySymbol: u.currencySymbol || (String(u.currency || 'INR').toUpperCase() === 'USD' ? '$' : '₹'),
-          profile_status: u.profileStatus || u.profile_status || 'incomplete',
-          profileStatus: u.profileStatus || u.profile_status || 'incomplete',
+          profile_status: initEval.profileStatus,
+          profileStatus: initEval.profileStatus,
           payment_status: u.paymentStatus || u.payment_status || 'pending',
           paymentStatus: u.paymentStatus || u.payment_status || 'pending',
-          kycPercent: typeof u.kycPercent === 'number' ? u.kycPercent : 25,
+          kycPercent: initEval.kycPercent,
           balance: typeof u.walletBalance === 'number' ? u.walletBalance : (typeof u.balance === 'number' ? u.balance : 0),
           walletBalance: typeof u.walletBalance === 'number' ? u.walletBalance : (typeof u.balance === 'number' ? u.balance : 0),
           amountPaid: typeof u.amountPaid === 'number' ? u.amountPaid : (typeof u.totalLifetimePaid === 'number' ? u.totalLifetimePaid : 0),
@@ -207,7 +213,19 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         .then((res) => {
           if (res?.customer) {
             setCustomer((prev) => {
-              const merged = { ...prev, ...res.customer };
+              const rawMerged = { ...prev, ...res.customer };
+              const clean = sanitizeCustomerProfileFields(rawMerged);
+              const merged = {
+                ...rawMerged,
+                city: clean.city,
+                state: clean.state,
+                category: clean.category,
+                industry: clean.industry,
+              };
+              const syncEval = evaluateCustomerProfileCompletion(merged);
+              merged.profileStatus = syncEval.profileStatus;
+              merged.profile_status = syncEval.profileStatus;
+              merged.kycPercent = syncEval.kycPercent;
               merged.currency = String(res.customer.currency || prev.currency || 'INR').toUpperCase();
               merged.currencySymbol = res.customer.currencySymbol || (merged.currency === 'USD' ? '$' : '₹');
               merged.dailyAdSpend = Number(res.customer.dailyAdSpend || prev.dailyAdSpend || (merged.currency === 'USD' ? 10 : 300));
@@ -577,7 +595,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           amount: payNum,
           referenceUtr: refCode,
           paymentMethod: sourceInfo.method || 'Razorpay Secure (UPI/Card)',
-          description: sourceInfo.desc || `Marketing & Growth Budget Credit (₹${payNum.toLocaleString('en-IN')})`,
+          description: sourceInfo.desc || `Lead Generation & Growth Wallet Credit (₹${payNum.toLocaleString('en-IN')})`,
         })
         .then(() => crmApi.syncStateFromPostgres())
         .catch(() => {});
@@ -591,7 +609,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       company: customer?.companyName || customer?.name || '',
       date: 'Today, Just now',
       ref: refCode,
-      desc: sourceInfo.desc || `Marketing & Growth Budget Credit (₹${payNum.toLocaleString('en-IN')})`,
+      desc: sourceInfo.desc || `Lead Generation & Growth Wallet Credit (₹${payNum.toLocaleString('en-IN')})`,
       type: 'Credit',
       amount: payNum,
       balance: newBal,
@@ -630,7 +648,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       company: customer?.companyName || customer?.name || '',
       invoiceNo: `INV-2026-${String(invoices.length + 1).padStart(3, '0')}`,
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      particulars: `Meta Ads Campaign Ad Spend Budget Credit`,
+      particulars: `Lead Generation & Growth Wallet Credit`,
       sacCode: '998311',
       baseAmount: baseAmt,
       cgst: gstHalf,
@@ -728,7 +746,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           phone: updated.phone || '',
           city: updated.city || 'India',
           type: 'topup',
-          typeLabel: 'Ad Spend Budget Top-Up',
+          typeLabel: 'Growth Wallet Top-Up',
           amount: payNum,
           gstAmount: Math.round(payNum * 0.18),
           total: payNum,
@@ -829,7 +847,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         company: customer?.companyName || customer?.name || '',
         date: 'Today, Just now',
         ref: `SYS-DAILY-${Date.now().toString().slice(-6)}`,
-        desc: `Daily Meta Ad Spend - Per-Day Service (${todayDayCode}) (-${currencySymbol}${spend})`,
+        desc: `Daily Lead Delivery Pacing - Per-Day Service (${todayDayCode}) (-${currencySymbol}${spend})`,
         type: 'Debit',
         amount: spend,
         balance: newBal,
@@ -867,7 +885,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         return updated;
       });
 
-      return { success: true, message: `Successfully deducted ${currencySymbol}${spend} ad spend for today!` };
+      return { success: true, message: `Successfully deducted ${currencySymbol}${spend} daily pacing for today!` };
     }
     return { success: false, message: `Insufficient balance! Wallet has ${currencySymbol}${walletBalance.toFixed(0)}, needs ${currencySymbol}${spend}.` };
   };
@@ -882,7 +900,14 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     }
 
     setCustomer((prev) => {
-      const updated = { ...prev, ...updates };
+      const rawUpdated = { ...prev, ...updates };
+      const evalRes = evaluateCustomerProfileCompletion(rawUpdated);
+      const updated = {
+        ...rawUpdated,
+        profileStatus: evalRes.profileStatus,
+        profile_status: evalRes.profileStatus,
+        kycPercent: evalRes.kycPercent,
+      };
       try {
         localStorage.setItem('growthline_active_user', JSON.stringify(updated));
         const rawCusts = localStorage.getItem('growthline_registered_customers');
@@ -898,9 +923,9 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                   companyName: updated.companyName || updated.name || c.companyName,
                   contact: updated.contactPerson || updated.contact || c.contact,
                   contactPerson: updated.contactPerson || updated.contact || c.contactPerson,
-                  profileStatus: 'complete',
-                  profile_status: 'complete',
-                  kycPercent: 100,
+                  profileStatus: evalRes.profileStatus,
+                  profile_status: evalRes.profileStatus,
+                  kycPercent: evalRes.kycPercent,
                   verified: true,
                 };
               }
@@ -922,8 +947,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                   company: updated.companyName || pv.company,
                   contact: updated.contactPerson || pv.contact,
                   phone: updated.phone || pv.phone,
-                  profileStatus: 'complete',
-                  queueType: pv.paymentStatus === 'verified' || pv.paymentStatus === 'paid' ? 'Completed' : 'Payment Pending',
+                  profileStatus: evalRes.profileStatus,
+                  queueType: evalRes.isComplete && (pv.paymentStatus === 'verified' || pv.paymentStatus === 'paid') ? 'Completed' : (evalRes.isComplete ? 'Payment Pending' : 'Profile Incomplete'),
                 };
               }
               return pv;
@@ -967,15 +992,14 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     const payAmount = Number(amount) || 600;
     const refCode = paymentId || `rzp_pay_${Date.now().toString().slice(-8)}`;
     
-    // Top up wallet, update AD WALLET balance, add wallet transaction, create invoice, and record in Desk 05
+    // Top up wallet, update Growth Wallet balance, add wallet transaction, create invoice, and record in Desk 05
     handleTopUpWallet(payAmount, refCode, {
-      desc: `Marketing & Growth Budget Credit (₹${payAmount.toLocaleString('en-IN')})`,
+      desc: `Lead Generation & Growth Wallet Credit (₹${payAmount.toLocaleString('en-IN')})`,
       method: 'Razorpay Secure (UPI/Card)',
     });
 
     setIsPaymentModalOpen(false);
 
-    // Per User Request: "when payment complete thann open information all submit page and than submit"
     // Open the complete business information submission page/modal
     setIsBusinessProfileModalOpen(true);
   };
@@ -991,12 +1015,13 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     }
     setCustomer((prev) => {
       const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ', Today';
-      const updated = {
+      const cleanPrev = sanitizeCustomerProfileFields(prev);
+      const draftUpdated = {
         ...prev,
         companyName: profileData.companyName || prev.companyName || '',
         name: profileData.companyName || prev.name || '',
-        category: profileData.category || prev.category || 'Other',
-        industry: profileData.industry || profileData.category || 'Other',
+        category: profileData.category || cleanPrev.category || '',
+        industry: profileData.industry || profileData.category || cleanPrev.industry || '',
         domain: profileData.website || prev.domain || '',
         website: profileData.website || prev.website || '',
         contactPerson: profileData.contactPerson || prev.contactPerson || '',
@@ -1004,14 +1029,18 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         email: profileData.email || prev.email || '',
         phone: profileData.phone || prev.phone || '',
         personalEmail: profileData.personalEmail || prev.personalEmail || '',
-        city: profileData.city || prev.city || '',
-        state: profileData.state || prev.state || 'Maharashtra',
+        city: profileData.city || cleanPrev.city || '',
+        state: profileData.state || cleanPrev.state || '',
         country: profileData.country || prev.country || 'India',
-        profile_status: 'complete',
-        profileStatus: 'complete',
-        kycPercent: 100,
         verified: true,
         completedAt: nowStr,
+      };
+      const evalRes = evaluateCustomerProfileCompletion({ ...draftUpdated, profileStatus: 'complete' });
+      const updated = {
+        ...draftUpdated,
+        profile_status: evalRes.profileStatus,
+        profileStatus: evalRes.profileStatus,
+        kycPercent: evalRes.kycPercent,
       };
 
       try {
@@ -1163,8 +1192,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     if (forceState === true && customer.adCampaignActive) {
       Swal.fire({
         icon: 'info',
-        title: 'Marketing Campaign Already Active',
-        html: `Your marketing campaign is currently <strong>Running (Active)</strong> and pacing at <strong>${currencySymbol}${dailyLimit.toLocaleString()}/day</strong>.<br/><br/>Meta ads and local buyer lead capture are active.`,
+        title: 'Lead Delivery Already Active',
+        html: `Your lead delivery schedule is currently <strong>Running (Active)</strong> and pacing at <strong>${currencySymbol}${dailyLimit.toLocaleString()}/day</strong>.<br/><br/>Verified buyer lead matching and dispatch are active.`,
         confirmButtonText: 'Understood',
         confirmButtonColor: '#059669',
       });
@@ -1175,8 +1204,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     if (forceState === false && !customer.adCampaignActive) {
       Swal.fire({
         icon: 'info',
-        title: 'Marketing Campaign Already Paused',
-        html: `Your marketing campaign is currently <strong>Paused (Off)</strong>.<br/><br/>Click <strong>Start</strong> whenever you are ready to launch advertising.`,
+        title: 'Lead Delivery Already Paused',
+        html: `Your lead delivery schedule is currently <strong>Paused (Off)</strong>.<br/><br/>Click <strong>Start</strong> whenever you are ready to activate buyer lead delivery.`,
         confirmButtonText: 'Understood',
         confirmButtonColor: '#64748b',
       });
@@ -1187,8 +1216,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     if (nextActive && walletBalance < dailyLimit) {
       Swal.fire({
         icon: 'warning',
-        title: 'Ad Wallet Balance is Low',
-        html: `Your available Ad Wallet balance is <strong style="color:#ef4444;">${currencySymbol}${walletBalance.toLocaleString()}</strong>, but today's daily ad spend is <strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong>.<br/><br/>Please top up your wallet to start marketing.`,
+        title: 'Growth Wallet Balance is Low',
+        html: `Your available Growth Wallet balance is <strong style="color:#ef4444;">${currencySymbol}${walletBalance.toLocaleString()}</strong>, but today's daily growth budget is <strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong>.<br/><br/>Please top up your wallet to activate lead delivery.`,
         showCancelButton: true,
         confirmButtonText: '+ Top Up Wallet Now',
         confirmButtonColor: '#4f46e5',
@@ -1201,7 +1230,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       return;
     }
 
-    // 4. Starting Campaign -> Directly deduct daily amount from wallet in PostgreSQL
+    // 4. Activating Delivery -> Directly deduct daily amount from wallet
     const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const todayDayCode = dayCodes[kolkataNow.getDay()];
@@ -1217,28 +1246,28 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     if (nextActive) {
       const confirmStart = await Swal.fire({
         icon: 'question',
-        title: 'Start Meta Ads Campaign?',
+        title: 'Activate Daily Lead Delivery?',
         html: `
           <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px; margin: 10px 0; font-family: inherit;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="color: #64748b; font-size: 0.85rem;">Daily Ad Spend:</span>
+              <span style="color: #64748b; font-size: 0.85rem;">Daily Lead Delivery Pacing:</span>
               <strong style="color: #059669; font-size: 1rem;">${currencySymbol}${dailyLimit.toLocaleString()}/day</strong>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="color: #64748b; font-size: 0.85rem;">Ad Wallet Balance:</span>
+              <span style="color: #64748b; font-size: 0.85rem;">Growth Wallet Balance:</span>
               <strong style="color: #4f46e5; font-size: 1rem;">${currencySymbol}${walletBalance.toLocaleString()}</strong>
             </div>
             <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; display: flex; justify-content: space-between;">
-              <span style="color: #64748b; font-size: 0.85rem;">Today's Placement:</span>
+              <span style="color: #64748b; font-size: 0.85rem;">Today's Schedule:</span>
               <span style="color: #047857; font-weight: 700; font-size: 0.85rem;">${customer.isDeductedToday ? 'Already Debited ✓' : `Deduct ${currencySymbol}${dailyLimit.toLocaleString()}`}</span>
             </div>
           </div>
           <p style="font-size: 0.88rem; color: #475569; margin: 0;">
-            Clicking <strong>Start</strong> will activate your Meta advertising and book today's ad delivery.
+            Clicking <strong>Start</strong> will activate your verified buyer lead delivery and book today's schedule.
           </p>
         `,
         showCancelButton: true,
-        confirmButtonText: customer.isDeductedToday ? '▶ Start Campaign' : `▶ Deduct ${currencySymbol}${dailyLimit.toLocaleString()} & Start`,
+        confirmButtonText: customer.isDeductedToday ? '▶ Activate Delivery' : `▶ Deduct ${currencySymbol}${dailyLimit.toLocaleString()} & Start`,
         confirmButtonColor: '#059669',
         cancelButtonText: 'Cancel',
       });
@@ -1276,30 +1305,30 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           if (deductRes.alreadyDeducted) {
             Swal.fire({
               icon: 'success',
-              title: 'Marketing is LIVE!',
-              html: `Today's ad slot was already booked &amp; paid.<br/>Campaign is now <strong>Running (Active)</strong> without duplicate deduction.`,
+              title: 'Lead Delivery is LIVE!',
+              html: `Today's delivery schedule was already booked &amp; paid.<br/>Lead delivery is now <strong>Running (Active)</strong> without duplicate deduction.`,
               timer: 2400,
               showConfirmButton: false,
             });
           } else {
             Swal.fire({
               icon: 'success',
-              title: 'Marketing Started & Slot Booked!',
-              html: `<strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong> deducted from your Ad Wallet.<br/>Today's advertising slot is now <strong>🎯 BOOKED &amp; RUNNING</strong>.<br/><br/>Remaining Wallet Balance: <strong style="color:#059669;">${currencySymbol}${(deductRes.walletBalance ?? (walletBalance - dailyLimit)).toLocaleString()}</strong>`,
+              title: 'Lead Delivery Activated & Booked!',
+              html: `<strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong> deducted from your Growth Wallet.<br/>Today's lead delivery schedule is now <strong>🎯 BOOKED &amp; ACTIVE</strong>.<br/><br/>Remaining Wallet Balance: <strong style="color:#059669;">${currencySymbol}${(deductRes.walletBalance ?? (walletBalance - dailyLimit)).toLocaleString()}</strong>`,
               timer: 3000,
               showConfirmButton: false,
             });
           }
         } else {
-          throw new Error(deductRes?.error || 'Could not deduct ad spend');
+          throw new Error(deductRes?.error || 'Could not deduct daily pacing');
         }
       } catch (err) {
-        console.error('Failed to deduct and start campaign:', err);
+        console.error('Failed to deduct and activate delivery:', err);
         if (err.message && (err.message.includes('Insufficient') || err.message.includes('balance'))) {
           Swal.fire({
             icon: 'warning',
-            title: 'Ad Wallet Balance is Low',
-            html: `${err.message}<br/><br/>Please top up your wallet to start marketing.`,
+            title: 'Growth Wallet Balance is Low',
+            html: `${err.message}<br/><br/>Please top up your wallet to activate lead delivery.`,
             showCancelButton: true,
             confirmButtonText: '+ Top Up Wallet Now',
             confirmButtonColor: '#4f46e5',
@@ -1312,21 +1341,21 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         } else {
           Swal.fire({
             icon: 'error',
-            title: 'Could Not Start Campaign',
-            text: err.message || 'An error occurred while starting the campaign. Please retry.',
+            title: 'Could Not Activate Delivery',
+            text: err.message || 'An error occurred while activating lead delivery. Please retry.',
             confirmButtonColor: '#059669',
           });
         }
       }
     } else {
-      // Stopping Campaign: Pause in PostgreSQL
+      // Pausing Delivery
       try {
         const confirmStop = await Swal.fire({
           icon: 'warning',
-          title: 'Stop Marketing Campaign?',
-          html: `Are you sure you want to stop/pause your marketing campaign?<br/><br/>Daily ad deductions and active Meta lead generation will be <strong>paused</strong>.`,
+          title: 'Pause Lead Delivery?',
+          html: `Are you sure you want to pause your lead delivery schedule?<br/><br/>Daily wallet deductions and active buyer lead dispatch will be <strong>paused</strong>.`,
           showCancelButton: true,
-          confirmButtonText: '⏹ Yes, Stop Marketing',
+          confirmButtonText: '⏹ Yes, Pause Delivery',
           confirmButtonColor: '#dc2626',
           cancelButtonText: 'Keep Running',
         });
@@ -1356,8 +1385,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
 
         Swal.fire({
           icon: 'info',
-          title: 'Marketing Paused (Off)',
-          html: `Your campaign has been paused. Daily ad spend will not be deducted until you start it again.`,
+          title: 'Lead Delivery Paused (Off)',
+          html: `Your delivery schedule has been paused. Daily wallet pacing will not be deducted until you start it again.`,
           timer: 2200,
           showConfirmButton: false,
         });
@@ -1387,11 +1416,11 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         <div className="mobile-brand-title" onClick={() => handleSwitchTab('dashboard')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <img
             src="/AdMafia-Logo.png"
-            alt="AdMafia Marketing"
+            alt="Ad Mafia Marketing"
             style={{ height: '34px', width: 'auto', objectFit: 'contain', background: '#ffffff', padding: '3px 6px', borderRadius: '6px' }}
           />
           <span className="portal-logo-text" style={{ fontSize: '1.04rem' }}>
-            Ad<b>Mafia</b>
+            Ad <b>Mafia</b>
           </span>
         </div>
 
@@ -1420,7 +1449,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           <div className="portal-logo-wrap" onClick={() => handleSwitchTab('dashboard')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img
               src="/AdMafia-Logo.png"
-              alt="AdMafia Marketing"
+              alt="Ad Mafia Marketing"
               style={{
                 height: isSidebarCollapsed ? '34px' : '40px',
                 width: 'auto',
@@ -1432,7 +1461,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             />
             {!isSidebarCollapsed && (
               <span className="portal-logo-text">
-                Ad<b>Mafia</b> <span>CRM</span>
+                Ad <b>Mafia</b> <span>CRM</span>
               </span>
             )}
           </div>
@@ -1530,12 +1559,12 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             )}
           </button>
 
-          {/* 4. Marketing Wallet */}
+          {/* 4. Growth Wallet */}
           <button
             type="button"
             className={`nav-item-btn ${activeTab === 'wallet' ? 'active' : ''}`}
             onClick={() => handleSwitchTab('wallet')}
-            title="Marketing Wallet (/app/wallet)"
+            title="Growth Wallet (/app/wallet)"
           >
             <span className="nav-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1660,6 +1689,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       {/* MAIN CONTENT AREA */}
       <div className="portal-main-area">
         <div
+          className="portal-subheader-bar"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -1671,7 +1701,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#475569' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#475569', flexWrap: 'wrap', minWidth: 0 }}>
             <span
               style={{
                 width: '8px',
@@ -1679,9 +1709,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 borderRadius: '50%',
                 background: '#10b981',
                 display: 'inline-block',
+                flexShrink: 0,
               }}
             />
-            <strong style={{ color: '#0f172a' }}>{customer.companyName || customer.username || 'Business Workspace'}</strong>
+            <strong style={{ color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>{customer.companyName || customer.username || 'Business Workspace'}</strong>
             <span
               style={{
                 background: '#dcfce7',
@@ -1691,6 +1722,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 borderRadius: '999px',
                 fontSize: '0.7rem',
                 fontWeight: 700,
+                whiteSpace: 'nowrap',
               }}
             >
               WhatsApp Verified ✓
@@ -1699,6 +1731,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
+              className="portal-subheader-wallet-btn"
               onClick={() => handleSwitchTab('wallet')}
               style={{
                 background: '#f8fafc',
@@ -1711,7 +1744,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 cursor: 'pointer',
               }}
             >
-              Wallet: {currencySymbol}{walletBalance.toFixed(0)}
+              Growth Wallet: {currencySymbol}{walletBalance.toFixed(0)}
             </button>
             <NotificationBell
               variant="light"

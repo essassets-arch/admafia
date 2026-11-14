@@ -191,7 +191,7 @@ export default function SuperAdminQueriesDesk() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
             type="button"
             className="sa-btn-primary"
@@ -429,7 +429,7 @@ export default function SuperAdminQueriesDesk() {
                 <div style={{ fontSize: '0.80rem', color: '#64748b' }}>
                   Quick Action: Mark as
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {selectedQuery.status !== 'open' && (
                     <button
                       type="button"
@@ -550,6 +550,8 @@ export default function SuperAdminQueriesDesk() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 8,
                     }}
                   >
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: '#64748b', cursor: 'pointer' }}>
@@ -619,7 +621,7 @@ export default function SuperAdminQueriesDesk() {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="sa-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <div className="sa-form-group">
                     <label className="sa-form-label">Category</label>
                     <select

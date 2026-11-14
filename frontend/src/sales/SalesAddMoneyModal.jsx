@@ -192,7 +192,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: 6 }}>
               Select Top-Up Amount (Min. ₹300) <span style={{ color: '#dc2626' }}>*</span>
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
+            <div className="sales-presets-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
               {PRESETS.map((p) => {
                 const isSelected = String(amount) === String(p.amt);
                 return (
@@ -253,7 +253,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
 
           {/* Reference UTR */}
           <div style={{ marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 4 }}>
               <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>
                 Bank Reference UTR / Transaction ID <span style={{ color: '#dc2626' }}>*</span>
               </label>
@@ -304,7 +304,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
           </div>
 
           {/* Buttons */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
             <button
               type="button"
               className="desk-action-btn"

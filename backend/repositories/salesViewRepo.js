@@ -205,12 +205,17 @@ export function walletTxToRow(t) {
 
 export function invoiceToRow(i) {
   if (!i) return null;
+  const rawParticulars = String(i.particulars || '').trim();
+  const safeParticulars =
+    !rawParticulars || /meta ads|facebook|instagram|google ads/i.test(rawParticulars)
+      ? 'Lead Generation & Growth Wallet Credit'
+      : rawParticulars;
   return {
     id: i._id,
     invoice_no: i.invoiceNumber,
     customer_id: i.customerId,
     payment_record_id: i.paymentRecordId ?? null,
-    particulars: i.particulars || 'Meta Ads Campaign Ad Spend Budget Credit',
+    particulars: safeParticulars,
     sac_code: i.sacCode,
     base_amount: i.baseAmount ?? i.subtotalAmount,
     cgst_amount: i.cgstAmount,

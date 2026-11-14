@@ -1,10 +1,13 @@
 import {
+  Customer,
+  PendingVerification,
   SystemUser,
   CountryPricing,
   WalletTransaction,
   PaymentRecord,
 } from '../models/index.js';
 import { hashPassword, isPasswordHashed } from '../utils/passwordCrypto.js';
+import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion.js';
 
 /**
  * MongoDB startup bootstrap (replaces the data-seeding / cleanup half of PostgreSQL initDatabase()).
@@ -13,7 +16,7 @@ import { hashPassword, isPasswordHashed } from '../utils/passwordCrypto.js';
  */
 
 const DEFAULT_SYSTEM_USERS = [
-  { _id: 'user_superadmin_01', fullName: 'AdMafia Executive Super Admin', email: 'admin@admafia.marketing', username: 'superadmin', phone: '9999999999', password: 'SuperAdmin@2026!', role: 'Super Admin', department: 'Super Admin', permissions: ['all'] },
+  { _id: 'user_superadmin_01', fullName: 'Ad Mafia Executive Super Admin', email: 'admin@admafia.marketing', username: 'superadmin', phone: '9999999999', password: 'SuperAdmin@2026!', role: 'Super Admin', department: 'Super Admin', permissions: ['all'] },
   { _id: 'user_marketing_01', fullName: 'Senior Marketing Campaign Director', email: 'marketing@admafia.marketing', username: 'marketing', phone: '9888888888', password: 'Marketing@2026!', role: 'Marketing Manager', department: 'Marketing', permissions: ['marketing:all', 'campaigns:manage', 'ideas:create', 'posts:verify'] },
   { _id: 'user_graphics_01', fullName: 'Lead Creative & Graphics Designer', email: 'graphics@admafia.marketing', username: 'graphics', phone: '9777777777', password: 'Graphics@2026!', role: 'Senior Graphics Designer', department: 'Graphics', permissions: ['graphics:all', 'artworks:upload', 'requests:manage'] },
   { _id: 'user_sales_01', fullName: 'Principal Sales & Accounts Executive', email: 'sales@admafia.marketing', username: 'sales', phone: '9666666666', password: 'Sales@2026!', role: 'Sales Executive', department: 'Sales', permissions: ['sales:all', 'leads:call', 'deals:manage', 'groups:edit'] },
@@ -31,7 +34,7 @@ export async function seedBaselineData() {
 
   for (const u of DEFAULT_SYSTEM_USERS) {
     try {
-      const existing = await SystemUser.findOne({ username: u.username }).select('_id passwordHash').lean();
+      const existing = await SystemUser.findOne({ username: u.username }).select('_id fullName passwordHash').lean();
       const hashedDefault = await hashPassword(u.password);
       if (!existing) {
         await SystemUser.create({
@@ -52,6 +55,9 @@ export async function seedBaselineData() {
         });
       } else {
         const updateSet = { role: u.role, department: u.department, status: 'active', updatedAt: now };
+        if (existing.fullName === 'AdMafia Executive Super Admin') {
+          updateSet.fullName = u.fullName;
+        }
         // Upgrade any legacy plaintext password automatically without overwriting custom scrypt passwords
         if (!isPasswordHashed(existing.passwordHash)) {
           updateSet.passwordHash = await hashPassword(existing.passwordHash || u.password);
@@ -119,4 +125,72 @@ export async function purgeLegacyTestLedgerRows() {
   }).catch(() => {});
 
   return { dismissedPurged: dismissed?.deletedCount || 0 };
+}
+
+/**
+ * Non-destructive startup repair for existing self-registered customer accounts
+ * that inherited legacy fake schema defaults (state="Maharashtra", category="IT & Software", kycPercent=100)
+ * when operating city was never provided.
+ */
+export async function repairIncompleteCustomerProfiles() {
+  const candidates = await Customer.find({
+    $or: [{ city: '' }, { city: null }, { city: { $exists: false } }],
+  }).lean();
+
+  let repairedCount = 0;
+  const now = new Date();
+
+  for (const c of candidates) {
+    const rawState = String(c.state || '').trim();
+    const hasLegacyFakeState = rawState.toLowerCase() === 'maharashtra';
+    const hasLegacyFakeComplete =
+      Number(c.kycPercent ?? 0) === 100 || c.profileStatus === 'complete' || c.verified === true;
+    if (!hasLegacyFakeState && !hasLegacyFakeComplete) continue;
+
+    const evalProf = evaluateCustomerProfileCompletion(c);
+    await Customer.updateOne(
+      { _id: c._id },
+      {
+        $set: {
+          state: evalProf.sanitized.state,
+          category: evalProf.sanitized.category,
+          industry: evalProf.sanitized.industry,
+          profileStatus: evalProf.profileStatus,
+          kycPercent: evalProf.kycPercent,
+          verified: evalProf.isComplete,
+          completedAt: evalProf.isComplete ? c.completedAt || now : null,
+        },
+      },
+      { timestamps: false }
+    );
+
+    await PendingVerification.updateMany(
+      { customerId: c._id },
+      [
+        {
+          $set: {
+            profileStatus: evalProf.profileStatus,
+            queueType: {
+              $cond: [
+                { $eq: [evalProf.profileStatus, 'complete'] },
+                { $cond: [{ $in: ['$paymentStatus', ['paid', 'verified']] }, 'Completed', 'Payment Pending'] },
+                {
+                  $cond: [
+                    { $in: ['$paymentStatus', ['paid', 'verified']] },
+                    'Profile Only Incomplete',
+                    'Profile Incomplete',
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+      { updatePipeline: true }
+    ).catch(() => {});
+
+    repairedCount += 1;
+  }
+
+  return { scannedCount: candidates.length, repairedCount };
 }

@@ -5,7 +5,7 @@
 export const currentSalesRep = {
   id: 'rep_01',
   name: 'Sales Executive',
-  email: 'sales@growthline.in',
+  email: 'sales@admafia.marketing',
   role: 'Sales Executive',
   department: 'Sales & Revenue Operations',
   monthlyTarget: 250000,

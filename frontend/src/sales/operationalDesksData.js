@@ -1,5 +1,5 @@
 /**
- * Growthline CRM - Clean Operational Desks Dataset (Zero Static Data)
+ * Ad Mafia CRM - Clean Operational Desks Dataset (Zero Static Data)
  */
 
 export const INITIAL_REGISTERED_CUSTOMERS = [];

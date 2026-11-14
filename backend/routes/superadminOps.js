@@ -129,9 +129,11 @@ superadminOpsRouter.get('/database/status', async (_req, res) => {
     const snapshots = listSnapshotsOnDisk(backupDir);
     const waCfg = getWhatsAppConfig();
     const fbStatus = getFirebaseStatus();
+    const webConsoleUrl = (process.env.MONGO_EXPRESS_PUBLIC_URL || '').trim() || '/db-console/';
 
     res.json({
       ok: true,
+      webConsoleUrl,
       mongo: {
         ...mongoStatus,
         replicaSet: replSet,
@@ -160,6 +162,7 @@ superadminOpsRouter.get('/database/status', async (_req, res) => {
         },
       },
       compassGuides: {
+        webConsoleUrl,
         localDockerUri: 'mongodb://127.0.0.1:27018/admafia_crm?directConnection=true',
         vpsSshTunnelCmd: 'ssh -N -L 27019:127.0.0.1:27017 root@admafia.marketing',
         vpsCompassUri: 'mongodb://127.0.0.1:27019/admafia_crm?directConnection=true',
@@ -171,6 +174,135 @@ superadminOpsRouter.get('/database/status', async (_req, res) => {
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+const REDACTED_SECRET_FIELDS = new Set([
+  'passwordHash',
+  'otpHash',
+  'tokenHash',
+  'verificationTokenHash',
+]);
+
+function escapeExplorerRegex(value) {
+  return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function redactSensitiveDocumentFields(value) {
+  if (value === null || value === undefined) return value;
+  if (value instanceof Date) return value.toISOString();
+  if (Buffer.isBuffer(value)) return `[Binary ${value.length}B]`;
+  if (typeof value !== 'object') return value;
+  if (
+    value._bsontype === 'ObjectId' ||
+    value._bsontype === 'ObjectID' ||
+    typeof value.toHexString === 'function'
+  ) {
+    return value.toHexString();
+  }
+  if (value._bsontype === 'Binary' && value.buffer) {
+    return `[Binary ${value.buffer.length}B]`;
+  }
+  if (value._bsontype === 'Decimal128' || value._bsontype === 'Long') {
+    return value.toString();
+  }
+  if (Array.isArray(value)) {
+    return value.map(redactSensitiveDocumentFields);
+  }
+  const sanitized = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (REDACTED_SECRET_FIELDS.has(k) && v !== null && v !== undefined && v !== '') {
+      sanitized[k] = '[REDACTED_HASH]';
+    } else if (k === 'passwordHash' || k === 'otpHash' || k === 'tokenHash') {
+      sanitized[k] = '[REDACTED_HASH]';
+    } else {
+      sanitized[k] = redactSensitiveDocumentFields(v);
+    }
+  }
+  return sanitized;
+}
+
+/**
+ * GET /api/superadmin/database/collections/:name/documents
+ * Live Read-Only Super Admin Collection & Document Explorer with strict collection allowlist,
+ * pagination (`?limit=25&page=1`), safe substring search (`?search=`), and hash redaction.
+ */
+superadminOpsRouter.get('/database/collections/:name/documents', async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    if (!db) {
+      return res.status(503).json({ ok: false, error: 'MongoDB connection is not ready.' });
+    }
+
+    const requestedName = String(req.params.name || '').trim();
+    if (!requestedName || requestedName.startsWith('system.') || !/^[a-zA-Z0-9_.-]+$/.test(requestedName)) {
+      return res.status(400).json({ ok: false, error: 'Invalid collection name.' });
+    }
+
+    const existingCollections = await db.listCollections().toArray();
+    const allowedNames = new Set(
+      existingCollections.map((c) => c.name).filter((n) => n && !n.startsWith('system.'))
+    );
+    if (!allowedNames.has(requestedName)) {
+      return res.status(404).json({ ok: false, error: `Collection "${requestedName}" does not exist.` });
+    }
+
+    const rawLimit = Number.parseInt(String(req.query.limit ?? '25'), 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 25;
+    const rawPage = Number.parseInt(String(req.query.page ?? '1'), 10);
+    const page = Number.isFinite(rawPage) ? Math.max(1, rawPage) : 1;
+    const skip = (page - 1) * limit;
+
+    const rawSearch = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 120) : '';
+    let filter = {};
+    if (rawSearch) {
+      const rx = new RegExp(escapeExplorerRegex(rawSearch), 'i');
+      const orClauses = [
+        { _id: rx },
+        { username: rx },
+        { phone: rx },
+        { email: rx },
+        { companyName: rx },
+        { contactPerson: rx },
+        { referenceUtr: rx },
+        { title: rx },
+        { eventType: rx },
+      ];
+      if (/^[0-9a-fA-F]{24}$/.test(rawSearch) && mongoose.Types.ObjectId.isValid(rawSearch)) {
+        orClauses.push({ _id: new mongoose.Types.ObjectId(rawSearch) });
+      }
+      filter = { $or: orClauses };
+    }
+
+    const col = db.collection(requestedName);
+    const [total, rawDocs] = await Promise.all([
+      col.countDocuments(filter),
+      col
+        .find(filter)
+        .sort({ createdAt: -1, registeredAt: -1, assignedAt: -1, submittedAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+    ]);
+
+    const documents = rawDocs.map(redactSensitiveDocumentFields);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    return res.json({
+      ok: true,
+      collection: requestedName,
+      page,
+      limit,
+      total,
+      totalCount: total,
+      totalDocuments: total,
+      totalPages,
+      search: rawSearch,
+      documents,
+    });
+  } catch (err) {
+    console.error('[GET /api/superadmin/database/collections/:name/documents]', err);
+    return res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -514,7 +646,7 @@ superadminOpsRouter.get('/growth-analytics', async (_req, res) => {
     const hotUnpaidVerifiedLeads = (facet.hotUnpaidVerifiedLeads || []).map((c) => {
       const e164 = c.countryCode === 'IN' || !c.countryCode ? `91${String(c.phone || '').slice(-10)}` : String(c.phone || '').replace(/\D/g, '');
       const msg = encodeURIComponent(
-        `Hi ${c.contactPerson || c.companyName || 'there'}, welcome to AdMafia! Your business workspace (${c.companyName}) is verified. Activate your daily lead campaign starting at ${c.currency === 'USD' ? '$' : '₹'}${c.dailySpend}/day here: https://admafia.marketing/portal#wallet`
+        `Hi ${c.contactPerson || c.companyName || 'there'}, welcome to Ad Mafia! Your business workspace (${c.companyName}) is verified. Activate your daily lead campaign starting at ${c.currency === 'USD' ? '$' : '₹'}${c.dailySpend}/day here: https://admafia.marketing/portal#wallet`
       );
       return {
         id: c._id,
@@ -535,7 +667,7 @@ superadminOpsRouter.get('/growth-analytics', async (_req, res) => {
     const lowRunwayAtRisk = (facet.lowRunwayAtRisk || []).map((c) => {
       const e164 = `91${String(c.phone || '').slice(-10)}`;
       const msg = encodeURIComponent(
-        `Hi ${c.contactPerson || c.companyName}, your AdMafia Marketing Wallet balance is ₹${c.bal} (${c.runwayDays} day runway left). Recharge now so your inbound buyer leads continue without pause: https://admafia.marketing/portal#wallet`
+        `Hi ${c.contactPerson || c.companyName}, your Ad Mafia Growth Wallet balance is ₹${c.bal} (${c.runwayDays} day runway left). Recharge now so your inbound buyer leads continue without pause: https://admafia.marketing/portal#wallet`
       );
       return {
         id: c._id,

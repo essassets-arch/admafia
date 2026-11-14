@@ -430,7 +430,7 @@ export default function SuperAdminTopupsDesk() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
             type="button"
             className="sa-btn-primary"
@@ -969,7 +969,7 @@ export default function SuperAdminTopupsDesk() {
                   <label className="sa-form-label" style={{ fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
                     <Wallet size={14} color="#059669" /> 2. Top-Up Amount Presets (₹300/day pacing)
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  <div className="sa-presets-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                     {TOPUP_PRESETS.map((p) => {
                       const isSelected = String(manualForm.amount) === String(p.amount);
                       return (
@@ -1019,7 +1019,7 @@ export default function SuperAdminTopupsDesk() {
 
                 {/* Bank Reference UTR with Quick Generator */}
                 <div className="sa-form-group" style={{ marginBottom: 14 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
                     <label className="sa-form-label" style={{ margin: 0 }}>
                       Bank Transaction Reference / UTR Number *
                     </label>
@@ -1083,7 +1083,7 @@ export default function SuperAdminTopupsDesk() {
                   type="submit"
                   disabled={submittingManual}
                   className="sa-btn-success"
-                  style={{ minWidth: 200 }}
+                  style={{ minWidth: 'min(200px, 100%)' }}
                 >
                   <Zap size={14} />
                   <span>{submittingManual ? 'Crediting Wallet...' : 'Confirm Top-Up & Credit Wallet'}</span>

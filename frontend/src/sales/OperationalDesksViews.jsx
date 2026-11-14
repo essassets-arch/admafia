@@ -921,7 +921,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                           <Phone size={11} /> Call
                         </a>
                         <a
-                          href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(c.contact || c.username)},%20AdMafia%20Support%20here%20regarding%20your%20registered%20workspace.`}
+                          href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(c.contact || c.username)},%20Ad%20Mafia%20Support%20here%20regarding%20your%20registered%20workspace.`}
                           target="_blank"
                           rel="noreferrer"
                           className="desk-action-btn"
@@ -1698,7 +1698,7 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Target Geography / City</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.city || 'India'}, {cust.state || 'Maharashtra'}</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.city || 'India'}{cust.state ? `, ${cust.state}` : ''}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Intake Submission Time</div>
@@ -2550,7 +2550,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             <div className="desk-customer-kpi-actions">
               {selectedCustomerObj.phone && (
                 <a
-                  href={`https://wa.me/91${String(selectedCustomerObj.phone).replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedCustomerObj.companyName || selectedCustomerObj.name || 'Client')},%20this%20is%20AdMafia%20GrowthLine%20Desk%20regarding%20your%20campaign%20leads.`}
+                  href={`https://wa.me/91${String(selectedCustomerObj.phone).replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedCustomerObj.companyName || selectedCustomerObj.name || 'Client')},%20this%20is%20Ad%20Mafia%20Growth%20Desk%20regarding%20your%20campaign%20leads.`}
                   target="_blank"
                   rel="noreferrer"
                   style={{
@@ -2711,7 +2711,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
       }}>
         {/* Customer-Wise Smart Search Dropdown Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: '1 1 340px', minWidth: 260 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: '1 1 340px', minWidth: 'min(260px, 100%)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <Building2 size={18} style={{ color: '#4f46e5' }} />
             <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
@@ -2719,7 +2719,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             </span>
           </div>
 
-          <div ref={customerDropdownRef} style={{ position: 'relative', flex: '1 1 240px', minWidth: 220 }}>
+          <div ref={customerDropdownRef} style={{ position: 'relative', flex: '1 1 240px', minWidth: 'min(220px, 100%)' }}>
             {/* Interactive Smart Search Trigger Button */}
             <button
               type="button"
@@ -2793,8 +2793,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 top: 'calc(100% + 6px)',
                 left: 0,
                 width: '100%',
-                minWidth: 320,
-                maxWidth: 460,
+                minWidth: 'min(320px, 100%)',
+                maxWidth: 'min(460px, calc(100vw - 32px))',
                 background: '#ffffff',
                 borderRadius: 12,
                 border: '1px solid #cbd5e1',
@@ -3617,7 +3617,7 @@ export function ProfileCompletionDesk({ customers = [], setCustomers }) {
   const handleCopyProfile = (cust) => {
     if (!cust) return;
     const text = `
-=== ADMAFIA CUSTOMER PROFILE DOSSIER ===
+=== AD MAFIA CUSTOMER PROFILE DOSSIER ===
 Company / Name: ${cust.companyName || cust.name || 'Not Provided'}
 Contact Person: ${cust.contactPerson || cust.contact || cust.username || 'Not Provided'}
 Username: @${cust.username || 'user'}
@@ -3823,7 +3823,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
             </button>
           </div>
 
-          <div style={{ position: 'relative', minWidth: 260 }}>
+          <div style={{ position: 'relative', minWidth: 'min(260px, 100%)', flex: '1 1 240px' }}>
             <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
             <input
               type="text"
@@ -3945,7 +3945,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                       {/* 5. Location (City, State) */}
                       <td>
                         <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.88rem' }}>
-                          {c.city ? `${c.city}, ` : ''}{c.state || 'Maharashtra'}
+                          {[c.city, c.state].filter(Boolean).join(', ') || '—'}
                         </div>
                         <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
                           {c.country || 'India'}
@@ -4015,7 +4015,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
 
                           {/* WhatsApp Shortcut */}
                           <a
-                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20we%20reviewed%20your%20AdMafia%20business%20profile.`}
+                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20we%20reviewed%20your%20Ad%20Mafia%20business%20profile.`}
                             target="_blank"
                             rel="noreferrer"
                             className="desk-action-btn"
@@ -4231,7 +4231,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                     </button>
 
                     <a
-                      href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20your%20AdMafia%20business%20profile%20is%20now%20reviewed.`}
+                      href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20your%20Ad%20Mafia%20business%20profile%20is%20now%20reviewed.`}
                       target="_blank"
                       rel="noreferrer"
                       className="desk-action-btn"
@@ -4535,7 +4535,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
               </button>
 
               <a
-                href={`https://wa.me/91${String(selectedProfileCust.phone || '').replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedProfileCust.contactPerson || selectedProfileCust.contact || selectedProfileCust.name || 'Partner')},%20we%20reviewed%20your%20AdMafia%20business%20profile.`}
+                href={`https://wa.me/91${String(selectedProfileCust.phone || '').replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedProfileCust.contactPerson || selectedProfileCust.contact || selectedProfileCust.name || 'Partner')},%20we%20reviewed%20your%20Ad%20Mafia%20business%20profile.`}
                 target="_blank"
                 rel="noreferrer"
                 className="desk-action-btn"
@@ -5492,7 +5492,7 @@ export function PaymentCollectionDesk({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #0f172a', paddingBottom: 16, marginBottom: 18 }}>
               <div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
-                  ADMAFIA MARKETING
+                  AD MAFIA MARKETING
                 </div>
                 <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
                   Official Payment Acknowledgement &amp; Tax Receipt
@@ -5559,7 +5559,7 @@ export function PaymentCollectionDesk({
                 <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '12px 10px', fontSize: '0.84rem' }}>
                     <div style={{ fontWeight: 700, color: '#0f172a' }}>
-                      {activeReceipt.typeLabel || 'Meta & Google Ads Campaign Service'}
+                      {activeReceipt.typeLabel || 'Verified B2B Lead Generation & Growth Service'}
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
                       {activeReceipt.notes || 'Marketing Wallet Balance & Campaign Deployment'}
@@ -5977,7 +5977,7 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
 
                         {/* Direct WhatsApp Chat Action */}
                         <a
-                          href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(contactPerson)},%20your%20current%20AdMafia%20wallet%20balance%20is%20${encodeURIComponent(formatINR(bal))}%20(${runway}%20days%20runway).`}
+                          href={`https://wa.me/91${c.phone}?text=Hello%20${encodeURIComponent(contactPerson)},%20your%20current%20Ad%20Mafia%20wallet%20balance%20is%20${encodeURIComponent(formatINR(bal))}%20(${runway}%20days%20runway).`}
                           target="_blank"
                           rel="noreferrer"
                           className="desk-action-btn"
@@ -6097,7 +6097,7 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
             {/* Modal Actions */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
               <a
-                href={`https://wa.me/91${selectedWalletCust.phone}?text=Hello%20${encodeURIComponent(selectedWalletCust.contactPerson || selectedWalletCust.contact || selectedWalletCust.name || 'Partner')},%20your%20current%20AdMafia%20wallet%20balance%20is%20${encodeURIComponent(formatINR(selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0))}.`}
+                href={`https://wa.me/91${selectedWalletCust.phone}?text=Hello%20${encodeURIComponent(selectedWalletCust.contactPerson || selectedWalletCust.contact || selectedWalletCust.name || 'Partner')},%20your%20current%20Ad%20Mafia%20wallet%20balance%20is%20${encodeURIComponent(formatINR(selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0))}.`}
                 target="_blank"
                 rel="noreferrer"
                 className="desk-action-btn"
@@ -6666,7 +6666,7 @@ export function QuerySupportDesk({
                     </td>
 
                     {/* 3. Queries Preview */}
-                    <td style={{ minWidth: 320 }}>
+                    <td style={{ minWidth: 'min(320px, 100%)' }}>
                       {latestQuery ? (
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -6766,7 +6766,7 @@ export function QuerySupportDesk({
                         {/* WhatsApp Customer Action */}
                         {cleanPhone && (
                           <a
-                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactPerson)},%20this%20is%20AdMafia%20Growth%20Support%20regarding%20${encodeURIComponent(compName)}.%20How%20may%20our%20team%20assist%20you%20today?`}
+                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactPerson)},%20this%20is%20Ad%20Mafia%20Growth%20Support%20regarding%20${encodeURIComponent(compName)}.%20How%20may%20our%20team%20assist%20you%20today?`}
                             target="_blank"
                             rel="noreferrer"
                             className="desk-action-btn"
@@ -7235,7 +7235,7 @@ export function FollowupTasksDesk({ tasks, setTasks }) {
                 <Phone size={14} /> Call
               </a>
               <a
-                href={`https://wa.me/91${t.phone}?text=Hello%20${encodeURIComponent(t.contact)},%20AdMafia%20Support%20follow-up%20regarding%20${encodeURIComponent(t.type)}.`}
+                href={`https://wa.me/91${t.phone}?text=Hello%20${encodeURIComponent(t.contact)},%20Ad%20Mafia%20Support%20follow-up%20regarding%20${encodeURIComponent(t.type)}.`}
                 target="_blank"
                 rel="noreferrer"
                 className="desk-action-btn"
@@ -7638,7 +7638,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                           <span>Call</span>
                         </a>
                         <a
-                          href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(m.contactPerson || m.name)},%20this%20is%20AdMafia%20Marketing%20Operations.%20Your%20active%20campaign%20wallet%20balance%20is%20%E2%82%B9${bal.toLocaleString('en-IN')}%20(${runway}%20days%20runway%20remaining).`}
+                          href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(m.contactPerson || m.name)},%20this%20is%20Ad%20Mafia%20Marketing%20Operations.%20Your%20active%20campaign%20wallet%20balance%20is%20%E2%82%B9${bal.toLocaleString('en-IN')}%20(${runway}%20days%20runway%20remaining).`}
                           target="_blank"
                           rel="noreferrer"
                           className="appr-action-btn appr-action-wa"
@@ -7698,7 +7698,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 22 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 14, marginBottom: 22 }}>
               <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Authorized Contact</div>
                 <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{resolveCustomerIdentity(selectedMember, customers).contactPerson}</div>
@@ -7720,10 +7720,10 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
               <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Target Geography</div>
                 <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{selectedMember.city || 'India'}</div>
-                <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>{selectedMember.state || 'Maharashtra'}, India</div>
+                <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>{selectedMember.state ? `${selectedMember.state}, ` : ''}India</div>
               </div>
 
-              <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ gridColumn: '1 / -1', background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Registered Work Email &amp; Web Domain</div>
                 <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a', marginTop: 3 }}>✉️ {selectedMember.email || 'Registered via Web Portal'}</div>
                 {selectedMember.website && (
@@ -8615,7 +8615,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                           </span>
                         </div>
                         <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
-                          {item.city ? `${item.city}, ` : ''}{item.state || 'Maharashtra'}
+                          {[item.city, item.state].filter(Boolean).join(', ') || '—'}
                         </div>
                       </td>
 
@@ -8702,7 +8702,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                           {/* WhatsApp Direct Action */}
                           {cleanPhone && (
                             <a
-                              href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(item.contactPerson || '')},%20we%20are%20following%20up%20on%20your%20AdMafia%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(item.amount))}.`}
+                              href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(item.contactPerson || '')},%20we%20are%20following%20up%20on%20your%20Ad%20Mafia%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(item.amount))}.`}
                               target="_blank"
                               rel="noreferrer"
                               className="desk-action-btn"
@@ -8800,8 +8800,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                       </div>
                       <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
                         {(tx.email || matchedCust?.email) && <span>{tx.email || matchedCust?.email} • </span>}
-                        {tx.city || matchedCust?.city ? `${tx.city || matchedCust?.city}, ` : ''}
-                        {tx.state || matchedCust?.state || 'Maharashtra'}
+                        {[tx.city || matchedCust?.city, tx.state || matchedCust?.state].filter(Boolean).join(', ') || '—'}
                       </div>
                     </td>
 
@@ -8864,7 +8863,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                         {/* WhatsApp Customer Action */}
                         {cleanPhone ? (
                           <a
-                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactTitle)},%20we%20noticed%20your%20recent%20wallet%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(tx.amount))}%20on%20AdMafia%20was%20declined%20by%20the%20bank.%20Would%20you%20like%20our%20team%20to%20assist%20you%20with%20activating%20your%20campaign?`}
+                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactTitle)},%20we%20noticed%20your%20recent%20wallet%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(tx.amount))}%20on%20Ad%20Mafia%20was%20declined%20by%20the%20bank.%20Would%20you%20like%20our%20team%20to%20assist%20you%20with%20activating%20your%20campaign?`}
                             target="_blank"
                             rel="noreferrer"
                             className="desk-action-btn"
@@ -9052,7 +9051,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
             {/* Modal Actions */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
               <a
-                href={`https://wa.me/91${String(selectedFailTx.phone || '').replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedFailTx.contactPerson || 'Partner')},%20we%20noticed%20your%20recent%20wallet%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(selectedFailTx.amount))}%20on%20AdMafia%20was%20declined%20by%20the%20bank.%20Would%20you%20like%20our%20team%20to%20assist%20you%20with%20activating%20your%20campaign?`}
+                href={`https://wa.me/91${String(selectedFailTx.phone || '').replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedFailTx.contactPerson || 'Partner')},%20we%20noticed%20your%20recent%20wallet%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(selectedFailTx.amount))}%20on%20Ad%20Mafia%20was%20declined%20by%20the%20bank.%20Would%20you%20like%20our%20team%20to%20assist%20you%20with%20activating%20your%20campaign?`}
                 target="_blank"
                 rel="noreferrer"
                 className="desk-action-btn"

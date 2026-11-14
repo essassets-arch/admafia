@@ -132,11 +132,11 @@ export default function SuperAdminFinanceDesk() {
         <div>
           <h1>Manage Finance &amp; Ledger</h1>
           <p>
-            Authoritative financial control for AdMafia. Inspect account-wise balances, trace every credit and debit in the MongoDB transaction ledger, and export financial audit reports.
+            Authoritative financial control for Ad Mafia. Inspect account-wise balances, trace every credit and debit in the MongoDB transaction ledger, and export financial audit reports.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
             type="button"
             className="sa-btn-primary"

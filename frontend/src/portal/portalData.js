@@ -1,5 +1,5 @@
 /**
- * Growthline CRM - Clean Baseline Data & Translations (Zero Static Data)
+ * Ad Mafia CRM - Clean Baseline Data & Translations (Zero Static Data)
  */
 
 export function getKolkataTodayCode() {

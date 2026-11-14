@@ -366,7 +366,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button
             type="button"
             className="sales-btn-secondary"
@@ -471,7 +471,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
           style={{
             background: '#ffffff',
             borderRadius: 12,
-            overflow: 'hidden',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
             boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
             marginBottom: 28,
           }}
@@ -608,7 +609,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
 
       {/* 4. Distribution History Section */}
       <div style={{ marginTop: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
           <div>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
               Lead Distribution History
@@ -642,7 +643,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             style={{
               background: '#ffffff',
               borderRadius: 12,
-              overflow: 'hidden',
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
               boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
             }}
           >
@@ -1001,103 +1003,105 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                   </p>
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                        Company Name
-                      </th>
-                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                        Contact Person
-                      </th>
-                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                        Balance / Daily Spend
-                      </th>
-                      <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                        Distribution Eligibility
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {viewingMembers
-                      .filter((m) => {
-                        if (!viewSearch.trim()) return true;
-                        const q = viewSearch.toLowerCase();
-                        return (
-                          (m.companyName || '').toLowerCase().includes(q) ||
-                          (m.contactPerson || '').toLowerCase().includes(q) ||
-                          (m.phone || '').includes(q)
-                        );
-                      })
-                      .map((m) => {
-                        const isGen = (s) => !s || s.toLowerCase() === 'registered business' || s.toLowerCase() === 'corporate workspace';
-                        const cleanU = (m.username || '').replace(/^@/, '').trim();
-                        const capU = cleanU ? cleanU.charAt(0).toUpperCase() + cleanU.slice(1) : '';
-                        const cleanPhone = String(m.phone || '').replace(/\D/g, '').slice(-10);
-                        const fallback = capU || (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
-                        const resolvedComp = !isGen(m.companyName) ? m.companyName : fallback;
-                        const resolvedCont = !isGen(m.contactPerson) ? m.contactPerson : (capU || resolvedComp);
-                        return (
-                        <tr key={m.customerId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
-                            <div>{resolvedComp}</div>
-                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>{m.category || 'General'}</div>
-                          </td>
-                          <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
-                            <div>{resolvedCont}</div>
-                            <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{m.phone}</div>
-                          </td>
-                          <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#334155' }}>
-                            <div style={{ fontWeight: 700, color: Number(m.balance || 0) >= Number(m.dailyAdSpend || 300) ? '#15803d' : '#b91c1c' }}>
-                              ₹{Number(m.balance || 0).toLocaleString('en-IN')}
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                              Spend: ₹{Number(m.dailyAdSpend || 300)}/day
-                            </div>
-                          </td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                            {m.isEligible ? (
-                              <span
-                                style={{
-                                  padding: '3px 8px',
-                                  borderRadius: 10,
-                                  fontSize: '0.72rem',
-                                  fontWeight: 700,
-                                  backgroundColor: '#ecfdf5',
-                                  color: '#047857',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                }}
-                              >
-                                ✓ Eligible
-                              </span>
-                            ) : (
-                              <span
-                                style={{
-                                  padding: '3px 8px',
-                                  borderRadius: 10,
-                                  fontSize: '0.72rem',
-                                  fontWeight: 700,
-                                  backgroundColor: '#fef2f2',
-                                  color: '#b91c1c',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  maxWidth: 180,
-                                  textAlign: 'left',
-                                }}
-                                title={(m.reasons || []).join(' • ')}
-                              >
-                                ✕ {m.reason || 'Ineligible'}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
+                <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+                  <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                          Company Name
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                          Contact Person
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                          Balance / Daily Spend
+                        </th>
+                        <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                          Distribution Eligibility
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewingMembers
+                        .filter((m) => {
+                          if (!viewSearch.trim()) return true;
+                          const q = viewSearch.toLowerCase();
+                          return (
+                            (m.companyName || '').toLowerCase().includes(q) ||
+                            (m.contactPerson || '').toLowerCase().includes(q) ||
+                            (m.phone || '').includes(q)
+                          );
+                        })
+                        .map((m) => {
+                          const isGen = (s) => !s || s.toLowerCase() === 'registered business' || s.toLowerCase() === 'corporate workspace';
+                          const cleanU = (m.username || '').replace(/^@/, '').trim();
+                          const capU = cleanU ? cleanU.charAt(0).toUpperCase() + cleanU.slice(1) : '';
+                          const cleanPhone = String(m.phone || '').replace(/\D/g, '').slice(-10);
+                          const fallback = capU || (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
+                          const resolvedComp = !isGen(m.companyName) ? m.companyName : fallback;
+                          const resolvedCont = !isGen(m.contactPerson) ? m.contactPerson : (capU || resolvedComp);
+                          return (
+                          <tr key={m.customerId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
+                              <div>{resolvedComp}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>{m.category || 'General'}</div>
+                            </td>
+                            <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
+                              <div>{resolvedCont}</div>
+                              <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{m.phone}</div>
+                            </td>
+                            <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#334155' }}>
+                              <div style={{ fontWeight: 700, color: Number(m.balance || 0) >= Number(m.dailyAdSpend || 300) ? '#15803d' : '#b91c1c' }}>
+                                ₹{Number(m.balance || 0).toLocaleString('en-IN')}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                Spend: ₹{Number(m.dailyAdSpend || 300)}/day
+                              </div>
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                              {m.isEligible ? (
+                                <span
+                                  style={{
+                                    padding: '3px 8px',
+                                    borderRadius: 10,
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    backgroundColor: '#ecfdf5',
+                                    color: '#047857',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                >
+                                  ✓ Eligible
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    padding: '3px 8px',
+                                    borderRadius: 10,
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    backgroundColor: '#fef2f2',
+                                    color: '#b91c1c',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    maxWidth: 180,
+                                    textAlign: 'left',
+                                  }}
+                                  title={(m.reasons || []).join(' • ')}
+                                >
+                                  ✕ {m.reason || 'Ineligible'}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
@@ -1233,52 +1237,54 @@ export default function CustomerGroupsDesk({ customers = [] }) {
               ) : inspectRecipients.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>No recipient records found.</div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                        Customer / Company
-                      </th>
-                      <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                        Phone
-                      </th>
-                      <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
-                        Response Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inspectRecipients.map((r, i) => (
-                      <tr key={r.id || i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.84rem', color: '#1e293b' }}>
-                          {(() => {
-                            const raw = r.companyName || r.company_name || '';
-                            const isGen = !raw || raw.toLowerCase() === 'registered business' || raw.toLowerCase() === 'corporate workspace';
-                            const cleanPhone = String(r.phone || '').replace(/\D/g, '').slice(-10);
-                            return !isGen ? raw : (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
-                          })()}
-                        </td>
-                        <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
-                          {r.phone}
-                        </td>
-                        <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: 10,
-                              fontSize: '0.72rem',
-                              fontWeight: 700,
-                              backgroundColor: r.responseInterest === 'Interested' ? '#ecfdf5' : '#f1f5f9',
-                              color: r.responseInterest === 'Interested' ? '#047857' : '#64748b',
-                            }}
-                          >
-                            {r.responseInterest || 'Pending'}
-                          </span>
-                        </td>
+                <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+                  <table style={{ width: '100%', minWidth: 440, borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                          Customer / Company
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                          Phone
+                        </th>
+                        <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                          Response Status
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {inspectRecipients.map((r, i) => (
+                        <tr key={r.id || i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.84rem', color: '#1e293b' }}>
+                            {(() => {
+                              const raw = r.companyName || r.company_name || '';
+                              const isGen = !raw || raw.toLowerCase() === 'registered business' || raw.toLowerCase() === 'corporate workspace';
+                              const cleanPhone = String(r.phone || '').replace(/\D/g, '').slice(-10);
+                              return !isGen ? raw : (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
+                            })()}
+                          </td>
+                          <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
+                            {r.phone}
+                          </td>
+                          <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                            <span
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: 10,
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                backgroundColor: r.responseInterest === 'Interested' ? '#ecfdf5' : '#f1f5f9',
+                                color: r.responseInterest === 'Interested' ? '#047857' : '#64748b',
+                              }}
+                            >
+                              {r.responseInterest || 'Pending'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 

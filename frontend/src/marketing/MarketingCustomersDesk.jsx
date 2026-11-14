@@ -862,7 +862,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   <div>
                     <div className="mkt-form-help">State / Province</div>
                     <div style={{ fontWeight: 600, color: '#334155' }}>
-                      {selectedCustomer.state || 'Maharashtra'}
+                      {selectedCustomer.state || '—'}
                     </div>
                   </div>
                   <div>

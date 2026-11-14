@@ -197,6 +197,7 @@ export default function SubadminDesksReferenceView() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* 1. Header Banner & Docs Link */}
       <div
+        className="sales-ref-hero"
         style={{
           background: 'linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)',
           borderRadius: 20,
@@ -208,7 +209,7 @@ export default function SubadminDesksReferenceView() {
           border: '1px solid rgba(255, 255, 255, 0.1)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
           <span
             style={{
               background: 'rgba(99, 102, 241, 0.25)',
@@ -262,7 +263,7 @@ export default function SubadminDesksReferenceView() {
 
       {/* 2. Visual Mermaid Topology Card */}
       <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 18, padding: '22px 24px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
               Summary of the 9 Desks &amp; Page Breakdown
@@ -271,7 +272,7 @@ export default function SubadminDesksReferenceView() {
               Architecture map linking the Sub Admin root hub to its 9 operational desks.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {categories.map((cat) => (
               <button
                 key={cat}
@@ -296,7 +297,7 @@ export default function SubadminDesksReferenceView() {
         </div>
 
         {/* 3x3 Desks Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
           {filteredDesks.map((desk) => (
             <div
               key={desk.id}
@@ -384,7 +385,7 @@ export default function SubadminDesksReferenceView() {
 
       {/* 3. Comprehensive Master Reference Table */}
       <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-        <div style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
               Master Operational Desks Reference Table
@@ -483,7 +484,7 @@ export default function SubadminDesksReferenceView() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, fontFamily: 'monospace', fontSize: '0.78rem' }}>
+        <div style={{ display: 'flex', gap: 10, fontFamily: 'monospace', fontSize: '0.78rem', flexWrap: 'wrap' }}>
           <span style={{ background: '#ffffff', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: 8, color: '#065f46', fontWeight: 700 }}>
             crm-backend-nest: tsc (0 errors)
           </span>

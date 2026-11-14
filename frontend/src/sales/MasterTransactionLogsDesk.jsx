@@ -80,7 +80,7 @@ export function synthesizeMasterTransactions(txList = [], custList = [], invList
           phone: inv.phone || '',
           email: inv.email || '',
           city: inv.city || 'India',
-          state: inv.state || 'Maharashtra',
+          state: inv.state || '',
           category: inv.category || 'IT & Software',
           amount: Number(inv.amount || inv.totalAmount || 0),
           gstAmount: Number(inv.gstAmount || 0),
@@ -843,7 +843,7 @@ export default function MasterTransactionLogsDesk({
                               <Phone size={10} /> Call
                             </a>
                             <a
-                              href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(identity.contactPerson)},%20AdMafia%20Financial%20Ops%20regarding%20transaction%20${encodeURIComponent(tx.ref || tx.receiptNo || 'reference')}.`}
+                              href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(identity.contactPerson)},%20Ad%20Mafia%20Financial%20Ops%20regarding%20transaction%20${encodeURIComponent(tx.ref || tx.receiptNo || 'reference')}.`}
                               target="_blank"
                               rel="noreferrer"
                               className="desk-action-btn"
@@ -1202,7 +1202,7 @@ export default function MasterTransactionLogsDesk({
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <a
-                    href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(identity.contactPerson)},%20AdMafia%20Financial%20Ops%20regarding%20transaction%20${encodeURIComponent(selectedTx.ref || selectedTx.receiptNo || 'reference')}%20amount%20Rs.${selectedTx.amount}.`}
+                    href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(identity.contactPerson)},%20Ad%20Mafia%20Financial%20Ops%20regarding%20transaction%20${encodeURIComponent(selectedTx.ref || selectedTx.receiptNo || 'reference')}%20amount%20Rs.${selectedTx.amount}.`}
                     target="_blank"
                     rel="noreferrer"
                     className="desk-action-btn"
@@ -1271,7 +1271,7 @@ export default function MasterTransactionLogsDesk({
               >
                 <div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
-                    ADMAFIA MARKETING
+                    AD MAFIA MARKETING
                   </div>
                   <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
                     Official Payment Acknowledgement &amp; Tax Receipt
@@ -1345,7 +1345,7 @@ export default function MasterTransactionLogsDesk({
                   <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '12px 10px', fontSize: '0.84rem' }}>
                       <div style={{ fontWeight: 700, color: '#0f172a' }}>
-                        {activeReceipt.typeLabel || 'Meta & Google Ads Campaign Service'}
+                        {activeReceipt.typeLabel || 'Verified B2B Lead Generation & Growth Service'}
                       </div>
                       <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
                         {activeReceipt.description || 'Marketing Wallet Balance & Campaign Deployment'}

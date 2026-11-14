@@ -95,7 +95,7 @@ export default function SuperAdminAddUserDesk() {
     username: '',
     category: 'IT & Software',
     city: 'Mumbai',
-    state: 'Maharashtra',
+    state: '',
     password: generateRandomPassword('AdMafia@'),
     initialBalance: '0',
   });
@@ -195,9 +195,9 @@ export default function SuperAdminAddUserDesk() {
 
   // Copy Credentials Helper
   const handleCopyCredentials = (c) => {
-    const text = `AdMafia Customer Portal Login Credentials:
+    const text = `Ad Mafia Customer Portal Login Credentials:
 Portal URL: ${c.loginUrl || 'https://admafia.marketing/portal'}
-Business / Account: ${c.companyName || c.fullName || 'AdMafia Account'}
+Business / Account: ${c.companyName || c.fullName || 'Ad Mafia Account'}
 Mobile (Login): ${c.mobile || c.phone ? '+91 ' + (c.mobile || c.phone) : 'N/A'}
 Email: ${c.email || 'N/A'}
 Username: ${c.username || 'N/A'}
@@ -302,7 +302,7 @@ Role: ${c.role || 'Business Customer'}`;
           username: '',
           category: 'IT & Software',
           city: 'Mumbai',
-          state: 'Maharashtra',
+          state: '',
           password: generateRandomPassword('AdMafia@'),
           initialBalance: '0',
         });
@@ -685,7 +685,7 @@ Role: ${c.role || 'Business Customer'}`;
                   <label>
                     <MapPin size={14} /> City &amp; State *
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div className="sa-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     <input
                       type="text"
                       required
@@ -696,7 +696,7 @@ Role: ${c.role || 'Business Customer'}`;
                     <input
                       type="text"
                       required
-                      placeholder="State (e.g. Maharashtra)"
+                      placeholder="e.g. Gujarat, Delhi, Karnataka"
                       value={bizForm.state}
                       onChange={(e) => setBizForm({ ...bizForm, state: e.target.value })}
                     />
@@ -723,7 +723,7 @@ Role: ${c.role || 'Business Customer'}`;
 
               {/* Row 5: PROMINENT PORTAL LOGIN PASSWORD */}
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                   <label style={{ fontSize: '0.84rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
                     <Lock size={15} color="#4f46e5" /> Customer Portal Login Password *
                   </label>
@@ -797,7 +797,7 @@ Role: ${c.role || 'Business Customer'}`;
                   type="submit"
                   className="sa-action-btn sa-btn-primary"
                   disabled={loading}
-                  style={{ minWidth: 240, padding: '12px 24px', fontSize: 14 }}
+                  style={{ minWidth: 'min(240px, 100%)', padding: '12px 24px', fontSize: 14 }}
                 >
                   <Building2 size={16} />
                   {loading ? 'Creating Business Account...' : 'Register Business & Create Login'}
@@ -940,7 +940,7 @@ Role: ${c.role || 'Business Customer'}`;
 
               {/* Row 4: PROMINENT USER LOGIN PASSWORD */}
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                   <label style={{ fontSize: '0.84rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
                     <Lock size={15} color="#4f46e5" /> User Login Password *
                   </label>
@@ -1034,7 +1034,7 @@ Role: ${c.role || 'Business Customer'}`;
                   type="submit"
                   className="sa-action-btn sa-btn-primary"
                   disabled={loading}
-                  style={{ minWidth: 240, padding: '12px 24px', fontSize: 14 }}
+                  style={{ minWidth: 'min(240px, 100%)', padding: '12px 24px', fontSize: 14 }}
                 >
                   <UserPlus size={16} />
                   {loading ? 'Creating User Account...' : 'Create User Login'}
@@ -1070,8 +1070,8 @@ Role: ${c.role || 'Business Customer'}`;
               <Users size={18} className="sa-brand-icon" />
               <h3>Platform Users &amp; Staff Roster</h3>
             </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <div className="sa-search-wrap" style={{ minWidth: 260 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="sa-search-wrap" style={{ minWidth: 'min(260px, 100%)' }}>
                 <Search size={15} />
                 <input
                   type="text"

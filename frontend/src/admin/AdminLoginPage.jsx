@@ -94,7 +94,6 @@ export default function AdminLoginPage({
             background: 'linear-gradient(180deg, #131c2e 0%, #0d1527 100%)',
             border: '1px solid rgba(255, 255, 255, 0.14)',
             borderRadius: '20px',
-            padding: '34px 30px',
             boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6)',
             boxSizing: 'border-box',
           }}
@@ -299,7 +298,7 @@ export default function AdminLoginPage({
 
       {/* Bottom Bar */}
       <footer className="adm-login-bottom-bar">
-        &copy; {new Date().getFullYear()} AdMafia Marketing CRM &bull; Multi-Department Operations Gateway &bull; MongoDB Protected
+        &copy; {new Date().getFullYear()} Ad Mafia Marketing CRM &bull; Multi-Department Operations Gateway &bull; MongoDB Protected
       </footer>
     </div>
   );

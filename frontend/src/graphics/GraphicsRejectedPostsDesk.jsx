@@ -270,7 +270,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {rejectedPosts.map((p) => (
             <div key={p.id} className="graphics-table-card" style={{ padding: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '140px minmax(260px, 1fr) minmax(260px, 1fr) 180px', gap: 18, alignItems: 'center' }}>
+              <div className="gfx-rejected-grid" style={{ display: 'grid', gridTemplateColumns: '140px minmax(260px, 1fr) minmax(260px, 1fr) 180px', gap: 18, alignItems: 'center' }}>
                 {/* Artwork Thumbnail */}
                 <div>
                   <div

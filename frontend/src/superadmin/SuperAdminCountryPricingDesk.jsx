@@ -458,7 +458,7 @@ export default function SuperAdminCountryPricingDesk() {
               Simulate an incoming visitor request with any public IP address to verify how Cloudflare headers and offline MaxMind GeoIP resolve their country, currency, and daily rate.
             </p>
 
-            <form onSubmit={handleTestIp} style={{ display: 'flex', gap: '12px', maxWidth: '640px', marginBottom: '24px' }}>
+            <form onSubmit={handleTestIp} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', maxWidth: '640px', marginBottom: '24px' }}>
               <input
                 type="text"
                 placeholder="Enter test IP address (e.g. 94.200.0.1 or 8.8.8.8)"
@@ -466,6 +466,7 @@ export default function SuperAdminCountryPricingDesk() {
                 onChange={(e) => setTestIp(e.target.value)}
                 style={{
                   flex: 1,
+                  minWidth: 'min(220px, 100%)',
                   padding: '10px 14px',
                   borderRadius: '8px',
                   border: '1px solid #cbd5e1',
@@ -880,6 +881,9 @@ export default function SuperAdminCountryPricingDesk() {
         .cp-tabs {
           display: flex;
           gap: 8px;
+          flex-wrap: wrap;
+          overflow-x: auto;
+          max-width: 100%;
         }
         .cp-tab-btn {
           display: inline-flex;
@@ -924,6 +928,8 @@ export default function SuperAdminCountryPricingDesk() {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          flex-wrap: wrap;
+          gap: 10px;
           padding: 16px 20px;
           border-bottom: 1px solid #f1f5f9;
         }
@@ -935,7 +941,7 @@ export default function SuperAdminCountryPricingDesk() {
           border: 1px solid #cbd5e1;
           padding: 6px 12px;
           border-radius: 8px;
-          width: 320px;
+          width: min(320px, 100%);
         }
         .cp-search-wrap input {
           border: none;
@@ -1228,6 +1234,22 @@ export default function SuperAdminCountryPricingDesk() {
           border-radius: 6px;
           font-weight: 700;
           cursor: pointer;
+        }
+        @media (max-width: 640px) {
+          .country-pricing-desk {
+            padding: 14px 4px;
+          }
+          .cp-form-row-2,
+          .cp-form-row-3 {
+            grid-template-columns: 1fr;
+          }
+          .cp-modal-footer {
+            flex-wrap: wrap;
+          }
+          .cp-tab-btn {
+            font-size: 0.8rem;
+            padding: 7px 11px;
+          }
         }
       `}</style>
     </div>

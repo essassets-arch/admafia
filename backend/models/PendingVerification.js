@@ -12,7 +12,7 @@ const PendingVerificationSchema = new mongoose.Schema({
   dailyRate: { type: Number, default: 300 },
   utrNumber: { type: String, default: 'Awaiting Payment' },
   paymentStatus: { type: String, default: 'pending' }, // pending | verified | paid
-  profileStatus: { type: String, default: 'complete' }, // incomplete | complete
+  profileStatus: { type: String, default: 'incomplete' }, // incomplete | complete
   queueType: { type: String, default: 'Payment Pending', index: true },
   submittedAt: { type: Date, default: Date.now, index: true },
   verifiedAt: { type: Date, default: null }

@@ -1,0 +1,198 @@
+/* ==========================================================================
+   Ad Mafia — Global Responsive Safety Rails & Cross-Portal Breakpoint System
+   Loaded LAST in main.jsx so no screen (360px, 390px, 768px, 1024px) can
+   ever trigger horizontal viewport overflow.
+   ========================================================================== */
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+#root {
+  max-width: 100%;
+  min-width: 0;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* Prevent flex/grid main areas across all portals from blowing out width */
+.sa-main,
+.sa-content,
+.marketing-main-area,
+.marketing-page-body,
+.graphics-main-area,
+.graphics-page-body,
+.sales-main-viewport,
+.sales-body-wrap,
+.desk-page-container {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Universal Touch-Scrollable Table Wrapper Safety Rails */
+.responsive-table-wrap,
+.sa-table-wrap,
+.marketing-table-card,
+.graphics-table-card,
+.desk-table-card,
+.appr-table-card,
+.tx-table-card,
+.cp-table-card {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Reusable Responsive Grid Helper Classes */
+.resp-grid-auto {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+
+.resp-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.resp-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.resp-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+/* ==========================================================================
+   TABLET BREAKPOINT (<= 1024px)
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .resp-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .mkt-mobile-menu-btn {
+    display: inline-flex !important;
+  }
+}
+
+/* ==========================================================================
+   SMALL TABLET / SPLIT-PANE BREAKPOINT (<= 900px)
+   ========================================================================== */
+@media (max-width: 900px) {
+  .resp-grid-3,
+  .mkt-split-grid,
+  .gfx-rejected-grid,
+  .gfx-upload-split,
+  .sa-split-grid,
+  .sa-dash-split {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ==========================================================================
+   MOBILE BREAKPOINT (<= 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .resp-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sa-pagination,
+  .marketing-pagination,
+  .graphics-pagination {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .marketing-live-pill,
+  .marketing-clock-tag,
+  .mkt-user-role,
+  .sa-admin-info {
+    display: none !important;
+  }
+
+  .sa-topbar h1 {
+    font-size: 1rem !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    max-width: 100%;
+  }
+}
+
+/* ==========================================================================
+   COMPACT PHONE SAFETY RAILS (<= 640px — covers 390px & 360px)
+   ========================================================================== */
+@media (max-width: 640px) {
+  .resp-grid-4,
+  .mkt-form-2col,
+  .gfx-specs-2col,
+  .sa-form-2col,
+  .sa-form-3col,
+  .cp-form-row-2,
+  .cp-form-row-3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .mkt-days-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .sales-presets-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .graphics-clock-tag,
+  .graphics-live-pill,
+  .graphics-bc-dept {
+    display: none !important;
+  }
+
+  /* Modal & Auth Card Viewport Overflow Guard */
+  .sales-modal-card,
+  .sa-modal,
+  .sa-modal-card,
+  .marketing-modal,
+  .marketing-modal-card,
+  .graphics-modal,
+  .graphics-modal-card,
+  .cp-modal {
+    max-width: calc(100vw - 24px) !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .adm-form-card,
+  .sales-auth-card {
+    max-width: calc(100vw - 24px) !important;
+    padding: 20px 16px !important;
+    border-radius: 16px !important;
+  }
+
+  /* Preformatted JSON / URI blocks never push viewport wider than screen */
+  pre,
+  code {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}

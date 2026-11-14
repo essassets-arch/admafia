@@ -83,6 +83,28 @@ services:
     networks:
       - admafia-net
 
+  # 5. Mongo Express — Live MongoDB Web Console (Bound strictly to 127.0.0.1:8081 behind Nginx /db-console/)
+  mongo-express:
+    image: mongo-express:1.0.2-20-alpine3.19
+    container_name: admafia-mongo-express
+    restart: always
+    env_file:
+      - path: ./backend/.env
+        required: false
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      ME_CONFIG_MONGODB_URL: ${ME_MONGODB_URL:-mongodb://mongo:27017/?directConnection=true}
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+      ME_CONFIG_SITE_BASEURL: /db-console/
+      ME_CONFIG_BASICAUTH_USERNAME: ${ME_ADMIN_USER:-admafia_db_admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ME_ADMIN_PASS:-AdMafiaLiveDB@2026!}
+    ports:
+      - "127.0.0.1:8081:8081"
+    networks:
+      - admafia-net
+
 volumes:
   mongo_data:
   redis_data:

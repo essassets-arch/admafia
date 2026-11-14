@@ -3,7 +3,7 @@ import { CustomerLoginPage, CustomerRegisterPage } from '../portal/AuthPages';
 
 /**
  * Unified Customer & Agency Authentication Entry (/auth)
- * Enforces mandatory Meta WhatsApp Cloud API v26.0 OTP verification and MongoDB JWT sessions.
+ * Enforces mandatory WhatsApp OTP verification and secure JWT sessions.
  */
 export default function AuthPage({ onBackToHome, onAuthenticated }) {
   const [mode, setMode] = useState('login');

@@ -361,7 +361,7 @@ async function creditOnce({ customerId, cleanPhone, username, cleanAmount, utr, 
     await Customer.updateOne({ _id: cust._id }, { $set: { paymentStatus: 'paid', updatedAt: now } }, { session });
 
     // 5. Ledger transaction ('Verified ✓') - insert or upgrade a previous failed attempt with the same reference
-    const txDesc = description || `Ad Wallet Balance Top-Up (${currencySymbol}${cleanAmount.toLocaleString()} Added)`;
+    const txDesc = description || `Growth Wallet Balance Top-Up (${currencySymbol}${cleanAmount.toLocaleString()} Added)`;
     let txDoc;
     if (existingTx) {
       txDoc = await WalletTransaction.findOneAndUpdate(
@@ -449,7 +449,7 @@ async function creditOnce({ customerId, cleanPhone, username, cleanAmount, utr, 
           customerId: cust._id,
           paymentRecordId: payId,
           invoiceNumber: invoiceNo,
-          particulars: 'Meta Ads Campaign Ad Spend Budget Credit',
+          particulars: 'Lead Generation & Growth Wallet Credit',
           sacCode: '998311',
           baseAmount: baseAmt,
           cgstAmount: cgstAmt,
@@ -727,7 +727,7 @@ export async function deductWalletForDay({ cust, amount, activeDays, force, manu
         activeDays: finalDays,
         isDeductedToday: true,
         lastDeductedAt: w.lastDeductedAt,
-        message: "Today's ad budget is already booked and running. No duplicate deduction made.",
+        message: "Today's daily delivery budget is already booked and running. No duplicate deduction made.",
       };
     };
 
@@ -738,7 +738,7 @@ export async function deductWalletForDay({ cust, amount, activeDays, force, manu
     const insufficient = (w) =>
       new HttpError(
         400,
-        `Insufficient wallet balance (${currencySymbol}${Number(w.availableBalance || 0)}) for ${currencySymbol}${spendAmt} daily ad spend.`
+        `Insufficient wallet balance (${currencySymbol}${Number(w.availableBalance || 0)}) for ${currencySymbol}${spendAmt} daily delivery budget.`
       );
 
     if (Number(wallet.availableBalance || 0) < spendAmt) throw insufficient(wallet);
@@ -784,7 +784,7 @@ export async function deductWalletForDay({ cust, amount, activeDays, force, manu
           amount: spendAmt,
           balanceAfter: nextBal,
           referenceUtr: `AUTO-AD-${Date.now()}-${randomBytes(2).toString('hex')}`,
-          description: `Daily Meta Ads Campaign Spend Deduction (-${currencySymbol}${spendAmt}/day)`,
+          description: `Daily Lead Delivery Service Pacing (-${currencySymbol}${spendAmt}/day)`,
           paymentMethod: 'Daily Auto-Debit',
           status: 'Settled ✓',
           currency: walletCurrency,

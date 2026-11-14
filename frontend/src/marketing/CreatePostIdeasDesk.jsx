@@ -278,7 +278,7 @@ export default function CreatePostIdeasDesk({
       {/* 2. Customer & Idea Selector Controls */}
       <div className="marketing-controls-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', flex: 1 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '240px', flex: 1 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 'min(100%, 220px)', flex: 1 }}>
             <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#475569' }}>1. ACTIVE CUSTOMER</label>
             <select
               className="marketing-select"
@@ -296,7 +296,7 @@ export default function CreatePostIdeasDesk({
             </select>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '280px', flex: 1.5 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 'min(100%, 220px)', flex: 1.5 }}>
             <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#475569' }}>
               2. LINK TO SAVED BUILD IDEA (CUSTOMER-SCOPED)
             </label>
@@ -317,7 +317,7 @@ export default function CreatePostIdeasDesk({
       </div>
 
       {/* 3. Main Content Split: Form vs Live Simulator Preview */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: '24px' }}>
+      <div className="mkt-split-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: '24px' }}>
         {/* Left Column: Post Creation Form */}
         <div className="marketing-table-card" style={{ padding: '24px' }}>
           <h3 style={{ margin: '0 0 18px 0', fontSize: '1.15rem', fontWeight: 800 }}>
@@ -337,7 +337,7 @@ export default function CreatePostIdeasDesk({
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="mkt-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div className="mkt-form-group">
               <label className="mkt-form-label">Destination Platform</label>
               <select
@@ -377,7 +377,7 @@ export default function CreatePostIdeasDesk({
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px' }}>
+          <div className="mkt-form-2col" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px' }}>
             <div className="mkt-form-group">
               <label className="mkt-form-label">Hashtags</label>
               <input
@@ -467,7 +467,7 @@ export default function CreatePostIdeasDesk({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="mkt-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div className="mkt-form-group">
               <label className="mkt-form-label">Campaign Association (Optional)</label>
               <input
@@ -490,7 +490,7 @@ export default function CreatePostIdeasDesk({
           </div>
 
           {/* Action Row */}
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '16px' }}>
             <button
               type="button"
               className="mkt-btn-table-action"

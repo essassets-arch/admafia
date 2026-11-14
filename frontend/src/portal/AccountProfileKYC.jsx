@@ -14,8 +14,13 @@ import {
   Wallet,
   Clock,
   Sparkles,
+  AlertCircle,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
+import {
+  evaluateCustomerProfileCompletion,
+  sanitizeCustomerProfileFields,
+} from '../utils/profileCompletion';
 
 export default function AccountProfileKYC({
   customer,
@@ -30,18 +35,20 @@ export default function AccountProfileKYC({
     } catch (e) {}
 
     const c = customer || {};
+    const merged = { ...u, ...c };
+    const clean = sanitizeCustomerProfileFields(merged);
 
     return {
       companyName: c.companyName || c.name || u.companyName || u.name || '',
-      category: c.category || u.category || 'IT & Software',
+      category: clean.category,
       websiteUrl: c.website || c.domain || u.website || u.domain || '',
-      industry: c.industry || u.industry || '',
+      industry: clean.industry,
       contactPerson: c.contactPerson || c.contact || u.contactPerson || u.contact || c.username || u.username || '',
       email: c.email || u.email || '',
       phone: c.phone || u.phone || '',
       personalEmail: c.personalEmail || u.personalEmail || '',
-      city: c.city || c?.address?.city || u.city || '',
-      state: c.state || c?.address?.state || u.state || '',
+      city: clean.city,
+      state: clean.state,
       country: c.country || u.country || 'India',
       profile_status: c.profileStatus || c.profile_status || u.profileStatus || u.profile_status || 'incomplete',
     };
@@ -55,17 +62,18 @@ export default function AccountProfileKYC({
   // Sync real-time when customer prop changes
   useEffect(() => {
     if (customer) {
+      const clean = sanitizeCustomerProfileFields(customer);
       setProfileData((prev) => ({
         companyName: customer.companyName || customer.name || prev.companyName || '',
-        category: customer.category || prev.category || 'IT & Software',
+        category: clean.category || prev.category || '',
         websiteUrl: customer.website || customer.domain || prev.websiteUrl || '',
-        industry: customer.industry || prev.industry || '',
+        industry: clean.industry || prev.industry || '',
         contactPerson: customer.contactPerson || customer.contact || customer.username || prev.contactPerson || '',
         email: customer.email || prev.email || '',
         phone: customer.phone || prev.phone || '',
         personalEmail: customer.personalEmail || prev.personalEmail || '',
-        city: customer.city || customer?.address?.city || prev.city || '',
-        state: customer.state || customer?.address?.state || prev.state || '',
+        city: clean.city || prev.city || '',
+        state: clean.state || prev.state || '',
         country: customer.country || prev.country || 'India',
         profile_status: customer.profileStatus || customer.profile_status || prev.profile_status || 'incomplete',
       }));
@@ -81,19 +89,20 @@ export default function AccountProfileKYC({
         .then((res) => {
           if (res?.customer) {
             const c = res.customer;
+            const clean = sanitizeCustomerProfileFields(c);
             setProfileData((prev) => ({
               companyName: c.companyName || c.name || prev.companyName || '',
-              category: c.category || prev.category || 'IT & Software',
+              category: clean.category || prev.category || '',
               websiteUrl: c.website || c.domain || prev.websiteUrl || '',
-              industry: c.industry || prev.industry || '',
+              industry: clean.industry || prev.industry || '',
               contactPerson: c.contactPerson || c.contact || c.username || prev.contactPerson || '',
               email: c.email || prev.email || '',
               phone: c.phone || prev.phone || '',
               personalEmail: c.personalEmail || prev.personalEmail || '',
-              city: c.city || c?.address?.city || prev.city || '',
-              state: c.state || c?.address?.state || prev.state || '',
+              city: clean.city || prev.city || '',
+              state: clean.state || prev.state || '',
               country: c.country || prev.country || 'India',
-              profile_status: c.profileStatus || c.profile_status || prev.profile_status || 'complete',
+              profile_status: c.profileStatus || c.profile_status || prev.profile_status || 'incomplete',
             }));
           }
         })
@@ -105,20 +114,21 @@ export default function AccountProfileKYC({
     const handleActiveUserChange = (e) => {
       if (e?.detail) {
         const u = e.detail;
+        const clean = sanitizeCustomerProfileFields(u);
         setProfileData((prev) => ({
           ...prev,
           companyName: u.companyName || u.name || prev.companyName || '',
-          category: u.category || prev.category || 'IT & Software',
+          category: clean.category || prev.category || '',
           websiteUrl: u.website || u.domain || prev.websiteUrl || '',
-          industry: u.industry || prev.industry || '',
+          industry: clean.industry || prev.industry || '',
           contactPerson: u.contactPerson || u.contact || u.username || prev.contactPerson || '',
           email: u.email || prev.email || '',
           phone: u.phone || prev.phone || '',
           personalEmail: u.personalEmail || prev.personalEmail || '',
-          city: u.city || prev.city || '',
-          state: u.state || prev.state || '',
+          city: clean.city || prev.city || '',
+          state: clean.state || prev.state || '',
           country: u.country || prev.country || 'India',
-          profile_status: u.profileStatus || u.profile_status || prev.profile_status || 'complete',
+          profile_status: u.profileStatus || u.profile_status || prev.profile_status || 'incomplete',
         }));
       }
     };
@@ -137,28 +147,40 @@ export default function AccountProfileKYC({
 
     const compName = (profileData.companyName || '').trim();
     const contactName = (profileData.contactPerson || '').trim();
-    const rawPhone = String(profileData.phone || '').replace(/\D/g, '').slice(-10);
+    const rawDigits = String(profileData.phone || '').replace(/\D/g, '');
+    const isIndia = (profileData.country || 'India').trim().toLowerCase() === 'india';
+    const rawPhone = isIndia ? rawDigits.slice(-10) : rawDigits;
     const opCity = (profileData.city || '').trim();
+    const opState = (profileData.state || '').trim();
     const opEmail = (profileData.email || '').trim();
+    const chosenCategory = (profileData.category || '').trim();
 
     if (!compName) {
       setSaveError('Company Name is required.');
+      return;
+    }
+    if (!chosenCategory) {
+      setSaveError('Please select your Business Category.');
       return;
     }
     if (!contactName) {
       setSaveError('Contact Person Name is required.');
       return;
     }
-    if (rawPhone.length !== 10) {
-      setSaveError('Please enter a valid 10-digit mobile number.');
+    if (isIndia ? rawPhone.length !== 10 : rawPhone.length < 7) {
+      setSaveError(isIndia ? 'Please enter a valid 10-digit mobile number.' : 'Please enter a valid mobile number.');
       return;
     }
-    if (!opEmail) {
-      setSaveError('Business Email is required.');
+    if (!opEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opEmail)) {
+      setSaveError('Please enter a valid Business Email address.');
       return;
     }
     if (!opCity) {
-      setSaveError('City is required.');
+      setSaveError('Operating City is required.');
+      return;
+    }
+    if (!opState) {
+      setSaveError('State / Province is required.');
       return;
     }
 
@@ -166,33 +188,39 @@ export default function AccountProfileKYC({
 
     const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ', Today';
 
-    const updatedPayload = {
+    const draftPayload = {
       ...customer,
       companyName: compName,
       name: compName,
       domain: (profileData.websiteUrl || '').trim(),
       website: (profileData.websiteUrl || '').trim(),
-      category: profileData.category || 'IT & Software',
-      industry: (profileData.industry || '').trim() || 'Software & Services',
+      category: chosenCategory,
+      industry: (profileData.industry || '').trim() || chosenCategory,
       contactPerson: contactName,
       contact: contactName,
       email: opEmail,
       phone: rawPhone,
       personalEmail: (profileData.personalEmail || '').trim(),
       city: opCity,
-      state: (profileData.state || '').trim(),
+      state: opState,
       country: (profileData.country || 'India').trim(),
       profile_status: 'complete',
       profileStatus: 'complete',
-      kycPercent: 100,
       verified: true,
       completedAt: nowStr,
       address: {
         ...(customer?.address || {}),
         city: opCity,
-        state: (profileData.state || '').trim(),
+        state: opState,
         country: (profileData.country || 'India').trim(),
       },
+    };
+    const submitEval = evaluateCustomerProfileCompletion(draftPayload);
+    const updatedPayload = {
+      ...draftPayload,
+      profile_status: submitEval.profileStatus,
+      profileStatus: submitEval.profileStatus,
+      kycPercent: submitEval.kycPercent,
     };
 
     // 1. Direct PostgreSQL Backend Persistence
@@ -306,10 +334,17 @@ export default function AccountProfileKYC({
     setTimeout(() => setSavedSuccess(false), 5000);
   };
 
-  const isProfileComplete = profileData.profile_status === 'complete' || customer?.profileStatus === 'complete';
+  const profEval = evaluateCustomerProfileCompletion({ ...customer, ...profileData, website: profileData.websiteUrl });
+  const isProfileComplete = profEval.isComplete;
   const effectiveWallet = Number(customer?.walletBalance ?? customer?.balance ?? 0);
   const effectivePacing = Number(customer?.dailyAdSpend || 300);
   const isLeadEligible = effectiveWallet >= effectivePacing && isProfileComplete;
+  const missingKeySet = new Set(profEval.missingKeys || []);
+  const missingFieldStyle = {
+    borderColor: '#f59e0b',
+    backgroundColor: '#fffbeb',
+    boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.14)',
+  };
 
   const handleScrollToEdit = () => {
     const el = document.getElementById('profile-edit-section');
@@ -325,7 +360,7 @@ export default function AccountProfileKYC({
         <div>
           <h2>Account &amp; Business Profile</h2>
           <p className="profile-sub">
-            Verified organization details, authorized administrator contacts, geographic territory, and ad distribution eligibility.
+            Verified organization details, authorized administrator contacts, geographic territory, and lead distribution eligibility.
           </p>
         </div>
         <button
@@ -338,6 +373,53 @@ export default function AccountProfileKYC({
           <span>✏️ Edit Profile</span>
         </button>
       </div>
+
+      {/* Incomplete Profile Alert Strip */}
+      {!isProfileComplete && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+            border: '1.5px solid #f59e0b',
+            borderRadius: '14px',
+            padding: '14px 18px',
+            marginBottom: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: '1 1 260px' }}>
+            <AlertCircle size={20} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div>
+              <div style={{ fontWeight: 800, color: '#92400e', fontSize: '0.92rem' }}>
+                Profile {profEval.kycPercent}% Complete — {profEval.missingFields.length} required {profEval.missingFields.length === 1 ? 'field' : 'fields'} remaining
+              </div>
+              <div style={{ fontSize: '0.82rem', color: '#b45309', marginTop: '3px' }}>
+                Missing: <strong>{profEval.missingFields.join(', ')}</strong>. Complete the highlighted fields below and save to reach 100%.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleScrollToEdit}
+            style={{
+              background: '#d97706',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '9px 16px',
+              fontSize: '0.84rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Complete Missing Fields ↓
+          </button>
+        </div>
+      )}
 
       {/* 2. Comprehensive Profile Overview Dashboard — Displays ALL customer-filled data cleanly */}
       <div className="profile-overview-dashboard">
@@ -354,19 +436,25 @@ export default function AccountProfileKYC({
                 </span>
               ) : (
                 <span className="badge-kyc-pending">
-                  <Clock size={14} /> ⏳ Profile Setup (25%)
+                  <Clock size={14} /> ⏳ Profile {profEval.kycPercent}% Complete
                 </span>
               )}
-              <span className="badge-category-pill">
-                🏷️ {profileData.category || customer?.category || 'IT & Software'}
-              </span>
+              {profileData.category ? (
+                <span className="badge-category-pill">
+                  🏷️ {profileData.category}
+                </span>
+              ) : (
+                <span className="badge-kyc-pending" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d' }}>
+                  ⚠️ Category Not Selected
+                </span>
+              )}
               {(profileData.city || profileData.state) && (
                 <span style={{ fontSize: '0.8rem', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
                   📍 {[profileData.city, profileData.state].filter(Boolean).join(', ')}
                 </span>
               )}
               <span className="badge-wallet-info">
-                💰 Wallet: ₹{effectiveWallet.toLocaleString('en-IN')}
+                💰 Growth Wallet: ₹{effectiveWallet.toLocaleString('en-IN')}
               </span>
               {isLeadEligible ? (
                 <span style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -374,7 +462,7 @@ export default function AccountProfileKYC({
                 </span>
               ) : (
                 <span style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700 }}>
-                  ⚠️ {effectiveWallet < effectivePacing ? 'Low Balance (Min ₹' + effectivePacing + ')' : 'Profile Incomplete'}
+                  ⚠️ {!isProfileComplete ? `Profile Incomplete (${profEval.kycPercent}%)` : 'Low Balance (Min ₹' + effectivePacing + ')'}
                 </span>
               )}
             </div>
@@ -384,13 +472,13 @@ export default function AccountProfileKYC({
             <div className="progress-bar-container">
               <div className="progress-bar-label">
                 <span>Profile Readiness</span>
-                <strong>{isProfileComplete ? '100%' : '25%'}</strong>
+                <strong>{profEval.kycPercent}%</strong>
               </div>
               <div className="progress-track">
                 <div
                   className="progress-fill"
                   style={{
-                    width: isProfileComplete ? '100%' : '25%',
+                    width: `${profEval.kycPercent}%`,
                     background: isProfileComplete ? '#10b981' : '#f59e0b',
                   }}
                 ></div>
@@ -416,11 +504,13 @@ export default function AccountProfileKYC({
               </div>
               <div className="profile-kv-row">
                 <span className="profile-kv-label">Business Category:</span>
-                <span className="profile-kv-val">{profileData.category || customer?.category || 'IT & Software'}</span>
+                <span className="profile-kv-val" style={!profileData.category ? { color: '#d97706', fontWeight: 700 } : undefined}>
+                  {profileData.category || '⚠️ Required — Select below'}
+                </span>
               </div>
               <div className="profile-kv-row">
                 <span className="profile-kv-label">Primary Industry:</span>
-                <span className="profile-kv-val">{profileData.industry || customer?.industry || 'Not specified'}</span>
+                <span className="profile-kv-val">{profileData.industry || 'Not specified'}</span>
               </div>
               <div className="profile-kv-row">
                 <span className="profile-kv-label">Website / Domain:</span>
@@ -463,7 +553,9 @@ export default function AccountProfileKYC({
               </div>
               <div className="profile-kv-row">
                 <span className="profile-kv-label">Official Email:</span>
-                <span className="profile-kv-val">{profileData.email || customer?.email || '—'}</span>
+                <span className="profile-kv-val" style={missingKeySet.has('email') ? { color: '#d97706', fontWeight: 700 } : undefined}>
+                  {profileData.email || customer?.email || '⚠️ Required'}
+                </span>
               </div>
               <div className="profile-kv-row">
                 <span className="profile-kv-label">Personal Email:</span>
@@ -487,11 +579,15 @@ export default function AccountProfileKYC({
             <div className="profile-key-values">
               <div className="profile-kv-row">
                 <span className="profile-kv-label">Operating City:</span>
-                <span className="profile-kv-val">{profileData.city || customer?.city || 'Not specified'}</span>
+                <span className="profile-kv-val" style={missingKeySet.has('city') ? { color: '#d97706', fontWeight: 700 } : undefined}>
+                  {profileData.city || '⚠️ Required'}
+                </span>
               </div>
               <div className="profile-kv-row">
                 <span className="profile-kv-label">State / Province:</span>
-                <span className="profile-kv-val">{profileData.state || customer?.state || 'Not specified'}</span>
+                <span className="profile-kv-val" style={missingKeySet.has('state') ? { color: '#d97706', fontWeight: 700 } : undefined}>
+                  {profileData.state || '⚠️ Required'}
+                </span>
               </div>
               <div className="profile-kv-row">
                 <span className="profile-kv-label">Operating Country:</span>
@@ -499,12 +595,12 @@ export default function AccountProfileKYC({
               </div>
               <div className="profile-kv-row">
                 <span className="profile-kv-label">Delivery Scope:</span>
-                <span className="profile-kv-val" style={{ color: '#4f46e5' }}>Pan-India Targeted Ads</span>
+                <span className="profile-kv-val" style={{ color: '#4f46e5' }}>Territory &amp; Category Lead Matching</span>
               </div>
             </div>
           </div>
 
-          {/* Panel 4: Account & Marketing Distribution Ledger */}
+          {/* Panel 4: Account & Lead Distribution Ledger */}
           <div className="profile-info-card-box">
             <div className="profile-info-card-header">
               <div className="profile-info-card-icon" style={{ color: '#7c3aed' }}>
@@ -526,11 +622,11 @@ export default function AccountProfileKYC({
                 </span>
               </div>
               <div className="profile-kv-row">
-                <span className="profile-kv-label">Daily Ad Spend:</span>
+                <span className="profile-kv-label">Daily Growth Pacing:</span>
                 <span className="profile-kv-val">₹{effectivePacing.toLocaleString('en-IN')} / day</span>
               </div>
               <div className="profile-kv-row">
-                <span className="profile-kv-label">Wallet Balance:</span>
+                <span className="profile-kv-label">Growth Wallet:</span>
                 <span className="profile-kv-val" style={{ color: effectiveWallet >= effectivePacing ? '#059669' : '#dc2626' }}>
                   ₹{effectiveWallet.toLocaleString('en-IN')}
                 </span>
@@ -576,24 +672,34 @@ export default function AccountProfileKYC({
 
           <div className="form-fields-grid-2">
             <div className="form-group-block">
-              <label>Company Name<span>*</span></label>
+              <label>
+                Company Name<span>*</span>
+                {missingKeySet.has('companyName') && <small style={{ color: '#d97706', marginLeft: 6, fontWeight: 700 }}>• Required</small>}
+              </label>
               <input
                 type="text"
                 required
                 value={profileData.companyName}
                 onChange={(e) => setProfileData({ ...profileData, companyName: e.target.value })}
                 className="clean-input"
+                style={missingKeySet.has('companyName') ? missingFieldStyle : undefined}
                 placeholder="e.g. Acme Technologies Pvt Ltd"
               />
             </div>
 
             <div className="form-group-block">
-              <label>Business Category<span>*</span></label>
+              <label>
+                Business Category<span>*</span>
+                {missingKeySet.has('category') && <small style={{ color: '#d97706', marginLeft: 6, fontWeight: 700 }}>• Select Category</small>}
+              </label>
               <select
+                required
                 value={profileData.category}
                 onChange={(e) => setProfileData({ ...profileData, category: e.target.value })}
                 className="clean-select"
+                style={missingKeySet.has('category') ? missingFieldStyle : undefined}
               >
+                <option value="">— Select Your Business Category —</option>
                 <option value="IT & Software">IT &amp; Software</option>
                 <option value="Organic Food & FMCG">Organic Food &amp; FMCG</option>
                 <option value="Hardware & Computer Accessories">Hardware &amp; Computer Accessories</option>
@@ -656,38 +762,50 @@ export default function AccountProfileKYC({
 
           <div className="form-fields-grid-2">
             <div className="form-group-block">
-              <label>Contact Person Name<span>*</span></label>
+              <label>
+                Contact Person Name<span>*</span>
+                {missingKeySet.has('contactPerson') && <small style={{ color: '#d97706', marginLeft: 6, fontWeight: 700 }}>• Required</small>}
+              </label>
               <input
                 type="text"
                 required
                 value={profileData.contactPerson}
                 onChange={(e) => setProfileData({ ...profileData, contactPerson: e.target.value })}
                 className="clean-input"
+                style={missingKeySet.has('contactPerson') ? missingFieldStyle : undefined}
                 placeholder="e.g. Rajesh Sharma"
               />
             </div>
 
             <div className="form-group-block">
-              <label>Business Email<span>*</span></label>
+              <label>
+                Business Email<span>*</span>
+                {missingKeySet.has('email') && <small style={{ color: '#d97706', marginLeft: 6, fontWeight: 700 }}>• Required</small>}
+              </label>
               <input
                 type="email"
                 required
                 value={profileData.email}
                 onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
                 className="clean-input"
+                style={missingKeySet.has('email') ? missingFieldStyle : undefined}
                 placeholder="e.g. contact@yourcompany.com"
               />
             </div>
 
             <div className="form-group-block">
-              <label>Direct Phone / WhatsApp Number<span>*</span></label>
+              <label>
+                Direct Phone / WhatsApp Number<span>*</span>
+                {missingKeySet.has('phone') && <small style={{ color: '#d97706', marginLeft: 6, fontWeight: 700 }}>• Required</small>}
+              </label>
               <input
                 type="tel"
                 required
-                maxLength={10}
+                maxLength={15}
                 value={profileData.phone}
                 onChange={(e) => setProfileData({ ...profileData, phone: e.target.value.replace(/\D/g, '') })}
                 className="clean-input"
+                style={missingKeySet.has('phone') ? missingFieldStyle : undefined}
                 placeholder="Enter 10-digit mobile number"
               />
               <small style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
@@ -723,29 +841,38 @@ export default function AccountProfileKYC({
 
           <div className="form-fields-grid-2">
             <div className="form-group-block">
-              <label>City<span>*</span></label>
+              <label>
+                Operating City<span>*</span>
+                {missingKeySet.has('city') && <small style={{ color: '#d97706', marginLeft: 6, fontWeight: 700 }}>• Required</small>}
+              </label>
               <input
                 type="text"
                 required
                 value={profileData.city}
                 onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
                 className="clean-input"
-                placeholder="e.g. Mumbai"
+                style={missingKeySet.has('city') ? missingFieldStyle : undefined}
+                placeholder="e.g. Ahmedabad, Bengaluru, Delhi"
               />
             </div>
 
             <div className="form-group-block">
-              <label>State / Province</label>
+              <label>
+                State / Province<span>*</span>
+                {missingKeySet.has('state') && <small style={{ color: '#d97706', marginLeft: 6, fontWeight: 700 }}>• Required</small>}
+              </label>
               <input
                 type="text"
+                required
                 value={profileData.state}
                 onChange={(e) => setProfileData({ ...profileData, state: e.target.value })}
                 className="clean-input"
-                placeholder="e.g. Maharashtra"
+                style={missingKeySet.has('state') ? missingFieldStyle : undefined}
+                placeholder="e.g. Gujarat, Karnataka, Delhi"
               />
             </div>
 
-            <div className="form-group-block" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group-block form-group-full" style={{ gridColumn: '1 / -1' }}>
               <label>Country</label>
               <input
                 type="text"

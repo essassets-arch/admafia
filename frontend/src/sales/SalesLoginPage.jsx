@@ -52,7 +52,7 @@ export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchTo
 
         <div className="sales-auth-header">
           <div className="sales-brand-logo">
-            Ad<b>Mafia</b> <span>SALES DESK</span>
+            Ad <b>Mafia</b> <span>SALES DESK</span>
           </div>
           <h2>Sales Executive Portal</h2>
           <p>

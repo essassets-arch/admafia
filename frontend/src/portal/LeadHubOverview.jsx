@@ -1,6 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import emperorBannerImg from '../assets/emperor-banner.jpg';
+import {
+  evaluateCustomerProfileCompletion,
+  sanitizeCustomerProfileFields,
+} from '../utils/profileCompletion';
 
 // Formatting Helpers
 export function getKolkataWeekDays(weekOffset = 0) {
@@ -207,7 +211,9 @@ export default function LeadHubOverview({
   const isMarketingLiveToday = Boolean(customer.adCampaignActive && activeDays.includes(currentTodayItem.code));
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
-  const isProfileDone = customer.profileStatus === 'complete' || customer.profile_status === 'complete' || customer.kycPercent === 100;
+  const profEval = evaluateCustomerProfileCompletion(customer);
+  const sanitizedProfile = sanitizeCustomerProfileFields(customer);
+  const isProfileDone = profEval.isComplete;
   const isFullyComplete = isPaymentDone && isProfileDone;
 
   const toggleDay = (dayTarget) => {
@@ -218,8 +224,8 @@ export default function LeadHubOverview({
     if (isTargetBooked) {
       Swal.fire({
         icon: 'info',
-        title: 'Marketing Day Already Booked',
-        text: 'Advertising has already started or been booked for this day. This day is locked and cannot be deselected.',
+        title: 'Delivery Day Already Booked',
+        text: 'Lead delivery has already started or been booked for this day. This day is locked and cannot be deselected.',
         confirmButtonText: 'Understood',
         confirmButtonColor: '#059669',
       });
@@ -263,7 +269,7 @@ export default function LeadHubOverview({
     if (preset === 'clear' && bookedCodesInView.length > 0) {
       Swal.fire({
         icon: 'info',
-        title: 'Marketing Day Already Booked',
+        title: 'Delivery Day Already Booked',
         text: 'All unbooked days cleared. Successfully booked days remain locked in your schedule.',
         confirmButtonText: 'Understood',
         confirmButtonColor: '#059669',
@@ -317,6 +323,133 @@ export default function LeadHubOverview({
 
   return (
     <div className="portal-overview-view">
+      {/* 0. HIGHLIGHTED FIRST: Profile Completion Required Executive Action Card */}
+      {!profEval.isComplete && (
+        <div
+          className="am-profile-urgent-banner"
+          role="region"
+          aria-label="Profile completion required"
+          style={{
+            background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 55%, #fff7ed 100%)',
+            border: '1.5px solid #f59e0b',
+            borderLeft: '5px solid #d97706',
+            borderRadius: '16px',
+            padding: '18px 20px',
+            marginBottom: '20px',
+            boxShadow: '0 10px 26px -10px rgba(217, 119, 6, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+          }}
+        >
+          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: '#d97706',
+                  color: '#ffffff',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase',
+                  padding: '4px 11px',
+                  borderRadius: '999px',
+                }}
+              >
+                ⚠️ Action Required • Profile {profEval.kycPercent}% Complete
+              </span>
+              {sanitizedProfile.city && (
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#92400e' }}>
+                  📍 {sanitizedProfile.city}
+                </span>
+              )}
+            </div>
+
+            <h3 style={{ margin: '0 0 6px', fontSize: '1.04rem', fontWeight: 800, color: '#78350f', lineHeight: 1.3 }}>
+              Complete Your Business Profile to Activate Territory &amp; Category Lead Matching
+            </h3>
+
+            {/* Progress Bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', maxWidth: '460px' }}>
+              <div
+                style={{
+                  flex: 1,
+                  height: '8px',
+                  background: 'rgba(217, 119, 6, 0.18)',
+                  borderRadius: '999px',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${profEval.kycPercent}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
+                    borderRadius: '999px',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+              <strong style={{ fontSize: '0.8rem', fontWeight: 800, color: '#92400e', flexShrink: 0 }}>
+                {profEval.kycPercent}%
+              </strong>
+            </div>
+
+            {/* Missing Items Pills */}
+            {profEval.missingFields.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#92400e', marginRight: '2px' }}>
+                  Missing:
+                </span>
+                {profEval.missingFields.map((fieldLabel) => (
+                  <span
+                    key={fieldLabel}
+                    style={{
+                      background: '#ffffff',
+                      color: '#b45309',
+                      border: '1px solid #fcd34d',
+                      padding: '3px 9px',
+                      borderRadius: '999px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {fieldLabel}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }} className="am-profile-urgent-cta-wrap">
+            <button
+              type="button"
+              onClick={() => onNavigate && onNavigate('profile')}
+              className="am-profile-urgent-cta-btn"
+              style={{
+                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '11px',
+                padding: '12px 20px',
+                fontSize: '0.88rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 6px 16px rgba(15, 23, 42, 0.22)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Complete Business Profile Now →
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. Breadcrumbs & Title */}
       <div className="overview-top-breadcrumb-bar">
         <div className="breadcrumb-line">
@@ -337,12 +470,12 @@ export default function LeadHubOverview({
           </p>
         </div>
 
-        {/* Right side top: Exact AD WALLET Card & Complete Registration Button (Screenshot Match) */}
+        {/* Right side top: Growth Wallet Card & Complete Registration Button */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginLeft: 'auto' }}>
-          {/* 1. AD WALLET Card */}
+          {/* 1. GROWTH WALLET Card */}
           <div
             className="header-ad-wallet-card"
-            title="Ad Wallet Balance"
+            title="Growth Wallet Balance"
             onClick={onOpenAddFunds}
           >
             <div className="header-wallet-icon-box">
@@ -352,7 +485,7 @@ export default function LeadHubOverview({
               </svg>
             </div>
             <div className="header-wallet-text-col">
-              <span className="header-wallet-tag">AD WALLET</span>
+              <span className="header-wallet-tag">GROWTH WALLET</span>
               <strong className="header-wallet-val">{currencySymbol}{walletBalance.toFixed(0)}</strong>
             </div>
             <button
@@ -388,7 +521,7 @@ export default function LeadHubOverview({
         </div>
       </div>
 
-        {/* 3. Marketing Campaign & Pacing Control (Exact User Screenshot Match) */}
+        {/* 3. Lead Delivery & Pacing Control */}
       <div className="pacing-control-master-card">
         {/* Master Top Header */}
         <div className="pacing-master-header-exact">
@@ -409,12 +542,12 @@ export default function LeadHubOverview({
 
             <div className="pacing-master-title-stack">
               <div className="pacing-title-line-exact">
-                <h2>Marketing Campaign &amp; Pacing Control</h2>
+                <h2>Lead Delivery &amp; Pacing Control</h2>
                 <span className={`badge-marketing-pill-exact ${customer.adCampaignActive ? 'live' : 'off'}`}>
                   {customer.adCampaignActive ? (
                     <>
                       <span className="live-dot-pulse"></span>
-                      <span>MARKETING IS LIVE</span>
+                      <span>LEAD DELIVERY IS LIVE</span>
                     </>
                   ) : (
                     <>
@@ -422,26 +555,26 @@ export default function LeadHubOverview({
                         <rect x="5" y="4" width="4" height="16" rx="1" />
                         <rect x="15" y="4" width="4" height="16" rx="1" />
                       </svg>
-                      <span>MARKETING IS OFF</span>
+                      <span>LEAD DELIVERY IS OFF</span>
                     </>
                   )}
                 </span>
               </div>
               <p className="pacing-master-subtitle-exact">
-                Schedule running days for Meta ads &amp; local lead capture. Daily spend of <strong>{currencySymbol}{dailySpend}</strong> is deducted only on scheduled active days.
+                Schedule active days for verified buyer lead delivery. Daily pacing of <strong>{currencySymbol}{dailySpend}</strong> is deducted only on scheduled active days.
               </p>
             </div>
           </div>
 
-          {/* Right: MARKETING STATUS Paused (Off) + Start / Stop Action Button */}
+          {/* Right: DELIVERY STATUS Paused (Off) + Start / Stop Action Button */}
           <div className="pacing-status-toggle-cluster">
             <div
               className="pacing-status-text-stack"
               onClick={() => onToggleCampaign && onToggleCampaign(!customer.adCampaignActive)}
               style={{ cursor: 'pointer' }}
-              title={customer.adCampaignActive ? 'Click to Stop Marketing Campaign' : 'Click to Start Marketing Campaign'}
+              title={customer.adCampaignActive ? 'Click to Pause Lead Delivery' : 'Click to Activate Lead Delivery'}
             >
-              <span className="pacing-status-mini-label">MARKETING STATUS</span>
+              <span className="pacing-status-mini-label">DELIVERY STATUS</span>
               <strong
                 className="pacing-status-state-text"
                 style={{
@@ -485,7 +618,7 @@ export default function LeadHubOverview({
                   type="button"
                   className="btn-proper-pacing-stop is-active"
                   onClick={() => onToggleCampaign && onToggleCampaign(false)}
-                  title="Click to Stop Marketing Campaign"
+                  title="Click to Pause Lead Delivery"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -497,7 +630,7 @@ export default function LeadHubOverview({
                   type="button"
                   className="btn-proper-pacing-start is-active"
                   onClick={() => onToggleCampaign && onToggleCampaign(true)}
-                  title="Click to Start Marketing Campaign"
+                  title="Click to Activate Lead Delivery"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                     <polygon points="5 3 19 12 5 21 5 3" />
@@ -509,14 +642,14 @@ export default function LeadHubOverview({
           </div>
         </div>
 
-        {/* 3 Metric Cards Grid (Daily Ad Budget, Active Schedule, Current Wallet) */}
+        {/* 3 Metric Cards Grid (Daily Growth Budget, Active Schedule, Current Wallet) */}
         <div className="pacing-three-cards-grid">
-          {/* Card 1: DAILY AD BUDGET */}
+          {/* Card 1: DAILY GROWTH BUDGET */}
           <div className="pacing-metric-card-exact">
             <div className="pacing-card-top-row">
               <div className="pacing-card-label-with-icon">
-                <span className="pacing-icon-dollar">$</span>
-                <span className="pacing-card-exact-label">DAILY AD BUDGET</span>
+                <span className="pacing-icon-dollar">{currencySymbol}</span>
+                <span className="pacing-card-exact-label">DAILY GROWTH BUDGET</span>
               </div>
               <button
                 type="button"
@@ -536,7 +669,7 @@ export default function LeadHubOverview({
                 <strong className="pacing-big-amount">{currencySymbol}{dailySpend}</strong>
                 <span className="pacing-unit-sub">/ active day</span>
               </div>
-              <span className="pacing-meta-verified-pill">Meta Verified</span>
+              <span className="pacing-meta-verified-pill">Verified Active</span>
             </div>
 
             <div className="pacing-card-footer-line">
@@ -602,15 +735,15 @@ export default function LeadHubOverview({
               {walletBalance < dailySpend ? (
                 <span className="text-red-alert" style={{ fontWeight: 800 }}>● Balance is Low (Needs Top Up)</span>
               ) : customer.adCampaignActive ? (
-                <span style={{ color: '#047857', fontWeight: 800 }}>● {fundedRunwayDays}d Marketing Booked</span>
+                <span style={{ color: '#047857', fontWeight: 800 }}>● {fundedRunwayDays}d Schedule Booked</span>
               ) : (
-                <span style={{ color: '#0284c7', fontWeight: 800 }}>● Ready to Launch (Click Start)</span>
+                <span style={{ color: '#0284c7', fontWeight: 800 }}>● Ready to Activate (Click Start)</span>
               )}
             </div>
           </div>
         </div>
 
-        {/* Day Selection Engine: SELECT MARKETING DAYS (5 OF 7 DAYS ACTIVE) */}
+        {/* Day Selection Engine: SELECT ACTIVE DELIVERY DAYS */}
         <div className="select-marketing-days-engine">
           <div className="engine-header-row">
             <div className="engine-title-with-icon">
@@ -621,7 +754,7 @@ export default function LeadHubOverview({
                 <line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
               <span className="engine-title-text">
-                SELECT MARKETING DAYS ({activeDays.length > 0 ? `${activeDays.length} OF 7 DAYS ACTIVE` : 'SELECT ANY DAY'}
+                SELECT DELIVERY DAYS ({activeDays.length > 0 ? `${activeDays.length} OF 7 DAYS ACTIVE` : 'SELECT ANY DAY'}
                 {totalBookedCount > 0 ? ` • ${totalBookedCount} DAY${totalBookedCount > 1 ? 'S' : ''} BOOKED` : ''})
               </span>
               {totalBookedCount > 0 ? (
@@ -639,7 +772,7 @@ export default function LeadHubOverview({
                   marginLeft: '8px'
                 }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-                  {totalBookedCount} Day{totalBookedCount > 1 ? 's' : ''} Marketing Booked
+                  {totalBookedCount} Day{totalBookedCount > 1 ? 's' : ''} Schedule Booked
                 </span>
               ) : activeDays.length === 0 ? (
                 <span className="engine-booked-highlight-pill" style={{
@@ -671,7 +804,7 @@ export default function LeadHubOverview({
                   gap: '4px',
                   marginLeft: '8px',
                   cursor: 'pointer'
-                }} onClick={onOpenAddFunds} title="Click to Top Up & Book Marketing Days">
+                }} onClick={onOpenAddFunds} title="Click to Top Up & Book Delivery Days">
                   ⚠️ 0 Days Booked (Top Up to Book)
                 </span>
               ) : (
@@ -688,7 +821,7 @@ export default function LeadHubOverview({
                   gap: '4px',
                   marginLeft: '8px',
                 }}>
-                  ● Click Start to Launch Ad
+                  ● Click Start to Activate Delivery
                 </span>
               )}
             </div>
@@ -796,7 +929,7 @@ export default function LeadHubOverview({
             </div>
           </div>
 
-          {/* 7 Day Cards (Selected with green border and checkmark, Unselected with grey border and lock, Ad Booked & Locked when marketing is active) */}
+          {/* 7 Day Cards */}
           <div className="seven-days-cards-grid-exact">
             {daysList.map((d) => {
               const isBooked = isDayBooked(d);
@@ -806,7 +939,7 @@ export default function LeadHubOverview({
                   key={d.code}
                   className={`seven-day-card-exact ${isBooked ? 'is-ad-booked is-selected' : isSelected ? 'is-selected' : 'is-unselected'} ${d.isToday ? 'is-today' : ''}`}
                   onClick={() => toggleDay(d)}
-                  title={isBooked ? `${d.label} (${d.dateFormatted}): Advertising already booked & locked` : isSelected ? `Click to disable ${d.label} (${d.dateFormatted})` : `Click to enable ${d.label} (${d.dateFormatted})`}
+                  title={isBooked ? `${d.label} (${d.dateFormatted}): Delivery schedule already booked & locked` : isSelected ? `Click to disable ${d.label} (${d.dateFormatted})` : `Click to enable ${d.label} (${d.dateFormatted})`}
                 >
                   {/* If today, floating blue badge */}
                   {d.isToday && <span className="today-floating-pill">Today</span>}
@@ -829,7 +962,7 @@ export default function LeadHubOverview({
                   </div>
 
                   {isBooked ? (
-                    <div className="day-status-micro-text booked">🔒 MARKETING BOOKED</div>
+                    <div className="day-status-micro-text booked">🔒 SCHEDULE BOOKED</div>
                   ) : isSelected ? (
                     <div className="day-status-micro-text selected">Active Day</div>
                   ) : (
@@ -839,7 +972,7 @@ export default function LeadHubOverview({
                   {/* Bottom Status Wrap */}
                   <div className="day-bottom-status-wrap">
                     {isBooked ? (
-                      <div className="day-check-circle is-booked-lock-pill" style={{ background: '#059669', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px', padding: '0 6px', width: 'auto', minWidth: '38px', borderRadius: '9999px', height: '22px' }} title={`${d.label} (${d.dateFormatted}) is marketing booked & locked`}>
+                      <div className="day-check-circle is-booked-lock-pill" style={{ background: '#059669', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px', padding: '0 6px', width: 'auto', minWidth: '38px', borderRadius: '9999px', height: '22px' }} title={`${d.label} (${d.dateFormatted}) is booked & locked`}>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
@@ -876,15 +1009,15 @@ export default function LeadHubOverview({
                 <span className="bullet-dot">●</span>
                 {isMarketingLiveToday
                   ? (isTodayBooked
-                    ? `Marketing is LIVE (Meta Ads Running • Ad Booked ${currencySymbol}${dailySpend})`
-                    : 'Marketing is LIVE (Meta Ads Running)')
+                    ? `Lead Delivery is LIVE (Active Schedule • Booked ${currencySymbol}${dailySpend})`
+                    : 'Lead Delivery is LIVE (Active Schedule)')
                   : walletBalance < dailySpend
-                  ? 'Marketing is OFF (Customer Balance is Low - Needs Top Up)'
-                  : 'Marketing is OFF (Click Start to Launch Ad & Book Today)'}
+                  ? 'Lead Delivery is OFF (Wallet Balance is Low - Needs Top Up)'
+                  : 'Lead Delivery is OFF (Click Start to Activate Delivery & Book Today)'}
               </span>
               {isTodayBooked && (
                 <span className="pill-ad-booked-badge">
-                  🎯 Marketing Booked &amp; Running
+                  🎯 Schedule Booked &amp; Active
                 </span>
               )}
               {totalBookedCount > 0 && !isTodayBooked && (
@@ -896,7 +1029,7 @@ export default function LeadHubOverview({
 
             <div className="today-budget-actions-right">
               <div className="today-ad-budget-text-wrap">
-                <span className="budget-sub-label">Today's Ad Budget:</span>
+                <span className="budget-sub-label">Today&apos;s Growth Budget:</span>
                 <strong className="budget-val-purple">{currencySymbol}{dailySpend}</strong>
                 <span className="budget-per-day">/day</span>
               </div>
@@ -909,7 +1042,7 @@ export default function LeadHubOverview({
                   <path d="M12 20h9"/>
                   <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                 </svg>
-                <span>Set Amount (Min ${currencySymbol}${savedCurrency === 'USD' ? 10 : 300})</span>
+                <span>Set Amount (Min {currencySymbol}{savedCurrency === 'USD' ? 10 : 300})</span>
               </button>
             </div>
           </div>
@@ -1015,7 +1148,7 @@ export default function LeadHubOverview({
             <h2>Recent High-Priority Enquiries</h2>
             <div className="realtime-inbound-tag">Real-Time Inbound</div>
             <p className="priority-panel-desc">
-              Showing top 4 high-intent buyer leads from Meta Lead Ads, WhatsApp &amp; Web forms.
+              Showing your latest verified high-intent buyer enquiries.
             </p>
           </div>
           <button

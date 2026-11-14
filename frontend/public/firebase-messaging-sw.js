@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-globals */
 /**
- * AdMafia Marketing — Firebase Cloud Messaging (FCM) & Web Push Service Worker (v2)
+ * Ad Mafia Marketing — Firebase Cloud Messaging (FCM) & Web Push Service Worker (v2)
  * Handles 100% of Google FCM HTTP v1 Web Push frames directly so OS notifications
  * ALWAYS display in Windows / macOS / Android Notification Center (even when a tab
  * of admafia.marketing is open in the foreground) AND broadcasts to active tabs.
@@ -22,7 +22,7 @@ self.addEventListener('push', (event) => {
     payload = event.data.json();
   } catch (err) {
     try {
-      payload = { title: 'AdMafia CRM Alert', body: event.data.text() };
+      payload = { title: 'Ad Mafia CRM Alert', body: event.data.text() };
     } catch {
       return;
     }
@@ -31,7 +31,7 @@ self.addEventListener('push', (event) => {
   const notif = payload?.notification || {};
   const data = payload?.data || {};
 
-  const title = notif.title || data.title || payload.title || 'AdMafia Notification';
+  const title = notif.title || data.title || payload.title || 'Ad Mafia Notification';
   const body = notif.body || data.body || payload.body || 'You have a new real-time update.';
   const deepLink = data.deepLink || payload.deepLink || notif.click_action || '/portal';
   const notificationId = data.notificationId || notif.tag || payload.tag || `admafia-${Date.now()}`;

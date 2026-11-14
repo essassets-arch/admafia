@@ -42,7 +42,7 @@ import './superadmin.css';
 
 export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
   const activeUser = adminAuthApi.getCurrentUser() || {
-    fullName: 'AdMafia Executive Super Admin',
+    fullName: 'Ad Mafia Executive Super Admin',
     role: 'Super Admin',
   };
   // Resolve active desk from URL pathname or hash
@@ -231,7 +231,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
               <ShieldCheck size={20} color="#ffffff" />
             </div>
             <div>
-              <div className="sa-brand-title">AdMafia HQ</div>
+              <div className="sa-brand-title">Ad Mafia HQ</div>
               <div className="sa-brand-sub">Super Admin Control Center</div>
             </div>
           </div>
@@ -320,7 +320,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
               className="sa-footer-link"
               style={{ fontSize: 11, padding: '7px 8px', justifyContent: 'center' }}
               onClick={onBackToWebsite || (() => (window.location.href = '/'))}
-              title="AdMafia Main Website"
+              title="Ad Mafia Main Website"
             >
               <ExternalLink size={13} color="#10b981" />
               <span>Website</span>
@@ -364,7 +364,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
             <div className="sa-topbar-title-block">
               <h1>{currentMeta.title}</h1>
               <p className="sa-topbar-breadcrumb">
-                AdMafia Super Admin &bull; <span>{currentMeta.subtitle}</span>
+                Ad Mafia Super Admin &bull; <span>{currentMeta.subtitle}</span>
               </p>
             </div>
           </div>
@@ -413,7 +413,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
         {/* ACTIVE DESK VIEWPORT */}
         <main className="sa-content-area">
           {activeDesk === 'dashboard' && (
-            <SuperAdminDashboardDesk onNavigate={navigateToDesk} />
+            <SuperAdminDashboardDesk onNavigate={navigateToDesk} onNavigateToDesk={navigateToDesk} />
           )}
 
           {activeDesk === 'growth_analytics' && (

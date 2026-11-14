@@ -47,15 +47,15 @@ try {
 
 // ---------- CONFIG (yahan apni details daalo) ----------
 const site = {
-  name: 'AdMafia Marketing',
+  name: 'Ad Mafia Marketing',
   url: 'https://admafia.marketing/',       // canonical (trailing slash ke saath)
   email: 'info@admafia.marketing',         // official contact email
   phone: '+91 6359 120 081',
   phoneRaw: '+916359120081',
   instagram: 'https://www.instagram.com/admafia.marketing/',
   facebook: 'https://www.facebook.com/profile.php?id=61596014007136',
-  title: 'Get Qualified Leads. Grow Your Business. Increase Your Customers | AdMafia Marketing',
-  desc: 'Stop Searching for Customers. Start Connecting With Them. AdMafia Marketing helps businesses connect with interested people and generate leads with transparent daily starting budgets.',
+  title: 'Get Qualified Leads. Grow Your Business. Increase Your Customers | Ad Mafia Marketing',
+  desc: 'Stop Searching for Customers. Start Connecting With Them. Ad Mafia Marketing helps businesses connect with interested buyers and receive verified leads with transparent daily starting budgets.',
 };
 
 // ---------- CONTENT ----------
@@ -96,14 +96,14 @@ const industries = [
 ];
 
 const faqs = [
-  ['What is AdMafia Marketing?', 'AdMafia Marketing is a lead generation platform that helps businesses connect with potential customers by providing relevant customer enquiries and available contact details.'],
+  ['What is Ad Mafia Marketing?', 'Ad Mafia Marketing is a verified customer lead delivery platform that helps businesses connect with potential buyers by matching relevant enquiries and verified contact details by industry and territory.'],
   ['What type of leads will I receive?', 'You can receive customer enquiries relevant to your business category, products or services. The available information may include customer names, phone numbers and details submitted with their enquiry.'],
-  ['What is the minimum starting price?', 'You can start with a minimum daily budget. The actual lead generation results depend on your business category, target location, audience demand and campaign performance.'],
-  ['Are the leads suitable for my business?', 'Our lead generation approach focuses on your business category, target audience and preferred location to find relevant potential customers. However, no lead generation service can guarantee that every enquiry will become a qualified sales opportunity or paying customer.'],
+  ['What is the minimum starting price?', 'You can start with a minimum daily budget. Actual enquiry volumes depend on your business category, target territory, and market demand.'],
+  ['Are the leads suitable for my business?', 'Our lead matching approach focuses on your business category, target audience and preferred location to find relevant potential customers. However, no lead delivery service can guarantee that every enquiry will become a qualified sales opportunity or paying customer.'],
   ['Can I choose the location for my leads?', 'Yes. You can specify your preferred city, area or service location when sharing your business requirements.'],
-  ['Which types of businesses can use AdMafia Marketing?', 'Our platform supports different business categories, including real estate, education, healthcare, home services, automobile businesses, beauty services, retail and professional services, subject to applicable eligibility requirements.'],
-  ['Will AdMafia Marketing close sales for my business?', 'No. Our primary service is generating and providing customer enquiries. You will communicate with the leads, understand their requirements, handle follow-ups and convert them into customers.'],
-  ['How can I get started?', 'Simply share your business details, products or services, target audience and preferred location. Our team will help you understand the process and get started with lead generation.'],
+  ['Which types of businesses can use Ad Mafia Marketing?', 'Our platform supports different business categories, including real estate, education, healthcare, home services, automobile businesses, beauty services, retail and professional services, subject to applicable eligibility requirements.'],
+  ['Will Ad Mafia Marketing close sales for my business?', 'No. Our primary service is delivering verified customer enquiries. You will communicate with the leads, understand their requirements, handle follow-ups and convert them into customers.'],
+  ['How can I get started?', 'Simply share your business details, products or services, target audience and preferred location. Our team will help you understand the process and start receiving verified leads.'],
 ];
 
 const platformPages = [
@@ -123,7 +123,7 @@ const platformPages = [
     icon: Sparkles,
     badge: 'Campaigns',
     badgeClass: 'badge-blue',
-    desc: 'Meta Ads pacing, target audiences, creative angles & post ideation',
+    desc: 'Campaign pacing, target segments & creative workflow',
   },
   {
     title: 'Graphics Department',
@@ -159,7 +159,7 @@ const platformPages = [
     icon: Laptop,
     badge: 'Client Dashboard',
     badgeClass: 'badge-amber',
-    desc: 'Real-time ad spend, wallet recharge & live submitted enquiries',
+    desc: 'Real-time wallet pacing, instant recharge & live verified enquiries',
   },
 ];
 
@@ -445,14 +445,14 @@ export default function App({ initialCountry = null } = {}) {
   ];
 
   const dynamicFaqs = [
-    ['What is AdMafia Marketing?', 'AdMafia Marketing is a lead generation platform that helps businesses connect with potential customers by providing relevant customer enquiries and available contact details.'],
+    ['What is Ad Mafia Marketing?', 'Ad Mafia Marketing is a verified customer lead delivery platform that helps businesses connect with potential buyers by matching relevant enquiries and verified contact details by industry and territory.'],
     ['What type of leads will I receive?', 'You can receive customer enquiries relevant to your business category, products or services. The available information may include customer names, phone numbers and details submitted with their enquiry.'],
-    ['What is the minimum starting price?', `You can start with a minimum budget of ${dailyBudget} per day. The actual lead generation results depend on your business category, target location, audience demand and campaign performance.`],
-    ['Are the leads suitable for my business?', 'Our lead generation approach focuses on your business category, target audience and preferred location to find relevant potential customers. However, no lead generation service can guarantee that every enquiry will become a qualified sales opportunity or paying customer.'],
+    ['What is the minimum starting price?', `You can start with a minimum budget of ${dailyBudget} per day. Actual enquiry volumes depend on your business category, target territory, and market demand.`],
+    ['Are the leads suitable for my business?', 'Our lead matching approach focuses on your business category, target audience and preferred location to find relevant potential customers. However, no lead delivery service can guarantee that every enquiry will become a qualified sales opportunity or paying customer.'],
     ['Can I choose the location for my leads?', 'Yes. You can specify your preferred city, area or service location when sharing your business requirements.'],
-    ['Which types of businesses can use AdMafia Marketing?', 'Our platform supports different business categories, including real estate, education, healthcare, home services, automobile businesses, beauty services, retail and professional services, subject to applicable eligibility requirements.'],
-    ['Will AdMafia Marketing close sales for my business?', 'No. Our primary service is generating and providing customer enquiries. You will communicate with the leads, understand their requirements, handle follow-ups and convert them into customers.'],
-    ['How can I get started?', 'Simply share your business details, products or services, target audience and preferred location. Our team will help you understand the process and get started with lead generation.'],
+    ['Which types of businesses can use Ad Mafia Marketing?', 'Our platform supports different business categories, including real estate, education, healthcare, home services, automobile businesses, beauty services, retail and professional services, subject to applicable eligibility requirements.'],
+    ['Will Ad Mafia Marketing close sales for my business?', 'No. Our primary service is delivering verified customer enquiries. You will communicate with the leads, understand their requirements, handle follow-ups and convert them into customers.'],
+    ['How can I get started?', 'Simply share your business details, products or services, target audience and preferred location. Our team will help you understand the process and start receiving verified leads.'],
   ];
 
   const navigateTo = (path, targetView) => {
@@ -798,7 +798,7 @@ export default function App({ initialCountry = null } = {}) {
           <a
             className="logo"
             href={site.url}
-            aria-label="AdMafia Marketing home"
+            aria-label="Ad Mafia Marketing home"
             onClick={(e) => {
               e.preventDefault();
               navigateTo('/', 'landing');
@@ -807,7 +807,7 @@ export default function App({ initialCountry = null } = {}) {
           >
             <img
               src="/AdMafia-Logo.png"
-              alt="AdMafia Marketing"
+              alt="Ad Mafia Marketing"
               className="site-logo-img"
             />
           </a>
@@ -921,7 +921,7 @@ export default function App({ initialCountry = null } = {}) {
                     setCurrentView('register');
                     setMobileMenuOpen(false);
                   }}
-                  className="nav-btn nav-btn-primary"
+                  className="nav-btn nav-btn-primary desktop-only"
                 >
                   Create Account
                 </button>
@@ -945,6 +945,44 @@ export default function App({ initialCountry = null } = {}) {
         {mobileMenuOpen && (
           <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
             <div className="mobile-drawer-menu" onClick={(e) => e.stopPropagation()}>
+              {!currentUser && (
+                <>
+                  <div className="mobile-drawer-section-title">Client Portal Access</div>
+                  <div className="mobile-drawer-auth-cta-row">
+                    <button
+                      type="button"
+                      className="nav-btn nav-btn-outline mobile-drawer-auth-btn"
+                      onClick={() => {
+                        try { window.history.pushState({}, '', '/#login'); } catch (e) {}
+                        window.location.hash = '#login';
+                        setCurrentView('login');
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      Login
+                    </button>
+                    <button
+                      type="button"
+                      className="nav-btn nav-btn-primary mobile-drawer-auth-btn"
+                      onClick={() => {
+                        try {
+                          localStorage.removeItem('growthline_active_user');
+                          sessionStorage.clear();
+                          window.history.pushState({}, '', '/#register');
+                        } catch (e) {}
+                        setCurrentUser(null);
+                        window.location.hash = '#register';
+                        setCurrentView('register');
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      Create Business Account →
+                    </button>
+                  </div>
+                  <div className="mobile-drawer-divider" />
+                </>
+              )}
+
               <div className="mobile-drawer-section-title">Website Sections</div>
               <div className="mobile-drawer-links">
                 <a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }} className="mobile-drawer-link">
@@ -956,7 +994,7 @@ export default function App({ initialCountry = null } = {}) {
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
                 <a href="#why" onClick={(e) => { e.preventDefault(); navigateTo('#why', 'landing'); }} className="mobile-drawer-link">
-                  <span>Why Choose AdMafia</span>
+                  <span>Why Choose Ad Mafia</span>
                   <ChevronRight size={16} color="#94a3b8" />
                 </a>
                 <a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }} className="mobile-drawer-link">
@@ -1100,7 +1138,7 @@ export default function App({ initialCountry = null } = {}) {
             </div>
 
             <h3 style={{ marginTop: '44px', fontSize: '1.45rem', fontWeight: 800 }}>
-              What Do You Get with AdMafia Marketing?
+              What Do You Get with Ad Mafia Marketing?
             </h3>
             <ul className="gets">
               {dynamicGets.map((g, idx) => (
@@ -1132,20 +1170,20 @@ export default function App({ initialCountry = null } = {}) {
             </div>
 
             <p className="note" style={{ marginTop: '32px' }}>
-              <strong>Note:</strong> {dailyRate} is the minimum starting budget, not a guaranteed cost per lead. Lead volume and quality may vary depending on business category, audience demand, location and campaign performance. A lead indicates interest, not a guaranteed purchase or sale.
+              <strong>Note:</strong> {dailyRate} is the minimum starting budget, not a guaranteed cost per lead. Lead volume and quality may vary depending on business category, audience demand, target territory, and market conditions. A lead indicates interest, not a guaranteed purchase or sale.
             </p>
           </div>
         </section>
 
-        {/* Section 3: How AdMafia Marketing Works */}
+        {/* Section 3: How Ad Mafia Marketing Works */}
         <section id="how" style={{ background: 'var(--mist)' }} aria-labelledby="h-how">
           <div className="wrap">
-            <h2 id="h-how">How AdMafia Marketing Works</h2>
+            <h2 id="h-how">How Ad Mafia Marketing Works</h2>
             <div className="section-subhead">
               From Finding Potential Customers to Growing Your Business.
             </div>
             <p className="lead" style={{ marginTop: '14px' }}>
-              Getting new customers doesn't have to be complicated. Our simple lead generation process helps you connect with potential buyers.
+              Getting new customers doesn&apos;t have to be complicated. Our simple lead generation process helps you connect with potential buyers.
             </p>
             <ol className="steps">
               {steps.map((s, idx) => (
@@ -1166,10 +1204,10 @@ export default function App({ initialCountry = null } = {}) {
           </div>
         </section>
 
-        {/* Section 4: Why Choose AdMafia Marketing? */}
+        {/* Section 4: Why Choose Ad Mafia Marketing? */}
         <section className="why" id="why" aria-labelledby="h-why">
           <div className="wrap">
-            <h2 id="h-why">Why Choose AdMafia Marketing?</h2>
+            <h2 id="h-why">Why Choose Ad Mafia Marketing?</h2>
             <div className="section-subhead gold">
               Your Business Growth Starts with the Right Customers.
             </div>
@@ -1192,7 +1230,7 @@ export default function App({ initialCountry = null } = {}) {
               Whatever You Sell, We Help You Find Potential Customers.
             </div>
             <p className="lead" style={{ marginTop: '14px' }}>
-              AdMafia Marketing helps businesses across different industries generate relevant customer enquiries.
+              Ad Mafia Marketing helps businesses across different industries generate relevant customer enquiries.
             </p>
             <div className="chips">
               {industries.map((i, idx) => (
@@ -1258,7 +1296,7 @@ export default function App({ initialCountry = null } = {}) {
                 Your business deserves a consistent opportunity to reach new customers.
               </p>
               <p style={{ color: '#bdbbe6', fontSize: '1.05rem', lineHeight: '1.6', marginTop: '10px' }}>
-                Start generating relevant customer enquiries with AdMafia Marketing.
+                Start generating relevant customer enquiries with Ad Mafia Marketing.
               </p>
               <div style={{ marginTop: '28px', display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(255, 184, 0, 0.15)', padding: '10px 22px', borderRadius: '999px', border: '1px solid rgba(255, 184, 0, 0.45)' }}>
                 <span style={{ color: '#d9d7f5', fontSize: '1rem', fontWeight: 600 }}>Starting Budget:</span>
@@ -1341,12 +1379,12 @@ export default function App({ initialCountry = null } = {}) {
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
                 <img
                   src="/AdMafia-Logo.png"
-                  alt="AdMafia Marketing"
+                  alt="Ad Mafia Marketing"
                   style={{ height: '40px', width: 'auto', objectFit: 'contain', background: '#ffffff', padding: '4px 8px', borderRadius: '8px' }}
                 />
               </div>
               <p style={{ fontSize: '0.86rem', lineHeight: '1.6', color: '#94a3b8', margin: '0 0 16px' }}>
-                Get qualified leads, grow your business, and increase your customers. AdMafia Marketing helps businesses connect directly with interested buyers with names and phone numbers starting from just {dailyRateLower}.
+                Get qualified leads, grow your business, and increase your customers. Ad Mafia Marketing helps businesses connect directly with interested buyers with names and phone numbers starting from just {dailyRateLower}.
               </p>
               
               <div className="footer-social-links">
@@ -1355,7 +1393,7 @@ export default function App({ initialCountry = null } = {}) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="footer-social-btn instagram"
-                  title="Follow AdMafia on Instagram"
+                  title="Follow Ad Mafia on Instagram"
                   aria-label="Instagram"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1370,7 +1408,7 @@ export default function App({ initialCountry = null } = {}) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="footer-social-btn facebook"
-                  title="Connect with AdMafia on Facebook"
+                  title="Connect with Ad Mafia on Facebook"
                   aria-label="Facebook"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -1445,8 +1483,8 @@ export default function App({ initialCountry = null } = {}) {
               <h4>Lead Solutions</h4>
               <ul className="footer-links">
                 <li><a href="#pricing" onClick={(e) => { e.preventDefault(); navigateTo('#pricing', 'landing'); }}>Starting Budget ({dailyRate})</a></li>
-                <li><a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }}>How AdMafia Works</a></li>
-                <li><a href="#why" onClick={(e) => { e.preventDefault(); navigateTo('#why', 'landing'); }}>Why Choose AdMafia</a></li>
+                <li><a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }}>How Ad Mafia Works</a></li>
+                <li><a href="#why" onClick={(e) => { e.preventDefault(); navigateTo('#why', 'landing'); }}>Why Choose Ad Mafia</a></li>
                 <li><a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }}>Industry Solutions</a></li>
                 <li><a href="#contact" onClick={(e) => { e.preventDefault(); navigateTo('#contact', 'landing'); }}>Get Qualified Leads</a></li>
               </ul>
@@ -1470,7 +1508,7 @@ export default function App({ initialCountry = null } = {}) {
                 </li>
                 <li>
                   <a 
-                    href={`https://wa.me/916359120081?text=${encodeURIComponent('Hi AdMafia Team, I want to start Meta Ads lead generation for my business.')}`} 
+                    href={`https://wa.me/916359120081?text=${encodeURIComponent('Hi Ad Mafia Team, I want to start receiving verified business leads.')}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="footer-contact-item"

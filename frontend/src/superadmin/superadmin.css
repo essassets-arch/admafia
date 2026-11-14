@@ -1,5 +1,5 @@
 /**
- * AdMafia Super Admin Control Center - Executive Design System
+ * Ad Mafia Super Admin Control Center - Executive Design System
  * Authoritative CSS Framework for Platform Governance & Financial Operations
  * Palette: Deep Slate (#090d16 / #0f172a), Royal Indigo (#4f46e5), Emerald (#059669),
  *          Amber (#d97706), Crimson Rose (#e11d48), Sky Blue (#0284c7)
@@ -305,6 +305,8 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+  flex: 1;
 }
 
 .sa-hamburger-btn {
@@ -317,6 +319,11 @@
   cursor: pointer;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+.sa-topbar-title-block {
+  min-width: 0;
 }
 
 .sa-topbar-title-block h1 {
@@ -1311,6 +1318,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
   padding: 14px 20px;
   border-top: 1px solid #e2e8f0;
   background: #ffffff;
@@ -1355,6 +1364,8 @@
     position: fixed;
     left: 0;
     top: 0;
+    width: min(280px, 86vw);
+    z-index: 1200;
     transform: translateX(-100%);
     box-shadow: none;
   }
@@ -1377,7 +1388,7 @@
     inset: 0;
     background: rgba(15, 23, 42, 0.6);
     backdrop-filter: blur(4px);
-    z-index: 45;
+    z-index: 1190;
   }
 
   .sa-topbar {
@@ -1395,20 +1406,86 @@
   }
 }
 
+@media (max-width: 900px) {
+  .sa-split-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .sa-topbar {
+    padding: 0 14px;
+    height: 60px;
+    gap: 10px;
+  }
+
+  .sa-topbar-left {
+    gap: 10px;
+  }
+
+  .sa-topbar-title-block h1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+  }
+
+  .sa-topbar-breadcrumb,
+  .sa-clock-pill,
+  .sa-admin-info {
+    display: none !important;
+  }
+
+  .sa-topbar-right {
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .sa-admin-pill {
+    padding: 3px;
+  }
+
+  .sa-content-area,
+  .sa-content-body,
+  .sa-desk-content {
+    padding: 16px 14px 36px 14px;
+  }
+}
+
 @media (max-width: 640px) {
-  .sa-topbar-breadcrumb {
-    display: none;
-  }
-
-  .sa-clock-pill {
-    display: none;
-  }
-
   .sa-stats-grid {
     grid-template-columns: 1fr;
   }
 
-  .sa-form-row {
-    grid-template-columns: 1fr;
+  .sa-form-row,
+  .sa-form-2col {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sa-presets-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .sa-funnel-row {
+    grid-template-columns: 1fr auto !important;
+    row-gap: 6px !important;
+  }
+
+  .sa-funnel-bar {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+
+  .sa-search-wrap,
+  .sa-search-box {
+    min-width: min(100%, 200px);
+  }
+
+  .sa-modal-header,
+  .sa-modal-body,
+  .sa-modal-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+    flex-wrap: wrap;
   }
 }

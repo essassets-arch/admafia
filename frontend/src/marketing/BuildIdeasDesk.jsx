@@ -198,7 +198,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
           </label>
           <select
             className="marketing-select"
-            style={{ minWidth: '280px', flex: 1 }}
+            style={{ minWidth: 'min(100%, 240px)', flex: 1 }}
             value={selectedCustomerId}
             onChange={(e) => setSelectedCustomerId(e.target.value)}
           >
@@ -221,10 +221,10 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
       </div>
 
       {/* 3. Main Workspace Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '24px' }}>
+      <div className="mkt-split-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '24px' }}>
         {/* Left Column: 6 Core Requested Fields */}
         <div className="marketing-table-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
             <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Campaign Concept &amp; Strategy</h3>
             <button
               type="button"
@@ -267,7 +267,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
           </div>
 
           {/* 3. Platform & 4. Language */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="mkt-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div className="mkt-form-group">
               <label className="mkt-form-label">Platform</label>
               <select
@@ -321,7 +321,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
           </div>
 
           {/* Action Row */}
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '20px' }}>
             <button
               type="button"
               className="mkt-btn-table-action"
@@ -351,7 +351,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
                 <Building size={20} color="#4f46e5" />
                 <h4 style={{ margin: 0, fontSize: '0.96rem' }}>Selected Customer Profile</h4>
               </div>
-              <div style={{ fontSize: '0.85rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div className="mkt-form-2col" style={{ fontSize: '0.85rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 <div>
                   <span className="mkt-form-help">Company:</span>
                   <strong>{selectedCustomer.name}</strong>

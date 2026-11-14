@@ -24,7 +24,7 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
   if (!country) return <div className="planner-container" role="status">Pricing is unavailable because we could not determine your location.</div>;
 
   // Recalculate metrics:
-  // Formula: Monthly Advertising Budget = Daily Advertising Budget × 30
+  // Formula: Monthly Growth Investment = Daily Growth Budget × 30
   const monthlySpend = dailyBudget * 30;
 
   // Reach multipliers (scaled proportionally to visibility index)
@@ -36,8 +36,6 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
   const costPerLeadRef = minDaily === 300 ? 120 : (minDaily * 0.4);
   const minLeads = Math.max(3, Math.round(monthlySpend / (costPerLeadRef * 1.5)));
   const maxLeads = Math.max(8, Math.round(monthlySpend / costPerLeadRef));
-
-  const sym = country?.currency_symbol || '₹';
 
   return (
     <div className="planner-container">
@@ -56,16 +54,16 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
                 <circle cx="8" cy="17" r="2" fill="#10b981" />
               </svg>
             </div>
-            <h2>Interactive Meta Ads Budget Planner</h2>
+            <h2>Interactive Lead Growth &amp; Budget Planner</h2>
           </div>
           <p className="planner-subtitle">
-            Adjust your daily budget in {country?.country_name} ({country?.currency_code}) to preview estimated monthly visibility &amp; enquiries
+            Adjust your daily growth budget in {country?.country_name} ({country?.currency_code}) to preview estimated monthly buyer reach &amp; verified enquiries
           </p>
         </div>
 
         {/* Dynamic Country Currency Daily Badge */}
         <div className="planner-daily-badge">
-          Daily: <span className="gold-text">{formatCurrency(dailyBudget, country)}</span> /day
+          Daily Growth Budget: <span className="gold-text">{formatCurrency(dailyBudget, country)}</span> /day
         </div>
       </div>
 
@@ -80,7 +78,7 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
             value={dailyBudget}
             onChange={(e) => setDailyBudget(Number(e.target.value))}
             className="capsule-range-slider"
-            aria-label={`Daily advertising budget slider in ${country?.currency_code}`}
+            aria-label={`Daily growth budget slider in ${country?.currency_code}`}
           />
         </div>
 
@@ -94,21 +92,21 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
 
       {/* 3 Metric Cards */}
       <div className="planner-cards-grid">
-        {/* Card 1: Monthly Ad Spend */}
+        {/* Card 1: Monthly Growth Investment */}
         <div className="metric-box">
           <div className="metric-label">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
               <circle cx="12" cy="12" r="3" />
             </svg>
-            <span>Monthly Advertising Spend</span>
+            <span>Monthly Growth Investment</span>
           </div>
           <div className="metric-value">
             {formatCurrency(monthlySpend, country)}
           </div>
         </div>
 
-        {/* Card 2: Estimated Reach */}
+        {/* Card 2: Estimated Monthly Reach */}
         <div className="metric-box">
           <div className="metric-label">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -117,21 +115,21 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
               <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
-            <span>Estimated Monthly Reach</span>
+            <span>Estimated Territory Reach</span>
           </div>
           <div className="metric-value">
             {minReach.toLocaleString('en-US')} - {maxReach.toLocaleString('en-US')}
           </div>
         </div>
 
-        {/* Card 3: Projected Enquiries */}
+        {/* Card 3: Projected Verified Enquiries */}
         <div className="metric-box">
           <div className="metric-label">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
               <line x1="4" y1="22" x2="4" y2="15" />
             </svg>
-            <span>Projected Enquiries</span>
+            <span>Projected Verified Enquiries</span>
           </div>
           <div className="metric-value coral-highlight">
             {minLeads} - {maxLeads}+ Leads*
@@ -140,7 +138,7 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
       </div>
 
       <div style={{ marginTop: '16px', fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>
-        *Projections are campaign estimates based on industry benchmarks in {country?.country_name}. Actual lead volumes vary by category, targeting, and audience response.
+        *Projections are estimates based on industry benchmarks in {country?.country_name}. Actual enquiry volumes vary by business category, target territory, and market demand.
       </div>
 
       <style>{`
@@ -352,6 +350,42 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
 
           .metric-value {
             font-size: 1.45rem;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .planner-container {
+            padding: 18px 14px;
+            border-radius: 18px;
+          }
+
+          .planner-heading-row h2 {
+            font-size: 1.2rem;
+          }
+
+          .planner-subtitle {
+            font-size: 0.85rem;
+          }
+
+          .planner-daily-badge {
+            font-size: 0.9rem;
+            padding: 7px 14px;
+            white-space: normal;
+            max-width: 100%;
+          }
+
+          .slider-labels-row {
+            font-size: 0.74rem;
+            flex-wrap: wrap;
+            gap: 4px;
+          }
+
+          .metric-box {
+            padding: 16px 14px;
+          }
+
+          .metric-value {
+            font-size: 1.3rem;
           }
         }
       `}</style>

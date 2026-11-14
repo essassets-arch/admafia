@@ -256,7 +256,6 @@ otpAuthRouter.post('/auth/verify-existing-phone', async (req, res) => {
         $set: {
           phoneVerified: true,
           phoneVerifiedAt: new Date(),
-          verified: true,
         },
       },
       { new: true }

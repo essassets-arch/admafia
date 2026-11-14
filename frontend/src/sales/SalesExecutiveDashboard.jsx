@@ -511,7 +511,7 @@ return (
       <div className="sales-mobile-brand">
         <img
           src="/AdMafia-Logo.png"
-          alt="AdMafia"
+          alt="Ad Mafia"
           style={{
             height: 32,
             width: 'auto',
@@ -523,7 +523,7 @@ return (
           }}
         />
         <div className="sales-mobile-brand-text">
-          <span>Ad<b>Mafia</b></span>
+          <span>Ad <b>Mafia</b></span>
           <span className="sales-ops-mini-badge">OPS</span>
         </div>
       </div>
@@ -550,7 +550,7 @@ return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img
               src="/AdMafia-Logo.png"
-              alt="AdMafia Marketing"
+              alt="Ad Mafia Marketing"
               style={{
                 height: 42,
                 width: 'auto',
@@ -571,7 +571,7 @@ return (
                   lineHeight: 1.1,
                 }}
               >
-                Ad<b>Mafia</b>
+                Ad <b>Mafia</b>
               </div>
               <div
                 style={{

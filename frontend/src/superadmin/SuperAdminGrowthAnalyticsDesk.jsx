@@ -146,7 +146,7 @@ export default function SuperAdminGrowthAnalyticsDesk() {
 
       {/* Onboarding & Revenue Funnel */}
       <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '22px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '1.06rem', fontWeight: 800, color: '#0f172a' }}>
               10,000-User Onboarding &amp; Paid Activation Funnel
@@ -180,9 +180,9 @@ export default function SuperAdminGrowthAnalyticsDesk() {
           {funnelSteps.map((step) => {
             const pct = Math.max(4, Math.round((step.count / maxFunnel) * 100));
             return (
-              <div key={step.label} style={{ display: 'grid', gridTemplateColumns: '200px 1fr 70px', alignItems: 'center', gap: '12px' }}>
+              <div key={step.label} className="sa-funnel-row" style={{ display: 'grid', gridTemplateColumns: '200px 1fr 70px', alignItems: 'center', gap: '12px' }}>
                 <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#334155' }}>{step.label}</span>
-                <div style={{ height: '14px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
+                <div className="sa-funnel-bar" style={{ height: '14px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
                   <div
                     style={{
                       width: `${pct}%`,
@@ -201,7 +201,7 @@ export default function SuperAdminGrowthAnalyticsDesk() {
       </div>
 
       {/* 2-Column Action Queues: Hot Unpaid Verified Drop-Offs + Low-Runway Churn Radar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '18px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '18px' }}>
         {/* Hot Unpaid Verified Drop-Offs */}
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>

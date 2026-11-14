@@ -23,6 +23,10 @@ import {
   SecurityEventLog,
 } from './models/index.js';
 import { hashPassword, verifyPassword } from './utils/passwordCrypto.js';
+import {
+  evaluateCustomerProfileCompletion,
+  sanitizeCustomerProfileFields,
+} from './utils/profileCompletion.js';
 import { consumeOtpVerificationToken } from './services/whatsappOtpService.js';
 import { otpAuthRouter } from './routes/otpAuth.js';
 import { notificationsRouter } from './routes/notifications.js';
@@ -83,7 +87,11 @@ import {
   applyWalletSettings,
   deleteCustomerCascade,
 } from './repositories/salesLedgerRepo.js';
-import { seedBaselineData, purgeLegacyTestLedgerRows } from './repositories/bootstrapRepo.js';
+import {
+  seedBaselineData,
+  purgeLegacyTestLedgerRows,
+  repairIncompleteCustomerProfiles,
+} from './repositories/bootstrapRepo.js';
 import { startOutboxWorker, recordOutboxEvent } from './services/outboxWorker.js';
 import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
@@ -238,6 +246,7 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
   const balance = Number(row.balance ?? row.wallet_balance ?? 0);
   const dailyPacing = Number(row.daily_pacing ?? 300);
   const amountPaid = Number(row.amount_paid ?? 0);
+  const evalProf = evaluateCustomerProfileCompletion(row);
   return {
     id: row.id,
     username: cleanUsername,
@@ -250,23 +259,24 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     personalEmail: row.personal_email || '',
     password: '••••••••••••',
     passwordMasked: '••••••••••••',
-    category: row.category || 'IT & Software',
-    industry: row.industry || 'Other',
+    category: evalProf.sanitized.category,
+    industry: evalProf.sanitized.industry,
     website: row.website || '',
     domain: row.website || '',
-    city: row.city || '',
-    state: row.state || 'Maharashtra',
+    city: evalProf.sanitized.city,
+    state: evalProf.sanitized.state,
     country: row.country || 'India',
     countryCode: String(row.country_code || 'IN').toUpperCase(),
     currency: String(row.currency || 'INR').toUpperCase(),
     currencySymbol: row.currency === 'USD' ? '$' : row.currency === 'AED' ? 'AED ' : row.currency === 'GBP' ? '£' : row.currency === 'SAR' ? 'SAR ' : '₹',
     status: row.status || 'active',
-    profileStatus: row.profile_status || 'incomplete',
-    profile_status: row.profile_status || 'incomplete',
+    profileStatus: evalProf.profileStatus,
+    profile_status: evalProf.profileStatus,
     paymentStatus: row.payment_status || (balance > 0 ? 'paid' : 'pending'),
     payment_status: row.payment_status || (balance > 0 ? 'paid' : 'pending'),
-    kycPercent: Number(row.kyc_percent ?? (row.profile_status === 'complete' ? 100 : 25)),
-    verified: Boolean(row.verified || row.profile_status === 'complete'),
+    kycPercent: evalProf.kycPercent,
+    missingProfileFields: evalProf.missingFields,
+    verified: evalProf.isComplete,
     phoneVerified: Boolean(row.phone_verified),
     phoneVerifiedAt: row.phone_verified_at || null,
     adCampaignActive: Boolean(row.ad_campaign_active),
@@ -416,9 +426,15 @@ function mapLeadRow(row) {
     name: row.buyer_name || displayPhone,
     email: row.buyer_email || '',
     city: row.city || '',
-    requirement: row.requirement || 'Inbound Meta Ads Campaign Enquiry',
+    requirement:
+      !row.requirement || /meta ads|facebook|instagram|google ads/i.test(String(row.requirement))
+        ? 'Verified Business Enquiry'
+        : row.requirement,
     budget: row.budget || '₹1.5L – ₹3.5L',
-    source: row.source || 'Direct Intake',
+    source:
+      !row.source || /meta ads|facebook|instagram|google ads/i.test(String(row.source))
+        ? 'Verified Business Enquiry'
+        : row.source,
     priority: row.priority || 'Urgent',
     status: row.status || 'new',
     isHot: Boolean(row.is_hot),
@@ -442,6 +458,17 @@ function mapLeadRow(row) {
   };
 }
 
+function scrubCustomerVisibleDescription(raw, fallback = '') {
+  const str = String(raw || '').trim();
+  if (!str) return fallback;
+  return str
+    .replace(/Meta Ads Campaign Ad Spend Budget Credit/gi, 'Lead Generation & Growth Wallet Credit')
+    .replace(/Daily Meta Ads? (?:Campaign )?Spend(?: Deduction)?/gi, 'Daily Lead Delivery Service Pacing')
+    .replace(/Daily Meta Ad Spend\s*-\s*Per-Day Service/gi, 'Daily Lead Delivery Service Pacing')
+    .replace(/\bAd Wallet\b/gi, 'Growth Wallet')
+    .replace(/\bAdMafia\b/g, 'Ad Mafia');
+}
+
 function mapWalletTxRow(row) {
   return {
     id: row.id,
@@ -452,7 +479,7 @@ function mapWalletTxRow(row) {
     balance: Number(row.balance_after || 0),
     balanceAfter: Number(row.balance_after || 0),
     ref: row.reference_utr,
-    desc: row.description,
+    desc: scrubCustomerVisibleDescription(row.description),
     method: row.payment_method,
     status: row.status || 'Verified ✓',
     date: row.created_at
@@ -475,7 +502,7 @@ function mapInvoiceRow(row) {
     id: row.id,
     invoiceNo: row.invoice_no,
     customerId: row.customer_id,
-    particulars: row.particulars,
+    particulars: scrubCustomerVisibleDescription(row.particulars, 'Lead Generation & Growth Wallet Credit'),
     sacCode: row.sac_code || '998311',
     baseAmount: Number(row.base_amount || 0),
     cgst: Number(row.cgst_amount || 0),
@@ -623,8 +650,8 @@ function mapFailedTxRow(row) {
     phone: cleanPhone || row.phone || '',
     email: row.email || '',
     city: row.city || '',
-    state: row.state || 'Maharashtra',
-    category: row.category || 'IT & Software',
+    state: row.state || '',
+    category: row.category || '',
     amount: Number(row.amount || 0),
     ref: row.reference_utr,
     desc: row.description,
@@ -667,8 +694,8 @@ function mapDeletedFailedTxRow(row) {
     phone: cleanPhone || row.phone || '',
     email: row.email || '',
     city: row.city || '',
-    state: row.state || 'Maharashtra',
-    category: row.category || 'IT & Software',
+    state: row.state || '',
+    category: row.category || '',
     amount: Number(row.amount || 0),
     ref: row.reference_utr || row.id,
     desc: row.description || '',
@@ -756,7 +783,7 @@ function mapTransactionItem(row, fallbackCustomers = []) {
 
   if (rawType.includes('debit') || String(row.description || '').toLowerCase().includes('auto-debit') || String(row.description || '').toLowerCase().includes('daily burn')) {
     normalizedType = 'daily_burn';
-    typeLabel = 'Daily Ad Spend Auto-Debit';
+    typeLabel = 'Daily Lead Delivery Pacing';
   } else if (rawType.includes('reg') || String(row.description || '').toLowerCase().includes('registration')) {
     normalizedType = 'registration';
     typeLabel = 'Registration Package';
@@ -800,9 +827,9 @@ function mapTransactionItem(row, fallbackCustomers = []) {
     username: rawUser,
     phone: cleanPhone || (row.phone ? String(row.phone).trim() : ''),
     email: row.email || row.cust_email || matchedCust?.email || '',
-    city: row.city || row.cust_city || matchedCust?.city || 'India',
-    state: row.state || row.cust_state || matchedCust?.state || 'Maharashtra',
-    category: row.category || row.cust_category || matchedCust?.category || 'IT & Software',
+    city: row.city || row.cust_city || matchedCust?.city || '',
+    state: row.state || row.cust_state || matchedCust?.state || '',
+    category: row.category || row.cust_category || matchedCust?.category || '',
     amount: Number(row.amount || 0),
     gstAmount: Number(row.gst_amount || 0),
     totalAmount: Number(row.total_amount || row.amount || 0),
@@ -816,7 +843,10 @@ function mapTransactionItem(row, fallbackCustomers = []) {
     date: formattedDate,
     createdAt: rawDate,
     createdAtRaw: rawDate,
-    description: row.description || row.notes || (normalizedStatus === 'failed' ? 'Payment declined by customer bank or user cancelled checkout' : 'Marketing Ad Wallet Top-Up'),
+    description: scrubCustomerVisibleDescription(
+      row.description || row.notes,
+      normalizedStatus === 'failed' ? 'Payment declined by customer bank or user cancelled checkout' : 'Growth Wallet Top-Up'
+    ),
     failureReason: normalizedStatus === 'failed' ? (row.description || 'Payment declined by customer bank or user cancelled checkout') : null,
   };
 }
@@ -1077,9 +1107,9 @@ app.get('/api/state', requireStaff(), async (req, res) => {
             username: (f.username || f.customer_username || '').replace(/^@/, ''),
             phone: f.phone || f.customer_phone || '',
             email: f.email || '',
-            city: f.city || 'India',
-            state: f.state || 'Maharashtra',
-            category: f.category || 'IT & Software',
+            city: f.city || '',
+            state: f.state || '',
+            category: f.category || '',
             amount: Number(f.amount || 0),
             gstAmount: 0,
             totalAmount: Number(f.amount || 0),
@@ -1140,7 +1170,7 @@ app.post('/api/auth/register', async (req, res) => {
       country = 'India',
       countryCode = 'IN',
       currency = 'INR',
-      category = 'IT & Software',
+      category = '',
       deposit = 0,
       initialDeposit: reqInitialDeposit,
     } = req.body || {};
@@ -1267,6 +1297,15 @@ app.post('/api/auth/register', async (req, res) => {
 
     const storedPassword = await hashPassword(rawPassword);
     const now = new Date();
+    const evalProf = evaluateCustomerProfileCompletion({
+      phone: cleanPhone,
+      contactPerson: contactName,
+      companyName: formattedName,
+      email: cleanEmail,
+      category,
+      city,
+      state,
+    });
     const queueType = initialDeposit >= dailyBudget ? 'Completed' : 'Payment Pending';
 
     // Strict new Customer creation + wallet + verification queue + real-time Outbox event in ONE MongoDB transaction
@@ -1276,24 +1315,24 @@ app.post('/api/auth/register', async (req, res) => {
           _id: custId,
           username: cleanUsername,
           phone: cleanPhone,
-          email: email.trim(),
+          email: cleanEmail,
           passwordHash: storedPassword,
           companyName: formattedName,
-          category,
+          category: evalProf.sanitized.category,
           contactPerson: contactName,
-          city,
-          state: state || '',
+          city: evalProf.sanitized.city,
+          state: evalProf.sanitized.state,
           country: registeredCountryName,
           countryCode: cleanCountryCode,
           currency: registeredCurrency,
           status: 'active',
-          profileStatus: 'complete',
+          profileStatus: evalProf.profileStatus,
           paymentStatus: payStatus,
-          kycPercent: 100,
-          verified: true,
+          kycPercent: evalProf.kycPercent,
+          verified: evalProf.isComplete,
           phoneVerified: true,
           phoneVerifiedAt: now,
-          completedAt: now,
+          completedAt: evalProf.isComplete ? now : null,
         }],
         { session }
       );
@@ -1325,7 +1364,10 @@ app.post('/api/auth/register', async (req, res) => {
       await PendingVerification.updateOne(
         { customerId: custId },
         {
-          $set: { profileStatus: 'complete', queueType },
+          $set: {
+            profileStatus: evalProf.profileStatus,
+            queueType: !evalProf.isComplete ? 'Profile Incomplete' : queueType,
+          },
           $setOnInsert: {
             _id: pvId,
             companyName: formattedName,
@@ -2170,11 +2212,11 @@ app.get('/api/sales/balance-logs', requireStaff(['sales', 'super admin']), async
         username: rawUser,
         phone: cleanPhone,
         email: row.email || matchedCust?.email || '',
-        city: row.city || matchedCust?.city || 'India',
-        state: row.state || matchedCust?.state || 'Maharashtra',
-        category: row.category || matchedCust?.category || 'IT & Software',
+        city: matchedCust?.city || row.city || '',
+        state: matchedCust ? matchedCust.state : (row.city ? (row.state || '') : ''),
+        category: matchedCust ? matchedCust.category : (row.category || ''),
         txType: isDebit ? 'debit' : 'credit',
-        typeLabel: isDebit ? 'Daily Ad Spend Auto-Debit' : 'Ad Wallet Top-Up',
+        typeLabel: isDebit ? 'Daily Lead Delivery Pacing' : 'Growth Wallet Top-Up',
         amount,
         previousBalance: Number(balanceBefore.toFixed(2)),
         changedAmount: Number(amount.toFixed(2)),
@@ -2183,8 +2225,8 @@ app.get('/api/sales/balance-logs', requireStaff(['sales', 'super admin']), async
         balanceAfter: Number(balanceAfter.toFixed(2)),
         balanceChangeFormatted: isDebit ? `-₹${amount.toFixed(2)}` : `+₹${amount.toFixed(2)}`,
         currentWalletBalance: row.current_wallet_balance != null ? Number(row.current_wallet_balance) : (matchedCust?.balance || 0),
-        reason: row.description || (isDebit ? 'Ad Spend Daily Pacing' : 'Wallet Top-Up'),
-        description: row.description || (isDebit ? 'Daily Ad Spend Pacing' : 'Wallet Top-Up'),
+        reason: row.description || (isDebit ? 'Daily Lead Delivery Pacing' : 'Growth Wallet Top-Up'),
+        description: row.description || (isDebit ? 'Daily Lead Delivery Pacing' : 'Growth Wallet Top-Up'),
         updatedBy: 'Super Admin',
         paymentMethod: row.payment_method || (isDebit ? 'Daily Auto-Debit' : 'Razorpay Secure'),
         status: 'Settled ✓',
@@ -2255,11 +2297,11 @@ app.get('/api/sales/balance-logs', requireStaff(['sales', 'super admin']), async
         username: rawUser,
         phone: cleanPhone,
         email: pr.email || pr.cust_email || matchedCust?.email || '',
-        city: pr.city || pr.cust_city || matchedCust?.city || 'India',
-        state: pr.state || pr.cust_state || matchedCust?.state || 'Maharashtra',
-        category: pr.category || pr.cust_category || matchedCust?.category || 'IT & Software',
+        city: matchedCust?.city || pr.city || pr.cust_city || '',
+        state: matchedCust ? matchedCust.state : ((pr.city || pr.cust_city) ? (pr.state || pr.cust_state || '') : ''),
+        category: matchedCust ? matchedCust.category : (pr.category || pr.cust_category || ''),
         txType: 'credit',
-        typeLabel: pr.type_label || 'Ad Wallet Top-Up',
+        typeLabel: pr.type_label || 'Growth Wallet Top-Up',
         amount,
         previousBalance: Number(balanceBefore.toFixed(2)),
         changedAmount: Number(amount.toFixed(2)),
@@ -2303,9 +2345,9 @@ app.get('/api/sales/balance-logs', requireStaff(['sales', 'super admin']), async
         username: c.username || '',
         phone: cleanPhone,
         email: c.email || '',
-        city: c.city || 'India',
-        state: c.state || 'Maharashtra',
-        category: c.category || 'IT & Software',
+        city: c.city || '',
+        state: c.state || '',
+        category: c.category || '',
         txType: 'credit',
         amount: 0,
         previousBalance: Number(currBal.toFixed(2)),
@@ -2422,6 +2464,7 @@ app.get('/api/sales/failed-transactions', requireStaff(['sales', 'super admin'])
       const properCompany = rawCompany || (capUser ? `${capUser} Enterprises` : '') || properContact;
       const planAmount = Number(c.daily_pacing || 300);
 
+      const sanitizedUnpaid = sanitizeCustomerProfileFields(c);
       list.push({
         id: `tx_fail_reg_${c.id}`,
         customerId: c.id,
@@ -2430,10 +2473,10 @@ app.get('/api/sales/failed-transactions', requireStaff(['sales', 'super admin'])
         contactPerson: properContact,
         username: rawUser,
         phone: cleanP || c.phone || '',
-        email: c.email || '',
-        city: c.city || 'India',
-        state: c.state || 'Maharashtra',
-        category: c.category || 'IT & Software',
+        email: sanitizedUnpaid.email || '',
+        city: sanitizedUnpaid.city || '',
+        state: sanitizedUnpaid.state || '',
+        category: sanitizedUnpaid.category || '',
         amount: planAmount,
         ref: ref,
         desc: 'Registration payment incomplete: customer abandoned checkout before payment completion',
@@ -2579,22 +2622,16 @@ app.delete('/api/sales/failed-transactions', requireStaff(['sales', 'super admin
 app.put('/api/customers/:id/profile', requireCustomerSelfOrStaff((req) => req.params.id), async (req, res) => {
   try {
     const rawId = req.params.id;
+    const body = req.body || {};
     const {
       companyName,
       name,
-      category = 'IT & Software',
-      industry = 'Other',
-      website = '',
-      domain = '',
+      website,
+      domain,
       contactPerson,
       contact,
-      email = '',
-      personalEmail = '',
       phone,
-      city = '',
-      state = 'Maharashtra',
-      country = 'India',
-    } = req.body || {};
+    } = body;
 
     const cleanPhone = String(phone || rawId).replace(/\D/g, '').slice(-10);
     const custRow = await findCustomerByIdOrPhone(rawId, cleanPhone);
@@ -2602,6 +2639,19 @@ app.put('/api/customers/:id/profile', requireCustomerSelfOrStaff((req) => req.pa
     if (!custRow) {
       return res.status(404).json({ ok: false, error: 'Customer record not found' });
     }
+
+    const baseSanitized = sanitizeCustomerProfileFields(custRow);
+    const category = body.category !== undefined ? String(body.category || '').trim() : baseSanitized.category;
+    const industry = body.industry !== undefined ? String(body.industry || '').trim() : baseSanitized.industry;
+    const email = body.email !== undefined ? String(body.email || '').trim() : baseSanitized.email;
+    const personalEmail = body.personalEmail !== undefined
+      ? String(body.personalEmail || '').trim()
+      : String(custRow.personalEmail || '').trim();
+    const city = body.city !== undefined ? String(body.city || '').trim() : baseSanitized.city;
+    const state = body.state !== undefined ? String(body.state || '').trim() : baseSanitized.state;
+    const country = body.country !== undefined
+      ? String(body.country || '').trim()
+      : (String(custRow.country || '').trim() || 'India');
 
     const custId = custRow._id;
     const cleanU = (custRow.username || '').replace(/^@/, '').trim();
@@ -2611,9 +2661,11 @@ app.put('/api/customers/:id/profile', requireCustomerSelfOrStaff((req) => req.pa
       str.trim().toLowerCase() === 'registered business' ||
       str.trim().toLowerCase() === 'corporate workspace';
 
-    const orgName = !isGeneric(companyName || name) ? (companyName || name).trim() : fallbackU;
-    const personName = !isGeneric(contactPerson || contact) ? (contactPerson || contact).trim() : orgName;
-    const siteUrl = (website || domain || '').trim();
+    const candidateCompany = companyName ?? name ?? baseSanitized.companyName;
+    const candidatePerson = contactPerson ?? contact ?? baseSanitized.contactPerson;
+    const orgName = !isGeneric(candidateCompany) ? String(candidateCompany).trim() : fallbackU;
+    const personName = !isGeneric(candidatePerson) ? String(candidatePerson).trim() : orgName;
+    const siteUrl = String(website ?? domain ?? custRow.website ?? '').trim();
 
     await applyCustomerProfile(custId, custRow, {
       orgName,
@@ -2673,29 +2725,69 @@ const handleUpdateCustomerRecord = async (req, res) => {
       });
     }
 
+    const baseSanitized = sanitizeCustomerProfileFields(cust);
+    const hasExplicitCategory = updates.category !== undefined;
+    const hasExplicitIndustry = updates.industry !== undefined;
+    const nextCompany = String(updates.companyName ?? updates.name ?? baseSanitized.companyName ?? cust.companyName ?? '').trim();
+    const nextContactPerson = String(updates.contactPerson ?? updates.contact ?? baseSanitized.contactPerson ?? cust.contactPerson ?? '').trim();
+    const nextEmail = String(updates.email ?? baseSanitized.email ?? '').trim();
+    const nextPersonalEmail = updates.personalEmail !== undefined
+      ? String(updates.personalEmail || '').trim()
+      : String(cust.personalEmail || '').trim();
+    const nextCategoryRaw = hasExplicitCategory ? String(updates.category || '').trim() : baseSanitized.category;
+    const nextIndustryRaw = hasExplicitIndustry ? String(updates.industry || '').trim() : baseSanitized.industry;
+    const nextCityRaw = updates.city !== undefined ? String(updates.city || '').trim() : baseSanitized.city;
+    const nextStateRaw = updates.state !== undefined ? String(updates.state || '').trim() : baseSanitized.state;
+    const nextCountry = updates.country !== undefined
+      ? String(updates.country || '').trim()
+      : (String(cust.country || '').trim() || 'India');
+    const nextWebsite = String(updates.website ?? updates.domain ?? cust.website ?? '').trim();
+
+    const evalProf = evaluateCustomerProfileCompletion({
+      phone: cust.phone,
+      contactPerson: nextContactPerson,
+      companyName: nextCompany,
+      email: nextEmail,
+      category: nextCategoryRaw,
+      industry: nextIndustryRaw,
+      city: nextCityRaw,
+      state: nextStateRaw,
+      registeredAt: cust.registeredAt,
+      completedAt: (hasExplicitCategory || hasExplicitIndustry)
+        ? new Date(Date.now() + 10_000)
+        : cust.completedAt,
+    });
+
     const nextStatus = isStaffActor ? (updates.status || cust.status) : cust.status;
-    const nextProfile = updates.profileStatus || updates.profile_status || cust.profileStatus;
     const nextPayment = isStaffActor
       ? (updates.paymentStatus || updates.payment_status || cust.paymentStatus)
       : cust.paymentStatus;
-    const nextKyc = updates.kycPercent !== undefined ? Number(updates.kycPercent) : Number(cust.kycPercent);
-    const nextCompany = updates.companyName || updates.name || cust.companyName;
-    const nextWebsite = updates.website ?? updates.domain ?? cust.website;
+    const nextProfile = evalProf.isComplete ? 'complete' : 'incomplete';
+    const nextKyc = evalProf.isComplete ? 100 : evalProf.kycPercent;
+    const nextVerified = evalProf.isComplete;
+    const nextCompletedAt = evalProf.isComplete ? (cust.completedAt || new Date()) : null;
     const rawSubmittedPassword = (updates.password || updates.passwordPlain || updates.passwordHash || '').trim();
     const nextPassword = rawSubmittedPassword
       ? await hashPassword(rawSubmittedPassword)
       : cust.passwordHash;
-    // Legacy SQL evaluated `verified` against the row values from BEFORE this update; kept as-is.
-    const nextVerified = Number(cust.kycPercent) >= 100 || cust.profileStatus === 'complete';
 
     await applyCustomerRecordUpdate(cust._id, {
       company: nextCompany,
+      contactPerson: nextContactPerson,
+      email: nextEmail,
+      personalEmail: nextPersonalEmail,
+      category: evalProf.sanitized.category,
+      industry: evalProf.sanitized.industry,
+      city: evalProf.sanitized.city,
+      state: evalProf.sanitized.state,
+      country: nextCountry,
       website: nextWebsite,
       status: nextStatus,
       profile: nextProfile,
       payment: nextPayment,
       kyc: nextKyc,
       verified: nextVerified,
+      completedAt: nextCompletedAt,
       password: nextPassword,
     });
 
@@ -2904,7 +2996,7 @@ app.post('/api/payments/razorpay/order', requireAuth, async (req, res) => {
           phone: cleanPhone || '9999999999',
           username: req.body?.username || 'client',
           contact_person: req.body?.contactPerson || 'Client',
-          company_name: 'AdMafia Client',
+          company_name: 'Ad Mafia Client',
           email: `${cleanPhone || 'client'}@admafia.marketing`,
         };
     const billingCurrency = await getBillingCurrency(cust.id);
@@ -3026,7 +3118,7 @@ app.post('/api/payments/razorpay/payment-link', requireAuth, async (req, res) =>
         currency: 'INR',
         accept_partial: false,
         reference_id: `plink_ref_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-        description: `AdMafia Instant Wallet Top-Up (₹${amount.toLocaleString('en-IN')})`,
+        description: `Ad Mafia Instant Wallet Top-Up (₹${amount.toLocaleString('en-IN')})`,
         customer: {
           name: cust.contact_person || cust.company_name || cust.username || 'Customer',
           contact: cleanPhone || cust.phone || '9999999999',
@@ -3225,7 +3317,7 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
       amount: cleanAmount,
       referenceUtr: paymentId,
       paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
-      description: `AdMafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
+      description: `Ad Mafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
     });
 
     return res.redirect(
@@ -3341,7 +3433,7 @@ app.post('/api/payments/razorpay/verify', requireAuth, async (req, res) => {
       amount: cleanAmount,
       referenceUtr: paymentId,
       paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
-      description: `AdMafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
+      description: `Ad Mafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
     });
     return res.status(200).json(result);
   } catch (err) {
@@ -3454,7 +3546,7 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
               amount,
               referenceUtr: paymentId,
               paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
-              description: `AdMafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
+              description: `Ad Mafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
             });
             console.log(`[Razorpay Webhook] Successfully credited ₹${amount} for payment ${paymentId} (Customer: ${customerId || cleanPhone}).`);
           } else {
@@ -3484,7 +3576,7 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
                 amount,
                 referenceUtr: canonicalPaymentId,
                 paymentMethod: capturedPayment?.method ? `Razorpay ${capturedPayment.method.toUpperCase()}` : 'Razorpay Secure (Order)',
-                description: `AdMafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
+                description: `Ad Mafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
               });
               console.log(`[Razorpay Webhook] Successfully credited order ${orderId} (Payment: ${canonicalPaymentId}).`);
             } catch (ordErr) {
@@ -4276,7 +4368,7 @@ app.listen(PORT, () => {
   });
   databaseReady
     .then((info) => {
-      console.log(`🚀 Growthline CRM Backend API listening on http://localhost:${PORT} (DB: MongoDB "${info.database}" @ ${info.host}:${info.port})`);
+      console.log(`🚀 Ad Mafia CRM Backend API listening on http://localhost:${PORT} (DB: MongoDB "${info.database}" @ ${info.host}:${info.port})`);
 
       // Seed default department admin accounts + two-rule country pricing (idempotent upserts)
       seedBaselineData()
@@ -4285,6 +4377,15 @@ app.listen(PORT, () => {
           for (const w of seeded.warnings) console.warn('[Mongo Bootstrap Warning]', w);
         })
         .catch((err) => console.warn('[Mongo Bootstrap Warning]', err.message));
+
+      // Non-destructive startup repair for legacy self-registered accounts with fake 'Maharashtra' / 100% completion
+      repairIncompleteCustomerProfiles()
+        .then((repaired) => {
+          if (repaired.repairedCount > 0) {
+            console.log(`[Profile Repair] Reconciled ${repaired.repairedCount} incomplete customer profile(s) on startup.`);
+          }
+        })
+        .catch((err) => console.warn('[Profile Repair Warning]', err.message));
 
       // Clean up dismissed test failed transactions & admin-requested test payment/ledger entries
       purgeLegacyTestLedgerRows()

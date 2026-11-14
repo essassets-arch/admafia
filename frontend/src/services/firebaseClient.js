@@ -1,5 +1,5 @@
 /**
- * AdMafia Real-Time Notification & Firebase Cloud Messaging (FCM) Client (v2)
+ * Ad Mafia Real-Time Notification & Firebase Cloud Messaging (FCM) Client (v2)
  * Dual-channel real-time engine:
  *  1. Instant Server-Sent Events (SSE) stream (/api/notifications/stream)
  *  2. Google Firebase Cloud Messaging (FCM HTTP v1) Web Push + Service Worker bridge
@@ -74,7 +74,7 @@ export async function triggerDesktopOsNotification(data) {
   if (typeof window === 'undefined' || typeof Notification === 'undefined') return;
   if (Notification.permission !== 'granted') return;
 
-  const title = data?.title || 'AdMafia Notification';
+  const title = data?.title || 'Ad Mafia Notification';
   const body = data?.body || '';
   const tag = String(data?.id || `admafia-${Date.now()}`);
   const deepLink = data?.deepLink || '/portal';

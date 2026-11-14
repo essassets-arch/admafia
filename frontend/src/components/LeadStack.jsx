@@ -193,7 +193,7 @@ export default function LeadStack() {
           }
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: 640px) {
           .lead-stack-container {
             height: 360px;
           }
@@ -202,12 +202,9 @@ export default function LeadStack() {
             padding: 14px 16px;
           }
 
-          .card-item-2 {
-            transform: translateX(8px) rotate(1.5deg);
-          }
-
+          .card-item-2,
           .card-item-3 {
-            transform: translateX(-4px) rotate(-1deg);
+            transform: none !important;
           }
         }
       `}</style>

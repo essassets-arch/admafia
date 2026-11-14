@@ -1,5 +1,5 @@
 /* =============================================================================
-   ADMAFIA MARKETING DEPARTMENT - STYLESHEET
+   AD MAFIA MARKETING DEPARTMENT - STYLESHEET
    Clean, modern, professional, high-contrast light theme
    ============================================================================= */
 
@@ -904,16 +904,147 @@
   border: none;
 }
 
-/* 13. Mobile Drawer Responsive */
-@media (max-width: 900px) {
+/* 13. Mobile & Tablet Drawer + Responsive Breakpoints */
+.mkt-mobile-menu-btn,
+.mkt-drawer-close-btn {
+  display: none;
+}
+
+@media (max-width: 1024px) {
   .marketing-sidebar {
     display: none;
   }
-  .marketing-page-container {
-    padding: 16px;
+
+  .marketing-sidebar.mobile-open {
+    display: flex !important;
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(280px, 86vw);
+    min-width: 0;
+    z-index: 1200;
+    box-shadow: 8px 0 30px rgba(15, 23, 42, 0.28);
   }
+
+  .mkt-drawer-close-btn {
+    display: inline-flex;
+    margin-left: auto;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--mkt-border);
+    background: var(--mkt-slate-50);
+    color: var(--mkt-slate-700);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .mkt-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(3px);
+    z-index: 1190;
+  }
+
+  .mkt-mobile-menu-btn {
+    display: inline-flex !important;
+    flex-shrink: 0;
+    padding: 6px 8px;
+  }
+
+  .marketing-page-container {
+    padding: 18px 16px;
+  }
+
   .marketing-top-bar {
     padding: 0 16px;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .mkt-split-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .marketing-live-pill,
+  .marketing-clock-tag,
+  .mkt-user-role {
+    display: none !important;
+  }
+
+  .marketing-top-actions {
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .marketing-breadcrumbs {
+    min-width: 0;
+  }
+
+  .marketing-breadcrumbs > span {
+    display: none;
+  }
+
+  .marketing-breadcrumbs strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 150px;
+    display: inline-block;
+  }
+
+  .mkt-user-pill {
+    padding: 5px 8px !important;
+  }
+
+  .mkt-user-name {
+    max-width: 88px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .marketing-search-box {
+    min-width: min(100%, 200px);
+    max-width: 100%;
+  }
+
+  .marketing-pagination {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  .mkt-form-2col {
+    grid-template-columns: 1fr !important;
+  }
+
+  .mkt-days-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+
+  .mkt-hero-banner {
+    padding: 20px 16px !important;
+    border-radius: 16px !important;
+  }
+
+  .mkt-hero-banner h1 {
+    font-size: 1.35rem !important;
+  }
+
+  .marketing-modal-header,
+  .marketing-modal-body,
+  .marketing-modal-footer {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }
 

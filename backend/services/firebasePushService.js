@@ -350,7 +350,7 @@ export async function dispatchOutboxNotification(event) {
           recipientId: customerId,
           type: 'WALLET_CREDITED',
           title: '💳 Wallet Recharged Successfully',
-          body: `${sym}${amount.toLocaleString('en-IN')} has been credited to your Marketing Wallet.`,
+          body: `${sym}${amount.toLocaleString('en-IN')} has been credited to your Growth Wallet.`,
           deepLink: '/portal#wallet',
           metadata: { amount, utr: p.referenceUtr || '' },
         });
@@ -374,7 +374,7 @@ export async function dispatchOutboxNotification(event) {
           recipientType: 'customer',
           recipientId: customerId,
           type: 'LOW_WALLET_RUNWAY',
-          title: '⚠️ Low Ad Wallet Balance Alert',
+          title: '⚠️ Low Growth Wallet Balance Alert',
           body: `Your campaign runway is under 2 days (Balance: ₹${balanceAfter.toLocaleString('en-IN')}). Top up now to avoid lead pause.`,
           deepLink: '/portal#wallet',
           metadata: { balanceAfter, dailySpend },
@@ -388,7 +388,7 @@ export async function dispatchOutboxNotification(event) {
       await notifyStaffDepartments(['Sales'], {
         type: 'NEW_CUSTOMER_REGISTERED',
         title: '🚀 New WhatsApp-Verified Signup!',
-        body: `${company} (${p.phone || ''}) verified via WhatsApp OTP and joined AdMafia.`,
+        body: `${company} (${p.phone || ''}) verified via WhatsApp OTP and joined Ad Mafia.`,
         deepLink: '/sales',
         metadata: { customerId: event.aggregateId, phone: p.phone || '' },
       });

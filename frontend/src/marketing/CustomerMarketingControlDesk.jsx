@@ -1067,7 +1067,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 </div>
 
                 {/* 7 Days Cards Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
+                <div className="mkt-days-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
                   {DAYS_OF_WEEK.map((day) => {
                     const isSelected = editActiveDays.includes(day.code);
                     const isToday = day.code === todayItem.code;
@@ -1134,7 +1134,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
               </div>
             </div>
 
-            <div className="marketing-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="marketing-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <button
                 type="button"
                 className="mkt-btn-table-action"
@@ -1223,7 +1223,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 </div>
               </div>
 
-              <div className="marketing-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '12px' }}>
+              <div className="marketing-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', width: '100%', gap: '12px' }}>
                 <button
                   type="button"
                   className="mkt-btn-table-action"
@@ -1231,7 +1231,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 >
                   Cancel
                 </button>
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <button
                     type="submit"
                     className="mkt-btn-table-action"

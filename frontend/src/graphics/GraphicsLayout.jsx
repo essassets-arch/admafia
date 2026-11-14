@@ -196,9 +196,17 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
             <Palette size={20} />
           </div>
           <div className="graphics-brand-text">
-            <span className="graphics-brand-title">AdMafia Creative</span>
+            <span className="graphics-brand-title">Ad Mafia Creative</span>
             <span className="graphics-brand-tag">Graphics Department</span>
           </div>
+          <button
+            type="button"
+            className="gfx-drawer-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close Menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Live IST clock */}
@@ -259,7 +267,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
             }}
           >
             <ExternalLink size={15} />
-            <span>AdMafia Website</span>
+            <span>Ad Mafia Website</span>
           </button>
 
           <button
@@ -279,11 +287,19 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
         </div>
       </aside>
 
+      {mobileMenuOpen && (
+        <div
+          className="gfx-drawer-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* 2. Main Workspace Wrap */}
       <div className="graphics-main-wrap">
         {/* Top Header */}
         <header className="graphics-top-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
             <button
               type="button"
               className="gfx-mobile-toggle-btn"
@@ -306,7 +322,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
           </div>
 
           <div className="graphics-top-actions">
-            <NotificationBell variant="dark" />
+            <NotificationBell variant="light" />
             <div className="graphics-live-pill">
               <span className="graphics-live-dot" />
               <span>MongoDB Live Sync</span>

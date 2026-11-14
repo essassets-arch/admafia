@@ -239,7 +239,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1.4fr) minmax(280px, 1fr)', gap: 20 }}>
+      <div className="gfx-upload-split" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 20 }}>
         {/* Left Column: Real Upload Form */}
         <div className="graphics-table-card" style={{ padding: 24 }}>
           <form onSubmit={handleSubmitArtwork}>
@@ -427,7 +427,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
+                <div className="gfx-specs-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
                   <div style={{ background: '#f8fafc', padding: 8, borderRadius: 6 }}>
                     <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>Platform</span>
                     <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{selectedRequest.platform}</div>

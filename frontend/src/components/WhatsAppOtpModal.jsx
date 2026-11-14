@@ -3,7 +3,7 @@ import { ShieldCheck, RefreshCw, X, Lock, Eye, EyeOff, MessageCircle, CheckCircl
 import crmApi from '../services/crmApi';
 
 /**
- * Reusable Meta WhatsApp Cloud API (v26.0) 6-Digit OTP Verification Modal
+ * Reusable Official WhatsApp 6-Digit OTP Verification Modal
  * Supports purposes: 'register' | 'password_reset' | 'verify_phone'
  */
 export default function WhatsAppOtpModal({
@@ -174,6 +174,7 @@ export default function WhatsAppOtpModal({
       }}
     >
       <div
+        className="am-wa-otp-modal-card"
         style={{
           width: '100%',
           maxWidth: '450px',
@@ -309,6 +310,7 @@ export default function WhatsAppOtpModal({
 
         <form onSubmit={handleVerifySubmit}>
           <div
+            className="am-wa-otp-grid"
             onPaste={handlePaste}
             style={{
               display: 'grid',
@@ -320,6 +322,7 @@ export default function WhatsAppOtpModal({
             {digits.map((digit, idx) => (
               <input
                 key={idx}
+                className="am-wa-otp-input"
                 ref={(el) => {
                   inputRefs.current[idx] = el;
                 }}
@@ -433,11 +436,14 @@ export default function WhatsAppOtpModal({
         </form>
 
         <div
+          className="am-wa-otp-resend-row"
           style={{
             marginTop: '16px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '6px',
             fontSize: '0.82rem',
             color: '#64748b',
           }}
@@ -464,6 +470,23 @@ export default function WhatsAppOtpModal({
           </button>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 420px) {
+          .am-wa-otp-modal-card {
+            padding: 20px 16px !important;
+            border-radius: 16px !important;
+          }
+          .am-wa-otp-grid {
+            gap: 6px !important;
+          }
+          .am-wa-otp-input {
+            height: 46px !important;
+            font-size: 1.15rem !important;
+            border-radius: 10px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

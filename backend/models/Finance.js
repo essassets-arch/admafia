@@ -91,7 +91,7 @@ const TaxInvoiceSchema = new mongoose.Schema({
   customerId: { type: String, required: true, index: true },
   paymentRecordId: { type: String, default: null, index: true },
   invoiceNumber: { type: String, required: true, unique: true, index: true },
-  particulars: { type: String, default: 'Meta Ads Campaign Ad Spend Budget Credit' },
+  particulars: { type: String, default: 'Lead Generation & Growth Wallet Credit' },
   paymentMode: { type: String, default: '' },
   status: { type: String, default: 'Paid' },
   invoiceDate: { type: Date, default: Date.now },

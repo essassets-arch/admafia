@@ -32,7 +32,7 @@ export default function WhatsAppWidget() {
   if (!mounted || !country) return null;
 
   const dailyRate = formatDailyRate(country);
-  const dynamicMsg = `Hi AdMafia Marketing! I'm interested in generating customer leads from ${dailyRate} in ${country?.country_name || 'my area'}. Please guide me.`;
+  const dynamicMsg = `Hi Ad Mafia Marketing! I'm interested in receiving verified business leads from ${dailyRate} in ${country?.country_name || 'my area'}. Please guide me.`;
   const waUrl = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(dynamicMsg)}`;
 
   return (
@@ -62,11 +62,11 @@ export default function WhatsAppWidget() {
           <div className="wa-teaser-content">
             <div className="wa-teaser-header">
               <span className="wa-online-dot" />
-              <strong>AdMafia Growth Support</strong>
+              <strong>Ad Mafia Growth Support</strong>
               <VerifiedBadge size={14} />
             </div>
             <p className="wa-teaser-text">
-              Generate genuine buyer leads with phone numbers from <strong>{dailyRate}</strong>. Chat with us on WhatsApp! 👋
+              Receive verified buyer leads with phone numbers from <strong>{dailyRate}</strong>. Chat with us on WhatsApp! 👋
             </p>
           </div>
         </a>
@@ -78,7 +78,7 @@ export default function WhatsAppWidget() {
         target="_blank"
         rel="noopener noreferrer"
         className="wa-floating-btn"
-        aria-label="Chat directly with AdMafia Marketing on WhatsApp"
+        aria-label="Chat directly with Ad Mafia Marketing on WhatsApp"
         title="Chat on WhatsApp (+91 6359 120 081)"
       >
         <span className="wa-btn-pulse-ring" />
@@ -89,7 +89,7 @@ export default function WhatsAppWidget() {
   );
 }
 
-// Official Meta / WhatsApp Verified Badge SVG
+// Official WhatsApp Verified Support Badge SVG
 function VerifiedBadge({ size = 15 }) {
   return (
     <svg

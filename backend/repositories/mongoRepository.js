@@ -13,6 +13,7 @@ import {
   CountryPricing,
 } from '../models/index.js';
 import { recordMongoOutboxEvent } from '../services/mongoOutbox.js';
+import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion.js';
 
 /**
  * MongoDB Data Access & Repository Layer
@@ -417,24 +418,36 @@ export async function createOrUpdateCustomerMongo({
   passwordHash = 'Password123!',
   companyName,
   contactPerson,
-  category = 'IT & Software',
-  industry = 'Other',
+  category = '',
+  industry = '',
   website = '',
   city = '',
-  state = 'Maharashtra',
+  state = '',
   country = 'India',
   countryCode = 'IN',
   currency = 'INR',
   status = 'active',
-  profileStatus = 'complete',
+  profileStatus,
   paymentStatus = 'pending',
-  kycPercent = 100,
-  verified = true,
+  kycPercent,
+  verified,
   dailyBudget = 300,
 }) {
   const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
   const custId = id || `cust_reg_${cleanPhone}`;
   const walId = `wal_${cleanPhone}`;
+  const resolvedCompany = companyName || `Business ${cleanPhone}`;
+  const resolvedContact = contactPerson || companyName || `Client ${cleanPhone}`;
+  const evalProf = evaluateCustomerProfileCompletion({
+    phone: cleanPhone,
+    contactPerson: resolvedContact,
+    companyName: resolvedCompany,
+    email,
+    category,
+    industry,
+    city,
+    state,
+  });
 
   // Upsert Customer in MongoDB
   const customer = await Customer.findOneAndUpdate(
@@ -446,21 +459,21 @@ export async function createOrUpdateCustomerMongo({
         phone: cleanPhone,
         email,
         passwordHash,
-        companyName: companyName || `Business ${cleanPhone}`,
-        contactPerson: contactPerson || companyName || `Client ${cleanPhone}`,
-        category,
-        industry,
+        companyName: resolvedCompany,
+        contactPerson: resolvedContact,
+        category: evalProf.sanitized.category,
+        industry: evalProf.sanitized.industry,
         website,
-        city,
-        state,
+        city: evalProf.sanitized.city,
+        state: evalProf.sanitized.state,
         country,
         countryCode,
         currency,
         status,
-        profileStatus,
+        profileStatus: profileStatus ?? evalProf.profileStatus,
         paymentStatus,
-        kycPercent,
-        verified,
+        kycPercent: kycPercent ?? evalProf.kycPercent,
+        verified: verified ?? evalProf.isComplete,
         updatedAt: new Date(),
       },
       $setOnInsert: {

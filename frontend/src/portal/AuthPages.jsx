@@ -22,6 +22,7 @@ import {
 import crmApi from '../services/crmApi';
 import countryService, { formatDailyRate, formatDailyBudget } from '../services/countryService';
 import WhatsAppOtpModal from '../components/WhatsAppOtpModal';
+import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion';
 
 const STRICT_EMAIL_REGEX =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,24}$/;
@@ -452,6 +453,10 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       } else {
         newCustomer = sanitizeStoredCustomer(newCustomer);
       }
+      const regEval = evaluateCustomerProfileCompletion(newCustomer);
+      newCustomer.kycPercent = regEval.kycPercent;
+      newCustomer.profileStatus = regEval.profileStatus;
+      newCustomer.profile_status = regEval.profileStatus;
 
       try {
         localStorage.setItem('growthline_active_user', JSON.stringify(newCustomer));
@@ -486,9 +491,9 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
             className="auth-fullpage-brand"
             onClick={onBackToWebsite}
             style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            title="AdMafia Marketing"
+            title="Ad Mafia Marketing"
           >
-            <img src="/AdMafia-Logo.png" alt="AdMafia Marketing" className="auth-topbar-logo" />
+            <img src="/AdMafia-Logo.png" alt="Ad Mafia Marketing" className="auth-topbar-logo" />
           </div>
           <div className="auth-fullpage-topbar-actions">
             <span className="auth-topbar-Question">Already have an account?</span>
@@ -506,7 +511,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         <section className="auth-fullpage-showcase">
           <div className="auth-showcase-inner">
             <div className="auth-showcase-topbar">
-              <img src="/AdMafia-Logo.png" alt="AdMafia Marketing" className="auth-brand-logo" />
+              <img src="/AdMafia-Logo.png" alt="Ad Mafia Marketing" className="auth-brand-logo" />
               <div className="auth-top-badge">
                 <span className="auth-pulse-dot" />
                 <span>WHATSAPP VERIFIED ONBOARDING</span>
@@ -519,7 +524,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                 <span className="auth-showcase-highlight">from {dailyRateText}.</span>
               </h1>
               <p className="auth-showcase-subtext">
-                Create your dedicated <strong>AdMafia Business Workspace</strong> in 3 simple steps with instant WhatsApp OTP verification. Top up your ad wallet, configure your target city &amp; industry, and receive real-time customer names and unmasked mobile numbers.
+                Create your dedicated <strong>Ad Mafia Business Workspace</strong> in 3 simple steps with instant WhatsApp OTP verification. Top up your growth wallet, configure your target city &amp; industry, and receive real-time customer names and unmasked mobile numbers.
               </p>
             </div>
 
@@ -562,9 +567,9 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
 
               <div className="auth-live-card-metrics">
                 <div className="auth-metric-item">
-                  <small>Minimum Ad Spend</small>
+                  <small>Minimum Daily Budget</small>
                   <strong>{dailyBudgetText} / Day</strong>
-                  <span className="auth-metric-sub">100% Towards Meta Ads</span>
+                  <span className="auth-metric-sub">100% Towards Verified Leads</span>
                 </div>
                 <div className="auth-metric-item highlight">
                   <small>Setup &amp; Platform Fee</small>
@@ -589,7 +594,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                     <h4>1. WhatsApp Verified Business Identity</h4>
                     <span className="auth-step-tag">Instant OTP</span>
                   </div>
-                  <p>Every business workspace is verified via Meta WhatsApp OTP to guarantee 100% authentic accounts.</p>
+                  <p>Every business workspace is verified via WhatsApp OTP to guarantee 100% authentic accounts.</p>
                 </div>
               </div>
 
@@ -602,7 +607,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                     <h4>2. Pure Wallet Balance Control (Min {dailyBudgetText})</h4>
                     <span className="auth-step-tag blue">Direct Gateway / Bank UTR</span>
                   </div>
-                  <p>Add funds anytime with full daily ad budget control in your local currency.</p>
+                  <p>Add funds anytime with full daily growth budget control in your local currency.</p>
                 </div>
               </div>
 
@@ -612,8 +617,8 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                 </div>
                 <div className="auth-step-body">
                   <div className="auth-step-header">
-                    <h4>3. City &amp; Category Targeted Meta Ads</h4>
-                    <span className="auth-step-tag amber">Precision Geo-Targeted</span>
+                    <h4>3. City &amp; Category Matched Buyer Leads</h4>
+                    <span className="auth-step-tag amber">Precision Territory Match</span>
                   </div>
                   <p>Connect directly with high-intent customers searching for your services in your city.</p>
                 </div>
@@ -682,7 +687,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                 {step === 2 &&
                   'Step 2 of 3 — Tell us your business name, optional work email, and workspace handle.'}
                 {step === 3 &&
-                  'Step 3 of 3 — Choose and confirm a strong password for your AdMafia account.'}
+                  'Step 3 of 3 — Choose and confirm a strong password for your Ad Mafia account.'}
               </p>
             </div>
 
@@ -1252,7 +1257,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
 
             <div className="auth-mobile-trust-bar">
               <ShieldCheck size={14} color="#10b981" />
-              <span>Official Meta WhatsApp Verified AdMafia Client Portal</span>
+              <span>Official WhatsApp Verified Ad Mafia Client Portal</span>
             </div>
           </div>
         </section>
@@ -1444,9 +1449,9 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
             className="auth-fullpage-brand"
             onClick={onBackToWebsite}
             style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            title="AdMafia Marketing"
+            title="Ad Mafia Marketing"
           >
-            <img src="/AdMafia-Logo.png" alt="AdMafia Marketing" className="auth-topbar-logo" />
+            <img src="/AdMafia-Logo.png" alt="Ad Mafia Marketing" className="auth-topbar-logo" />
           </div>
           <div className="auth-fullpage-topbar-actions">
             <span className="auth-topbar-Question">Need a client account?</span>
@@ -1464,7 +1469,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
         <section className="auth-fullpage-showcase">
           <div className="auth-showcase-inner">
             <div className="auth-showcase-topbar">
-              <img src="/AdMafia-Logo.png" alt="AdMafia Marketing" className="auth-brand-logo" />
+              <img src="/AdMafia-Logo.png" alt="Ad Mafia Marketing" className="auth-brand-logo" />
               <div className="auth-top-badge">
                 <span className="auth-pulse-dot" />
                 <span>CUSTOMER COMMAND CENTER</span>
@@ -1477,7 +1482,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
                 <span className="auth-showcase-highlight">Buyer Lead Hub.</span>
               </h1>
               <p className="auth-showcase-subtext">
-                Sign in to view real-time buyer leads dispatched by our ad operations team, manage your marketing wallet balance, and convert enquiries via direct Call &amp; WhatsApp.
+                Sign in to view real-time buyer leads dispatched to your pipeline, manage your growth wallet balance, and convert enquiries via direct Call &amp; WhatsApp.
               </p>
             </div>
 
@@ -1497,14 +1502,14 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
                 <div className="auth-live-lead-avatar">AM</div>
                 <div className="auth-live-lead-details">
                   <div className="auth-live-lead-name-row">
-                    <span className="auth-lead-name">AdMafia Live Lead Dispatch</span>
+                    <span className="auth-lead-name">Ad Mafia Live Lead Dispatch</span>
                     <span className="auth-lead-tag-verified">24/7 Live Stream ✓</span>
                   </div>
                   <div className="auth-lead-phone-row">
                     <span className="auth-lead-phone">Real-Time Lead Inbox &amp; Wallet Ledger</span>
                   </div>
                   <div className="auth-lead-intent-sub">
-                    Instant sync with Sales Operations &amp; Meta Ads Campaign Engine
+                    Instant sync with Sales Operations &amp; Verified Lead Delivery Engine
                   </div>
                 </div>
                 <div className="auth-live-lead-actions">
@@ -1514,7 +1519,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
 
               <div className="auth-live-card-metrics">
                 <div className="auth-metric-item">
-                  <small>Daily Ad Budget</small>
+                  <small>Daily Growth Budget</small>
                   <strong>From {formatDailyRate(selectedCountry)}</strong>
                   <span className="auth-metric-sub">Full Pacing Control</span>
                 </div>
@@ -1551,10 +1556,10 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
                 </div>
                 <div className="auth-step-body">
                   <div className="auth-step-header">
-                    <h4>Transparent Wallet &amp; Daily Spend</h4>
+                    <h4>Transparent Wallet &amp; Daily Pacing</h4>
                     <span className="auth-step-tag blue">Live Ledger</span>
                   </div>
-                  <p>Track every rupee added to your wallet and adjust your daily ad spend limit anytime.</p>
+                  <p>Track every rupee added to your wallet and adjust your daily pacing limit anytime.</p>
                 </div>
               </div>
 
@@ -1604,7 +1609,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
 
             <div className="auth-card-top">
               <h2>Sign In to Workspace</h2>
-              <p>Enter your credentials to sign in to your marketing &amp; lead workspace.</p>
+              <p>Enter your credentials to sign in to your client lead workspace.</p>
             </div>
 
             {loginError && (
@@ -1675,7 +1680,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
                 <p style={{ margin: '0 0 10px', fontSize: '0.8rem', color: '#166534' }}>
                   Enter your registered WhatsApp mobile number to receive a 6-digit password reset code.
                 </p>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div className="forgot-otp-input-row" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <input
                     type="tel"
                     required
@@ -1683,7 +1688,8 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
                     onChange={(e) => setForgotPhone(e.target.value.replace(/\D/g, ''))}
                     placeholder="e.g. 9724916167"
                     style={{
-                      flex: 1,
+                      flex: '1 1 160px',
+                      minWidth: 0,
                       padding: '10px 12px',
                       borderRadius: '9px',
                       border: '1px solid #86efac',
@@ -1793,7 +1799,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
 
             <div className="auth-mobile-trust-bar">
               <ShieldCheck size={14} color="#10b981" />
-              <span>Official 256-bit Encrypted AdMafia Client Portal</span>
+              <span>Official 256-bit Encrypted Ad Mafia Client Portal</span>
             </div>
           </div>
         </section>
@@ -1813,7 +1819,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
         }
         subtitle={
           otpFlow.purpose === 'verify_phone'
-            ? `For security compliance, every AdMafia account must verify its WhatsApp number once. Enter the 6-digit code sent to ${otpFlow.maskedPhone}.`
+            ? `For security compliance, every Ad Mafia account must verify its WhatsApp number once. Enter the 6-digit code sent to ${otpFlow.maskedPhone}.`
             : ''
         }
         initialCooldown={otpFlow.cooldown}

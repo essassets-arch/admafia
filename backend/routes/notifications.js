@@ -202,7 +202,7 @@ notificationsRouter.post('/test', requireAuth, async (req, res) => {
       recipientId,
       department,
       type: 'SYSTEM_ALERT',
-      title: '🔔 Live Push Verified (AdMafia)',
+      title: '🔔 Live Push Verified (Ad Mafia)',
       body: 'Real-time Firebase Cloud Messaging & Live Stream notifications are active on this device.',
       deepLink: isStaff ? '/sales' : '/portal#dashboard',
       metadata: { source: 'self-test' },

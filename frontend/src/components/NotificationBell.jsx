@@ -207,6 +207,7 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
       {/* Instant Floating Toast for New Push Event */}
       {toastItem && !open && (
         <div
+          className="am-notif-toast"
           onClick={() => {
             const item = toastItem;
             setToastItem(null);
@@ -249,6 +250,7 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
 
       {open && (
         <div
+          className="am-notif-dropdown"
           style={{
             position: 'absolute',
             top: '44px',
@@ -448,6 +450,24 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
           </div>
         </div>
       )}
+
+      <style>{`
+        @media (max-width: 640px) {
+          .am-notif-dropdown {
+            position: fixed !important;
+            top: 60px !important;
+            left: 12px !important;
+            right: 12px !important;
+            width: auto !important;
+            max-width: none !important;
+          }
+          .am-notif-toast {
+            left: 12px !important;
+            right: 12px !important;
+            width: auto !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

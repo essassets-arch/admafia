@@ -161,16 +161,21 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
   return (
     <div className="marketing-layout-root">
       {/* 1. Desktop & Mobile Sidebar */}
-      <aside
-        className={`marketing-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}
-        style={mobileMenuOpen ? { display: 'flex', position: 'fixed', zIndex: 100, width: '280px' } : undefined}
-      >
+      <aside className={`marketing-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="marketing-sidebar-brand">
-          <img src="/AdMafia-Logo.png" alt="AdMafia Marketing" className="marketing-sidebar-logo" />
+          <img src="/AdMafia-Logo.png" alt="Ad Mafia Marketing" className="marketing-sidebar-logo" />
           <div className="marketing-brand-text">
-            <span className="marketing-brand-title">AdMafia CRM</span>
+            <span className="marketing-brand-title">Ad Mafia CRM</span>
             <span className="marketing-brand-tag">Marketing Ops</span>
           </div>
+          <button
+            type="button"
+            className="mkt-drawer-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close Menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="marketing-sidebar-nav">
@@ -211,7 +216,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
             }}
           >
             <ExternalLink size={15} />
-            <span>AdMafia Website</span>
+            <span>Ad Mafia Website</span>
           </button>
           <button
             type="button"
@@ -230,16 +235,24 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
         </div>
       </aside>
 
+      {mobileMenuOpen && (
+        <div
+          className="mkt-drawer-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* 2. Main Workspace Wrap */}
       <div className="marketing-main-wrap">
         {/* Top Bar */}
         <header className="marketing-top-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
             <button
               type="button"
-              className="mkt-btn-table-action"
-              style={{ display: window.innerWidth <= 900 ? 'inline-flex' : 'none' }}
+              className="mkt-btn-table-action mkt-mobile-menu-btn"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle Menu"
             >
               {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
@@ -253,7 +266,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
           </div>
 
           <div className="marketing-top-actions">
-            <NotificationBell variant="dark" />
+            <NotificationBell variant="light" />
             <div className="marketing-live-pill">
               <span className="marketing-live-dot" />
               <span>MongoDB Live Sync</span>
@@ -267,11 +280,11 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
                 hour12: true,
               })} IST
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(236,72,153,0.12)', border: '1px solid rgba(236,72,153,0.3)', padding: '5px 12px', borderRadius: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ec4899' }} />
-              <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#fbcfe8' }}>{activeUser.fullName}</div>
-                <div style={{ fontSize: 10, color: '#f472b6' }}>{activeUser.role}</div>
+            <div className="mkt-user-pill" style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', padding: '5px 12px', borderRadius: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ec4899', flexShrink: 0 }} />
+              <div style={{ textAlign: 'left', lineHeight: 1.2, minWidth: 0 }}>
+                <div className="mkt-user-name" style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{activeUser.fullName}</div>
+                <div className="mkt-user-role" style={{ fontSize: 10, fontWeight: 600, color: '#475569' }}>{activeUser.role}</div>
               </div>
             </div>
           </div>

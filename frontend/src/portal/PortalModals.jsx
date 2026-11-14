@@ -2,6 +2,7 @@ import { TrendingUp, Zap, Calendar, X, ArrowRight, ShieldCheck, Sparkles, Buildi
 import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { crmApi } from '../services/crmApi';
+import { evaluateCustomerProfileCompletion, sanitizeCustomerProfileFields } from '../utils/profileCompletion';
 
 // Reusable SweetAlert2-Style Popup Dialog
 export function SweetAlertModal({
@@ -375,7 +376,7 @@ export function ScheduleFollowUpModal({ isOpen, onClose, onSchedule, leads, defa
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="am-modal-2col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div className="form-group-block">
               <label>Day</label>
               <input
@@ -491,7 +492,7 @@ export function HelpSupportModal({ isOpen, onClose }) {
           <div className="support-card-item">
             <span className="sup-icon">✉️</span>
             <strong>Email Desk</strong>
-            <a href="mailto:support@growthline.example">support@growthline.example</a>
+            <a href="mailto:support@admafia.marketing">support@admafia.marketing</a>
             <small>Guaranteed 2-hour response SLA</small>
           </div>
         </div>
@@ -503,7 +504,7 @@ export function HelpSupportModal({ isOpen, onClose }) {
               <textarea
                 rows={3}
                 required
-                placeholder="Explain your inquiry, ad campaign change, or billing question..."
+                placeholder="Explain your inquiry, territory targeting update, or billing question..."
                 value={msg}
                 onChange={(e) => setMsg(e.target.value)}
                 className="clean-input"
@@ -515,7 +516,7 @@ export function HelpSupportModal({ isOpen, onClose }) {
             </form>
           ) : (
             <div style={{ background: '#ecfdf5', color: '#047857', padding: '16px', borderRadius: '12px', marginTop: '8px', textAlign: 'center' }}>
-              ✓ Ticket #GL-9481 created! A support manager will contact your registered phone within 2 hours.
+              ✓ Ticket #AM-9481 created! A support manager will contact your registered phone within 2 hours.
             </div>
           )}
         </div>
@@ -597,11 +598,12 @@ export function AddFundsModal({
     });
   };
 
-  const finalizeTopUp = (amount, paymentRef) => {
+  const finalizeTopUp = (amount, paymentRef, verifyData = {}) => {
     if (onTopUp) {
       onTopUp(amount, paymentRef, {
         method: 'Razorpay Secure (UPI/Card)',
-        desc: `Ad Wallet Balance Top-Up (₹${Number(amount).toLocaleString('en-IN')} Added)`,
+        desc: `Growth Wallet Balance Top-Up (₹${Number(amount).toLocaleString('en-IN')} Added)`,
+        ...verifyData,
       });
     }
     setIsProcessing(false);
@@ -669,12 +671,12 @@ export function AddFundsModal({
         key: orderRes.keyId,
         amount: orderRes.amount,
         currency: orderRes.currency || 'INR',
-        name: 'AdMafia',
-        description: `Ad Wallet Instant Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
+        name: 'Ad Mafia',
+        description: `Growth Wallet Instant Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
         image: 'https://admafia.marketing/assets/logo.png',
         order_id: orderRes.orderId,
         prefill: {
-          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'AdMafia Customer',
+          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'Ad Mafia Customer',
           ...(cleanPhone && cleanPhone.length === 10 ? { contact: cleanPhone } : {}),
           email: customer?.email || `${cleanPhone || 'client'}@admafia.marketing`,
         },
@@ -700,10 +702,7 @@ export function AddFundsModal({
             try {
               const verifyRes = await crmApi.verifyRazorpayPayment(verifyPayload);
               if (verifyRes?.ok) {
-                finalizeTopUp(currentAmount, response.razorpay_payment_id);
-                if (onTopUp) {
-                  onTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
-                }
+                finalizeTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
                 return true;
               }
               throw new Error(verifyRes?.error || 'Payment verification could not be confirmed.');
@@ -733,8 +732,7 @@ export function AddFundsModal({
                 try {
                   const checkRes = await crmApi.verifyRazorpayPayment(verifyPayload);
                   if (checkRes?.ok) {
-                    finalizeTopUp(currentAmount, response.razorpay_payment_id);
-                    if (onTopUp) onTopUp(currentAmount, response.razorpay_payment_id, checkRes);
+                    finalizeTopUp(currentAmount, response.razorpay_payment_id, checkRes);
                   } else {
                     throw new Error(checkRes?.error || 'Verification still pending.');
                   }
@@ -876,8 +874,8 @@ export function AddFundsModal({
                 <span className="step-pill">Instant Wallet Credit</span>
                 <span className="step-label" style={{ color: '#059669' }}>● Zero Setup Fee</span>
               </div>
-              <h2>Add Funds to Ad Wallet</h2>
-              <p>100% of your top-up is credited directly to your wallet balance</p>
+              <h2>Add Funds to Growth Wallet</h2>
+              <p>100% of your top-up is credited directly to your Growth Wallet balance</p>
             </div>
           </div>
           <button
@@ -909,7 +907,7 @@ export function AddFundsModal({
               <CheckCircle2 size={34} strokeWidth={2.5} />
             </div>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: '0 0 6px' }}>
-              ₹{currentAmount.toLocaleString('en-IN')} Added to Wallet!
+              ₹{currentAmount.toLocaleString('en-IN')} Added to Growth Wallet!
             </h3>
             <p style={{ color: '#64748b', fontSize: '0.88rem', margin: 0 }}>
               Your new wallet balance is <strong>₹{(Number(walletBalance || 0) + currentAmount).toLocaleString('en-IN')}</strong>.
@@ -917,10 +915,10 @@ export function AddFundsModal({
           </div>
         ) : (
           <form onSubmit={handleTopUpSubmit}>
-            {/* 1. AD SPEND BUDGET | ÷ ₹300/day → | CAMPAIGN AD RUNTIME Split Row */}
+            {/* 1. GROWTH WALLET BUDGET | ÷ ₹300/day → | ESTIMATED ACTIVE DAYS Split Row */}
             <div className="payment-calc-split-row">
               <div className="calc-col-budget">
-                <label className="calc-col-label">AD SPEND BUDGET</label>
+                <label className="calc-col-label">GROWTH WALLET BUDGET</label>
                 <div className="budget-input-wrapper">
                   <span className="currency-symbol">₹</span>
                   <input
@@ -939,7 +937,7 @@ export function AddFundsModal({
               </div>
 
               <div className="calc-col-runtime">
-                <label className="calc-col-label">CAMPAIGN AD RUNTIME</label>
+                <label className="calc-col-label">ESTIMATED ACTIVE DAYS</label>
                 <div className="runtime-display-box">
                   <div className="runtime-cal-badge">
                     <Calendar className="runtime-cal-icon" size={16} />
@@ -958,8 +956,8 @@ export function AddFundsModal({
               <span className="presets-hint-text">Select duration to auto-calculate budget</span>
             </div>
 
-            {/* 3. Duration Presets 4x2 Grid Matching Screenshot */}
-            <div className="duration-presets-unified-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
+            {/* 3. Duration Presets 4x2 Grid */}
+            <div className="duration-presets-unified-grid">
               {durationPresets.map((p) => {
                 const isSelected = selectedPreset === p.amount;
                 return (
@@ -1014,7 +1012,7 @@ export function AddFundsModal({
   );
 }
 
-// Modal 6: Set Daily Ad Spend Budget Modal (Exact match to "Set Today's Ad Budget" design + Day Lock & SweetAlert)
+// Modal 6: Set Daily Growth Budget Modal (Day Lock & SweetAlert)
 export function SetDailyLimitModal({
   isOpen,
   onClose,
@@ -1087,8 +1085,8 @@ export function SetDailyLimitModal({
     if (dayCode === todayItem.code && isTodayAlreadyBooked) {
       Swal.fire({
         icon: 'info',
-        title: `🎯 ${todayItem.label} is Already Ad Booked!`,
-        html: `Marketing is actively running for <strong>${todayItem.label}</strong>.<br/><br/>Once started, this day cannot be de-selected.`,
+        title: `🎯 ${todayItem.label} is Already Booked!`,
+        html: `Lead delivery is actively running for <strong>${todayItem.label}</strong>.<br/><br/>Once started, this day cannot be de-selected.`,
         confirmButtonColor: '#059669',
       });
       return;
@@ -1108,8 +1106,8 @@ export function SetDailyLimitModal({
     if (!finalAmount || finalAmount < minDailySpend) {
       Swal.fire({
         icon: 'warning',
-        title: `Minimum Daily Spend is ${currencySymbol}${minDailySpend}`,
-        text: `Minimum daily ad spend is ${currencySymbol}${minDailySpend} / day. Please enter ${currencySymbol}${minDailySpend} or higher to activate Meta Ads.`,
+        title: `Minimum Daily Budget is ${currencySymbol}${minDailySpend}`,
+        text: `Minimum daily growth budget is ${currencySymbol}${minDailySpend} / day. Please enter ${currencySymbol}${minDailySpend} or higher to activate lead delivery.`,
         confirmButtonText: `Set ${currencySymbol}${minDailySpend} (Min)`,
         confirmButtonColor: '#4f46e5',
       }).then((res) => {
@@ -1121,8 +1119,8 @@ export function SetDailyLimitModal({
     if (finalAmount > (walletBalance || 0)) {
       Swal.fire({
         icon: 'error',
-        title: 'Insufficient Ad Wallet Balance',
-        html: `Your selected daily spend of <strong>${currencySymbol}${finalAmount.toLocaleString('en-US')}</strong> exceeds your available wallet balance of <strong>${currencySymbol}${Number(walletBalance || 0).toLocaleString('en-US')}</strong>.<br/><br/>Please top up your wallet to activate this ad budget.`,
+        title: 'Insufficient Growth Wallet Balance',
+        html: `Your selected daily pacing of <strong>${currencySymbol}${finalAmount.toLocaleString('en-US')}</strong> exceeds your available Growth Wallet balance of <strong>${currencySymbol}${Number(walletBalance || 0).toLocaleString('en-US')}</strong>.<br/><br/>Please top up your Growth Wallet to activate this daily budget.`,
         showCancelButton: true,
         confirmButtonText: '+ Top Up Wallet',
         confirmButtonColor: '#059669',
@@ -1140,7 +1138,7 @@ export function SetDailyLimitModal({
 
     const isAlreadyActive = Boolean(customer?.adCampaignActive);
 
-    // 1. Only deduct ad spend if campaign is already running and today was not yet debited
+    // 1. Only deduct daily pacing if schedule is already running and today was not yet debited
     if (isAlreadyActive && onDeductDailyAdSpend && !customer?.isDeductedToday) {
       onDeductDailyAdSpend(finalAmount);
     }
@@ -1165,24 +1163,24 @@ export function SetDailyLimitModal({
       const remainingWallet = Math.max(0, (walletBalance || 0) - (customer?.isDeductedToday ? 0 : finalAmount));
       const calculatedRunway = Math.floor(remainingWallet / Math.max(finalAmount, 1));
 
-      // 5. Fire rich, prominent SweetAlert2 Confirmation Dialog for active campaigns
+      // 5. Fire rich, prominent SweetAlert2 Confirmation Dialog for active schedules
       Swal.fire({
         icon: 'success',
-        title: `🎯 Ad Budget Updated: ${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}/day`,
+        title: `🎯 Daily Budget Updated: ${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}/day`,
         html: `
           <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 16px; margin: 12px 0; font-family: inherit;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Daily Ad Budget:</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap;">
+              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Daily Growth Budget:</span>
               <strong style="color:#4f46e5; font-size:1.1rem; font-weight:800;">${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')} / active day</strong>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Marketing Campaign:</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap;">
+              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Lead Delivery:</span>
               <span style="background:#ecfdf5; color:#059669; font-weight:800; font-size:0.82rem; padding: 3px 10px; border-radius:9999px;">
                 ● Running (Active)
               </span>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Remaining Ad Wallet:</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap;">
+              <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Remaining Growth Wallet:</span>
               <strong style="color:#059669; font-size:1.1rem; font-weight:800;">${currencySymbol}${remainingWallet.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')} (${calculatedRunway}d runway)</strong>
             </div>
           </div>
@@ -1192,11 +1190,11 @@ export function SetDailyLimitModal({
         buttonsStyling: true,
       });
     } else {
-      // Campaign is currently paused/off: save settings without deduction
+      // Delivery schedule is currently paused/off: save settings without deduction
       Swal.fire({
         icon: 'success',
         title: `Daily Budget Set: ${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}/day`,
-        html: `Your daily ad spend has been saved as <strong>${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}/day</strong>.<br/><br/>Your marketing campaign is currently <strong>Paused (Off)</strong>. Click <strong>Start</strong> on your dashboard whenever you are ready to launch ads and deduct today's ad spend.`,
+        html: `Your daily growth pacing has been saved as <strong>${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}/day</strong>.<br/><br/>Your lead delivery schedule is currently <strong>Paused (Off)</strong>. Click <strong>Start</strong> on your dashboard whenever you are ready to activate delivery and deduct today's pacing.`,
         confirmButtonText: 'Understood',
         confirmButtonColor: '#4f46e5',
       });
@@ -1205,6 +1203,7 @@ export function SetDailyLimitModal({
 
   return (
     <div
+      className="portal-modal-backdrop"
       style={{
         position: 'fixed',
         top: 0,
@@ -1222,6 +1221,7 @@ export function SetDailyLimitModal({
       onClick={onClose}
     >
       <div
+        className="portal-modal-box am-daily-limit-modal"
         style={{
           background: '#ffffff',
           borderRadius: '20px',
@@ -1236,13 +1236,13 @@ export function SetDailyLimitModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+        <div className="am-daily-limit-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', gap: '10px' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
-              Set Today's Ad Budget
+              Set Daily Growth Budget
             </h2>
             <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-              Schedule pacing &amp; lock daily Meta ad delivery
+              Schedule active days &amp; lock daily buyer lead delivery
             </p>
           </div>
           <button
@@ -1255,6 +1255,7 @@ export function SetDailyLimitModal({
               borderRadius: '50%',
               width: '32px',
               height: '32px',
+              flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1268,8 +1269,9 @@ export function SetDailyLimitModal({
           </button>
         </div>
 
-        {/* Balance & Minimum Spend Box */}
+        {/* Balance & Minimum Budget Box */}
         <div
+          className="am-daily-limit-balance-box"
           style={{
             border: '1.5px solid #e2e8f0',
             borderRadius: '14px',
@@ -1279,6 +1281,7 @@ export function SetDailyLimitModal({
             alignItems: 'center',
             background: '#ffffff',
             marginBottom: '16px',
+            gap: '10px',
           }}
         >
           <div>
@@ -1291,7 +1294,7 @@ export function SetDailyLimitModal({
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '0.70rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '2px' }}>
-              MINIMUM SPEND
+              MINIMUM BUDGET
             </div>
             <div style={{ fontSize: '1.20rem', fontWeight: 800, color: '#4338ca', lineHeight: 1.1 }}>
               {currencySymbol}{minDailySpend} / day
@@ -1299,9 +1302,9 @@ export function SetDailyLimitModal({
           </div>
         </div>
 
-        {/* Enter Daily Ad Spend Amount Label */}
+        {/* Enter Daily Growth Budget Label */}
         <div style={{ marginBottom: '8px', fontWeight: 700, fontSize: '0.92rem', color: '#1e293b' }}>
-          Enter Daily Ad Spend Amount ({savedCurrency}):
+          Enter Daily Growth Budget ({savedCurrency}):
         </div>
 
         {/* Amount Input with Currency Symbol */}
@@ -1343,7 +1346,7 @@ export function SetDailyLimitModal({
         </div>
 
         {/* 4 Presets */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
+        <div className="am-daily-limit-presets-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
           {presets.map((p) => {
             const isSelected = currentAmountNum === p.value;
             return (
@@ -1372,16 +1375,16 @@ export function SetDailyLimitModal({
 
         {/* Day Selection Grid with Today Badged & Lock Indicator */}
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <div className="am-daily-limit-days-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
             <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>
-              Select Marketing Days ({selectedDays.length} of 7 Active):
+              Select Delivery Days ({selectedDays.length} of 7 Active):
             </span>
             <span style={{ fontSize: '0.74rem', color: '#b45309', fontWeight: 700, background: '#fef3c7', padding: '2px 8px', borderRadius: '9999px' }}>
               🔒 Today ({todayItem.short}) will be locked
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
+          <div className="am-daily-limit-days-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
             {dayDefinitions.map((d) => {
               const isDayActive = selectedDays.includes(d.code);
               return (
@@ -1451,13 +1454,14 @@ export function SetDailyLimitModal({
         >
           <span style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>💡</span>
           <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.45, fontWeight: 500 }}>
-            Amount will be deducted from your total balance immediately for today. Today's marketing schedule will be <strong>locked as completed</strong>. Meta Verified Ads &amp; pacing run automatically.
+            Amount will be deducted from your total balance immediately for today. Today&apos;s delivery schedule will be <strong>locked as completed</strong>. Verified lead delivery &amp; pacing run automatically.
           </p>
         </div>
 
         {/* Exceeds Balance Box */}
         {isExceeding && (
           <div
+            className="am-daily-limit-exceeds-box"
             style={{
               background: '#fff1f2',
               border: '1px solid #fecdd3',
@@ -1466,6 +1470,8 @@ export function SetDailyLimitModal({
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
               marginBottom: '14px',
             }}
           >
@@ -1499,6 +1505,7 @@ export function SetDailyLimitModal({
 
         {/* Actions Row */}
         <div
+          className="am-daily-limit-actions"
           style={{
             display: 'flex',
             justifyContent: 'flex-end',
@@ -1537,11 +1544,12 @@ export function SetDailyLimitModal({
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '6px',
               boxShadow: '0 4px 6px -1px rgba(5, 150, 105, 0.3)',
             }}
           >
-            <span>🎯 Set Ad Budget &amp; Confirm Booking →</span>
+            <span>🎯 Set Daily Budget &amp; Confirm Booking →</span>
           </button>
         </div>
       </div>
@@ -1563,31 +1571,31 @@ export function GstTaxInvoiceModal({ isOpen, onClose, invoice, customer }) {
   return (
     <div className="portal-modal-backdrop" onClick={onClose}>
       <div className="portal-modal-box" style={{ maxWidth: '640px', background: '#ffffff', color: '#111827' }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e5e7eb', paddingBottom: '14px', marginBottom: '18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="am-invoice-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e5e7eb', paddingBottom: '14px', marginBottom: '18px', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
             <img
               src="/AdMafia-Logo.png"
-              alt="AdMafia Marketing"
-              style={{ height: '46px', width: 'auto', objectFit: 'contain' }}
+              alt="Ad Mafia Marketing"
+              style={{ height: '46px', width: 'auto', objectFit: 'contain', flexShrink: 0 }}
             />
-            <div>
-              <span style={{ background: '#10b981', color: '#fff', fontSize: '0.72rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
+            <div style={{ minWidth: 0 }}>
+              <span style={{ background: '#10b981', color: '#fff', fontSize: '0.72rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', display: 'inline-block' }}>
                 OFFICIAL GST TAX INVOICE
               </span>
-              <h3 style={{ margin: '4px 0 0', color: '#111827', fontSize: '1.25rem' }}>Invoice #{invoice.invoiceNo}</h3>
+              <h3 style={{ margin: '4px 0 0', color: '#111827', fontSize: '1.25rem', wordBreak: 'break-word' }}>Invoice #{invoice.invoiceNo}</h3>
             </div>
           </div>
-          <button type="button" className="btn-close-drawer" onClick={onClose} style={{ color: '#374151' }}>&times;</button>
+          <button type="button" className="btn-close-drawer" onClick={onClose} style={{ color: '#374151', flexShrink: 0 }}>&times;</button>
         </div>
 
         {/* Invoice Header Details */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', fontSize: '0.85rem', marginBottom: '18px', lineHeight: '1.5' }}>
+        <div className="am-invoice-parties-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', fontSize: '0.85rem', marginBottom: '18px', lineHeight: '1.5' }}>
           <div>
             <strong style={{ color: '#171347' }}>Issued By:</strong>
-            <div>AdMafia Marketing Solutions Pvt Ltd</div>
+            <div>Ad Mafia Marketing</div>
             <div>CIN: U74999MH2022PTC384910</div>
             <div>GSTIN: 27AABCE1234F1Z5</div>
-            <div>Mumbai, Maharashtra - 400069</div>
+            <div>Commercial Operations Desk, India</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <strong style={{ color: '#171347' }}>Billed To:</strong>
@@ -1599,45 +1607,47 @@ export function GstTaxInvoiceModal({ isOpen, onClose, invoice, customer }) {
         </div>
 
         {/* Invoice Line Items Table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: '16px' }}>
-          <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
-              <th style={{ padding: '8px' }}>Particulars / Services</th>
-              <th style={{ padding: '8px' }}>SAC</th>
-              <th style={{ padding: '8px', textAlign: 'right' }}>Taxable Amt</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-              <td style={{ padding: '10px 8px' }}>{invoice.particulars}</td>
-              <td style={{ padding: '10px 8px' }}>{invoice.sacCode}</td>
-              <td style={{ padding: '10px 8px', textAlign: 'right' }}>{invSymbol}{Number(invoice.baseAmount || 0).toLocaleString(invCurrency === 'INR' ? 'en-IN' : 'en-US')}</td>
-            </tr>
-            {invCurrency === 'INR' ? (
-              <>
-                <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
-                  <td colSpan={2} style={{ padding: '6px 8px', textAlign: 'right' }}>CGST (9.0%):</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{invSymbol}{Number(invoice.cgst || 0).toLocaleString('en-IN')}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
-                  <td colSpan={2} style={{ padding: '6px 8px', textAlign: 'right' }}>SGST (9.0%):</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{invSymbol}{Number(invoice.sgst || 0).toLocaleString('en-IN')}</td>
-                </tr>
-              </>
-            ) : null}
-            <tr style={{ fontWeight: 800, background: '#f8fafc', fontSize: '0.95rem' }}>
-              <td colSpan={2} style={{ padding: '10px 8px', textAlign: 'right', color: '#171347' }}>Total Invoice Amount:</td>
-              <td style={{ padding: '10px 8px', textAlign: 'right', color: '#047857' }}>{invSymbol}{Number(invoice.totalAmount || 0).toLocaleString(invCurrency === 'INR' ? 'en-IN' : 'en-US')}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div className="am-invoice-table-wrap" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', marginBottom: '16px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
+                <th style={{ padding: '8px' }}>Particulars / Services</th>
+                <th style={{ padding: '8px' }}>SAC</th>
+                <th style={{ padding: '8px', textAlign: 'right' }}>Taxable Amt</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <td style={{ padding: '10px 8px' }}>{invoice.particulars}</td>
+                <td style={{ padding: '10px 8px' }}>{invoice.sacCode}</td>
+                <td style={{ padding: '10px 8px', textAlign: 'right' }}>{invSymbol}{Number(invoice.baseAmount || 0).toLocaleString(invCurrency === 'INR' ? 'en-IN' : 'en-US')}</td>
+              </tr>
+              {invCurrency === 'INR' ? (
+                <>
+                  <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                    <td colSpan={2} style={{ padding: '6px 8px', textAlign: 'right' }}>CGST (9.0%):</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{invSymbol}{Number(invoice.cgst || 0).toLocaleString('en-IN')}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                    <td colSpan={2} style={{ padding: '6px 8px', textAlign: 'right' }}>SGST (9.0%):</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{invSymbol}{Number(invoice.sgst || 0).toLocaleString('en-IN')}</td>
+                  </tr>
+                </>
+              ) : null}
+              <tr style={{ fontWeight: 800, background: '#f8fafc', fontSize: '0.95rem' }}>
+                <td colSpan={2} style={{ padding: '10px 8px', textAlign: 'right', color: '#171347' }}>Total Invoice Amount:</td>
+                <td style={{ padding: '10px 8px', textAlign: 'right', color: '#047857' }}>{invSymbol}{Number(invoice.totalAmount || 0).toLocaleString(invCurrency === 'INR' ? 'en-IN' : 'en-US')}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4', padding: '10px 14px', borderRadius: '8px', marginBottom: '18px', fontSize: '0.8rem', color: '#166534' }}>
+        <div className="am-invoice-settled-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', background: '#f0fdf4', padding: '10px 14px', borderRadius: '8px', marginBottom: '18px', fontSize: '0.8rem', color: '#166534' }}>
           <span>✓ Payment Settled via {invoice.paymentMode}</span>
           <span>Digitally Signed</span>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div className="am-invoice-actions-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button type="button" onClick={handlePrint} className="btn-portal-primary" style={{ flex: 1 }}>
             🖨️ Print / Download PDF
           </button>
@@ -1691,7 +1701,7 @@ export function RescheduleCallbackModal({ isOpen, onClose, followUp, onSaveResch
             <div style={{ fontWeight: 700, color: '#171347' }}>{followUp.leadName} ({followUp.phone})</div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="am-modal-2col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div className="form-group-block">
               <label>New Day<span>*</span></label>
               <input
@@ -1812,7 +1822,7 @@ export function ConfigureDomainModal({ isOpen, onClose, customer, onUpdateDomain
             </span>
           </div>
 
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', marginBottom: '16px' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', marginBottom: '16px', overflowX: 'auto' }}>
             <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
               Authoritative DNS Record Settings
             </div>
@@ -1835,14 +1845,14 @@ export function ConfigureDomainModal({ isOpen, onClose, customer, onUpdateDomain
                 <tr>
                   <td style={{ padding: '6px' }}><strong>CNAME</strong></td>
                   <td style={{ padding: '6px' }}>www</td>
-                  <td style={{ padding: '6px' }}><code>cname.growthline.example</code></td>
+                  <td style={{ padding: '6px' }}><code>cname.admafia.marketing</code></td>
                   <td style={{ padding: '6px', color: '#10b981' }}>✓ Active</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
             <button
               type="button"
               onClick={handleTestDns}
@@ -1874,34 +1884,71 @@ export function ConfigureDomainModal({ isOpen, onClose, customer, onUpdateDomain
 
 // Modal 10: Complete Setup Now / Registration Onboarding Wizard
 export function CompleteRegistrationModal({ isOpen, onClose, customer, onComplete }) {
+  const cleanCust = sanitizeCustomerProfileFields(customer || {});
   const [step, setStep] = useState(1);
+  const [stepError, setStepError] = useState('');
   const [formData, setFormData] = useState({
     companyName: customer?.companyName || customer?.name || '',
-    category: customer?.category || 'IT & Software',
+    category: cleanCust.category || '',
     contactPerson: customer?.contactPerson || customer?.contact || customer?.username || '',
     email: customer?.email || '',
     phone: customer?.phone || '',
-    city: customer?.city || '',
-    state: customer?.state || 'Maharashtra',
+    city: cleanCust.city || '',
+    state: cleanCust.state || '',
     country: customer?.country || 'India',
   });
 
   if (!isOpen) return null;
 
   const handleNext = () => {
-    if (step < 4) setStep(step + 1);
-    else {
+    setStepError('');
+    if (step === 1 && !formData.companyName.trim()) {
+      setStepError('Company Name is required.');
+      return;
+    }
+    if (step === 2 && !formData.category.trim()) {
+      setStepError('Please select your Business Category.');
+      return;
+    }
+    if (step === 3) {
+      if (!formData.contactPerson.trim()) {
+        setStepError('Contact Person Name is required.');
+        return;
+      }
+      const emailTrimmed = formData.email.trim();
+      if (!emailTrimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailTrimmed)) {
+        setStepError('Please enter a valid Business Email address.');
+        return;
+      }
+    }
+    if (step < 4) {
+      setStep(step + 1);
+    } else {
+      if (!formData.city.trim()) {
+        setStepError('Operating City is required.');
+        return;
+      }
+      if (!formData.state.trim()) {
+        setStepError('State / Province is required.');
+        return;
+      }
+      const nextPayload = {
+        companyName: formData.companyName.trim(),
+        category: formData.category.trim(),
+        contactPerson: formData.contactPerson.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        city: formData.city.trim(),
+        state: formData.state.trim(),
+        country: formData.country.trim() || 'India',
+      };
+      const evalRes = evaluateCustomerProfileCompletion({ ...customer, ...nextPayload });
       if (onComplete) {
         onComplete({
-          companyName: formData.companyName,
-          category: formData.category,
-          contactPerson: formData.contactPerson,
-          email: formData.email,
-          phone: formData.phone,
-          city: formData.city,
-          state: formData.state,
-          country: formData.country,
-          profile_status: 'complete',
+          ...nextPayload,
+          kycPercent: evalRes.kycPercent,
+          profileStatus: evalRes.profileStatus,
+          profile_status: evalRes.profileStatus,
         });
       }
       onClose();
@@ -1929,11 +1976,17 @@ export function CompleteRegistrationModal({ isOpen, onClose, customer, onComplet
               style={{
                 height: '4px',
                 borderRadius: '4px',
-                background: step >= idx + 1 ? '#ffb800' : 'rgba(255, 255, 255, 0.15)',
+                background: step >= idx + 1 ? '#ffb800' : 'rgba(148, 163, 184, 0.25)',
               }}
             ></div>
           ))}
         </div>
+
+        {stepError && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '10px 12px', borderRadius: '10px', fontSize: '0.82rem', fontWeight: 600, marginBottom: '14px' }}>
+            ⚠️ {stepError}
+          </div>
+        )}
 
         {step === 1 && (
           <div>
@@ -1960,10 +2013,12 @@ export function CompleteRegistrationModal({ isOpen, onClose, customer, onComplet
             <div className="form-group-block">
               <label>Select Category<span>*</span></label>
               <select
+                required
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="clean-select"
               >
+                <option value="">— Select Your Business Category —</option>
                 <option value="IT & Software">💻 IT &amp; Software</option>
                 <option value="Hardware & Computer Accessories">🖥️ Hardware &amp; Computer Accessories</option>
                 <option value="Construction & Building Materials">🏗️ Construction &amp; Building Materials</option>
@@ -1975,7 +2030,7 @@ export function CompleteRegistrationModal({ isOpen, onClose, customer, onComplet
               </select>
             </div>
             <p style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '8px' }}>
-              Your buyer inquiries are routed according to your registered business category.
+              Your buyer enquiries are routed according to your registered business category.
             </p>
           </div>
         )}
@@ -2013,15 +2068,19 @@ export function CompleteRegistrationModal({ isOpen, onClose, customer, onComplet
               <label>City<span>*</span></label>
               <input
                 type="text"
+                required
+                placeholder="e.g. Ahmedabad, Bengaluru, Delhi"
                 value={formData.city}
                 onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                 className="clean-input"
               />
             </div>
             <div className="form-group-block">
-              <label>State / Province</label>
+              <label>State / Province<span>*</span></label>
               <input
                 type="text"
+                required
+                placeholder="e.g. Gujarat, Karnataka, Delhi"
                 value={formData.state}
                 onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                 className="clean-input"
@@ -2037,9 +2096,9 @@ export function CompleteRegistrationModal({ isOpen, onClose, customer, onComplet
               />
             </div>
             <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '10px', padding: '12px', marginTop: '12px' }}>
-              <strong style={{ color: '#10b981', fontSize: '0.84rem' }}>✓ Profile Setup Completed</strong>
-              <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#cbd5e1' }}>
-                Clicking "Activate Workspace" unlocks your verified green badge and activates real-time buyer lead distribution.
+              <strong style={{ color: '#059669', fontSize: '0.84rem' }}>✓ Ready to Activate Workspace</strong>
+              <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#475569' }}>
+                Clicking &ldquo;Activate Workspace&rdquo; verifies your business profile and enables territory-matched buyer lead delivery.
               </p>
             </div>
           </div>
@@ -2049,7 +2108,7 @@ export function CompleteRegistrationModal({ isOpen, onClose, customer, onComplet
           {step > 1 && (
             <button
               type="button"
-              onClick={() => setStep(step - 1)}
+              onClick={() => { setStepError(''); setStep(step - 1); }}
               className="btn-portal-secondary"
             >
               &larr; Back
@@ -2061,7 +2120,7 @@ export function CompleteRegistrationModal({ isOpen, onClose, customer, onComplet
             className="btn-portal-primary"
             style={{ flex: 1 }}
           >
-            {step === 4 ? 'Activate Workspace & Unlock Verified Status ✓' : 'Next Step &rarr;'}
+            {step === 4 ? 'Activate Workspace & Unlock Verified Status ✓' : 'Next Step →'}
           </button>
         </div>
       </div>
@@ -2198,12 +2257,12 @@ export function MarketingGrowthPaymentModal({
         key: orderRes.keyId,
         amount: orderRes.amount,
         currency: orderRes.currency || 'INR',
-        name: 'AdMafia',
-        description: `Ad Wallet Instant Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
+        name: 'Ad Mafia',
+        description: `Growth Wallet Instant Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
         image: 'https://admafia.marketing/assets/logo.png',
         order_id: orderRes.orderId,
         prefill: {
-          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'AdMafia Customer',
+          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'Ad Mafia Customer',
           ...(cleanPhone && cleanPhone.length === 10 ? { contact: cleanPhone } : {}),
           email: customer?.email || `${cleanPhone || 'client'}@admafia.marketing`,
         },
@@ -2229,16 +2288,16 @@ export function MarketingGrowthPaymentModal({
             try {
               const verifyRes = await crmApi.verifyRazorpayPayment(verifyPayload);
               if (verifyRes?.ok) {
-                finalizeTopUp(currentAmount, response.razorpay_payment_id);
-                if (onTopUp) {
-                  onTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
+                setIsProcessing(false);
+                if (onPay) {
+                  onPay(currentAmount, response.razorpay_payment_id, verifyRes);
                 }
                 return true;
               }
               throw new Error(verifyRes?.error || 'Payment verification could not be confirmed.');
             } catch (err) {
               if (!isRetry) {
-                console.warn('[AddFundsModal] Initial verification attempt failed, retrying in 1.5s...', err.message);
+                console.warn('[GrowthWalletModal] Initial verification attempt failed, retrying in 1.5s...', err.message);
                 await new Promise((resolve) => setTimeout(resolve, 1500));
                 return attemptVerify(true);
               }
@@ -2249,7 +2308,7 @@ export function MarketingGrowthPaymentModal({
           try {
             await attemptVerify();
           } catch (vErr) {
-            console.error('[AddFundsModal Verify Error]', vErr);
+            console.error('[GrowthWalletModal Verify Error]', vErr);
             setIsProcessing(false);
             setSweetAlert({
               type: 'warning',
@@ -2262,8 +2321,8 @@ export function MarketingGrowthPaymentModal({
                 try {
                   const checkRes = await crmApi.verifyRazorpayPayment(verifyPayload);
                   if (checkRes?.ok) {
-                    finalizeTopUp(currentAmount, response.razorpay_payment_id);
-                    if (onTopUp) onTopUp(currentAmount, response.razorpay_payment_id, checkRes);
+                    setIsProcessing(false);
+                    if (onPay) onPay(currentAmount, response.razorpay_payment_id, checkRes);
                   } else {
                     throw new Error(checkRes?.error || 'Verification still pending.');
                   }
@@ -2399,8 +2458,8 @@ export function MarketingGrowthPaymentModal({
                 <span className="step-pill">Step 1 of 2</span>
                 <span className="step-label">Add Wallet Balance</span>
               </div>
-              <h2>Marketing &amp; Growth Wallet Payment</h2>
-              <p>100% directly added to your Ad Wallet for local buyer lead acquisition</p>
+              <h2>Growth Wallet Top-Up</h2>
+              <p>100% directly added to your Growth Wallet for verified buyer lead delivery</p>
             </div>
           </div>
           <button
@@ -2416,10 +2475,10 @@ export function MarketingGrowthPaymentModal({
 
         {/* Set Amount Input & Quick Presets */}
         <form onSubmit={handlePaySubmit}>
-          {/* 1. AD SPEND BUDGET | ÷ ₹300/day → | CAMPAIGN AD RUNTIME Split Row */}
+          {/* 1. GROWTH WALLET BUDGET | ÷ ₹300/day → | ESTIMATED ACTIVE DAYS Split Row */}
           <div className="payment-calc-split-row">
             <div className="calc-col-budget">
-              <label className="calc-col-label">AD SPEND BUDGET</label>
+              <label className="calc-col-label">GROWTH WALLET BUDGET</label>
               <div className="budget-input-wrapper">
                 <span className="currency-symbol">₹</span>
                 <input
@@ -2438,7 +2497,7 @@ export function MarketingGrowthPaymentModal({
             </div>
 
             <div className="calc-col-runtime">
-              <label className="calc-col-label">CAMPAIGN AD RUNTIME</label>
+              <label className="calc-col-label">ESTIMATED ACTIVE DAYS</label>
               <div className="runtime-display-box">
                 <div className="runtime-cal-badge">
                   <Calendar className="runtime-cal-icon" size={16} />
@@ -2457,8 +2516,8 @@ export function MarketingGrowthPaymentModal({
             <span className="presets-hint-text">Select duration to auto-calculate budget</span>
           </div>
 
-          {/* 3. Duration Presets 4x2 Grid Matching Screenshot */}
-          <div className="duration-presets-unified-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
+          {/* 3. Duration Presets 4x2 Grid */}
+          <div className="duration-presets-unified-grid">
             {durationPresets.map((p) => {
               const isSelected = selectedPreset === p.amount;
               return (
@@ -2520,33 +2579,35 @@ export function BusinessProfileModal({
   onSave,
   customer = {},
 }) {
+  const initClean = sanitizeCustomerProfileFields(customer || {});
   const [formData, setFormData] = useState({
     companyName: customer.companyName || customer.name || '',
-    category: customer.category || 'IT & Software',
+    category: initClean.category || '',
     website: customer.website || customer.domain || '',
-    industry: customer.industry || '',
+    industry: initClean.industry || '',
     contactPerson: customer.contactPerson || customer.contact || customer.username || '',
     email: customer.email || '',
     phone: customer.phone || '',
     personalEmail: customer.personalEmail || '',
-    city: customer.city || '',
-    state: customer.state || '',
+    city: initClean.city || '',
+    state: initClean.state || '',
     country: customer.country || 'India',
   });
 
   useEffect(() => {
     if (isOpen) {
+      const clean = sanitizeCustomerProfileFields(customer || {});
       setFormData({
         companyName: customer.companyName || customer.name || '',
-        category: customer.category || 'IT & Software',
+        category: clean.category || '',
         website: customer.website || customer.domain || '',
-        industry: customer.industry || '',
+        industry: clean.industry || '',
         contactPerson: customer.contactPerson || customer.contact || customer.username || '',
         email: customer.email || '',
         phone: customer.phone || '',
         personalEmail: customer.personalEmail || '',
-        city: customer.city || '',
-        state: customer.state || '',
+        city: clean.city || '',
+        state: clean.state || '',
         country: customer.country || 'India',
       });
     }
@@ -2557,14 +2618,25 @@ export function BusinessProfileModal({
 
   if (!isOpen) return null;
 
+  const profEval = evaluateCustomerProfileCompletion({ ...customer, ...formData });
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.companyName.trim()) {
       setError('Company Name is required.');
       return;
     }
+    if (!formData.category.trim()) {
+      setError('Business Category is required.');
+      return;
+    }
     if (!formData.contactPerson.trim()) {
       setError('Contact Person Name is required.');
+      return;
+    }
+    const emailClean = formData.email.trim();
+    if (!emailClean || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailClean)) {
+      setError('A valid Business Email address is required.');
       return;
     }
     if (!formData.phone.trim()) {
@@ -2572,16 +2644,26 @@ export function BusinessProfileModal({
       return;
     }
     if (!formData.city.trim()) {
-      setError('City is required.');
+      setError('Operating City is required.');
+      return;
+    }
+    if (!formData.state.trim()) {
+      setError('State / Province is required.');
       return;
     }
 
     setError('');
     setIsSubmitting(true);
 
+    const submitEval = evaluateCustomerProfileCompletion({ ...customer, ...formData });
     setTimeout(() => {
       setIsSubmitting(false);
-      onSave(formData);
+      onSave({
+        ...formData,
+        kycPercent: submitEval.kycPercent,
+        profileStatus: submitEval.profileStatus,
+        profile_status: submitEval.profileStatus,
+      });
     }, 400);
   };
 
@@ -2602,7 +2684,7 @@ export function BusinessProfileModal({
                 <span className="biz-step-pill">Step 2 of 2</span>
                 <span className="biz-verified-status">Workspace Configuration</span>
                 <span className="biz-kyc-live-pill">
-                  <span className="biz-pulsing-dot" /> Profile Completion: 100% Ready
+                  <span className="biz-pulsing-dot" /> Profile Completion: {profEval.kycPercent}%
                 </span>
               </div>
               <h2 className="biz-modal-main-title">Business Profile &amp; Information Submission</h2>
@@ -2668,9 +2750,11 @@ export function BusinessProfileModal({
                 <div className="biz-input-box">
                   <Layers size={17} className="biz-input-icon" />
                   <select
+                    required
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   >
+                    <option value="">— Select Your Business Category —</option>
                     <option value="IT & Software">IT &amp; Software</option>
                     <option value="Organic Food & FMCG">Organic Food &amp; FMCG</option>
                     <option value="Manufacturing">Manufacturing</option>
@@ -2830,23 +2914,25 @@ export function BusinessProfileModal({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Mumbai"
+                    placeholder="e.g. Ahmedabad, Bengaluru, Delhi"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                   />
                 </div>
               </div>
 
-              {/* State / Province */}
+              {/* State / Province* */}
               <div className="biz-field-group">
                 <label>
                   <span>State / Province</span>
+                  <span className="req-star">*</span>
                 </label>
                 <div className="biz-input-box">
                   <MapPin size={17} className="biz-input-icon" />
                   <input
                     type="text"
-                    placeholder="e.g. Maharashtra"
+                    required
+                    placeholder="e.g. Gujarat, Karnataka, Delhi"
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                   />

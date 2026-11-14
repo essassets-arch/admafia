@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import superadminApi from '../services/superadminApi';
 
-export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
+export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }) {
+  const nav = onNavigateToDesk || onNavigate;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState({
@@ -159,7 +160,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
         <div>
           <h1>Super Admin Command Center</h1>
           <p>
-            Centralized enterprise operations for AdMafia. Monitor live wallet liability, audit transactions, review refunds and top-up requests, and enforce account governance.
+            Centralized enterprise operations for Ad Mafia. Monitor live wallet liability, audit transactions, review refunds and top-up requests, and enforce account governance.
           </p>
         </div>
 
@@ -182,7 +183,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
             <div
               key={card.id}
               className="sa-stat-card"
-              onClick={() => onNavigateToDesk && onNavigateToDesk(card.deskKey)}
+              onClick={() => nav && nav(card.deskKey)}
             >
               <div className="sa-stat-top">
                 <span className="sa-stat-title">{card.title}</span>
@@ -220,7 +221,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
         <div
           className="sa-table-card"
           style={{ padding: 18, borderLeft: '4px solid #4f46e5', cursor: 'pointer' }}
-          onClick={() => onNavigateToDesk && onNavigateToDesk('finance')}
+          onClick={() => nav && nav('finance')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
@@ -250,7 +251,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
         <div
           className="sa-table-card"
           style={{ padding: 18, borderLeft: '4px solid #059669', cursor: 'pointer' }}
-          onClick={() => onNavigateToDesk && onNavigateToDesk('topups')}
+          onClick={() => nav && nav('topups')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
@@ -280,7 +281,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
         <div
           className="sa-table-card"
           style={{ padding: 18, borderLeft: '4px solid #e11d48', cursor: 'pointer' }}
-          onClick={() => onNavigateToDesk && onNavigateToDesk('accounts')}
+          onClick={() => nav && nav('accounts')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
@@ -309,7 +310,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
       </div>
 
       {/* 4. Split Grid: Recent Financial Transactions & Recent Audit Actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1.4fr) minmax(280px, 1fr)', gap: 24 }}>
+      <div className="sa-split-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 24 }}>
         {/* Recent Transactions */}
         <div className="sa-table-card">
           <div
@@ -331,7 +332,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk }) {
               type="button"
               className="sa-btn-secondary"
               style={{ padding: '4px 10px', fontSize: '0.76rem' }}
-              onClick={() => onNavigateToDesk && onNavigateToDesk('finance')}
+              onClick={() => nav && nav('finance')}
             >
               View All
             </button>

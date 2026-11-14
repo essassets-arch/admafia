@@ -22,6 +22,7 @@ import {
 } from '../models/index.js';
 import { withMongoTransaction, genId } from './tx.js';
 import { recordOutboxEvent } from '../services/outboxWorker.js';
+import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion.js';
 import {
   getCustomerViewRows,
   makeCustomerMatcher,
@@ -279,9 +280,9 @@ export async function archiveFailedTransactions({ filter = null, txSnapshot = nu
             contactPerson: properContact,
             phone: cleanPhone,
             email: s.email || '',
-            city: s.city || 'India',
-            state: s.state || 'Maharashtra',
-            category: s.category || 'IT & Software',
+            city: s.city || '',
+            state: s.state || '',
+            category: s.category || '',
             amount: Number(s.amount || 0),
             referenceUtr: String(s.ref || s.id || ''),
             description: s.desc || 'Failed wallet recharge',
@@ -317,9 +318,9 @@ export async function archiveFailedTransactions({ filter = null, txSnapshot = nu
               contactPerson: properContact,
               phone: cleanPhone,
               email: c?.email || '',
-              city: c?.city || 'India',
-              state: c?.state || 'Maharashtra',
-              category: c?.category || 'IT & Software',
+              city: c?.city || '',
+              state: c?.state || '',
+              category: c?.category || '',
               amount: Number(r.amount || 0),
               referenceUtr: r.referenceUtr,
               description: r.description || '',
@@ -426,7 +427,7 @@ export async function creditSalesTopup({
   const defaultDailySpend = isUsd ? 10 : 300;
   const salesLabel = salesPersonName ? `${salesPersonName} (Sales Team)` : 'Sales Desk';
   const cleanNotes = typeof notes === 'string' ? notes : notes ? String(notes) : '';
-  const txDesc = `Ad Wallet Top-Up by Sales (${salesLabel})${cleanNotes ? ` - ${cleanNotes.trim()}` : ''}`;
+  const txDesc = `Growth Wallet Top-Up by Sales (${salesLabel})${cleanNotes ? ` - ${cleanNotes.trim()}` : ''}`;
   const cleanMethod = `Sales Deposit (${paymentMethod})`;
 
   const runOnce = () =>
@@ -563,24 +564,36 @@ export async function findCustomerByIdOrPhone(rawId, cleanPhone, { lean = true }
 
 export async function applyCustomerProfile(custId, cust, { orgName, category, industry, website, personName, email, personalEmail, city, state, country }) {
   const now = new Date();
+  const evalProf = evaluateCustomerProfileCompletion({
+    phone: cust.phone,
+    contactPerson: personName,
+    companyName: orgName,
+    email,
+    category,
+    industry,
+    city,
+    state,
+    registeredAt: cust.registeredAt,
+    completedAt: new Date(now.getTime() + 10_000),
+  });
   await Customer.updateOne(
     { _id: custId },
     {
       $set: {
         companyName: orgName,
-        category,
-        industry,
+        category: evalProf.sanitized.category,
+        industry: evalProf.sanitized.industry,
         website,
         contactPerson: personName,
         email,
         personalEmail,
-        city,
-        state,
+        city: evalProf.sanitized.city,
+        state: evalProf.sanitized.state,
         country,
-        profileStatus: 'complete',
-        kycPercent: 100,
-        verified: true,
-        completedAt: cust.completedAt || now,
+        profileStatus: evalProf.profileStatus,
+        kycPercent: evalProf.kycPercent,
+        verified: evalProf.isComplete,
+        completedAt: evalProf.isComplete ? (cust.completedAt || now) : null,
         updatedAt: now,
       },
     },
@@ -591,31 +604,90 @@ export async function applyCustomerProfile(custId, cust, { orgName, category, in
       $set: {
         companyName: orgName,
         contactPerson: personName,
-        profileStatus: 'complete',
-        queueType: { $cond: [{ $in: ['$paymentStatus', ['paid', 'verified']] }, 'Completed', 'Payment Pending'] },
+        profileStatus: evalProf.profileStatus,
+        queueType: {
+          $cond: [
+            { $eq: [evalProf.profileStatus, 'complete'] },
+            { $cond: [{ $in: ['$paymentStatus', ['paid', 'verified']] }, 'Completed', 'Payment Pending'] },
+            { $cond: [{ $in: ['$paymentStatus', ['paid', 'verified']] }, 'Profile Only Incomplete', 'Profile Incomplete'] },
+          ],
+        },
       },
     },
   ], { updatePipeline: true });
 }
 
-export async function applyCustomerRecordUpdate(custId, { company, website, status, profile, payment, kyc, verified, password }) {
+export async function applyCustomerRecordUpdate(
+  custId,
+  {
+    company,
+    contactPerson,
+    email,
+    personalEmail,
+    category,
+    industry,
+    city,
+    state,
+    country,
+    website,
+    status,
+    profile,
+    payment,
+    kyc,
+    verified,
+    completedAt,
+    password,
+  }
+) {
+  const now = new Date();
+  const $set = {
+    companyName: company,
+    website,
+    status,
+    profileStatus: profile,
+    paymentStatus: payment,
+    kycPercent: kyc,
+    verified,
+    passwordHash: password,
+    updatedAt: now,
+  };
+  if (contactPerson !== undefined) $set.contactPerson = contactPerson;
+  if (email !== undefined) $set.email = email;
+  if (personalEmail !== undefined) $set.personalEmail = personalEmail;
+  if (category !== undefined) $set.category = category;
+  if (industry !== undefined) $set.industry = industry;
+  if (city !== undefined) $set.city = city;
+  if (state !== undefined) $set.state = state;
+  if (country !== undefined) $set.country = country;
+  if (completedAt !== undefined) $set.completedAt = completedAt;
+
   await Customer.updateOne(
     { _id: custId },
-    {
-      $set: {
-        companyName: company,
-        website,
-        status,
-        profileStatus: profile,
-        paymentStatus: payment,
-        kycPercent: kyc,
-        verified,
-        passwordHash: password,
-        updatedAt: new Date(),
-      },
-    },
+    { $set },
     { runValidators: true }
   );
+  if (profile !== undefined) {
+    await PendingVerification.updateMany(
+      { customerId: custId },
+      [
+        {
+          $set: {
+            ...(company ? { companyName: company } : {}),
+            ...(contactPerson ? { contactPerson } : {}),
+            profileStatus: profile,
+            queueType: {
+              $cond: [
+                { $eq: [profile, 'complete'] },
+                { $cond: [{ $in: ['$paymentStatus', ['paid', 'verified']] }, 'Completed', 'Payment Pending'] },
+                { $cond: [{ $in: ['$paymentStatus', ['paid', 'verified']] }, 'Profile Only Incomplete', 'Profile Incomplete'] },
+              ],
+            },
+          },
+        },
+      ],
+      { updatePipeline: true }
+    ).catch(() => {});
+  }
 }
 
 /** Wallet settings update (daily spend, campaign flag, schedule, explicit admin balance override). */

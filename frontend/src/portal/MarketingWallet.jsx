@@ -329,12 +329,12 @@ export default function MarketingWallet({
         key: orderRes.keyId,
         amount: orderRes.amount,
         currency: orderRes.currency || currency || 'INR',
-        name: 'AdMafia',
-        description: `Ad Wallet Instant Top-Up (${formatMoney(activeAmount)})`,
+        name: 'Ad Mafia',
+        description: `Growth Wallet Instant Top-Up (${formatMoney(activeAmount)})`,
         image: 'https://admafia.marketing/assets/logo.png',
         order_id: orderRes.orderId,
         prefill: {
-          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'AdMafia Customer',
+          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'Ad Mafia Customer',
           ...(cleanPhone && cleanPhone.length === 10 ? { contact: cleanPhone } : {}),
           email: customer?.email || `${cleanPhone || 'client'}@admafia.marketing`,
         },
@@ -543,15 +543,15 @@ export default function MarketingWallet({
             <span className="pulse-dot"></span>
             <span>
               {!customer.adCampaignActive
-                ? 'Campaign Paused'
+                ? 'Delivery Paused'
                 : walletBalance < dailyAdSpend
                 ? 'Paused (Low Balance)'
-                : 'Live Campaign Active'}
+                : 'Live Delivery Active'}
             </span>
           </span>
         </div>
         <p className="wallet-desc-lead">
-          Manage your advertising wallet balance, instant top-ups, daily campaign run rate, and official GST tax invoices.
+          Manage your Growth Wallet balance, instant top-ups, daily lead delivery pacing, and official GST tax invoices.
         </p>
       </div>
 
@@ -603,10 +603,10 @@ export default function MarketingWallet({
           </div>
         </div>
 
-        {/* Card 2: Daily Ad Spend */}
+        {/* Card 2: Daily Growth Pacing */}
         <div className="wallet-exact-kpi-card spend-card">
           <div className="kpi-card-top-line">
-            <span className="kpi-card-label">Daily Ad Spend</span>
+            <span className="kpi-card-label">Daily Growth Pacing</span>
             <div className="kpi-card-icon-badge spend">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
@@ -618,15 +618,15 @@ export default function MarketingWallet({
           </div>
           <div className="kpi-card-subline">
             <span className="territory-chip">
-              Target Territory: {[customer.city, customer.state].filter(Boolean).join(', ') || customer.country || 'Global'}
+              Target Territory: {[customer.city, customer.state].filter(Boolean).join(', ') || customer.country || 'India'}
             </span>
           </div>
         </div>
 
-        {/* Card 3: Campaign Runway */}
+        {/* Card 3: Delivery Runway */}
         <div className="wallet-exact-kpi-card runway-card">
           <div className="kpi-card-top-line">
-            <span className="kpi-card-label">Campaign Runway</span>
+            <span className="kpi-card-label">Delivery Runway</span>
             <div className="kpi-card-icon-badge runway">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <circle cx="12" cy="12" r="10" />
@@ -640,10 +640,10 @@ export default function MarketingWallet({
           </div>
         </div>
 
-        {/* Card 4: Total Ad Spent */}
+        {/* Card 4: Total Growth Invested */}
         <div className="wallet-exact-kpi-card total-card">
           <div className="kpi-card-top-line">
-            <span className="kpi-card-label">Total Ad Spent</span>
+            <span className="kpi-card-label">Total Growth Invested</span>
             <div className="kpi-card-icon-badge total">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <line x1="18" y1="20" x2="18" y2="10" />
@@ -672,7 +672,7 @@ export default function MarketingWallet({
             </div>
             <div>
               <h3>Low Wallet Balance Warning: {formatMoney(walletBalance)} Remaining</h3>
-              <p>Daily ad burn requires {formatMoney(dailyAdSpend)}/day. Inbound lead campaign is paused until recharged.</p>
+              <p>Daily delivery pacing requires {formatMoney(dailyAdSpend)}/day. Inbound lead delivery is paused until recharged.</p>
             </div>
           </div>
           <button
@@ -697,7 +697,7 @@ export default function MarketingWallet({
             </h2>
           </div>
           <p className="topup-card-desc">
-            Select a budget preset or enter a custom amount. Recharges are credited immediately to keep your ads running #1 in {customer.city ? customer.city.toLowerCase() : 'ahmedabad'}.
+            Select a budget preset or enter a custom amount. Recharges are credited immediately to keep your verified lead delivery active in {customer.city || 'your target territory'}.
           </p>
         </div>
 
@@ -816,7 +816,7 @@ export default function MarketingWallet({
         </div>
       </div>
 
-      {/* 5. 📅 Day-Wise Ad Spend Engine Master Card */}
+      {/* 5. 📅 Day-Wise Lead Pacing Engine Master Card */}
       <div className="daywise-adspend-engine-card">
         <div className="engine-card-header">
           <div className="engine-title-strip">
@@ -829,12 +829,12 @@ export default function MarketingWallet({
                   <line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
               </span>
-              <span className="engine-title-text">Day-Wise Ad Spend Engine</span>
+              <span className="engine-title-text">Day-Wise Lead Pacing Engine</span>
             </h2>
             <span className="engine-autocut-badge">{formatMoney(dailyAdSpend)} / Day Auto-Cut</span>
           </div>
           <p className="engine-card-desc">
-            Transparent day-by-day deduction: exactly {formatMoney(dailyAdSpend)} deducted daily from your balance to deliver high-priority buyer inbound leads in {customer.city || customer.state || customer.country || 'Global'}.
+            Transparent day-by-day deduction: exactly {formatMoney(dailyAdSpend)} deducted daily from your balance to deliver high-priority verified buyer leads in {customer.city || customer.state || customer.country || 'your territory'}.
           </p>
         </div>
 
@@ -842,11 +842,11 @@ export default function MarketingWallet({
         <div className="engine-three-cards-grid">
           {/* Box 1 */}
           <div className="engine-mini-box">
-            <div className="mini-box-label">Today's Ad Delivery Status</div>
+            <div className="mini-box-label">Today&apos;s Lead Delivery Status</div>
             <div className="engine-mini-content">
               <span className={`engine-status-pill ${isCampaignLive ? 'active' : 'paused'}`}>
                 {!customer.adCampaignActive
-                  ? 'Campaign Paused'
+                  ? 'Delivery Paused'
                   : walletBalance < dailyAdSpend
                   ? 'Paused (Low Balance)'
                   : 'Live & Delivering'}
@@ -860,10 +860,10 @@ export default function MarketingWallet({
               </div>
               <div className="mini-box-caption">
                 {!customer.adCampaignActive
-                  ? 'Campaign paused by user. Resume to start delivering ads.'
+                  ? 'Delivery paused by user. Resume to start receiving verified leads.'
                   : isDeductedToday
-                  ? `Today's ${formatMoney(dailyAdSpend)} placement debited`
-                  : `Ready to cut ${formatMoney(dailyAdSpend)} for today's placement`}
+                  ? `Today's ${formatMoney(dailyAdSpend)} pacing debited`
+                  : `Ready to cut ${formatMoney(dailyAdSpend)} for today's lead delivery`}
               </div>
             </div>
           </div>
@@ -881,7 +881,7 @@ export default function MarketingWallet({
               </div>
               <div className="mini-box-caption text-coral">
                 {!customer.adCampaignActive
-                  ? 'Resume campaign to re-enable scheduled daily cuts'
+                  ? 'Resume delivery to re-enable scheduled daily pacing'
                   : `-${formatMoney(dailyAdSpend)} from wallet (Est. Bal: ${formatMoney(Math.max(0, walletBalance - dailyAdSpend))})`}
               </div>
             </div>
@@ -903,12 +903,12 @@ export default function MarketingWallet({
             type="button"
             onClick={handleDeductTodaySpend}
             className="btn-deduct-spend-exact"
-            title="Manually trigger today's daily ad debit"
+            title="Manually trigger today's daily pacing debit"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <span>{isDeductedToday ? `Deduct ${formatMoney(dailyAdSpend)} Ad Spend (Manual)` : `Deduct Today's ${formatMoney(dailyAdSpend)} Ad Spend`}</span>
+            <span>{isDeductedToday ? `Deduct ${formatMoney(dailyAdSpend)} Daily Pacing (Manual)` : `Deduct Today's ${formatMoney(dailyAdSpend)} Pacing`}</span>
           </button>
 
           <button
@@ -916,7 +916,7 @@ export default function MarketingWallet({
             onClick={() => onToggleCampaign && onToggleCampaign()}
             className={`btn-resume-campaign-exact ${customer.adCampaignActive ? 'is-active' : ''}`}
           >
-            {customer.adCampaignActive ? '⏸ Pause Campaign' : '▶️ Resume Campaign'}
+            {customer.adCampaignActive ? '⏸ Pause Delivery' : '▶️ Resume Delivery'}
           </button>
 
           <span className="engine-realtime-note">
@@ -938,7 +938,7 @@ export default function MarketingWallet({
             <h2>Wallet Ledger &amp; Transaction History</h2>
           </div>
           <p className="ledger-history-desc">
-            Complete transparent log of all recharge deposits, daily ad spend deductions, and tax invoices.
+            Complete transparent log of all recharge deposits, daily lead delivery deductions, and tax invoices.
           </p>
         </div>
 
@@ -963,7 +963,7 @@ export default function MarketingWallet({
             className={`ledger-tab-btn ${activeLedgerTab === 'deductions' ? 'active' : ''}`}
             onClick={() => setActiveLedgerTab('deductions')}
           >
-            Daily Ad Cuts (-{formatMoney(dailyAdSpend)}/d) ({debitsList.length})
+            Daily Pacing Cuts (-{formatMoney(dailyAdSpend)}/d) ({debitsList.length})
           </button>
           <button
             type="button"
@@ -1156,8 +1156,8 @@ export default function MarketingWallet({
                         </div>
                         <div className="empty-ledger-subtitle">
                           {activeLedgerTab === 'failed'
-                            ? 'All your wallet recharge attempts and daily ad spend auto-cuts have completed successfully with zero transaction errors.'
-                            : 'Transactions will appear here as soon as wallet recharges or daily ad spend deductions occur.'}
+                            ? 'All your wallet recharge attempts and daily lead pacing auto-cuts have completed successfully with zero transaction errors.'
+                            : 'Transactions will appear here as soon as wallet recharges or daily lead pacing deductions occur.'}
                         </div>
                       </div>
                     </td>
@@ -1275,7 +1275,7 @@ export default function MarketingWallet({
 
             <p className="result-modal-subtitle">
               {paymentResultModal.status === 'success'
-                ? `${formatMoney(paymentResultModal.amount)} has been credited directly to your Ad Growth Wallet.`
+                ? `${formatMoney(paymentResultModal.amount)} has been credited directly to your Growth Wallet.`
                 : (paymentResultModal.reason || 'The transaction was cancelled or declined. No wallet funds were deducted.')}
             </p>
 

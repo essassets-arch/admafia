@@ -27,6 +27,7 @@ import {
   SuperAdminAuditLog,
 } from '../models/index.js';
 import { withMongoTransaction, genId } from '../repositories/tx.js';
+import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion.js';
 import {
   HttpError,
   ciContains,
@@ -2151,9 +2152,9 @@ superadminRouter.post('/businesses', async (req, res) => {
       phone,
       email = '',
       username = '',
-      category = 'IT & Software',
-      city = 'Mumbai',
-      state = 'Maharashtra',
+      category = '',
+      city = '',
+      state = '',
       password = '',
       initialBalance = 0,
       adminName = 'Super Admin',
@@ -2191,6 +2192,16 @@ superadminRouter.post('/businesses', async (req, res) => {
     const hashedBusinessPassword = await hashPassword(finalPassword);
 
     try {
+      const evalProf = evaluateCustomerProfileCompletion({
+        phone: cleanPhone,
+        contactPerson: contactPerson.trim(),
+        companyName: companyName.trim(),
+        email: email.trim(),
+        category: category.trim(),
+        city: city.trim(),
+        state: state.trim(),
+      });
+
       await withMongoTransaction(async (session) => {
         const now = new Date();
 
@@ -2204,15 +2215,16 @@ superadminRouter.post('/businesses', async (req, res) => {
               email: email.trim() || '',
               passwordHash: hashedBusinessPassword,
               companyName: companyName.trim(),
-              category: category.trim(),
+              category: evalProf.sanitized.category,
               contactPerson: contactPerson.trim(),
-              city: city.trim(),
-              state: state.trim(),
+              city: evalProf.sanitized.city,
+              state: evalProf.sanitized.state,
               status: 'active',
-              profileStatus: 'complete',
-              paymentStatus: 'paid',
-              kycPercent: 100,
-              verified: true,
+              profileStatus: evalProf.profileStatus,
+              paymentStatus: parsedInitialBalance > 0 ? 'paid' : 'pending',
+              kycPercent: evalProf.kycPercent,
+              verified: evalProf.isComplete,
+              completedAt: evalProf.isComplete ? now : null,
               isSelfRegistered: false,
               registeredFrom: 'Super Admin Control Center',
               registeredAt: now,

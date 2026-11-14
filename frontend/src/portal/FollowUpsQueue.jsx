@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion';
 
 // Helpers
 function formatMinimalMaskedPhone(phone, maskedPhone) {
@@ -29,7 +30,8 @@ export default function FollowUpsQueue({
   const [unmaskedMap, setUnmaskedMap] = useState({});
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
-  const isProfileDone = customer.profileStatus === 'complete' || customer.profile_status === 'complete' || customer.kycPercent === 100;
+  const profEval = evaluateCustomerProfileCompletion(customer);
+  const isProfileDone = profEval.isComplete;
   const isFullyComplete = isPaymentDone && isProfileDone;
 
   // Follow-up leads
@@ -127,10 +129,10 @@ export default function FollowUpsQueue({
         </div>
 
         <div className="lead-header-actions-right">
-          {/* AD WALLET Card */}
+          {/* GROWTH WALLET Card */}
           <div
             className="header-ad-wallet-card"
-            title="Ad Wallet Balance"
+            title="Growth Wallet Balance"
             onClick={onOpenAddFunds}
           >
             <div className="header-wallet-icon-box">
@@ -140,7 +142,7 @@ export default function FollowUpsQueue({
               </svg>
             </div>
             <div className="header-wallet-text-col">
-              <span className="header-wallet-tag">AD WALLET</span>
+              <span className="header-wallet-tag">GROWTH WALLET</span>
               <strong className="header-wallet-val">₹{walletBalance.toFixed(0)}</strong>
             </div>
             <button

@@ -17,6 +17,10 @@ import {
   Shield,
   ChevronDown,
 } from 'lucide-react';
+import {
+  evaluateCustomerProfileCompletion,
+  sanitizeCustomerProfileFields,
+} from '../utils/profileCompletion';
 
 export default function WorkspaceSetupPage({
   onSaved,
@@ -28,32 +32,33 @@ export default function WorkspaceSetupPage({
       const activeRaw = localStorage.getItem('growthline_active_user');
       if (activeRaw) {
         const u = JSON.parse(activeRaw);
+        const clean = sanitizeCustomerProfileFields(u);
         return {
           companyName: u.companyName || u.name || '',
-          category: u.category || 'IT & Software',
+          category: clean.category,
           website: u.website || u.domain || '',
-          industry: u.industry || 'Other',
+          industry: clean.industry,
           contactPerson: u.contactPerson || u.contact || u.username || '',
           email: u.email || '',
           phone: u.phone || '',
           personalEmail: u.personalEmail || '',
-          city: u.city || '',
-          state: u.state || 'Maharashtra',
+          city: clean.city,
+          state: clean.state,
           country: u.country || 'India',
         };
       }
     } catch (e) {}
     return {
       companyName: '',
-      category: 'IT & Software',
+      category: '',
       website: '',
-      industry: 'Other',
+      industry: '',
       contactPerson: '',
       email: '',
       phone: '',
       personalEmail: '',
       city: '',
-      state: 'Maharashtra',
+      state: '',
       country: 'India',
     };
   };
@@ -69,8 +74,16 @@ export default function WorkspaceSetupPage({
       setError('Company Name is required.');
       return;
     }
+    if (!formData.category) {
+      setError('Please select your Business Category.');
+      return;
+    }
     if (!formData.contactPerson.trim()) {
       setError('Contact Person Name is required.');
+      return;
+    }
+    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      setError('A valid Business Email is required.');
       return;
     }
     if (!formData.phone.trim()) {
@@ -81,6 +94,10 @@ export default function WorkspaceSetupPage({
       setError('City is required.');
       return;
     }
+    if (!formData.state.trim()) {
+      setError('State / Province is required.');
+      return;
+    }
 
     setError('');
     setIsSubmitting(true);
@@ -88,17 +105,23 @@ export default function WorkspaceSetupPage({
     const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ', Today';
 
     setTimeout(() => {
+      const profEval = evaluateCustomerProfileCompletion({
+        ...formData,
+        phoneVerified: true,
+        profileStatus: 'complete',
+      });
+
       // 1. Update growthline_active_user
       let updatedUser = {
         ...formData,
         name: formData.companyName,
         contact: formData.contactPerson,
         domain: formData.website,
-        profile_status: 'complete',
-        profileStatus: 'complete',
+        profile_status: profEval.profileStatus,
+        profileStatus: profEval.profileStatus,
         payment_status: 'paid',
         paymentStatus: 'paid',
-        kycPercent: 100,
+        kycPercent: profEval.kycPercent,
         verified: true,
         completedAt: nowStr,
         isSelfRegistered: true,
@@ -262,7 +285,7 @@ export default function WorkspaceSetupPage({
 
               {/* Subtitle */}
               <p className="onboard-hero-desc">
-                Set up your dedicated workspace in 60 seconds to streamline qualified inbound leads, monitor multi-channel campaigns, and sync performance analytics.
+                Set up your dedicated workspace in 60 seconds to streamline qualified inbound leads, monitor verified buyer pipelines, and sync performance analytics.
               </p>
 
               {/* LIVE INSTANCE PREVIEW CARD */}
@@ -276,7 +299,7 @@ export default function WorkspaceSetupPage({
                   </div>
                   <div className="onboard-preview-meta">
                     <span className="onboard-step-sub">Step 1 of 2</span>
-                    <span className="onboard-user-tag">@{formData.contactPerson.toLowerCase().replace(/\s+/g, '_') || 'vikram_malhotra'}</span>
+                    <span className="onboard-user-tag">@{formData.contactPerson.toLowerCase().replace(/\s+/g, '_') || 'business_admin'}</span>
                   </div>
                 </div>
 
@@ -287,18 +310,18 @@ export default function WorkspaceSetupPage({
                 <div className="onboard-preview-tags-row">
                   <span className="onboard-meta-tag">
                     <Building2 size={13} />
-                    <span>{formData.category || 'IT & Software'}</span>
+                    <span>{formData.category || 'Select Category'}</span>
                   </span>
                   <span className="onboard-meta-tag">
                     <MapPin size={13} />
-                    <span>{formData.city || 'Indore'}, {formData.country || 'India'}</span>
+                    <span>{formData.city || 'Your City'}, {formData.country || 'India'}</span>
                   </span>
                 </div>
 
                 <div className="onboard-preview-perks-grid">
                   <div className="onboard-perk-item">
                     <CheckCircle2 size={14} className="text-emerald" />
-                    <span>Meta Ads Sync Ready</span>
+                    <span>Live Lead Dispatch Ready</span>
                   </div>
                   <div className="onboard-perk-item">
                     <CheckCircle2 size={14} className="text-emerald" />
@@ -310,7 +333,7 @@ export default function WorkspaceSetupPage({
                   </div>
                   <div className="onboard-perk-item">
                     <CheckCircle2 size={14} className="text-emerald" />
-                    <span>Dedicated Strategist</span>
+                    <span>Dedicated Account Desk</span>
                   </div>
                 </div>
               </div>
@@ -327,7 +350,7 @@ export default function WorkspaceSetupPage({
                 <div className="onboard-step-connector" />
                 <div className="onboard-step-pill inactive">
                   <span className="onboard-step-num">2</span>
-                  <span>Step 2: Marketing &amp; Growth Budget</span>
+                  <span>Step 2: Growth Wallet Budget</span>
                 </div>
               </div>
 
@@ -393,19 +416,21 @@ export default function WorkspaceSetupPage({
                       </label>
                       <div className="onboard-select-wrap">
                         <select
+                          required
                           className="onboard-select"
                           value={formData.category}
                           onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                         >
+                          <option value="">— Select Your Business Category —</option>
                           <option value="IT & Software">IT &amp; Software</option>
-                          <option value="Other">Other</option>
-                          <option value="Organic Food & FMCG">Organic Food &amp; FMCG</option>
-                          <option value="Manufacturing">Manufacturing</option>
-                          <option value="Healthcare & Wellness">Healthcare &amp; Wellness</option>
                           <option value="Real Estate & Infrastructure">Real Estate &amp; Infrastructure</option>
+                          <option value="Healthcare & Wellness">Healthcare &amp; Wellness</option>
+                          <option value="Education & Coaching">Education &amp; Coaching</option>
+                          <option value="Manufacturing">Manufacturing</option>
+                          <option value="Organic Food & FMCG">Organic Food &amp; FMCG</option>
                           <option value="Retail & E-commerce">Retail &amp; E-commerce</option>
                           <option value="Financial & Consulting">Financial &amp; Consulting</option>
-                          <option value="Education & Coaching">Education &amp; Coaching</option>
+                          <option value="Other">Other</option>
                         </select>
                         <ChevronDown size={16} className="onboard-select-chevron" />
                       </div>
@@ -553,15 +578,17 @@ export default function WorkspaceSetupPage({
                       />
                     </div>
 
-                    {/* State / Province */}
+                    {/* State / Province* */}
                     <div className="onboard-field-wrap">
                       <label className="onboard-label">
                         <span>State / Province</span>
+                        <span className="onboard-star">*</span>
                       </label>
                       <input
                         type="text"
+                        required
                         className="onboard-input"
-                        placeholder="Maharashtra"
+                        placeholder="e.g. Gujarat, Karnataka, Delhi"
                         value={formData.state}
                         onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                       />
@@ -590,7 +617,7 @@ export default function WorkspaceSetupPage({
                     className="onboard-btn-submit"
                     disabled={isSubmitting}
                   >
-                    <span>{isSubmitting ? 'Configuring Workspace Profile...' : 'Proceed to Step 2: Marketing Budget'}</span>
+                    <span>{isSubmitting ? 'Configuring Workspace Profile...' : 'Proceed to Step 2: Growth Wallet'}</span>
                     <ArrowRight size={18} className="onboard-arrow-icon" />
                   </button>
                 </div>

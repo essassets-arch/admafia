@@ -10,14 +10,14 @@ const CustomerSchema = new mongoose.Schema({
 
   // Business Information
   companyName: { type: String, required: true },
-  category: { type: String, default: 'IT & Software', index: true },
-  industry: { type: String, default: 'Other' },
+  category: { type: String, default: '', index: true },
+  industry: { type: String, default: '' },
   website: { type: String, default: '' },
   contactPerson: { type: String, required: true },
 
   // Headquarter & Localization
   city: { type: String, default: '' },
-  state: { type: String, default: 'Maharashtra' },
+  state: { type: String, default: '' },
   country: { type: String, default: 'India' },
   countryCode: { type: String, default: 'IN' },
   currency: { type: String, default: 'INR' },
@@ -39,7 +39,7 @@ const CustomerSchema = new mongoose.Schema({
   profileStatus: {
     type: String,
     enum: ['incomplete', 'complete'],
-    default: 'complete',
+    default: 'incomplete',
     index: true
   },
   paymentStatus: {
@@ -48,8 +48,8 @@ const CustomerSchema = new mongoose.Schema({
     default: 'pending',
     index: true
   },
-  kycPercent: { type: Number, min: 0, max: 100, default: 100 },
-  verified: { type: Boolean, default: true },
+  kycPercent: { type: Number, min: 0, max: 100, default: 45 },
+  verified: { type: Boolean, default: false },
   phoneVerified: { type: Boolean, default: false, index: true },
   phoneVerifiedAt: { type: Date, default: null },
   isSelfRegistered: { type: Boolean, default: true },

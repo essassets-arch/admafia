@@ -95,6 +95,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
     <div className="marketing-overview-page">
       {/* 1. Welcome Banner */}
       <div
+        className="mkt-hero-banner"
         style={{
           background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
           borderRadius: '20px',
@@ -125,7 +126,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
               marginBottom: '10px',
             }}
           >
-            <Sparkles size={12} /> AdMafia Marketing Operations
+            <Sparkles size={12} /> Ad Mafia Marketing Operations
           </div>
           <h1 style={{ fontSize: '1.8rem', fontWeight: 800, margin: '0 0 10px 0', letterSpacing: '-0.03em' }}>
             Customer-Driven Advertising Operations
@@ -178,7 +179,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
         Marketing Operational Desks
       </h3>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '20px' }}>
         {desks.map((d) => {
           const Icon = d.icon;
           return (
