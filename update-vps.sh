@@ -117,6 +117,7 @@ if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1
   sleep 4
   docker compose exec -T backend node initDb.js 2>/dev/null || true
   docker compose exec -T backend node scripts/purge-test-users.js 2>/dev/null || true
+  docker compose exec -T backend node scripts/migrate-pg-to-mongo.js 2>/dev/null || true
   echo "📋 Docker container status:"
   docker compose ps
 elif command -v pm2 > /dev/null 2>&1; then
