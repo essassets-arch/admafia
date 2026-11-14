@@ -21,7 +21,7 @@ const ArtworkRevisionSchema = new mongoose.Schema({
 
 const ArtworkReviewSchema = new mongoose.Schema({
   revisionNumber: { type: Number, required: true },
-  action: { type: String, enum: ['Approved', 'Rejected'], required: true },
+  action: { type: String, enum: ['Approved', 'Rejected', 'Changes Requested'], required: true },
   reviewerId: { type: String, required: true },
   notes: { type: String, default: '' },
   reviewedAt: { type: Date, default: Date.now }
@@ -34,13 +34,11 @@ const MarketingPostSchema = new mongoose.Schema({
   caption: { type: String, default: '' },
   targetPlatform: {
     type: String,
-    enum: ['Instagram', 'Facebook', 'LinkedIn', 'Twitter', 'All'],
-    default: 'All'
+    default: 'Meta Ads (Facebook & Instagram)'
   },
   category: { type: String, default: 'General' },
   status: {
     type: String,
-    enum: ['Draft', 'Pending Verification', 'Approved', 'Rejected', 'Archived'],
     default: 'Pending Verification',
     index: true
   },

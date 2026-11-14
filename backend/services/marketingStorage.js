@@ -102,19 +102,26 @@ export async function recordTelemetryEvent(event) {
   if (!isMongoConnected() || !event) return null;
 
   try {
-    const doc = new MarketingAuditEvent({
-      _id: event.id || `audit_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      customerId: event.customerId || event.customer_id,
-      eventType: event.action || event.eventType || 'marketing_event',
-      postId: event.postId || event.post_id || null,
-      campaignId: event.campaignId || event.campaign_id || null,
-      payload: event.details || event.payload || {},
-      timestamp: event.timestamp ? new Date(event.timestamp) : new Date(),
-    });
-
-    return await doc.save();
+    const id = event.id || `audit_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    return await MarketingAuditEvent.findByIdAndUpdate(
+      id,
+      {
+        $setOnInsert: {
+          _id: id,
+          customerId: event.customerId || event.customer_id,
+          eventType: event.action || event.eventType || 'marketing_event',
+          postId: event.postId || event.post_id || null,
+          campaignId: event.campaignId || event.campaign_id || null,
+          payload: event.details || event.payload || {},
+          timestamp: event.timestamp ? new Date(event.timestamp) : new Date(),
+        }
+      },
+      { upsert: true, new: true }
+    );
   } catch (err) {
-    console.warn('[MarketingStorage] recordTelemetryEvent error:', err.message);
+    if (err.code !== 11000) {
+      console.warn('[MarketingStorage] recordTelemetryEvent error:', err.message);
+    }
     return null;
   }
 }
@@ -123,22 +130,29 @@ export async function recordSuperAdminAuditLog(log) {
   if (!isMongoConnected() || !log) return null;
 
   try {
-    const doc = new SuperAdminAuditLog({
-      _id: log.id || `salog_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      action: log.action,
-      adminId: log.adminId || log.admin_id,
-      adminEmail: log.adminEmail || log.admin_email || null,
-      targetEntity: log.targetEntity || log.target_entity || null,
-      targetId: log.targetId || log.target_id || null,
-      details: log.details || {},
-      ipAddress: log.ipAddress || log.ip_address || null,
-      userAgent: log.userAgent || log.user_agent || null,
-      timestamp: log.timestamp ? new Date(log.timestamp) : new Date(),
-    });
-
-    return await doc.save();
+    const id = log.id || `salog_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    return await SuperAdminAuditLog.findByIdAndUpdate(
+      id,
+      {
+        $setOnInsert: {
+          _id: id,
+          action: log.action,
+          adminId: log.adminId || log.admin_id,
+          adminEmail: log.adminEmail || log.admin_email || null,
+          targetEntity: log.targetEntity || log.target_entity || null,
+          targetId: log.targetId || log.target_id || null,
+          details: log.details || {},
+          ipAddress: log.ipAddress || log.ip_address || null,
+          userAgent: log.userAgent || log.user_agent || null,
+          timestamp: log.timestamp ? new Date(log.timestamp) : new Date(),
+        }
+      },
+      { upsert: true, new: true }
+    );
   } catch (err) {
-    console.warn('[MarketingStorage] recordSuperAdminAuditLog error:', err.message);
+    if (err.code !== 11000) {
+      console.warn('[MarketingStorage] recordSuperAdminAuditLog error:', err.message);
+    }
     return null;
   }
 }
