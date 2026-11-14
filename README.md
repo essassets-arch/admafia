@@ -78,7 +78,19 @@ npm run setup:firebase
 
 ---
 
-## 6. Key Documentation Reference (`docs/`)
+## 6. Production Deployment on VPS (100% Pure Docker Compose + Git)
+
+No PM2, no host `npm install`, and no wrapper shell scripts — everything builds and runs cleanly inside Docker (`admafia-mongo`, `admafia-redis`, `admafia-backend`, `admafia-frontend`):
+
+```bash
+cd /home/ubuntu/admafia
+git pull origin main
+docker compose up -d --build --remove-orphans
+```
+
+---
+
+## 7. Key Documentation Reference (`docs/`)
 
 - `docs/MASTER_MEMORY_MAP.md` — Master architecture, integration registry, security audit ledger & engineering log.
 - `docs/DATABASE_DESIGN.md` — Complete Mongoose schemas, compound indexes, tenant isolation & Compass/Atlas guide.
