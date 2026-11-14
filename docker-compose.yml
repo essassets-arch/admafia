@@ -47,7 +47,7 @@ services:
       PGDATABASE: admafia_crm
       NODE_ENV: production
       TRUST_PROXY_HEADERS: "true"
-      MONGO_URI: ${MONGO_URI:-mongodb://${MONGO_INITDB_ROOT_USERNAME:-admafia_mongo}:${MONGO_INITDB_ROOT_PASSWORD:-AdMafiaMongoPass2026!}@mongo:27017/${MONGO_INITDB_DATABASE:-admafia_marketing}?authSource=admin}
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/admafia_crm}
     ports:
       - "127.0.0.1:5000:5000"
     volumes:

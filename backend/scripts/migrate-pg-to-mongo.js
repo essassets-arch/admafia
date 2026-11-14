@@ -64,9 +64,24 @@ export async function runFullMigration() {
 
   // 2. Initialize MongoDB connection
   console.log('🔌 Step 2: Connecting to MongoDB Target Database...');
-  const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/admafia_crm';
-  await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
-  console.log(`✓ MongoDB connected at ${mongoUri.replace(/:[^:]*@/, ':***@')}.\n`);
+  let mongoUri = process.env.MONGO_URI;
+  if (!mongoUri || mongoUri.includes('admafia_mongo:')) {
+    mongoUri = (process.env.PGHOST === 'db' || process.env.DATABASE_URL?.includes('@db:'))
+      ? 'mongodb://mongo:27017/admafia_crm'
+      : 'mongodb://127.0.0.1:27017/admafia_crm';
+  }
+
+  try {
+    await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+    console.log(`✓ MongoDB connected at ${mongoUri.replace(/:[^:]*@/, ':***@')}.\n`);
+  } catch (mongoConnErr) {
+    console.warn(`[MongoDB] Primary connection to ${mongoUri.replace(/:[^:]*@/, ':***@')} failed (${mongoConnErr.message}). Retrying fallback...`);
+    const fallbackUri = mongoUri.includes('@')
+      ? mongoUri.replace(/mongodb:\/\/[^@]+@/, 'mongodb://')
+      : (mongoUri.includes('127.0.0.1') ? 'mongodb://mongo:27017/admafia_crm' : 'mongodb://127.0.0.1:27017/admafia_crm');
+    await mongoose.connect(fallbackUri, { serverSelectionTimeoutMS: 5000 });
+    console.log(`✓ MongoDB connected at ${fallbackUri}.\n`);
+  }
 
   const checkpoint = loadCheckpoint();
   const report = {
@@ -880,5 +895,8 @@ export async function runFullMigration() {
 if (process.argv[1] && process.argv[1].endsWith('migrate-pg-to-mongo.js')) {
   runFullMigration()
     .then(() => process.exit(0))
-    .catch(() => process.exit(1));
+    .catch((err) => {
+      console.error('❌ Migration Process Error:', err);
+      process.exit(1);
+    });
 }
