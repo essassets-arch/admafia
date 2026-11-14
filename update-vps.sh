@@ -72,8 +72,9 @@ cd "$APP_DIR/backend"
 npm install
 
 # 4. Restart Application Daemon (Docker Compose or PM2)
-echo "🚀 4/5 Restarting AdMafia application process on port $PORT..."
 if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
+  PORT="5050"
+  echo "🚀 4/5 Restarting AdMafia Docker stack on port $PORT..."
   echo "🐳 Rebuilding and launching Docker Compose stack (backend, frontend)..."
   cd "$APP_DIR"
   pm2 delete admafia 2>/dev/null || true
@@ -83,11 +84,14 @@ if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1
   docker compose build --no-cache frontend backend
   docker compose up -d
   # Ensure schema init and purge are executed inside container against postgres db
-  sleep 3
+  sleep 4
   docker compose exec -T backend node initDb.js 2>/dev/null || true
   docker compose exec -T backend node scripts/purge-test-users.js 2>/dev/null || true
+  echo "📋 Docker container status:"
+  docker compose ps
 elif command -v pm2 > /dev/null 2>&1; then
-  echo "⚡ Restarting with PM2 on host..."
+  PORT="5000"
+  echo "🚀 4/5 Restarting AdMafia application on port $PORT with PM2..."
   systemctl start postgresql 2>/dev/null || true
   cd "$APP_DIR/backend"
   node initDb.js || true
