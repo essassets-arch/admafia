@@ -161,12 +161,14 @@ export function extractTokenFromRequest(req) {
     const bearer = authHeader.slice(7).trim();
     if (bearer) return bearer;
   }
+  // Check explicit query token BEFORE shared browser cookie so multi-tab sessions
+  // (e.g. Sales in Tab 1 + Customer in Tab 2 using EventSource ?token=...) never collide!
+  if (req.query?.token && typeof req.query.token === 'string') {
+    const queryTok = req.query.token.trim();
+    if (queryTok) return queryTok;
+  }
   const cookies = parseCookies(req.headers?.cookie);
   if (cookies[COOKIE_NAME]) return cookies[COOKIE_NAME];
-  // SSE EventSource cannot set custom Authorization headers cross-port if cookies aren't sent
-  if (req.query?.token && typeof req.query.token === 'string') {
-    return req.query.token.trim();
-  }
   return null;
 }
 

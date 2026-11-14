@@ -124,6 +124,12 @@ async function sendFcmHttpV1ToTokens(tokens, { title, body, deepLink = '/portal'
   if (!accessToken) return { dispatched: false, sentCount: 0 };
 
   const endpoint = `https://fcm.googleapis.com/v1/projects/${status.projectId}/messages:send`;
+  const publicOrigin = (process.env.PUBLIC_ORIGIN || 'https://admafia.marketing').replace(/\/+$/, '');
+  const resolvedDeepLink = String(deepLink || '/portal');
+  const fullHttpsLink = resolvedDeepLink.startsWith('http')
+    ? resolvedDeepLink
+    : `${publicOrigin}${resolvedDeepLink.startsWith('/') ? '' : '/'}${resolvedDeepLink}`;
+  const dedupeTag = String(notificationId || `admafia-${Date.now()}`);
   let sentCount = 0;
 
   await Promise.all(
@@ -140,19 +146,26 @@ async function sendFcmHttpV1ToTokens(tokens, { title, body, deepLink = '/portal'
               token: deviceToken,
               notification: { title, body },
               data: {
+                title: String(title),
+                body: String(body),
                 type: String(type),
-                deepLink: String(deepLink || '/portal'),
-                notificationId: String(notificationId),
+                deepLink: resolvedDeepLink,
+                notificationId: dedupeTag,
               },
               webpush: {
+                headers: {
+                  Urgency: 'high',
+                },
                 fcm_options: {
-                  link: String(deepLink || '/portal'),
+                  link: fullHttpsLink,
                 },
                 notification: {
                   title,
                   body,
                   icon: '/AdMafia-Logo.png',
                   badge: '/AdMafia-Logo.png',
+                  tag: dedupeTag,
+                  renotify: true,
                 },
               },
             },

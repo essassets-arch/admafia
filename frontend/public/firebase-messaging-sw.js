@@ -1,73 +1,83 @@
 /* eslint-disable no-restricted-globals */
 /**
- * AdMafia Marketing — Firebase Cloud Messaging (FCM) & Web Push Service Worker
- * Dynamically configures Firebase Messaging when query params are supplied,
- * and handles native Web Push payloads + deep-link click routing.
+ * AdMafia Marketing — Firebase Cloud Messaging (FCM) & Web Push Service Worker (v2)
+ * Handles 100% of Google FCM HTTP v1 Web Push frames directly so OS notifications
+ * ALWAYS display in Windows / macOS / Android Notification Center (even when a tab
+ * of admafia.marketing is open in the foreground) AND broadcasts to active tabs.
  */
 
-try {
-  const params = new URL(self.location.href).searchParams;
-  const apiKey = params.get('apiKey');
-  const projectId = params.get('projectId');
-  const messagingSenderId = params.get('messagingSenderId');
-  const appId = params.get('appId');
+self.addEventListener('install', () => {
+  self.skipWaiting();
+});
 
-  if (apiKey && projectId && messagingSenderId && appId) {
-    importScripts('https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js');
-    importScripts('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js');
-
-    firebase.initializeApp({
-      apiKey,
-      authDomain: params.get('authDomain') || `${projectId}.firebaseapp.com`,
-      projectId,
-      messagingSenderId,
-      appId,
-    });
-
-    const messaging = firebase.messaging();
-    messaging.onBackgroundMessage((payload) => {
-      const title = payload?.notification?.title || payload?.data?.title || 'AdMafia Notification';
-      const body = payload?.notification?.body || payload?.data?.body || 'You have a new real-time update.';
-      const deepLink = payload?.data?.deepLink || '/';
-
-      self.registration.showNotification(title, {
-        body,
-        icon: '/AdMafia-Logo.png',
-        badge: '/AdMafia-Logo.png',
-        data: { deepLink },
-      });
-    });
-  }
-} catch (err) {
-  // Safe fallback to standard push listener below
-}
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
 
 self.addEventListener('push', (event) => {
   if (!event.data) return;
-  try {
-    const payload = event.data.json();
-    // Avoid duplicate notification if firebase.messaging already handled notification key
-    if (payload?.notification && self.firebase) return;
-    const title = payload?.notification?.title || payload?.data?.title || payload?.title || 'AdMafia CRM Alert';
-    const body = payload?.notification?.body || payload?.data?.body || payload?.body || '';
-    const deepLink = payload?.data?.deepLink || payload?.deepLink || '/';
 
-    event.waitUntil(
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch (err) {
+    try {
+      payload = { title: 'AdMafia CRM Alert', body: event.data.text() };
+    } catch {
+      return;
+    }
+  }
+
+  const notif = payload?.notification || {};
+  const data = payload?.data || {};
+
+  const title = notif.title || data.title || payload.title || 'AdMafia Notification';
+  const body = notif.body || data.body || payload.body || 'You have a new real-time update.';
+  const deepLink = data.deepLink || payload.deepLink || notif.click_action || '/portal';
+  const notificationId = data.notificationId || notif.tag || payload.tag || `admafia-${Date.now()}`;
+
+  const notifRecord = {
+    id: String(notificationId),
+    type: data.type || 'SYSTEM_ALERT',
+    title,
+    body,
+    deepLink,
+    isRead: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  event.waitUntil(
+    Promise.all([
       self.registration.showNotification(title, {
         body,
-        icon: '/AdMafia-Logo.png',
-        badge: '/AdMafia-Logo.png',
-        data: { deepLink },
-      })
-    );
-  } catch (e) {
-    // Ignore non-JSON push frames
-  }
+        icon: notif.icon || '/AdMafia-Logo.png',
+        badge: notif.badge || '/AdMafia-Logo.png',
+        tag: String(notificationId),
+        renotify: true,
+        data: { deepLink, notificationId: String(notificationId) },
+      }),
+      self.clients
+        .matchAll({ type: 'window', includeUncontrolled: true })
+        .then((clientList) => {
+          for (const client of clientList) {
+            try {
+              client.postMessage({
+                type: 'ADMAFIA_FCM_PUSH',
+                notification: notifRecord,
+              });
+            } catch {
+              // Ignore cross-context errors
+            }
+          }
+        })
+        .catch(() => {}),
+    ])
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification?.data?.deepLink || '/';
+  const targetUrl = event.notification?.data?.deepLink || '/portal';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
@@ -87,4 +97,3 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
-

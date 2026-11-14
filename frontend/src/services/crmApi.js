@@ -612,6 +612,13 @@ export const crmApi = {
     });
     return res.assignment;
   },
+
+  async sendTestNotification() {
+    return apiRequest('/notifications/test', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
 };
 
 export default crmApi;

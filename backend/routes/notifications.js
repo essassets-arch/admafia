@@ -1,7 +1,7 @@
 import express from 'express';
 import { Notification, FcmToken } from '../models/index.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
-import { getFirebaseStatus, registerSseClient } from '../services/firebasePushService.js';
+import { getFirebaseStatus, registerSseClient, createAndPushNotification } from '../services/firebasePushService.js';
 
 export const notificationsRouter = express.Router();
 
@@ -184,6 +184,39 @@ notificationsRouter.get('/stream', requireAuth, (req, res) => {
     clearInterval(heartbeat);
     unregister();
   });
+});
+
+/**
+ * POST /api/notifications/test
+ * Dispatches an immediate real-time SSE + Google Firebase FCM Web Push test alert to the caller.
+ */
+notificationsRouter.post('/test', requireAuth, async (req, res) => {
+  try {
+    const isStaff = req.auth.actorType === 'staff';
+    const recipientType = isStaff ? 'staff' : 'customer';
+    const recipientId = String(isStaff ? req.auth.sub : req.auth.customerId || req.auth.sub);
+    const department = String(req.auth.department || '');
+
+    const doc = await createAndPushNotification({
+      recipientType,
+      recipientId,
+      department,
+      type: 'SYSTEM_ALERT',
+      title: '🔔 Live Push Verified (AdMafia)',
+      body: 'Real-time Firebase Cloud Messaging & Live Stream notifications are active on this device.',
+      deepLink: isStaff ? '/sales' : '/portal#dashboard',
+      metadata: { source: 'self-test' },
+    });
+
+    return res.json({
+      ok: true,
+      notificationId: doc ? String(doc._id) : null,
+      fcmDispatched: Boolean(doc?.fcmDispatched),
+      fcmSentCount: Number(doc?.fcmSentCount || 0),
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 export default notificationsRouter;

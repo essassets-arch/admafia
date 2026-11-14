@@ -1,13 +1,27 @@
 /**
- * AdMafia Real-Time Notification & Firebase Cloud Messaging (FCM) Client
- * SSR-safe dual-channel engine:
+ * AdMafia Real-Time Notification & Firebase Cloud Messaging (FCM) Client (v2)
+ * Dual-channel real-time engine:
  *  1. Instant Server-Sent Events (SSE) stream (/api/notifications/stream)
- *  2. Google Firebase Cloud Messaging (FCM HTTP v1) Web Push registration
+ *  2. Google Firebase Cloud Messaging (FCM HTTP v1) Web Push + Service Worker bridge
  */
 
 import crmApi, { getActiveAuthToken } from './crmApi';
 
 let cachedConfig = null;
+const recentlyShownTags = new Map();
+
+function markTagSeen(tag) {
+  if (!tag) return false;
+  const key = String(tag);
+  const now = Date.now();
+  // Clean old entries (>60s)
+  for (const [k, ts] of recentlyShownTags.entries()) {
+    if (now - ts > 60_000) recentlyShownTags.delete(k);
+  }
+  if (recentlyShownTags.has(key)) return true;
+  recentlyShownTags.set(key, now);
+  return false;
+}
 
 function getStreamBaseUrl() {
   if (typeof window === 'undefined') return '/api';
@@ -53,14 +67,67 @@ function loadScriptOnce(src) {
 }
 
 /**
+ * Displays an OS-level notification (Windows Notification Center / macOS / Android)
+ * whether the tab is in the foreground OR background, deduplicated by notification ID tag.
+ */
+export async function triggerDesktopOsNotification(data) {
+  if (typeof window === 'undefined' || typeof Notification === 'undefined') return;
+  if (Notification.permission !== 'granted') return;
+
+  const title = data?.title || 'AdMafia Notification';
+  const body = data?.body || '';
+  const tag = String(data?.id || `admafia-${Date.now()}`);
+  const deepLink = data?.deepLink || '/portal';
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js') ||
+        await navigator.serviceWorker.getRegistration();
+      if (reg && typeof reg.showNotification === 'function') {
+        await reg.showNotification(title, {
+          body,
+          icon: '/AdMafia-Logo.png',
+          badge: '/AdMafia-Logo.png',
+          tag,
+          renotify: false,
+          data: { deepLink, notificationId: tag },
+        });
+        return;
+      }
+    }
+  } catch {
+    // Fallback to window Notification API below
+  }
+
+  try {
+    const n = new Notification(title, {
+      body,
+      icon: '/AdMafia-Logo.png',
+      tag,
+    });
+    n.onclick = () => {
+      window.focus();
+      if (deepLink) {
+        window.location.href = deepLink;
+      }
+    };
+  } catch {
+    // Ignore restricted context errors
+  }
+}
+
+/**
  * Requests browser Notification permission & registers Firebase FCM Web Push token when configured
  */
-export async function enableBrowserPushNotifications() {
+export async function enableBrowserPushNotifications({ promptIfDefault = true } = {}) {
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return { ok: false, reason: 'Browser does not support Web Notifications' };
   }
 
-  const permission = await Notification.requestPermission();
+  let permission = Notification.permission;
+  if (permission === 'default' && promptIfDefault) {
+    permission = await Notification.requestPermission();
+  }
   if (permission !== 'granted') {
     return { ok: false, permission, reason: 'Notification permission was not granted' };
   }
@@ -68,7 +135,6 @@ export async function enableBrowserPushNotifications() {
   const cfgRes = await fetchFirebaseWebConfig();
   const cfg = cfgRes?.webConfig || cfgRes?.firebaseConfig;
   if (!cfgRes?.webConfigured || !cfg?.apiKey || !cfg?.projectId || !cfg?.messagingSenderId || !cfg?.appId) {
-    // Desktop Notification API still works via live SSE stream!
     return { ok: true, mode: 'sse-desktop-push', permission };
   }
 
@@ -77,15 +143,12 @@ export async function enableBrowserPushNotifications() {
       return { ok: true, mode: 'sse-desktop-push', permission };
     }
 
-    const swQuery = new URLSearchParams({
-      apiKey: cfg.apiKey,
-      authDomain: cfg.authDomain || `${cfg.projectId}.firebaseapp.com`,
-      projectId: cfg.projectId,
-      messagingSenderId: cfg.messagingSenderId,
-      appId: cfg.appId,
-    }).toString();
-
-    const registration = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${swQuery}`);
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+      updateViaCache: 'none',
+    });
+    // Force immediate check for updated Service Worker script
+    registration.update().catch(() => {});
+    await navigator.serviceWorker.ready;
 
     await loadScriptOnce('https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js');
     await loadScriptOnce('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js');
@@ -119,7 +182,8 @@ export async function enableBrowserPushNotifications() {
 }
 
 /**
- * Connects to /api/notifications/stream (SSE) for instant <100ms in-app & desktop alerts
+ * Connects to /api/notifications/stream (SSE) + Service Worker FCM bridge
+ * for instant <100ms in-app toasts, live wallet/lead sync, and OS desktop alerts.
  */
 export function subscribeToRealtimeNotifications({ onNotification, onStatusChange } = {}) {
   if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
@@ -129,6 +193,40 @@ export function subscribeToRealtimeNotifications({ onNotification, onStatusChang
   let es = null;
   let reconnectTimer = null;
   let closed = false;
+
+  const deliverInboundEvent = (data, { fromServiceWorker = false } = {}) => {
+    if (!data) return;
+    const dedupeKey = data.id || `${data.type}:${data.title}:${data.body}`;
+    if (markTagSeen(dedupeKey)) return;
+
+    if (onNotification) onNotification(data);
+
+    // Trigger live workspace refresh when wallet or lead state mutates
+    const evtType = String(data.type || '').toUpperCase();
+    if (
+      evtType.includes('WALLET') ||
+      evtType.includes('PAYMENT') ||
+      evtType.includes('LEAD') ||
+      evtType.includes('CAMPAIGN')
+    ) {
+      crmApi.syncStateFromPostgres().catch(() => {});
+    }
+
+    // If this arrived via SSE (not already shown by Service Worker push), also surface OS notification!
+    if (!fromServiceWorker) {
+      triggerDesktopOsNotification(data).catch(() => {});
+    }
+  };
+
+  const handleSwMessage = (event) => {
+    if (event?.data?.type === 'ADMAFIA_FCM_PUSH' && event.data.notification) {
+      deliverInboundEvent(event.data.notification, { fromServiceWorker: true });
+    }
+  };
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+  }
 
   const connect = () => {
     if (closed) return;
@@ -149,25 +247,7 @@ export function subscribeToRealtimeNotifications({ onNotification, onStatusChang
     es.addEventListener('notification', (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (onNotification) onNotification(data);
-
-        // Also trigger native browser desktop notification if tab is in background & permission granted
-        if (
-          typeof Notification !== 'undefined' &&
-          Notification.permission === 'granted' &&
-          document.visibilityState !== 'visible'
-        ) {
-          const n = new Notification(data.title || 'AdMafia Notification', {
-            body: data.body || '',
-            icon: '/AdMafia-Logo.png',
-          });
-          n.onclick = () => {
-            window.focus();
-            if (data.deepLink) {
-              window.location.href = data.deepLink;
-            }
-          };
-        }
+        deliverInboundEvent(data, { fromServiceWorker: false });
       } catch (err) {
         // Ignore malformed frame
       }
@@ -186,14 +266,17 @@ export function subscribeToRealtimeNotifications({ onNotification, onStatusChang
 
   connect();
 
-  // Auto-register FCM token silently if permission was already granted earlier
+  // Auto-refresh Service Worker + FCM token silently if permission was already granted
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-    enableBrowserPushNotifications().catch(() => {});
+    enableBrowserPushNotifications({ promptIfDefault: false }).catch(() => {});
   }
 
   return () => {
     closed = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    }
     if (es) {
       try {
         es.close();
@@ -201,4 +284,3 @@ export function subscribeToRealtimeNotifications({ onNotification, onStatusChang
     }
   };
 }
-
