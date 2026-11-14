@@ -34,10 +34,17 @@ cd "$APP_DIR"
 
 # Preserve private server credentials across Git resets.
 BACKEND_ENV_BACKUP="$(mktemp)"
+ROOT_ENV_BACKUP="$(mktemp)"
 BACKEND_ENV_EXISTED=0
+ROOT_ENV_EXISTED=0
+
 if [ -f "$APP_DIR/backend/.env" ]; then
   cp "$APP_DIR/backend/.env" "$BACKEND_ENV_BACKUP"
   BACKEND_ENV_EXISTED=1
+fi
+if [ -f "$APP_DIR/.env" ]; then
+  cp "$APP_DIR/.env" "$ROOT_ENV_BACKUP"
+  ROOT_ENV_EXISTED=1
 fi
 
 # 1. Reset local uncommitted files to avoid git merge conflicts
@@ -46,10 +53,27 @@ git pull origin main 2>/dev/null || true
 
 if [ "$BACKEND_ENV_EXISTED" -eq 1 ]; then
   install -m 600 "$BACKEND_ENV_BACKUP" "$APP_DIR/backend/.env"
-else
-  rm -f "$APP_DIR/backend/.env"
 fi
-rm -f "$BACKEND_ENV_BACKUP"
+if [ "$ROOT_ENV_EXISTED" -eq 1 ]; then
+  install -m 600 "$ROOT_ENV_BACKUP" "$APP_DIR/.env"
+fi
+rm -f "$BACKEND_ENV_BACKUP" "$ROOT_ENV_BACKUP"
+
+# Synchronize keys if root .env was defined
+if [ -f "$APP_DIR/.env" ]; then
+  ROOT_KEY_ID=$(grep -E '^RAZORPAY_KEY_ID=' "$APP_DIR/.env" | tail -n 1 | cut -d'=' -f2- | tr -d '\r"' || true)
+  ROOT_KEY_SECRET=$(grep -E '^RAZORPAY_KEY_SECRET=' "$APP_DIR/.env" | tail -n 1 | cut -d'=' -f2- | tr -d '\r"' || true)
+  if [ ! -f "$APP_DIR/backend/.env" ]; then
+    cp "$APP_DIR/.env" "$APP_DIR/backend/.env"
+  else
+    if [ -n "$ROOT_KEY_ID" ]; then
+      sed -i "s|^RAZORPAY_KEY_ID=.*|RAZORPAY_KEY_ID=$ROOT_KEY_ID|" "$APP_DIR/backend/.env" || echo "RAZORPAY_KEY_ID=$ROOT_KEY_ID" >> "$APP_DIR/backend/.env"
+    fi
+    if [ -n "$ROOT_KEY_SECRET" ]; then
+      sed -i "s|^RAZORPAY_KEY_SECRET=.*|RAZORPAY_KEY_SECRET=$ROOT_KEY_SECRET|" "$APP_DIR/backend/.env" || echo "RAZORPAY_KEY_SECRET=$ROOT_KEY_SECRET" >> "$APP_DIR/backend/.env"
+    fi
+  fi
+fi
 
 # 1b. Keep payment credentials in the private backend/.env file. Never overwrite it during deploy.
 if [ ! -f "$APP_DIR/backend/.env" ] \

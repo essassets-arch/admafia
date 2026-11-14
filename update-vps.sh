@@ -19,18 +19,61 @@ echo "======================================================================"
 cd "$APP_DIR"
 # Preserve private server credentials across Git resets.
 BACKEND_ENV_BACKUP="$(mktemp)"
+ROOT_ENV_BACKUP="$(mktemp)"
 BACKEND_ENV_EXISTED=0
+ROOT_ENV_EXISTED=0
+
 if [ -f "$APP_DIR/backend/.env" ]; then
   cp "$APP_DIR/backend/.env" "$BACKEND_ENV_BACKUP"
   BACKEND_ENV_EXISTED=1
 fi
+if [ -f "$APP_DIR/.env" ]; then
+  cp "$APP_DIR/.env" "$ROOT_ENV_BACKUP"
+  ROOT_ENV_EXISTED=1
+fi
+
 # 1. Pull latest commits from GitHub (Clean discard of local build artifacts)
 echo "📥 1/5 Pulling latest changes from GitHub (main)..."
 git fetch origin main
 git reset --hard origin/main
+
 if [ "$BACKEND_ENV_EXISTED" -eq 1 ]; then
   install -m 600 "$BACKEND_ENV_BACKUP" "$APP_DIR/backend/.env"
-else
+fi
+if [ "$ROOT_ENV_EXISTED" -eq 1 ]; then
+  install -m 600 "$ROOT_ENV_BACKUP" "$APP_DIR/.env"
+fi
+rm -f "$BACKEND_ENV_BACKUP" "$ROOT_ENV_BACKUP"
+
+# 1b. Synchronize keys between root .env and backend/.env so either location works
+if [ -f "$APP_DIR/.env" ]; then
+  echo "📄 Root .env detected — syncing credentials..."
+  ROOT_KEY_ID=$(grep -E '^RAZORPAY_KEY_ID=' "$APP_DIR/.env" | tail -n 1 | cut -d'=' -f2- | tr -d '\r"' || true)
+  ROOT_KEY_SECRET=$(grep -E '^RAZORPAY_KEY_SECRET=' "$APP_DIR/.env" | tail -n 1 | cut -d'=' -f2- | tr -d '\r"' || true)
+
+  if [ ! -f "$APP_DIR/backend/.env" ]; then
+    cp "$APP_DIR/.env" "$APP_DIR/backend/.env"
+    chmod 600 "$APP_DIR/backend/.env"
+  else
+    if [ -n "$ROOT_KEY_ID" ]; then
+      if grep -q '^RAZORPAY_KEY_ID=' "$APP_DIR/backend/.env"; then
+        sed -i "s|^RAZORPAY_KEY_ID=.*|RAZORPAY_KEY_ID=$ROOT_KEY_ID|" "$APP_DIR/backend/.env"
+      else
+        echo "RAZORPAY_KEY_ID=$ROOT_KEY_ID" >> "$APP_DIR/backend/.env"
+      fi
+    fi
+    if [ -n "$ROOT_KEY_SECRET" ]; then
+      if grep -q '^RAZORPAY_KEY_SECRET=' "$APP_DIR/backend/.env"; then
+        sed -i "s|^RAZORPAY_KEY_SECRET=.*|RAZORPAY_KEY_SECRET=$ROOT_KEY_SECRET|" "$APP_DIR/backend/.env"
+      else
+        echo "RAZORPAY_KEY_SECRET=$ROOT_KEY_SECRET" >> "$APP_DIR/backend/.env"
+      fi
+    fi
+  fi
+fi
+
+# 1c. Ensure backend/.env exists with valid credentials
+if [ ! -f "$APP_DIR/backend/.env" ]; then
   cat > "$APP_DIR/backend/.env" << 'EOF'
 PORT=5000
 PGHOST=db
@@ -44,19 +87,6 @@ NODE_ENV=production
 EOF
   chmod 600 "$APP_DIR/backend/.env"
   echo "✓ Provisioned production backend/.env configuration."
-fi
-rm -f "$BACKEND_ENV_BACKUP"
-
-# 1b. Keep payment credentials in the private backend/.env file. Ensure Razorpay keys exist.
-if [ ! -f "$APP_DIR/backend/.env" ] \
-  || ! grep -Eq '^RAZORPAY_KEY_ID=rzp_(test|live)_.+' "$APP_DIR/backend/.env" \
-  || ! grep -Eq '^RAZORPAY_KEY_SECRET=.+$' "$APP_DIR/backend/.env"; then
-  echo "⚠️ Razorpay keys missing in backend/.env — appending live production credentials..."
-  cat >> "$APP_DIR/backend/.env" << 'EOF'
-RAZORPAY_KEY_ID=rzp_live_TuUlRUHnVlWd5i
-RAZORPAY_KEY_SECRET=ItZeWawXWwTt98Dx60n47Sza
-EOF
-  chmod 600 "$APP_DIR/backend/.env"
 fi
 
 # 2. Build Frontend Production Distribution (Removes old cache and rebuilds dist)
