@@ -1123,6 +1123,9 @@ app.post('/api/auth/register', async (req, res) => {
 
     // Real-Time Authoritative MongoDB Customer Registration Write
     try {
+      if (!isMongoConnected()) {
+        await initMongo().catch(() => {});
+      }
       if (isMongoConnected()) {
         await createOrUpdateCustomerMongo({
           id: custId,
@@ -1886,6 +1889,9 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
 
     // Real-Time Authoritative MongoDB Write
     try {
+      if (!isMongoConnected()) {
+        await initMongo().catch(() => {});
+      }
       if (isMongoConnected()) {
         await creditWalletAtomic({
           customerId: targetCustId,
@@ -3497,6 +3503,9 @@ export async function creditCustomerWallet({
       );
       custRes = await txQuery(`SELECT * FROM customers WHERE id = $1 OR phone = $2 LIMIT 1`, [fallbackId, cleanPhone]);
       try {
+        if (!isMongoConnected()) {
+          await initMongo().catch(() => {});
+        }
         if (isMongoConnected()) {
           await createOrUpdateCustomerMongo({
             id: fallbackId,
@@ -3665,6 +3674,9 @@ export async function creditCustomerWallet({
 
     // Real-Time Authoritative MongoDB Write
     try {
+      if (!isMongoConnected()) {
+        await initMongo().catch(() => {});
+      }
       if (isMongoConnected()) {
         await creditWalletAtomic({
           customerId: cust.id,

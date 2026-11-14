@@ -51,6 +51,8 @@ services:
     ports:
       - "127.0.0.1:5000:5000"
     volumes:
+      - ./backend:/app
+      - /app/node_modules
       - ./backend/uploads:/app/uploads
       - ./frontend/dist:/frontend/dist:ro
     networks:
