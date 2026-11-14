@@ -357,8 +357,14 @@ export async function runFullMigration() {
 
     // Reconcile any credit transactions from wallet_transactions into payment_records
     for (const tx of txRows.rows) {
-      if (tx.tx_type === 'Credit' && tx.reference_utr) {
-        const existing = await PaymentRecord.findOne({ referenceUtr: tx.reference_utr });
+      if (tx.tx_type === 'Credit') {
+        const ref = tx.reference_utr || tx.id;
+        const existing = await PaymentRecord.findOne({
+          $or: [
+            { referenceUtr: ref },
+            { _id: `pay_tx_${tx.id}` }
+          ]
+        });
         if (!existing) {
           const fallbackPayId = `pay_tx_${tx.id}`;
           await PaymentRecord.findByIdAndUpdate(
@@ -371,8 +377,8 @@ export async function runFullMigration() {
                 amount: Number(tx.amount),
                 currency: tx.currency || 'INR',
                 paymentMethod: tx.payment_method || 'Direct Secure Payment',
-                referenceUtr: tx.reference_utr,
-                receiptNumber: `REC-${String(tx.reference_utr).slice(-6)}`,
+                referenceUtr: ref,
+                receiptNumber: `REC-${String(ref).slice(-6)}`,
                 notes: tx.description || 'Wallet Credit',
                 status: 'Verified ✓',
                 createdAt: tx.created_at ? new Date(tx.created_at) : new Date(),

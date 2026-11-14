@@ -232,6 +232,14 @@ export async function creditWalletAtomic({
       { customerId },
       {
         $inc: { availableBalance: amount, totalLifetimePaid: amount },
+        $setOnInsert: {
+          _id: `wal_${String(customerId).replace(/^cust_/, '')}`,
+          currency: 'INR',
+          dailyAdSpend: 300,
+          totalAdSpent: 0,
+          adCampaignActive: false,
+          createdAt: new Date()
+        },
         $set: { updatedAt: new Date() }
       },
       { new: true, upsert: true, session }
