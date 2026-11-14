@@ -65,7 +65,10 @@ export async function initMongo() {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/admafia_crm';
+    let mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/admafia_crm';
+    if (!mongoUri.includes('directConnection=')) {
+      mongoUri += (mongoUri.includes('?') ? '&' : '?') + 'directConnection=true';
+    }
 
     try {
       // Parse host & port for status reporting
@@ -73,13 +76,13 @@ export async function initMongo() {
         const parsed = new URL(mongoUri.replace('mongodb://', 'http://').replace('mongodb+srv://', 'http://'));
         mongoStatus.host = parsed.hostname;
         mongoStatus.port = Number(parsed.port || 27017);
-        mongoStatus.database = parsed.pathname.replace(/^\//, '') || mongoStatus.database;
+        mongoStatus.database = parsed.pathname.replace(/^\//, '').split('?')[0] || mongoStatus.database;
       } catch (parseErr) {
         mongoStatus.host = '127.0.0.1';
       }
 
       // Pre-flight check: Is the MongoDB server actually listening?
-      const isListening = await probePort(mongoStatus.host, mongoStatus.port, 800);
+      const isListening = await probePort(mongoStatus.host, mongoStatus.port, 1500);
       if (!isListening) {
         isConnected = false;
         mongoStatus.connected = false;
@@ -93,9 +96,10 @@ export async function initMongo() {
 
       mongoose.set('strictQuery', false);
       mongoConnection = await mongoose.connect(mongoUri, {
-        serverSelectionTimeoutMS: 3000,
-        connectTimeoutMS: 3000,
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000,
         maxPoolSize: 20,
+        directConnection: true,
       });
 
       isConnected = true;
