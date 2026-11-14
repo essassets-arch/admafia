@@ -63,7 +63,7 @@ if command -v docker > /dev/null 2>&1 && docker ps --format '{{.Names}}' | grep 
   docker exec admafia-mongo mongodump --db=admafia_crm --archive --gzip > "$APP_DIR/backups/mongo_pre_cutover_${CUTOVER_TS}.archive.gz" || true
 
   if docker ps --format '{{.Names}}' | grep -q '^admafia-backend$'; then
-    docker exec -T admafia-backend node scripts/migrate-pg-to-mongo.js
+    docker exec admafia-backend node scripts/migrate-pg-to-mongo.js
   else
     PGHOST=127.0.0.1 PGPORT=5432 PGUSER=admafia_user PGPASSWORD=AdMafiaStrongPass2026! PGDATABASE=admafia_crm \
       MONGO_URI="mongodb://127.0.0.1:27017/admafia_crm?directConnection=true" \
