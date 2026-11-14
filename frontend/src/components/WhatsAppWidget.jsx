@@ -26,6 +26,8 @@ export default function WhatsAppWidget() {
     return () => clearTimeout(timer);
   }, [hasInteracted]);
 
+  if (!country) return null;
+
   const dailyRate = formatDailyRate(country);
   const dynamicMsg = `Hi AdMafia Marketing! I'm interested in generating customer leads from ${dailyRate} in ${country?.country_name || 'my area'}. Please guide me.`;
   const waUrl = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(dynamicMsg)}`;

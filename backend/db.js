@@ -48,7 +48,7 @@ SELECT
     c.completed_at,
     COALESCE(w.available_balance, 0) AS balance,
     COALESCE(w.available_balance, 0) AS wallet_balance,
-    COALESCE(w.daily_ad_spend, 300) AS daily_pacing,
+    COALESCE(w.daily_ad_spend, CASE WHEN COALESCE(w.currency, c.currency, 'INR') = 'INR' THEN 300 ELSE 10 END) AS daily_pacing,
     COALESCE(w.total_lifetime_paid, 0) AS amount_paid,
     COALESCE(w.total_ad_spent, 0) AS total_ad_spent,
     COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
@@ -56,7 +56,7 @@ SELECT
     COALESCE(w.schedule_preset, 'custom') AS schedule_preset,
     w.last_deducted_at,
     COALESCE(w.booked_dates, '') AS booked_dates,
-    FLOOR(COALESCE(w.available_balance, 0) / GREATEST(COALESCE(w.daily_ad_spend, 300), 1))::INT AS runway_days,
+    FLOOR(COALESCE(w.available_balance, 0) / GREATEST(COALESCE(w.daily_ad_spend, CASE WHEN COALESCE(w.currency, c.currency, 'INR') = 'INR' THEN 300 ELSE 10 END), 1))::INT AS runway_days,
     (SELECT COUNT(*) FROM leads l WHERE l.customer_id = c.id) AS total_leads_dispatched
 FROM customers c
 LEFT JOIN wallets w ON w.customer_id = c.id
@@ -292,8 +292,21 @@ export async function initDatabase() {
   const executeMigration = dbMode === 'postgres-server'
     ? (sql) => activePool.query(sql)
     : (sql) => pgliteInstance.exec(sql);
+  await executeMigration("DROP VIEW IF EXISTS vw_sales_customer_accounts CASCADE");
   await executeMigration("ALTER TABLE customers ADD COLUMN IF NOT EXISTS country_code VARCHAR(4) DEFAULT 'IN'");
   await executeMigration("ALTER TABLE customers ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR'");
+  await executeMigration("ALTER TABLE customers ALTER COLUMN phone TYPE VARCHAR(20)");
+  await executeMigration("ALTER TABLE customers DROP CONSTRAINT IF EXISTS chk_customers_phone_10digits");
+  await executeMigration("ALTER TABLE payment_records ALTER COLUMN phone TYPE VARCHAR(20)");
+  await executeMigration("ALTER TABLE pending_verifications ALTER COLUMN phone TYPE VARCHAR(20)");
+  await executeMigration("ALTER TABLE leads ALTER COLUMN customer_phone TYPE VARCHAR(20)");
+  await executeMigration("ALTER TABLE marketing_campaigns ADD COLUMN IF NOT EXISTS currency VARCHAR(10) NOT NULL DEFAULT 'INR'");
+  await executeMigration("ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS currency VARCHAR(10)");
+  await executeMigration("ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS currency VARCHAR(10)");
+  await executeMigration("ALTER TABLE wallets DROP CONSTRAINT IF EXISTS wallets_daily_ad_spend_check");
+  await executeMigration("ALTER TABLE marketing_campaigns DROP CONSTRAINT IF EXISTS marketing_campaigns_daily_budget_check");
+  await executeMigration("ALTER TABLE payment_records DROP CONSTRAINT IF EXISTS payment_records_amount_check");
+  await executeMigration("ALTER TABLE tax_invoices ADD COLUMN IF NOT EXISTS currency VARCHAR(10)");
 
   const kolkataDow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay();
   const kolkataToday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataDow];
@@ -548,23 +561,20 @@ export async function initDatabase() {
     ALTER TABLE wallets ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR';
     ALTER TABLE wallets DROP CONSTRAINT IF EXISTS wallets_daily_ad_spend_check;
 
-    ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR';
-    ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR';
+    ALTER TABLE wallet_transactions ADD COLUMN IF NOT EXISTS currency VARCHAR(10);
+    ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS currency VARCHAR(10);
     ALTER TABLE payment_records DROP CONSTRAINT IF EXISTS payment_records_amount_check;
-    ALTER TABLE tax_invoices ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR';
+    ALTER TABLE tax_invoices ADD COLUMN IF NOT EXISTS currency VARCHAR(10);
 
-    -- Initial authoritative country pricing records
+    -- Initial authoritative two-rule pricing records
     INSERT INTO country_pricing (
       id, country_code, country_name, currency_code, currency_symbol,
       currency_position, decimal_precision, daily_min_budget, monthly_budget,
       min_wallet_topup, tax_name, tax_rate, payment_gateway, phone_code,
       flag_emoji, is_active, is_default, effective_date
     ) VALUES
-      ('cp_in', 'IN', 'India', 'INR', '₹', 'before', 0, 300.00, 9000.00, 300.00, 'GST', 18.00, 'razorpay', '+91', '🇮🇳', TRUE, TRUE, CURRENT_DATE),
-      ('cp_ae', 'AE', 'United Arab Emirates', 'AED', 'AED ', 'before', 2, 10.00, 300.00, 10.00, 'VAT', 5.00, 'international', '+971', '🇦🇪', TRUE, FALSE, CURRENT_DATE),
-      ('cp_us', 'US', 'United States', 'USD', '$', 'before', 2, 10.00, 300.00, 10.00, 'Sales Tax', 0.00, 'international', '+1', '🇺🇸', TRUE, FALSE, CURRENT_DATE),
-      ('cp_gb', 'GB', 'United Kingdom', 'GBP', '£', 'before', 2, 10.00, 300.00, 10.00, 'VAT', 20.00, 'international', '+44', '🇬🇧', TRUE, FALSE, CURRENT_DATE),
-      ('cp_sa', 'SA', 'Saudi Arabia', 'SAR', 'SAR ', 'before', 2, 10.00, 300.00, 10.00, 'VAT', 15.00, 'international', '+966', '🇸🇦', TRUE, FALSE, CURRENT_DATE)
+      ('cp_in', 'IN', 'India', 'INR', chr(8377), 'before', 0, 300.00, 9000.00, 300.00, 'GST', 18.00, 'razorpay', '+91', '', TRUE, TRUE, CURRENT_DATE),
+      ('cp_global', 'ZZ', 'All Other Countries', 'USD', '$', 'before', 2, 10.00, 300.00, 10.00, 'Tax', 0.00, 'disabled', '', '', TRUE, FALSE, CURRENT_DATE)
     ON CONFLICT (country_code) DO UPDATE SET
       country_name = EXCLUDED.country_name,
       currency_code = EXCLUDED.currency_code,
@@ -575,36 +585,16 @@ export async function initDatabase() {
       min_wallet_topup = EXCLUDED.min_wallet_topup,
       tax_name = EXCLUDED.tax_name,
       tax_rate = EXCLUDED.tax_rate,
+      payment_gateway = EXCLUDED.payment_gateway,
       phone_code = EXCLUDED.phone_code,
       flag_emoji = EXCLUDED.flag_emoji,
       is_active = EXCLUDED.is_active,
       is_default = EXCLUDED.is_default,
       updated_at = NOW();
-  `);
 
-  // Keep homepage currency glyphs valid and provision Qatar's configured rate.
-  await safeExec(`
-    UPDATE country_pricing SET currency_symbol = chr(8377) WHERE country_code = 'IN';
-    UPDATE country_pricing SET currency_symbol = chr(163) WHERE country_code = 'GB';
-    INSERT INTO country_pricing (
-      id, country_code, country_name, currency_code, currency_symbol,
-      currency_position, decimal_precision, daily_min_budget, monthly_budget,
-      min_wallet_topup, tax_name, tax_rate, payment_gateway, phone_code,
-      flag_emoji, is_active, is_default, effective_date
-    ) VALUES (
-      'cp_qa', 'QA', 'Qatar', 'QAR', 'QAR ', 'before', 2, 10, 300,
-      10, 'VAT', 0, 'international', '+974', 'QA', TRUE, FALSE, CURRENT_DATE
-    ) ON CONFLICT (country_code) DO UPDATE SET
-      country_name = EXCLUDED.country_name,
-      currency_code = EXCLUDED.currency_code,
-      currency_symbol = EXCLUDED.currency_symbol,
-      daily_min_budget = EXCLUDED.daily_min_budget,
-      monthly_budget = EXCLUDED.monthly_budget,
-      min_wallet_topup = EXCLUDED.min_wallet_topup,
-      is_active = TRUE,
-      updated_at = NOW();
+    UPDATE country_pricing SET is_active = FALSE, updated_at = NOW()
+    WHERE country_code NOT IN ('IN', 'ZZ');
   `);
-
   // Ensure unified view vw_sales_customer_accounts is always compiled and live
   await safeExec(VW_SALES_CUSTOMER_ACCOUNTS_SQL);
 

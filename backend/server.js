@@ -11,7 +11,7 @@ import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.j
 import { graphicsRouter } from './routes/graphics.js';
 import { superadminRouter, logSuperAdminAudit } from './routes/superadmin.js';
 import { countryPricingRouter, superadminCountryPricingRouter } from './routes/countryPricing.js';
-import { resolveVisitorCountry } from './services/countryDetection.js';
+import { resolveVisitorCountry, getPricingForCountryCode } from './services/countryDetection.js';
 import { purgeSpecifiedTestUsers } from './scripts/purge-test-users.js';
 
 // Enterprise Crash-Protection: Prevent container exit on unhandled promise rejections or uncaught errors
@@ -292,6 +292,7 @@ function mapWalletTxRow(row) {
     customerId: row.customer_id,
     type: row.tx_type,
     amount: Number(row.amount || 0),
+    currency: String(row.currency || 'INR').toUpperCase(),
     balance: Number(row.balance_after || 0),
     balanceAfter: Number(row.balance_after || 0),
     ref: row.reference_utr,
@@ -324,6 +325,7 @@ function mapInvoiceRow(row) {
     cgst: Number(row.cgst_amount || 0),
     sgst: Number(row.sgst_amount || 0),
     totalAmount: Number(row.total_amount || 0),
+    currency: String(row.currency || 'INR').toUpperCase(),
     paymentMode: row.payment_mode,
     status: row.status || 'Paid',
     date: row.issued_date
@@ -371,6 +373,7 @@ function mapPaymentRecordRow(row) {
     city: row.city || 'India',
     type: row.tx_type || 'topup',
     amount: Number(row.amount || 0),
+    currency: String(row.currency || 'INR').toUpperCase(),
     gstAmount: Number(row.gst_amount || 0),
     totalAmount: Number(row.total_amount || 0),
     mode: row.payment_mode,
@@ -416,26 +419,26 @@ function mapQueryRow(row) {
     status: (row.status || 'open').toLowerCase(),
     createdAt: row.created_at
       ? new Date(row.created_at).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : 'Today',
     createdAtRaw: row.created_at,
     resolvedAt: row.resolved_at
       ? new Date(row.resolved_at).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : null,
   };
 }
@@ -474,14 +477,14 @@ function mapFailedTxRow(row) {
     failureReason: row.description || 'Bank transaction declined by customer',
     date: row.created_at
       ? new Date(row.created_at).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : 'Recently Failed',
     createdAt: row.created_at || new Date(),
     createdAtRaw: row.created_at || new Date(),
@@ -518,25 +521,25 @@ function mapDeletedFailedTxRow(row) {
     failureReason: row.failure_reason || row.description || 'Payment declined by bank or user cancelled',
     originalDate: row.original_created_at
       ? new Date(row.original_created_at).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : 'Previous Session',
     deletedAt: row.deleted_at
       ? new Date(row.deleted_at).toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
       : 'Just now',
     deletedAtRaw: row.deleted_at,
     deletedBy: row.deleted_by || 'Sales Admin',
@@ -858,32 +861,32 @@ app.get('/api/state', async (req, res) => {
         const resolvedComp = !isGeneric(r.company_name) ? r.company_name : (!isGeneric(r.cust_company) ? r.cust_company : fallback);
         const resolvedCont = !isGeneric(r.contact_person) ? r.contact_person : (!isGeneric(r.cust_contact) ? r.cust_contact : fallback);
         return {
-        id: r.id,
-        customerId: r.customer_id,
-        company: resolvedComp,
-        contact: resolvedCont,
-        phone: (r.phone || '').trim(),
-        packageTier: r.package_tier,
-        amount: Number(r.amount || 0),
-        dailyRate: Number(r.daily_rate || 300),
-        utrNumber: r.utr_number,
-        paymentStatus: r.payment_status,
-        profileStatus: r.profile_status,
-        queueType: r.queue_type,
-        submittedAt: r.submitted_at
-          ? new Date(r.submitted_at).toLocaleString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          })
-          : 'Today',
-        submittedAtRaw: r.submitted_at,
-        submitted_at_raw: r.submitted_at,
-      };
+          id: r.id,
+          customerId: r.customer_id,
+          company: resolvedComp,
+          contact: resolvedCont,
+          phone: (r.phone || '').trim(),
+          packageTier: r.package_tier,
+          amount: Number(r.amount || 0),
+          dailyRate: Number(r.daily_rate || 300),
+          utrNumber: r.utr_number,
+          paymentStatus: r.payment_status,
+          profileStatus: r.profile_status,
+          queueType: r.queue_type,
+          submittedAt: r.submitted_at
+            ? new Date(r.submitted_at).toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            })
+            : 'Today',
+          submittedAtRaw: r.submitted_at,
+          submitted_at_raw: r.submitted_at,
+        };
       }),
       queries: qRes.rows.map(mapQueryRow),
       tasks: tRes.rows,
@@ -998,8 +1001,18 @@ app.post('/api/auth/register', async (req, res) => {
       deposit = 0,
       initialDeposit: reqInitialDeposit,
     } = req.body || {};
+    void country;
+    void countryCode;
+    void currency;
 
-    const cleanCountryCode = String(countryCode || 'IN').trim().toUpperCase();
+    // New accounts use the server-detected IP pricing. Browser submitted country
+    // and currency are not authoritative. Existing accounts retain their billing currency.
+    const visitorPricing = await resolveVisitorCountry(req);
+    if (!visitorPricing.country) {
+      return res.status(400).json({ ok: false, error: 'We could not verify your location for billing. Please retry from a network with a public IP.' });
+    }
+    const detectedCountryCode = visitorPricing.detectedCode;
+    const cleanCountryCode = detectedCountryCode;
     const rawPhone = String(phone || mobile || '').trim();
     const cleanDigits = rawPhone.replace(/\D/g, '');
 
@@ -1016,23 +1029,10 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     // Determine country pricing, currency and daily starting budget
-    let dailyBudget = 300;
-    let registeredCurrency = currency || 'INR';
-    let registeredCountryName = country || 'India';
-    try {
-      const cpRes = await query(
-        `SELECT country_name, currency_code, daily_min_budget FROM country_pricing WHERE UPPER(country_code) = $1 LIMIT 1`,
-        [cleanCountryCode]
-      );
-      if (cpRes.rows.length > 0) {
-        dailyBudget = Number(cpRes.rows[0].daily_min_budget) || (cleanCountryCode === 'IN' ? 300 : 10);
-        registeredCurrency = cpRes.rows[0].currency_code || registeredCurrency;
-        registeredCountryName = cpRes.rows[0].country_name || registeredCountryName;
-      } else if (cleanCountryCode !== 'IN') {
-        dailyBudget = 10;
-        registeredCurrency = currency || 'USD';
-      }
-    } catch (e) {}
+    const pricing = getPricingForCountryCode(cleanCountryCode);
+    const dailyBudget = pricing.daily_min_budget;
+    const registeredCurrency = pricing.currency_code;
+    const registeredCountryName = pricing.country_name;
 
     const cleanUsername = (username || `user_${cleanPhone.slice(-4)}`).trim().replace(/^@/, '');
     const isGeneric = (str) =>
@@ -1047,8 +1047,10 @@ app.post('/api/auth/register', async (req, res) => {
     const custId = `cust_reg_${cleanPhone}`;
     const walId = `wal_${cleanPhone}`;
     const pvId = `pv_${cleanPhone}`;
-    const initialDeposit = Math.max(0, Number(deposit || reqInitialDeposit) || 0);
-    const payStatus = initialDeposit >= dailyBudget ? 'paid' : 'pending';
+    // Registration requests cannot assert successful payment. Only verified
+    // server-side payment processing may add money to a wallet.
+    const initialDeposit = 0;
+    const payStatus = 'pending';
 
     // Proactively verify if username is already taken by another account
     try {
@@ -1081,9 +1083,9 @@ app.post('/api/auth/register', async (req, res) => {
         email = EXCLUDED.email,
         password_hash = EXCLUDED.password_hash,
         company_name = EXCLUDED.company_name,
-        country = EXCLUDED.country,
-        country_code = EXCLUDED.country_code,
-        currency = EXCLUDED.currency,
+        country = COALESCE(customers.country, EXCLUDED.country),
+        country_code = COALESCE(customers.country_code, EXCLUDED.country_code),
+        currency = COALESCE(customers.currency, EXCLUDED.currency),
         profile_status = 'complete',
         kyc_percent = 100,
         verified = TRUE,
@@ -1114,7 +1116,7 @@ app.post('/api/auth/register', async (req, res) => {
       ON CONFLICT (customer_id) DO UPDATE SET
         available_balance = wallets.available_balance + EXCLUDED.available_balance,
         total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
-        currency = EXCLUDED.currency`,
+        currency = COALESCE(wallets.currency, EXCLUDED.currency)`,
       [walId, custId, initialDeposit, dailyBudget, registeredCurrency]
     );
 
@@ -1678,9 +1680,6 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
     if (!customerId && !phone) {
       return res.status(400).json({ ok: false, error: 'Customer ID or phone number is required.' });
     }
-    if (!creditAmount || creditAmount < 300) {
-      return res.status(400).json({ ok: false, error: 'Minimum wallet credit amount is ₹300.' });
-    }
     if (!cleanUtr) {
       return res.status(400).json({ ok: false, error: 'Transaction UTR reference number is required.' });
     }
@@ -1695,13 +1694,13 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
     }
 
     // 2. Resolve customer
-    const cleanPhone = String(phone || customerId || '').replace(/\D/g, '').slice(-10);
+    const cleanPhone = String(phone || customerId || '').trim();
     const custRes = await query(
-      `SELECT id, company_name, contact_person, phone, email
+      `SELECT id, company_name, contact_person, phone, email, currency
        FROM customers
-       WHERE id = $1 OR phone = $2
+       WHERE id = $1 OR phone = $2 OR phone = $3
        LIMIT 1`,
-      [customerId || '', cleanPhone]
+      [customerId || '', cleanPhone, cleanPhone.replace(/\D/g, '').slice(-10)]
     );
 
     if (custRes.rowCount === 0) {
@@ -1709,23 +1708,33 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
     }
     const customer = custRes.rows[0];
     const targetCustId = customer.id;
+    const custCurrency = customer.currency || 'INR';
+    const isUsd = custCurrency === 'USD';
+    const minCreditAmount = isUsd ? 10 : 300;
+    const minCreditSymbol = isUsd ? '$' : '₹';
+
+    if (!creditAmount || creditAmount < minCreditAmount) {
+      return res.status(400).json({ ok: false, error: `Minimum wallet credit amount is ${minCreditSymbol}${minCreditAmount}.` });
+    }
 
     let recordedNewBalance = 0;
     let recordedOldBalance = 0;
     let walletId = null;
+    let receiptNo = null;
 
     await withTransaction(async (tx) => {
       // 3. Upsert wallet balance atomically
+      const defaultDailySpend = isUsd ? 10.00 : 300.00;
       const walRes = await tx(
         `INSERT INTO wallets (
-          id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active
-        ) VALUES ($1, $2, $3, 300.00, $3, FALSE)
+          id, customer_id, available_balance, daily_ad_spend, total_lifetime_paid, ad_campaign_active, currency
+        ) VALUES ($1, $2, $3, $4, $3, FALSE, $5)
         ON CONFLICT (customer_id) DO UPDATE SET
           available_balance = wallets.available_balance + EXCLUDED.available_balance,
           total_lifetime_paid = wallets.total_lifetime_paid + EXCLUDED.total_lifetime_paid,
           updated_at = NOW()
         RETURNING *`,
-        [`wal_${Date.now()}`, targetCustId, creditAmount]
+        [`wal_${Date.now()}`, targetCustId, creditAmount, defaultDailySpend, custCurrency]
       );
 
       walletId = walRes.rows[0]?.id;
@@ -1740,6 +1749,14 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
          WHERE id = $1`,
         [targetCustId]
       );
+      await tx(
+        `UPDATE pending_verifications
+         SET payment_status = 'paid',
+             queue_type = 'Completed',
+             verified_at = NOW()
+         WHERE customer_id = $1`,
+        [targetCustId]
+      );
 
       // 5. Insert into wallet_transactions
       const txId = `tx_sales_${Date.now()}_${randomBytes(3).toString('hex')}`;
@@ -1749,8 +1766,8 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
 
       await tx(
         `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, created_at
-        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓', NOW())`,
+          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, currency, created_at
+        ) VALUES ($1, $2, $3, 'Credit', $4, $5, $6, $7, $8, 'Verified ✓', $9, NOW())`,
         [
           txId,
           targetCustId,
@@ -1760,6 +1777,7 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
           cleanUtr,
           txDesc,
           cleanMethod,
+          custCurrency,
         ]
       );
 
@@ -1783,11 +1801,11 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
       );
 
       // 7. Insert payment_records for billing / tax receipts
-      const receiptNo = `REC_${Date.now()}_${randomBytes(2).toString('hex').toUpperCase()}`;
+      receiptNo = `REC_${Date.now()}_${randomBytes(2).toString('hex').toUpperCase()}`;
       await tx(
         `INSERT INTO payment_records (
-          id, receipt_number, customer_id, company_name, contact_person, phone, tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, paid_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'topup', $7, 0.00, $7, $8, $9, 'paid', NOW())`,
+          id, receipt_number, customer_id, company_name, contact_person, phone, tx_type, amount, gst_amount, total_amount, payment_mode, utr_reference, status, currency, paid_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'topup', $7, 0.00, $7, $8, $9, 'paid', $10, NOW())`,
         [
           `pay_${Date.now()}_${randomBytes(3).toString('hex')}`,
           receiptNo,
@@ -1798,6 +1816,7 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
           creditAmount,
           cleanMethod,
           cleanUtr,
+          custCurrency,
         ]
       );
     });
@@ -1834,9 +1853,11 @@ app.post('/api/sales/wallet/topup', async (req, res) => {
       amount: creditAmount,
       previousBalance: recordedOldBalance,
       newBalance: recordedNewBalance,
+      walletBalance: recordedNewBalance,
       referenceUtr: cleanUtr,
       customer: updatedCustomer,
-      message: `₹${creditAmount.toLocaleString('en-IN')} successfully credited to ${customer.company_name}'s wallet by ${salesPersonName}.`,
+      paymentRecord: { receiptNo },
+      message: `${isUsd ? '$' : '₹'}${creditAmount.toLocaleString()} successfully credited to ${customer.company_name}'s wallet by ${salesPersonName}.`,
     });
   } catch (err) {
     console.error('[POST /api/sales/wallet/topup]', err);
@@ -2499,14 +2520,14 @@ app.get('/api/sales/failed-transactions', async (req, res) => {
         failureReason: 'Checkout abandoned before bank authorization',
         date: c.registered_at
           ? new Date(c.registered_at).toLocaleString('en-IN', {
-              timeZone: 'Asia/Kolkata',
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            })
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
           : 'Recently Failed',
         createdAt: c.registered_at || new Date(),
         createdAtRaw: c.registered_at || new Date(),
@@ -2967,7 +2988,11 @@ const handleUpdateCustomerRecord = async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
     }
     const cust = lookupRes.rows[0];
-    const updates = req.body || {};
+    const rawUpdates = req.body || {};
+    const updates = {
+      ...rawUpdates,
+      ...(rawUpdates.wallet || {}),
+    };
 
     const nextStatus = updates.status || cust.status;
     const nextProfile = updates.profileStatus || updates.profile_status || cust.profile_status;
@@ -3002,7 +3027,10 @@ const handleUpdateCustomerRecord = async (req, res) => {
       const walRes = await query('SELECT * FROM wallets WHERE customer_id = $1', [cust.id]);
       if (walRes.rowCount > 0) {
         const w = walRes.rows[0];
-        const nextDaily = updates.dailyAdSpend !== undefined ? Math.max(300, Number(updates.dailyAdSpend)) : Number(w.daily_ad_spend);
+        const walletCurrency = String(w.currency || 'INR').toUpperCase();
+        const minimumDailySpend = walletCurrency === 'INR' ? 300 : walletCurrency === 'USD' ? 10 : null;
+        if (minimumDailySpend === null) return res.status(409).json({ ok: false, error: 'Unsupported wallet currency.' });
+        const nextDaily = updates.dailyAdSpend !== undefined ? Math.max(minimumDailySpend, Number(updates.dailyAdSpend)) : Number(w.daily_ad_spend);
         const nextActive = updates.adCampaignActive !== undefined ? Boolean(updates.adCampaignActive) : Boolean(w.ad_campaign_active);
         const nextBal = updates.balance !== undefined ? Math.max(0, Number(updates.balance)) : Number(w.available_balance);
 
@@ -3017,8 +3045,8 @@ const handleUpdateCustomerRecord = async (req, res) => {
 
         let finalDaysArray = updates.activeDays !== undefined
           ? (Array.isArray(updates.activeDays)
-              ? updates.activeDays.map(d => String(d).trim().toUpperCase()).filter(Boolean)
-              : String(updates.activeDays).split(',').map(d => d.trim().toUpperCase()).filter(Boolean))
+            ? updates.activeDays.map(d => String(d).trim().toUpperCase()).filter(Boolean)
+            : String(updates.activeDays).split(',').map(d => d.trim().toUpperCase()).filter(Boolean))
           : (w.active_days ? w.active_days.split(',').map(d => d.trim().toUpperCase()).filter(Boolean) : [todayCode]);
         if (finalDaysArray.length === 5 && finalDaysArray.includes('MON') && finalDaysArray.includes('TUE') && finalDaysArray.includes('WED') && finalDaysArray.includes('THU') && finalDaysArray.includes('FRI')) {
           finalDaysArray = [todayCode];
@@ -3133,7 +3161,7 @@ app.delete('/api/customers/:identifier', async (req, res) => {
             JSON.stringify(cust),
           ]
         );
-      } catch (e) {}
+      } catch (e) { }
     });
 
     res.json({ ok: true, deleted: cust, deletedId: custId });
@@ -3149,6 +3177,17 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
   try {
     if (!razorpayKeyId || !razorpayKeySecret) {
       return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
+    }
+    const requestedCustomerId = String(req.body?.customerId || '');
+    if (requestedCustomerId) {
+      const billing = await query(
+        `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
+         FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
+        [requestedCustomerId]
+      );
+      if (billing.rowCount && String(billing.rows[0].currency).toUpperCase() !== 'INR') {
+        return res.status(400).json({ ok: false, error: 'Razorpay only supports INR wallets. Use the international USD gateway for this account.' });
+      }
     }
     const amount = Number(req.body?.amount);
     if (!Number.isSafeInteger(amount) || amount < 300 || amount > 1000000) {
@@ -3170,7 +3209,7 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, 'active', 'pending')
          ON CONFLICT DO NOTHING`,
         [newCustId, fallbackPhone, req.body?.username || fallbackPhone, newName, req.body?.companyName || newName, req.body?.email || `${fallbackPhone}@client.admafia.marketing`]
-      ).catch(() => {});
+      ).catch(() => { });
       customer = await query(
         `SELECT id, phone, username, contact_person, email, company_name FROM customers
          WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
@@ -3186,6 +3225,14 @@ app.post('/api/payments/razorpay/order', async (req, res) => {
       company_name: 'AdMafia Client',
       email: `${cleanPhone || 'client'}@admafia.marketing`,
     };
+    const billing = await query(
+      `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
+       FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
+      [cust.id]
+    );
+    if (billing.rowCount && String(billing.rows[0].currency).toUpperCase() !== 'INR') {
+      return res.status(400).json({ ok: false, error: 'Razorpay only supports INR wallets. International wallet payments are not enabled.' });
+    }
 
     const response = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
@@ -3258,7 +3305,7 @@ app.post('/api/payments/razorpay/payment-link', async (req, res) => {
            VALUES ($1, $2, $3, $4, $5, $6, 'active', 'pending')
            ON CONFLICT DO NOTHING`,
           [newCustId, newPhone, req.body?.username || newPhone, newName, req.body?.companyName || newName, req.body?.email || `${newPhone}@client.admafia.marketing`]
-        ).catch(() => {});
+        ).catch(() => { });
         customer = await query(
           `SELECT id, phone, username, contact_person, email, company_name FROM customers
            WHERE id = $1 OR phone = $2 OR LOWER(username) = LOWER($3) LIMIT 1`,
@@ -3270,6 +3317,15 @@ app.post('/api/payments/razorpay/payment-link', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Customer account not found.' });
     }
     const cust = customer.rows[0];
+
+    const billing = await query(
+      `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
+       FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
+      [cust.id]
+    );
+    if (billing.rowCount && String(billing.rows[0].currency).toUpperCase() !== 'INR') {
+      return res.status(400).json({ ok: false, error: 'Razorpay only supports INR wallets. International wallet payments are not enabled.' });
+    }
 
     const hostHeader = req.get('x-forwarded-host') || req.get('host') || 'admafia.marketing';
     const protoHeader = req.get('x-forwarded-proto') || (hostHeader.includes('localhost') ? 'http' : 'https');
@@ -3388,7 +3444,8 @@ export async function creditCustomerWallet({
     }
 
     const cust = custRes.rows[0];
-    const custCurrency = String(cust.currency || currency || 'INR').toUpperCase();
+    const existingWallet = await txQuery(`SELECT currency FROM wallets WHERE customer_id = $1 LIMIT 1`, [cust.id]);
+    const custCurrency = String(existingWallet.rows[0]?.currency || cust.currency || currency || 'INR').toUpperCase();
     const currencySymbol = custCurrency === 'USD' ? '$' : custCurrency === 'AED' ? 'AED ' : custCurrency === 'GBP' ? '£' : custCurrency === 'SAR' ? 'SAR ' : '₹';
 
     if (custCurrency === 'INR' && cleanAmount < 300) {
@@ -3589,7 +3646,7 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
           });
           const plinkData = await plinkResp.json();
           customerId = plinkData?.notes?.customer_id;
-        } catch (e) {}
+        } catch (e) { }
       }
       if (customerId) {
         await query(
@@ -3603,7 +3660,7 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
             paymentId || `FAIL_${Date.now()}`,
             `Online recharge ${failReason.toLowerCase()}`,
           ]
-        ).catch(() => {});
+        ).catch(() => { });
       }
       return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&reason=${encodeURIComponent(failReason)}#app/wallet`);
     }
@@ -3614,7 +3671,7 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
     });
     const payment = await paymentResp.json();
 
-    if (!paymentResp.ok || payment.status !== 'captured') {
+    if (!paymentResp.ok || payment.status !== 'captured' || String(payment.currency || '').toUpperCase() !== 'INR') {
       console.warn('[Razorpay Callback] Payment not captured:', paymentId, payment.status);
       return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${paymentId}&reason=Payment+not+captured#app/wallet`);
     }
@@ -3640,7 +3697,7 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
         if (plinkData?.notes?.customer_phone) {
           custPhone = custPhone || plinkData.notes.customer_phone;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     let targetCustId = null;
@@ -3653,6 +3710,15 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
       targetCustId = custRes.rows[0].id;
     } else {
       targetCustId = customerId || `cust_${custPhone || Date.now()}`;
+    }
+
+    const billingRes = await query(
+      `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
+       FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
+      [targetCustId]
+    );
+    if (billingRes.rowCount && String(billingRes.rows[0].currency).toUpperCase() !== 'INR') {
+      return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${encodeURIComponent(paymentId)}&reason=Razorpay+supports+INR+wallets+only#app/wallet`);
     }
 
     // Credit the wallet idempotently via atomic database transaction
@@ -3704,6 +3770,10 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
     if (!paymentResponse.ok || !payment.id) {
       console.error('[Razorpay Verify] Could not retrieve payment from Razorpay:', payment);
       return res.status(400).json({ ok: false, error: 'Could not verify payment with Razorpay gateway.' });
+    }
+
+    if (String(payment.currency || '').toUpperCase() !== 'INR') {
+      return res.status(400).json({ ok: false, error: 'Razorpay payment currency must be INR.' });
     }
 
     if (payment.order_id !== orderId) {
@@ -3759,6 +3829,15 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
 
     const cleanPhone = String(phone || customerId || payment.contact || '').replace(/\D/g, '').slice(-10);
     const targetCustId = customerId || payment.notes?.customer_id || `cust_${cleanPhone || Date.now()}`;
+
+    const billingRes = await query(
+      `SELECT COALESCE(w.currency, c.currency, 'INR') AS currency
+       FROM customers c LEFT JOIN wallets w ON w.customer_id = c.id WHERE c.id = $1 LIMIT 1`,
+      [targetCustId]
+    );
+    if (billingRes.rowCount && String(billingRes.rows[0].currency).toUpperCase() !== 'INR') {
+      return res.status(400).json({ ok: false, error: 'Razorpay cannot credit a non-INR wallet.' });
+    }
 
     // 5. Credit wallet via atomic idempotent PostgreSQL transaction
     const result = await creditCustomerWallet({
@@ -3873,7 +3952,7 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
               if (custByOrder.rowCount > 0 && custByOrder.rows[0].customer_id) {
                 customerId = custByOrder.rows[0].customer_id;
               }
-            } catch {}
+            } catch { }
           }
 
           if (payment?.status === 'captured' && (customerId || cleanPhone) && amount >= 300) {
@@ -4176,7 +4255,17 @@ app.post('/api/wallets/deduct', async (req, res) => {
         throw new Error('Wallet not found');
       }
       const wallet = walRes.rows[0];
-      const spendAmt = Math.max(300, Number(amount || wallet?.daily_ad_spend || 300));
+      const walletCurrency = String(wallet.currency || 'INR').toUpperCase();
+      const currencySymbol = walletCurrency === 'USD' ? '$' : '₹';
+      const minimumDailySpend = walletCurrency === 'INR' ? 300 : walletCurrency === 'USD' ? 10 : null;
+      if (minimumDailySpend === null || String(cust.currency || walletCurrency).toUpperCase() !== walletCurrency) {
+        throw Object.assign(new Error('Unsupported or mismatched customer and wallet currency.'), { statusCode: 409 });
+      }
+      const requestedSpend = amount === undefined || amount === null || amount === '' ? Number(wallet?.daily_ad_spend || minimumDailySpend) : Number(amount);
+      if (!Number.isFinite(requestedSpend) || requestedSpend < minimumDailySpend) {
+        throw Object.assign(new Error(`Daily spend minimum is ${walletCurrency === 'INR' ? '₹300' : '$10'}.`), { statusCode: 400 });
+      }
+      const spendAmt = requestedSpend;
       const currentBal = Number(wallet?.available_balance || 0);
 
       const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
@@ -4234,7 +4323,7 @@ app.post('/api/wallets/deduct', async (req, res) => {
       }
 
       if (currentBal < spendAmt) {
-        const err = new Error(`Insufficient wallet balance (₹${currentBal}) for ₹${spendAmt} daily ad spend.`);
+        const err = new Error(`Insufficient wallet balance (${currencySymbol}${currentBal}) for ${currencySymbol}${spendAmt} daily ad spend.`);
         err.statusCode = 400;
         throw err;
       }
@@ -4267,14 +4356,14 @@ app.post('/api/wallets/deduct', async (req, res) => {
           updated_at = NOW()
         WHERE customer_id = $2`,
         [spendAmt, cust.id]
-      ).catch(() => {});
+      ).catch(() => { });
 
       const txId = `tx_deb_${Date.now()}`;
       const refUtr = `AUTO-AD-${Date.now()}`;
       const txInsert = await txQuery(
         `INSERT INTO wallet_transactions (
-          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status
-        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓')
+          id, customer_id, wallet_id, tx_type, amount, balance_after, reference_utr, description, payment_method, status, currency
+        ) VALUES ($1, $2, $3, 'Debit', $4, $5, $6, $7, 'Daily Auto-Debit', 'Settled ✓', $8)
         RETURNING *`,
         [
           txId,
@@ -4283,7 +4372,8 @@ app.post('/api/wallets/deduct', async (req, res) => {
           spendAmt,
           nextBal,
           refUtr,
-          `Daily Meta Ads Campaign Spend Deduction (-₹${spendAmt}/day)`,
+          `Daily Meta Ads Campaign Spend Deduction (-${currencySymbol}${spendAmt}/day)`,
+          walletCurrency,
         ]
       );
 
@@ -5507,8 +5597,16 @@ if (fs.existsSync(frontendDistPath)) {
   app.get(['/', '/index.html'], async (req, res, next) => {
     try {
       if (databaseReady) await databaseReady;
-      const { country } = await resolveVisitorCountry(req);
-      const dailyAmount = Number(country.daily_min_budget || 300);
+      const detection = await resolveVisitorCountry(req);
+      const country = getPricingForCountryCode(detection.detectedCode);
+      if (!country) {
+        let html = await fs.promises.readFile(path.join(frontendDistPath, 'index.html'), 'utf8');
+        const notice = '<div class="country-pricing-unavailable" role="status">We could not determine country pricing for your location.</div>';
+        html = html.replace('<div id="root"></div>', `<div id="root">${notice}</div>`);
+        res.set({ 'Cache-Control': 'private, no-store', 'CDN-Cache-Control': 'no-store', 'Surrogate-Control': 'no-store', 'Content-Type': 'text/html; charset=utf-8' });
+        return res.status(503).send(html);
+      }
+      const dailyAmount = Number(country.daily_min_budget);
       const priceNumber = new Intl.NumberFormat('en-US', {
         maximumFractionDigits: Number(country.decimal_precision || 0),
       }).format(dailyAmount);
@@ -5521,7 +5619,6 @@ if (fs.existsSync(frontendDistPath)) {
       const ssrHomepage = await renderHomepage(country);
       let html = await fs.promises.readFile(path.join(frontendDistPath, 'index.html'), 'utf8');
       html = html.replace('<div id="root"></div>', `<div id="root">${ssrHomepage}</div>`);
-      html = html.replaceAll('₹300/Day', dailyRate).replaceAll('₹300', `${safeSymbol}${priceNumber}`);
       html = html.replace('</head>', `<script>window.__ADMAFIA_COUNTRY__=${bootstrap};window.__ADMAFIA_SSR__=true;</script></head>`);
       res.set({
         'Cache-Control': 'private, no-store, no-cache, must-revalidate',
@@ -5530,47 +5627,7 @@ if (fs.existsSync(frontendDistPath)) {
         'Vary': 'CF-IPCountry, CF-Connecting-IP, X-Forwarded-For',
         'Content-Type': 'text/html; charset=utf-8',
       });
-      return res.status(200).send(html);
-    } catch (error) {
-      return next(error);
-    }
-  });
-
-  // Personalize the initial document on the server, before React is downloaded.
-  // Both this HTML response and the country bootstrap are private/no-store so a
-  // CDN or reverse proxy cannot reuse one visitor's prices for another.
-  app.get(['/', '/index.html'], async (req, res, next) => {
-    try {
-      const { country } = await resolveVisitorCountry(req);
-      const dailyAmount = Number(country.daily_min_budget || 300);
-      const number = new Intl.NumberFormat('en-US', {
-        maximumFractionDigits: Number(country.decimal_precision || 0),
-      }).format(dailyAmount);
-      const symbol = country.currency_symbol || country.currency_code;
-      const dailyRate = `${symbol}${number}/Day`;
-      const monthly = Number(country.monthly_budget || dailyAmount * 30);
-      const monthlyRate = `${symbol}${new Intl.NumberFormat('en-US', {
-        maximumFractionDigits: Number(country.decimal_precision || 0),
-      }).format(monthly)}`;
-      const bootstrap = JSON.stringify(country).replace(/</g, '\\u003c');
-      const ssrHomepage = `<div class="ssr-homepage" style="font-family:Arial,sans-serif;color:#172033;max-width:1100px;margin:0 auto;padding:48px 24px;line-height:1.5">
-        <header><a href="/" aria-label="AdMafia Marketing home">AdMafia Marketing</a></header>
-        <main><section><h1>Start Generating Leads from Just ${dailyRate}!</h1><p>Generate qualified customer leads with AdMafia Marketing.</p><a href="/#contact">Start Generating Leads at ${dailyRate}</a></section>
-        <section id="pricing"><h2>Affordable Lead Generation Services Starting at ${dailyRate}</h2><p>Daily starting budget: ${dailyRate}</p><p>Estimated monthly spend (30 days): ${monthlyRate}</p><p>Budget calculator starting rate: ${dailyRate}</p></section>
-        <section id="faq"><h2>Frequently Asked Questions</h2><details><summary>What is the minimum starting price?</summary><p>You can start with a minimum budget of ${dailyRate}. Estimated monthly spend is ${monthlyRate}.</p></details></section>
-        <section id="contact"><h2>Contact AdMafia Marketing</h2><p>Starting budget: ${dailyRate}</p><a href="/#contact">Get Started Now</a></section></main>
-        <footer><p>Starting budget: ${dailyRate}</p><p>Estimated monthly spend: ${monthlyRate}</p></footer>
-      </div>`;
-      let html = await fs.promises.readFile(path.join(frontendDistPath, 'index.html'), 'utf8');
-      html = html.replace('<div id="root"></div>', `<div id="root">${ssrHomepage}</div>`);
-      html = html.replace('</head>', `<script>window.__ADMAFIA_COUNTRY__=${bootstrap};</script></head>`);
-      res.set({
-        'Cache-Control': 'private, no-store, no-cache, must-revalidate',
-        'CDN-Cache-Control': 'no-store',
-        'Surrogate-Control': 'no-store',
-        'Vary': 'CF-IPCountry, CF-Connecting-IP, X-Forwarded-For',
-        'Content-Type': 'text/html; charset=utf-8',
-      });
+      res.set('X-GeoIP-Country', detection.detectedCode);
       return res.status(200).send(html);
     } catch (error) {
       return next(error);
@@ -5624,14 +5681,14 @@ app.listen(PORT, () => {
             OR utr_reference = ANY($2::text[]) 
             OR id = ANY($3::text[])`,
         [testReceipts, testUtrs, testPayIds]
-      ).catch(() => {});
+      ).catch(() => { });
 
       query(
         `DELETE FROM wallet_transactions 
          WHERE reference_utr = ANY($1::text[]) 
             OR id = ANY($2::text[])`,
         [testUtrs, testTxIds]
-      ).catch(() => {});
+      ).catch(() => { });
 
       // Purge specified test accounts (@abc, @xxx) requested by admin
       purgeSpecifiedTestUsers().catch((err) => console.warn('[Purge Test Users Warning]', err.message));

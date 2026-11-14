@@ -84,7 +84,9 @@ export default function LeadHubOverview({
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const daysList = getKolkataWeekDays(weekOffset);
-  const dailySpend = customer.dailyAdSpend || 300;
+  const savedCurrency = String(customer?.currency || 'INR').toUpperCase();
+  const currencySymbol = savedCurrency === 'USD' ? '$' : '₹';
+  const dailySpend = Number(customer.dailyAdSpend || (savedCurrency === 'USD' ? 10 : 300));
   const currentTodayItem = daysList.find((d) => d.isToday) || daysList[0];
   const todayCode = currentTodayItem?.code || 'MON';
 
@@ -351,7 +353,7 @@ export default function LeadHubOverview({
             </div>
             <div className="header-wallet-text-col">
               <span className="header-wallet-tag">AD WALLET</span>
-              <strong className="header-wallet-val">₹{walletBalance.toFixed(0)}</strong>
+              <strong className="header-wallet-val">{currencySymbol}{walletBalance.toFixed(0)}</strong>
             </div>
             <button
               type="button"
@@ -426,7 +428,7 @@ export default function LeadHubOverview({
                 </span>
               </div>
               <p className="pacing-master-subtitle-exact">
-                Schedule running days for Meta ads &amp; local lead capture. Daily spend of <strong>₹{dailySpend}</strong> is deducted only on scheduled active days.
+                Schedule running days for Meta ads &amp; local lead capture. Daily spend of <strong>{currencySymbol}{dailySpend}</strong> is deducted only on scheduled active days.
               </p>
             </div>
           </div>
@@ -531,7 +533,7 @@ export default function LeadHubOverview({
 
             <div className="pacing-card-main-val-row">
               <div className="pacing-val-with-unit">
-                <strong className="pacing-big-amount">₹{dailySpend}</strong>
+                <strong className="pacing-big-amount">{currencySymbol}{dailySpend}</strong>
                 <span className="pacing-unit-sub">/ active day</span>
               </div>
               <span className="pacing-meta-verified-pill">Meta Verified</span>
@@ -561,7 +563,7 @@ export default function LeadHubOverview({
             </div>
 
             <div className="pacing-card-footer-between">
-              <span>Weekly pacing: <strong>₹{weeklyPacing.toLocaleString('en-IN')}</strong></span>
+              <span>Weekly pacing: <strong>{currencySymbol}{weeklyPacing.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}</strong></span>
               <span className="pacing-days-badge" style={{ background: totalBookedCount > 0 ? '#ecfdf5' : '#f8fafc', color: totalBookedCount > 0 ? '#047857' : '#64748b', fontWeight: 800 }}>
                 {totalBookedCount > 0 ? `🎯 ${totalBookedCount}d Booked` : `${activeDays.length}d / wk`}
               </span>
@@ -592,7 +594,7 @@ export default function LeadHubOverview({
             </div>
 
             <div className="pacing-card-main-val-row">
-              <strong className="pacing-big-amount">₹{walletBalance.toFixed(0)}</strong>
+              <strong className="pacing-big-amount">{currencySymbol}{walletBalance.toFixed(0)}</strong>
             </div>
 
             <div className="pacing-card-footer-between">
@@ -823,7 +825,7 @@ export default function LeadHubOverview({
                   
                   {/* Price tag */}
                   <div className={`day-price-badge ${isBooked ? 'booked' : isSelected ? 'selected' : 'unselected'}`}>
-                    ₹{dailySpend}
+                    {currencySymbol}{dailySpend}
                   </div>
 
                   {isBooked ? (
@@ -874,7 +876,7 @@ export default function LeadHubOverview({
                 <span className="bullet-dot">●</span>
                 {isMarketingLiveToday
                   ? (isTodayBooked
-                    ? `Marketing is LIVE (Meta Ads Running • Ad Booked ₹${dailySpend})`
+                    ? `Marketing is LIVE (Meta Ads Running • Ad Booked ${currencySymbol}${dailySpend})`
                     : 'Marketing is LIVE (Meta Ads Running)')
                   : walletBalance < dailySpend
                   ? 'Marketing is OFF (Customer Balance is Low - Needs Top Up)'
@@ -895,7 +897,7 @@ export default function LeadHubOverview({
             <div className="today-budget-actions-right">
               <div className="today-ad-budget-text-wrap">
                 <span className="budget-sub-label">Today's Ad Budget:</span>
-                <strong className="budget-val-purple">₹{dailySpend}</strong>
+                <strong className="budget-val-purple">{currencySymbol}{dailySpend}</strong>
                 <span className="budget-per-day">/day</span>
               </div>
               <button
@@ -907,7 +909,7 @@ export default function LeadHubOverview({
                   <path d="M12 20h9"/>
                   <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                 </svg>
-                <span>Set Amount (Min ₹300)</span>
+                <span>Set Amount (Min ${currencySymbol}${savedCurrency === 'USD' ? 10 : 300})</span>
               </button>
             </div>
           </div>

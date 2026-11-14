@@ -1,6 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import countryService, { formatDailyRate } from '../services/countryService';
 
 export default function AuthPage({ onBackToHome }) {
+  const [country, setCountry] = useState(() => countryService.getCurrentCountry());
+  useEffect(() => {
+    return countryService.subscribe((c) => setCountry(c || null));
+  }, []);
+  const dailyRate = country ? formatDailyRate(country) : '';
+
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -125,7 +132,7 @@ export default function AuthPage({ onBackToHome }) {
               Turn Meta Ad campaigns into qualified closed deals.
             </h2>
             <p className="showcase-lead">
-              Unified workspace for campaign management, direct WhatsApp lead routing, and revenue follow-ups starting from ₹300/day.
+              Unified workspace for campaign management, direct WhatsApp lead routing, and revenue follow-ups{dailyRate ? ` starting from ${dailyRate}` : ' with transparent daily pricing'}.
             </p>
 
             {/* Live Widget Preview */}
@@ -147,7 +154,7 @@ export default function AuthPage({ onBackToHome }) {
                 <div className="widget-metric-bar">
                   <div className="metric-col">
                     <small>Daily Spend</small>
-                    <strong>₹300/day</strong>
+                    <strong>{dailyRate || 'Daily pacing'}</strong>
                   </div>
                   <div className="metric-col">
                     <small>This Month</small>

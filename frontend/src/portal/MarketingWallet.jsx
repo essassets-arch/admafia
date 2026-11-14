@@ -174,6 +174,7 @@ export default function MarketingWallet({
 
   // Dynamically load active Razorpay gateway configuration from backend
   React.useEffect(() => {
+    if (currency !== 'INR') return;
     crmApi.getRazorpayConfig()
       .then((cfg) => {
         if (cfg?.ok) {
@@ -273,6 +274,10 @@ export default function MarketingWallet({
 
   // Trigger Direct Razorpay Standard Checkout popup (Instant on-screen checkout with UPI QR & payment modes)
   const handlePayViaRazorpay = async () => {
+    if (currency !== 'INR') {
+      setActionAlert({ type: 'error', message: 'USD wallet payments are not enabled yet. No payment was requested.' });
+      return;
+    }
     if (isProcessingPayment || isVerifyingPayment) return;
 
     if (!Number.isSafeInteger(activeAmount) || activeAmount < minTopUp) {
@@ -743,25 +748,25 @@ export default function MarketingWallet({
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   <path d="M9 12l2 2 4-4" />
                 </svg>
-                <span>SECURE GATEWAY</span>
+                <span>{currency === 'INR' ? 'RAZORPAY · INR' : 'INTERNATIONAL GATEWAY NOT ENABLED'}</span>
               </div>
             </div>
 
             {/* Selected Gateway Card */}
             <div className="razorpay-gateway-box-exact">
               <div className="gateway-box-left">
-                <div className="razorpay-icon-black">R</div>
+                <div className="razorpay-icon-black">{currency === 'INR' ? 'R' : '$'}</div>
                 <div className="gateway-box-text">
                   <div className="gateway-box-title-row">
-                    <strong>Payment Gateway ({currency})</strong>
-                    <span className={razorpayMode === 'LIVE MODE' ? 'live-mode-badge-emerald' : 'test-mode-badge-green'}>
-                      {razorpayMode === 'LIVE MODE' ? '● LIVE MODE' : (razorpayMode || 'ONLINE')}
-                    </span>
+                    <strong>{currency === 'INR' ? 'Razorpay (INR)' : 'USD payments unavailable'}</strong>
+                    {currency === 'INR' && <span className={razorpayMode === 'LIVE MODE' ? 'live-mode-badge-emerald' : 'test-mode-badge-green'}>{razorpayMode || 'ONLINE'}</span>}
                   </div>
                   <div className="gateway-box-sub">
-                    {razorpayMode === 'LIVE MODE'
-                      ? 'Secured 256-Bit Encrypted Live Production Gateway'
-                      : 'Secured 256-Bit Encrypted Online Gateway'}
+                    {currency !== 'INR'
+                      ? 'International USD wallet top-ups are disabled pending gateway approval and testing.'
+                      : razorpayMode === 'LIVE MODE'
+                        ? 'Secured 256-Bit Encrypted Live Production Gateway'
+                        : 'Secured 256-Bit Encrypted Online Gateway'}
                   </div>
                 </div>
               </div>
@@ -777,7 +782,7 @@ export default function MarketingWallet({
               type="button"
               className="btn-pay-green-exact"
               onClick={handlePayViaRazorpay}
-              disabled={isProcessingPayment || isVerifyingPayment || !Number.isSafeInteger(activeAmount) || activeAmount < minTopUp}
+              disabled={currency !== 'INR' || isProcessingPayment || isVerifyingPayment || !Number.isSafeInteger(activeAmount) || activeAmount < minTopUp}
             >
               {isProcessingPayment ? (
                 <>
@@ -789,6 +794,8 @@ export default function MarketingWallet({
                   <span className="spinner-rotate-inline">⟳</span>
                   <span>Verifying payment…</span>
                 </>
+              ) : currency !== 'INR' ? (
+                <span>USD payments unavailable</span>
               ) : (
                 <>
                   <span>Pay {formatMoney(activeAmount)}</span>
@@ -803,7 +810,7 @@ export default function MarketingWallet({
                 <circle cx="12" cy="12" r="10" />
                 <path d="M9 12l2 2 4-4" />
               </svg>
-              <span>100% added directly to wallet • Zero setup fee</span>
+              <span>{currency === 'INR' ? 'Wallet credited after server-side payment verification' : 'No payment requested for USD wallets'}</span>
             </div>
           </div>
         </div>

@@ -68,10 +68,12 @@ export function evaluateCustomerEligibility(row, options = {}) {
     reasons.push('Missing or invalid wallet configuration');
   }
 
-  // 4. Daily Advertising Spend Minimum (>= ₹300)
-  const dailySpend = Number(row.daily_ad_spend ?? row.dailyAdSpend ?? 300);
-  if (dailySpend < 300) {
-    reasons.push('Daily advertising spend below minimum ₹300');
+  // 4. Daily Advertising Spend Minimum (>= ₹300 or >= $10)
+  const currency = row.currency || 'INR';
+  const minSpend = currency === 'USD' ? 10 : 300;
+  const dailySpend = Number(row.daily_ad_spend ?? row.dailyAdSpend ?? minSpend);
+  if (dailySpend < minSpend) {
+    reasons.push(`Daily advertising spend below minimum ${currency === 'USD' ? '$10' : '₹300'}`);
   }
 
   // 5. Available Wallet Balance Sufficiency

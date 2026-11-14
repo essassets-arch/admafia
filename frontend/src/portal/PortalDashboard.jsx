@@ -123,6 +123,9 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           city: u.city || '',
           state: u.state || '',
           country: u.country || 'India',
+          countryCode: u.countryCode || u.country_code || '',
+          currency: String(u.currency || 'INR').toUpperCase(),
+          currencySymbol: u.currencySymbol || (String(u.currency || 'INR').toUpperCase() === 'USD' ? '$' : '₹'),
           profile_status: u.profileStatus || u.profile_status || 'incomplete',
           profileStatus: u.profileStatus || u.profile_status || 'incomplete',
           payment_status: u.paymentStatus || u.payment_status || 'pending',
@@ -133,8 +136,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           amountPaid: typeof u.amountPaid === 'number' ? u.amountPaid : (typeof u.totalLifetimePaid === 'number' ? u.totalLifetimePaid : 0),
           totalLifetimePaid: typeof u.totalLifetimePaid === 'number' ? u.totalLifetimePaid : (typeof u.amountPaid === 'number' ? u.amountPaid : 0),
           totalAdSpent: typeof u.totalAdSpent === 'number' ? u.totalAdSpent : 0,
-          dailyAdSpend: typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : 300,
-          dailyPacing: typeof u.dailyPacing === 'number' ? u.dailyPacing : (typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : 300),
+          dailyAdSpend: typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : (String(u.currency || 'INR').toUpperCase() === 'USD' ? 10 : 300),
+          dailyPacing: typeof u.dailyPacing === 'number' ? u.dailyPacing : (typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : (String(u.currency || 'INR').toUpperCase() === 'USD' ? 10 : 300)),
           adCampaignActive: typeof u.adCampaignActive === 'boolean' ? u.adCampaignActive : Boolean(u.adCampaignActive),
           activeDays: (Array.isArray(u.activeDays) && u.activeDays.length > 0 && !(u.activeDays.length === 5 && u.activeDays.includes('MON') && u.activeDays.includes('FRI'))) ? u.activeDays : [['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay()]],
           bookedDates: Array.isArray(u.bookedDates) ? u.bookedDates : [],
@@ -205,6 +208,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           if (res?.customer) {
             setCustomer((prev) => {
               const merged = { ...prev, ...res.customer };
+              merged.currency = String(res.customer.currency || prev.currency || 'INR').toUpperCase();
+              merged.currencySymbol = res.customer.currencySymbol || (merged.currency === 'USD' ? '$' : '₹');
+              merged.dailyAdSpend = Number(res.customer.dailyAdSpend || prev.dailyAdSpend || (merged.currency === 'USD' ? 10 : 300));
+              merged.dailyPacing = merged.dailyAdSpend;
               try {
                 localStorage.setItem('growthline_active_user', JSON.stringify(merged));
               } catch (e) {}
@@ -444,10 +451,12 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   });
 
   const t = translations[currentLang] || translations.en;
+  const currencySymbol = customer?.currencySymbol || (customer?.currency === 'USD' ? '$' : '₹');
 
   // Actions
   const handleUpdateDailyLimit = (newLimit, customDays) => {
-    const safeLimit = Math.max(300, Number(newLimit) || 300);
+    const minLimit = customer?.currency === 'USD' ? 10 : 300;
+    const safeLimit = Math.max(minLimit, Number(newLimit) || minLimit);
     const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const todayDayCode = dayCodes[new Date().getDay()];
 
@@ -820,7 +829,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         company: customer?.companyName || customer?.name || '',
         date: 'Today, Just now',
         ref: `SYS-DAILY-${Date.now().toString().slice(-6)}`,
-        desc: `Daily Meta Ad Spend - Per-Day Service (${todayDayCode}) (-₹${spend})`,
+        desc: `Daily Meta Ad Spend - Per-Day Service (${todayDayCode}) (-${currencySymbol}${spend})`,
         type: 'Debit',
         amount: spend,
         balance: newBal,
@@ -858,9 +867,9 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         return updated;
       });
 
-      return { success: true, message: `Successfully deducted ₹${spend} ad spend for today!` };
+      return { success: true, message: `Successfully deducted ${currencySymbol}${spend} ad spend for today!` };
     }
-    return { success: false, message: `Insufficient balance! Wallet has ₹${walletBalance.toFixed(0)}, needs ₹${spend}.` };
+    return { success: false, message: `Insufficient balance! Wallet has ${currencySymbol}${walletBalance.toFixed(0)}, needs ${currencySymbol}${spend}.` };
   };
 
   const handleUpdateCustomer = (updates) => {
@@ -1147,7 +1156,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   };
 
   const handleToggleCampaign = async (forceState) => {
-    const dailyLimit = Number(customer.dailyAdSpend || 300);
+    const dailyLimit = Number(customer.dailyAdSpend || (customer?.currency === 'USD' ? 10 : 300));
     const nextActive = typeof forceState === 'boolean' ? forceState : !customer.adCampaignActive;
 
     // 1. If user clicks Start but it's ALREADY active
@@ -1155,7 +1164,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       Swal.fire({
         icon: 'info',
         title: 'Marketing Campaign Already Active',
-        html: `Your marketing campaign is currently <strong>Running (Active)</strong> and pacing at <strong>₹${dailyLimit.toLocaleString('en-IN')}/day</strong>.<br/><br/>Meta ads and local buyer lead capture are active.`,
+        html: `Your marketing campaign is currently <strong>Running (Active)</strong> and pacing at <strong>${currencySymbol}${dailyLimit.toLocaleString()}/day</strong>.<br/><br/>Meta ads and local buyer lead capture are active.`,
         confirmButtonText: 'Understood',
         confirmButtonColor: '#059669',
       });
@@ -1179,7 +1188,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       Swal.fire({
         icon: 'warning',
         title: 'Ad Wallet Balance is Low',
-        html: `Your available Ad Wallet balance is <strong style="color:#ef4444;">₹${walletBalance.toLocaleString('en-IN')}</strong>, but today's daily ad spend is <strong>₹${dailyLimit.toLocaleString('en-IN')}</strong>.<br/><br/>Please top up your wallet to start marketing.`,
+        html: `Your available Ad Wallet balance is <strong style="color:#ef4444;">${currencySymbol}${walletBalance.toLocaleString()}</strong>, but today's daily ad spend is <strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong>.<br/><br/>Please top up your wallet to start marketing.`,
         showCancelButton: true,
         confirmButtonText: '+ Top Up Wallet Now',
         confirmButtonColor: '#4f46e5',
@@ -1213,15 +1222,15 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px; margin: 10px 0; font-family: inherit;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
               <span style="color: #64748b; font-size: 0.85rem;">Daily Ad Spend:</span>
-              <strong style="color: #059669; font-size: 1rem;">₹${dailyLimit.toLocaleString('en-IN')}/day</strong>
+              <strong style="color: #059669; font-size: 1rem;">${currencySymbol}${dailyLimit.toLocaleString()}/day</strong>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
               <span style="color: #64748b; font-size: 0.85rem;">Ad Wallet Balance:</span>
-              <strong style="color: #4f46e5; font-size: 1rem;">₹${walletBalance.toLocaleString('en-IN')}</strong>
+              <strong style="color: #4f46e5; font-size: 1rem;">${currencySymbol}${walletBalance.toLocaleString()}</strong>
             </div>
             <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; display: flex; justify-content: space-between;">
               <span style="color: #64748b; font-size: 0.85rem;">Today's Placement:</span>
-              <span style="color: #047857; font-weight: 700; font-size: 0.85rem;">${customer.isDeductedToday ? 'Already Debited ✓' : `Deduct ₹${dailyLimit.toLocaleString('en-IN')}`}</span>
+              <span style="color: #047857; font-weight: 700; font-size: 0.85rem;">${customer.isDeductedToday ? 'Already Debited ✓' : `Deduct ${currencySymbol}${dailyLimit.toLocaleString()}`}</span>
             </div>
           </div>
           <p style="font-size: 0.88rem; color: #475569; margin: 0;">
@@ -1229,7 +1238,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           </p>
         `,
         showCancelButton: true,
-        confirmButtonText: customer.isDeductedToday ? '▶ Start Campaign' : `▶ Deduct ₹${dailyLimit.toLocaleString('en-IN')} & Start`,
+        confirmButtonText: customer.isDeductedToday ? '▶ Start Campaign' : `▶ Deduct ${currencySymbol}${dailyLimit.toLocaleString()} & Start`,
         confirmButtonColor: '#059669',
         cancelButtonText: 'Cancel',
       });
@@ -1276,7 +1285,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             Swal.fire({
               icon: 'success',
               title: 'Marketing Started & Slot Booked!',
-              html: `<strong>₹${dailyLimit.toLocaleString('en-IN')}</strong> deducted from your Ad Wallet.<br/>Today's advertising slot is now <strong>🎯 BOOKED &amp; RUNNING</strong>.<br/><br/>Remaining Wallet Balance: <strong style="color:#059669;">₹${(deductRes.walletBalance ?? (walletBalance - dailyLimit)).toLocaleString('en-IN')}</strong>`,
+              html: `<strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong> deducted from your Ad Wallet.<br/>Today's advertising slot is now <strong>🎯 BOOKED &amp; RUNNING</strong>.<br/><br/>Remaining Wallet Balance: <strong style="color:#059669;">${currencySymbol}${(deductRes.walletBalance ?? (walletBalance - dailyLimit)).toLocaleString()}</strong>`,
               timer: 3000,
               showConfirmButton: false,
             });
@@ -1393,7 +1402,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           title="View Wallet Balance"
         >
           <span className="dot-green"></span>
-          <span>₹{walletBalance.toFixed(0)}</span>
+          <span>{currencySymbol}{walletBalance.toFixed(0)}</span>
         </button>
       </header>
 
@@ -1538,7 +1547,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               <>
                 <span className="nav-title">Wallet</span>
                 <span className={`nav-badge-wallet ${walletBalance <= 0 ? 'zero' : ''}`}>
-                  ₹{walletBalance.toFixed(0)}
+                  {currencySymbol}{walletBalance.toFixed(0)}
                 </span>
               </>
             )}
@@ -1743,7 +1752,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           setIsPaymentModalOpen(false);
           handleSwitchTab('profile');
         }}
-        dailyAdSpend={customer.dailyAdSpend || 300}
+        dailyAdSpend={customer.dailyAdSpend || (customer.currency === 'USD' ? 10 : 300)}
       />
 
       
@@ -1778,7 +1787,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         onTopUp={handleTopUpWallet}
         onPaymentFailed={handlePaymentFailed}
         transactions={transactions}
-        dailyAdSpend={customer.dailyAdSpend || 300}
+        dailyAdSpend={customer.dailyAdSpend || (customer.currency === 'USD' ? 10 : 300)}
         walletBalance={walletBalance}
         customer={customer}
       />
@@ -1786,7 +1795,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       <SetDailyLimitModal
         isOpen={isSetDailyLimitOpen}
         onClose={() => setIsSetDailyLimitOpen(false)}
-        currentLimit={customer.dailyAdSpend}
+        currentLimit={customer.dailyAdSpend || (customer.currency === 'USD' ? 10 : 300)}
         onUpdateLimit={handleUpdateDailyLimit}
         walletBalance={walletBalance}
         customer={customer}

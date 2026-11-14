@@ -40,8 +40,10 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
   const [showPwd, setShowPwd] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  if (!selectedCountry) return <main role="status">Registration is unavailable because we could not determine your billing country. Please retry from a network with a public IP.</main>;
+
   const isIndia = selectedCountry?.country_code === 'IN';
-  const phoneCode = selectedCountry?.phone_code || (isIndia ? '+91' : '+1');
+  const phoneCode = isIndia ? '+91' : '';
   const dailyRateText = formatDailyRate(selectedCountry);
   const dailyBudgetText = formatDailyBudget(selectedCountry);
 
@@ -82,7 +84,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (l) => l.toUpperCase());
 
-    const fullPhone = isIndia ? cleanMobile : `${phoneCode} ${cleanMobile}`;
+    const fullPhone = cleanMobile;
 
     // Provisions authoritative customer record for both client portal and subadmin desks
     let newCustomer = {
@@ -98,10 +100,10 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       passwordMasked: '••••••••••••',
       city: '',
       state: '',
-      country: selectedCountry.country_name || 'India',
-      countryCode: selectedCountry.country_code || 'IN',
-      currency: selectedCountry.currency_code || 'INR',
-      currencySymbol: selectedCountry.currency_symbol || '₹',
+      country: selectedCountry.country_name,
+      countryCode: selectedCountry.country_code,
+      currency: selectedCountry.currency_code,
+      currencySymbol: selectedCountry.currency_symbol,
       category: '',
       industry: '',
       website: '',
@@ -114,8 +116,8 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       payment_status: 'pending',
       amountPaid: 0,
       totalLifetimePaid: 0,
-      dailyPacing: selectedCountry.daily_min_budget || 300,
-      dailyAdSpend: selectedCountry.daily_min_budget || 300,
+      dailyPacing: selectedCountry.daily_min_budget || (isIndia ? 300 : 10),
+      dailyAdSpend: selectedCountry.daily_min_budget || (isIndia ? 300 : 10),
       balance: 0,
       walletBalance: 0,
       runwayDays: 0,
@@ -191,7 +193,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         currency: selectedCountry.currency_code,
         packageTier: 'Self-Registered (Awaiting Wallet Top-Up)',
         amount: 0,
-        dailyRate: selectedCountry.daily_min_budget || 300,
+        dailyRate: selectedCountry.daily_min_budget || (isIndia ? 300 : 10),
         runwayDays: 0,
         utrNumber: 'Awaiting Payment',
         paymentStatus: 'pending',
@@ -456,7 +458,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                     {/* 1. Mobile Number* */}
                     <div className="auth-input-group">
                       <label htmlFor="regMobile">
-                        <span>{isIndia ? 'Mobile Number (10 Digits)' : `Phone Number (${phoneCode})`}</span>
+                        <span>{isIndia ? 'Mobile Number (10 Digits)' : 'International Phone Number'}</span>
                         <span className="req-star">*</span>
                       </label>
                       <div className="clean-input-box" style={{ display: 'flex', alignItems: 'center' }}>
@@ -475,8 +477,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                             userSelect: 'none',
                           }}
                         >
-                          <span>{selectedCountry?.flag_emoji}</span>
-                          <span>{phoneCode}</span>
+                          {phoneCode && <span>{phoneCode}</span>}
                         </div>
                         <input
                           id="regMobile"
@@ -795,7 +796,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
               <div className="auth-live-card-metrics">
                 <div className="auth-metric-item">
                   <small>Daily Ad Budget</small>
-                  <strong>From ₹300/Day</strong>
+                  <strong>From {formatDailyRate(selectedCountry)}</strong>
                   <span className="auth-metric-sub">Full Pacing Control</span>
                 </div>
                 <div className="auth-metric-item highlight">

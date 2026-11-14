@@ -362,7 +362,7 @@ marketingRouter.get('/customers', async (req, res) => {
         c.completed_at,
         c.updated_at,
         COALESCE(w.available_balance, 0)::NUMERIC AS available_balance,
-        COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
+        COALESCE(w.daily_ad_spend, CASE WHEN COALESCE(w.currency, c.currency, 'INR') = 'INR' THEN 300 ELSE 10 END)::NUMERIC AS daily_ad_spend,
         COALESCE(w.total_lifetime_paid, 0)::NUMERIC AS total_paid,
         COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
         COALESCE(w.active_days, '') AS active_days,
@@ -477,7 +477,7 @@ marketingRouter.get('/customers/:id', async (req, res) => {
       `SELECT 
         c.*,
         COALESCE(w.available_balance, 0)::NUMERIC AS available_balance,
-        COALESCE(w.daily_ad_spend, 300)::NUMERIC AS daily_ad_spend,
+        COALESCE(w.daily_ad_spend, CASE WHEN COALESCE(w.currency, c.currency, 'INR') = 'INR' THEN 300 ELSE 10 END)::NUMERIC AS daily_ad_spend,
         COALESCE(w.total_lifetime_paid, 0)::NUMERIC AS total_paid,
         COALESCE(w.ad_campaign_active, FALSE) AS ad_campaign_active,
         COALESCE(w.active_days, '') AS active_days,
@@ -598,13 +598,13 @@ marketingRouter.get('/customers/:id/wallet-transactions', async (req, res) => {
     );
 
     const walRes = await query(
-      `SELECT available_balance::NUMERIC AS available_balance, daily_ad_spend::NUMERIC AS daily_ad_spend 
+      `SELECT available_balance::NUMERIC AS available_balance, daily_ad_spend::NUMERIC AS daily_ad_spend, currency 
        FROM wallets WHERE customer_id = $1`,
       [custId]
     );
 
     const availableBalance = Number(walRes.rows[0]?.available_balance || 0);
-    const dailyAdSpend = Number(walRes.rows[0]?.daily_ad_spend || 300);
+    const dailyAdSpend = Number(walRes.rows[0]?.daily_ad_spend || (walRes.rows[0]?.currency === 'USD' ? 10 : 300));
 
     res.json({
       ok: true,
@@ -1626,7 +1626,7 @@ marketingRouter.post('/campaigns', async (req, res) => {
       targetAudience = '',
       startDate,
       endDate = null,
-      dailyBudget = 300,
+      dailyBudget,
       totalBudget = 0,
       scheduleSettings = {},
       status = 'Draft',
@@ -1635,14 +1635,19 @@ marketingRouter.post('/campaigns', async (req, res) => {
 
     if (!customerId) return res.status(400).json({ ok: false, error: 'Customer is required.' });
     if (!name || !name.trim()) return res.status(400).json({ ok: false, error: 'Campaign name is required.' });
-    if (Number(dailyBudget) < 300) {
-      return res.status(400).json({ ok: false, error: 'Minimum campaign daily budget is ₹300/day.' });
-    }
-
     // 1. Verify customer exists and registration is complete
     const custRes = await query(`SELECT * FROM customers WHERE id = $1`, [customerId]);
     if (custRes.rowCount === 0) {
       return res.status(404).json({ ok: false, error: 'Customer not found.' });
+    }
+    const savedCurrency = String(custRes.rows[0].currency || 'INR').toUpperCase();
+    const minimumDailyBudget = savedCurrency === 'INR' ? 300 : savedCurrency === 'USD' ? 10 : null;
+    if (minimumDailyBudget === null) {
+      return res.status(409).json({ ok: false, error: 'This wallet currency is unsupported for campaign spending.' });
+    }
+    const resolvedDailyBudget = dailyBudget === undefined ? minimumDailyBudget : Number(dailyBudget);
+    if (!Number.isFinite(resolvedDailyBudget) || resolvedDailyBudget < minimumDailyBudget) {
+      return res.status(400).json({ ok: false, error: `Minimum campaign daily budget is ${savedCurrency === 'INR' ? '₹300' : '$10'}/day.` });
     }
 
     // 2. Determine and verify creative post
@@ -1715,10 +1720,16 @@ marketingRouter.post('/campaigns', async (req, res) => {
       const walRes = await txQuery(`SELECT * FROM wallets WHERE customer_id = $1 FOR UPDATE`, [customerId]);
       const walRow = walRes.rows[0];
       const balance = Number(walRow?.available_balance || 0);
+      if (String(walRow?.currency || savedCurrency).toUpperCase() !== savedCurrency) {
+        const err = new Error('Customer and wallet currencies do not match. Campaign spending is blocked for safety.');
+        err.statusCode = 409;
+        throw err;
+      }
+      const currencySymbol = savedCurrency === 'INR' ? '₹' : '$';
 
-      if (balance < Number(dailyBudget)) {
+      if (balance < resolvedDailyBudget) {
         const err = new Error(
-          `Insufficient Wallet Balance: Customer available balance (₹${balance.toLocaleString('en-IN')}) is less than campaign daily budget requirement (₹${Number(dailyBudget).toLocaleString('en-IN')}). Please top up wallet first.`
+          `Insufficient Wallet Balance: Customer available balance (${currencySymbol}${balance.toLocaleString('en-US')}) is less than campaign daily budget requirement (${currencySymbol}${resolvedDailyBudget.toLocaleString('en-US')}). Please top up wallet first.`
         );
         err.statusCode = 400;
         throw err;
@@ -1735,9 +1746,9 @@ marketingRouter.post('/campaigns', async (req, res) => {
         `INSERT INTO marketing_campaigns (
           id, customer_id, name, objective, post_id, platform,
           target_audience, start_date, end_date, daily_budget, total_budget,
-          schedule_settings, status, external_platform_status, created_by,
+          schedule_settings, status, external_platform_status, created_by, currency,
           last_action, last_actor, last_action_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Created', $15, NOW())`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'Created', $15, NOW())`,
         [
           campaignId,
           customerId,
@@ -1748,12 +1759,13 @@ marketingRouter.post('/campaigns', async (req, res) => {
           targetAudience,
           finalStart,
           endDate ? new Date(endDate) : null,
-          Number(dailyBudget),
+          resolvedDailyBudget,
           Number(totalBudget || 0),
           JSON.stringify(scheduleSettings),
           status,
           externalStatus,
           actor,
+          savedCurrency,
         ]
       );
 
@@ -1764,7 +1776,7 @@ marketingRouter.post('/campaigns', async (req, res) => {
           new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
         if (!isAlreadyDeductedToday) {
-          const spendAmt = Number(dailyBudget);
+          const spendAmt = resolvedDailyBudget;
           newBalanceAfterStart = balance - spendAmt;
           await txQuery(
             `UPDATE wallets SET
@@ -1807,7 +1819,7 @@ marketingRouter.post('/campaigns', async (req, res) => {
         name: name.trim(),
         status,
         effectivePostId,
-        dailyBudget: Number(dailyBudget),
+        dailyBudget: resolvedDailyBudget,
         externalStatus,
         newBalanceAfterStart,
         hasMetaToken,
@@ -1817,7 +1829,7 @@ marketingRouter.post('/campaigns', async (req, res) => {
     await logAuditEvent(customerId, 'campaign', campaignResult.campaignId, 'Created Marketing Campaign', actor, {
       name,
       postId: campaignResult.effectivePostId,
-      dailyBudget,
+      dailyBudget: resolvedDailyBudget,
       externalStatus: campaignResult.externalStatus,
     });
 
@@ -1877,7 +1889,15 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     }
     const wallet = walRes.rows[0];
     const balance = Number(wallet.available_balance || 0);
-    const dailySpend = Math.max(300, Number(camp.daily_budget || wallet.daily_ad_spend || 300));
+    const currency = String(wallet.currency || 'INR').toUpperCase();
+    const minimumDailySpend = currency === 'INR' ? 300 : currency === 'USD' ? 10 : null;
+    if (minimumDailySpend === null || String(camp.currency || currency).toUpperCase() !== currency) {
+      return res.status(409).json({ ok: false, error: 'Campaign and wallet currencies are unsupported or mismatched.' });
+    }
+    const dailySpend = Number(camp.daily_budget || wallet.daily_ad_spend || minimumDailySpend);
+    if (!Number.isFinite(dailySpend) || dailySpend < minimumDailySpend) {
+      return res.status(400).json({ ok: false, error: `Campaign daily spend minimum is ${currency === 'INR' ? '₹300' : '$10'}.` });
+    }
 
     // Per-day service check: Has this customer already been deducted for today's service?
     const isAlreadyDeductedToday = Boolean(
@@ -2014,15 +2034,22 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
     let walRes = await query(`SELECT * FROM wallets WHERE customer_id = $1`, [custId]);
     if (walRes.rowCount === 0) {
       await query(
-        `INSERT INTO wallets (id, customer_id, available_balance, daily_ad_spend, ad_campaign_active)
-         VALUES ($1, $2, 0, 300, FALSE) ON CONFLICT (customer_id) DO NOTHING`,
+        `INSERT INTO wallets (id, customer_id, available_balance, daily_ad_spend, ad_campaign_active, currency)
+         SELECT $1, $2, 0, CASE WHEN UPPER(COALESCE(c.currency, 'INR')) = 'INR' THEN 300 ELSE 10 END, FALSE, UPPER(COALESCE(c.currency, 'INR'))
+         FROM customers c WHERE c.id = $2 ON CONFLICT (customer_id) DO NOTHING`,
         [`wal_${custId}`, custId]
       );
       walRes = await query(`SELECT * FROM wallets WHERE customer_id = $1`, [custId]);
     }
     const wallet = walRes.rows[0];
     const balance = Number(wallet.available_balance || 0);
-    const dailySpend = Math.max(300, Number(wallet.daily_ad_spend || 300));
+    const currency = String(wallet.currency || 'INR').toUpperCase();
+    const minimumDailySpend = currency === 'INR' ? 300 : currency === 'USD' ? 10 : null;
+    if (minimumDailySpend === null) return res.status(409).json({ ok: false, error: 'Unsupported wallet currency.' });
+    const dailySpend = Number(wallet.daily_ad_spend || minimumDailySpend);
+    if (!Number.isFinite(dailySpend) || dailySpend < minimumDailySpend || String(cust.currency || currency).toUpperCase() !== currency) {
+      return res.status(409).json({ ok: false, error: 'Daily spend does not match the saved customer wallet currency.' });
+    }
 
     // Per-day service check: Has this customer already been deducted for today's service?
     const isAlreadyDeductedToday = Boolean(
@@ -2273,7 +2300,10 @@ marketingRouter.put('/customers/:id/pacing', async (req, res) => {
 
     const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
-    const nextDaily = dailyAdSpend !== undefined ? Math.max(300, Number(dailyAdSpend)) : Number(w.daily_ad_spend);
+    const walletCurrency = String(w.currency || 'INR').toUpperCase();
+    const minDaily = walletCurrency === 'INR' ? 300 : walletCurrency === 'USD' ? 10 : null;
+    if (minDaily === null) return res.status(409).json({ ok: false, error: 'Unsupported wallet currency.' });
+    const nextDaily = dailyAdSpend !== undefined ? Math.max(minDaily, Number(dailyAdSpend)) : Number(w.daily_ad_spend);
     const nextDays = activeDays !== undefined
       ? (Array.isArray(activeDays) ? activeDays.join(',') : String(activeDays))
       : (w.active_days || todayDayCode);

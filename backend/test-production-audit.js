@@ -15,7 +15,7 @@ const BASE_URL = 'http://localhost:5000';
 async function api(path, options = {}) {
   const url = `${BASE_URL}${path}`;
   const response = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', 'X-Real-IP': '103.212.156.1', ...(options.headers || {}) },
     ...options,
   });
   const data = await response.json().catch(() => null);
@@ -136,8 +136,17 @@ async function runProductionSafetyAudit() {
         initialDeposit: 2000,
       }),
     });
-    assert(regCust.ok && regCust.data.customer, 'Audit test customer registered with ₹2,000 wallet');
+    assert(regCust.ok && regCust.data.customer, 'Audit test customer registered');
     customerId = regCust.data.customer.id;
+
+    await api('/api/sales/wallet/topup', {
+      method: 'POST',
+      body: JSON.stringify({
+        customerId,
+        amount: 2000,
+        referenceUtr: `UTR_AUDIT_${testSuffix}`,
+      }),
+    });
 
     // Create a Post Request
     const createReq = await api('/api/marketing/posts', {

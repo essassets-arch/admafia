@@ -540,8 +540,20 @@ export function AddFundsModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [txSuccess, setTxSuccess] = useState(false);
   const [sweetAlert, setSweetAlert] = useState(null);
+  const walletCurrency = String(customer?.currency || 'INR').toUpperCase();
+  const isUsdWallet = walletCurrency === 'USD';
 
   if (!isOpen) return null;
+
+  if (isUsdWallet) return (
+    <div className="portal-modal-backdrop" role="presentation">
+      <div className="portal-modal-box" role="dialog" aria-modal="true" aria-label="USD wallet funding unavailable">
+        <h3>USD wallet payments are unavailable</h3>
+        <p>International payment processing is not enabled yet. Your USD wallet and balance remain unchanged.</p>
+        <button type="button" className="btn-portal-secondary" onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
 
   const durationPresets = [
     { days: 1, amount: 300, label: '1 Day', tag: 'Min' },
@@ -1014,7 +1026,10 @@ export function SetDailyLimitModal({
   customer = {},
   onUpdateCustomer,
 }) {
-  const [amount, setAmount] = useState(currentLimit || 300);
+  const savedCurrency = String(customer?.currency || 'INR').toUpperCase();
+  const currencySymbol = savedCurrency === 'USD' ? '$' : '₹';
+  const minDailySpend = savedCurrency === 'USD' ? 10 : 300;
+  const [amount, setAmount] = useState(currentLimit || minDailySpend);
   const [selectedDays, setSelectedDays] = useState(
     Array.isArray(customer?.activeDays) && customer.activeDays.length > 0
       ? customer.activeDays
@@ -1043,7 +1058,7 @@ export function SetDailyLimitModal({
 
   React.useEffect(() => {
     if (isOpen) {
-      setAmount(currentLimit || 300);
+      setAmount(currentLimit || minDailySpend);
       const initialDays = Array.isArray(customer?.activeDays) && customer.activeDays.length > 0
         ? customer.activeDays
         : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -1054,7 +1069,7 @@ export function SetDailyLimitModal({
         setSelectedDays(initialDays);
       }
     }
-  }, [isOpen, currentLimit, customer?.activeDays, todayItem.code]);
+  }, [isOpen, currentLimit, customer?.activeDays, todayItem.code, minDailySpend]);
 
   if (!isOpen) return null;
 
@@ -1062,10 +1077,10 @@ export function SetDailyLimitModal({
   const isExceeding = currentAmountNum > (walletBalance || 0);
 
   const presets = [
-    { label: '₹300 (Min)', value: 300 },
-    { label: '₹500', value: 500 },
-    { label: '₹1,000', value: 1000 },
-    { label: '₹2,000', value: 2000 },
+    { label: `${currencySymbol}${minDailySpend} (Min)`, value: minDailySpend },
+    { label: `${currencySymbol}${minDailySpend * 2}`, value: minDailySpend * 2 },
+    { label: `${currencySymbol}${minDailySpend * 5}`, value: minDailySpend * 5 },
+    { label: `${currencySymbol}${minDailySpend * 10}`, value: minDailySpend * 10 },
   ];
 
   const toggleDaySelection = (dayCode) => {
@@ -1090,15 +1105,15 @@ export function SetDailyLimitModal({
     if (e) e.preventDefault();
     const finalAmount = Number(amount);
 
-    if (!finalAmount || finalAmount < 300) {
+    if (!finalAmount || finalAmount < minDailySpend) {
       Swal.fire({
         icon: 'warning',
-        title: 'Minimum Daily Spend is ₹300',
-        text: 'Minimum daily ad spend is ₹300 / day. Please enter ₹300 or higher to activate Meta Ads.',
-        confirmButtonText: 'Set ₹300 (Min)',
+        title: `Minimum Daily Spend is ${currencySymbol}${minDailySpend}`,
+        text: `Minimum daily ad spend is ${currencySymbol}${minDailySpend} / day. Please enter ${currencySymbol}${minDailySpend} or higher to activate Meta Ads.`,
+        confirmButtonText: `Set ${currencySymbol}${minDailySpend} (Min)`,
         confirmButtonColor: '#4f46e5',
       }).then((res) => {
-        if (res.isConfirmed) setAmount(300);
+        if (res.isConfirmed) setAmount(minDailySpend);
       });
       return;
     }
@@ -1107,7 +1122,7 @@ export function SetDailyLimitModal({
       Swal.fire({
         icon: 'error',
         title: 'Insufficient Ad Wallet Balance',
-        html: `Your selected daily spend of <strong>₹${finalAmount.toLocaleString('en-IN')}</strong> exceeds your available wallet balance of <strong>₹${Number(walletBalance || 0).toLocaleString('en-IN')}</strong>.<br/><br/>Please top up your wallet to activate this ad budget.`,
+        html: `Your selected daily spend of <strong>${currencySymbol}${finalAmount.toLocaleString('en-US')}</strong> exceeds your available wallet balance of <strong>${currencySymbol}${Number(walletBalance || 0).toLocaleString('en-US')}</strong>.<br/><br/>Please top up your wallet to activate this ad budget.`,
         showCancelButton: true,
         confirmButtonText: '+ Top Up Wallet',
         confirmButtonColor: '#059669',
@@ -1153,12 +1168,12 @@ export function SetDailyLimitModal({
       // 5. Fire rich, prominent SweetAlert2 Confirmation Dialog for active campaigns
       Swal.fire({
         icon: 'success',
-        title: `🎯 Ad Budget Updated: ₹${finalAmount.toLocaleString('en-IN')}/day`,
+        title: `🎯 Ad Budget Updated: ${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}/day`,
         html: `
           <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 16px; margin: 12px 0; font-family: inherit;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
               <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Daily Ad Budget:</span>
-              <strong style="color:#4f46e5; font-size:1.1rem; font-weight:800;">₹${finalAmount.toLocaleString('en-IN')} / active day</strong>
+              <strong style="color:#4f46e5; font-size:1.1rem; font-weight:800;">${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')} / active day</strong>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
               <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Marketing Campaign:</span>
@@ -1168,7 +1183,7 @@ export function SetDailyLimitModal({
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
               <span style="color:#64748b; font-size:0.85rem; font-weight: 600;">Remaining Ad Wallet:</span>
-              <strong style="color:#059669; font-size:1.1rem; font-weight:800;">₹${remainingWallet.toLocaleString('en-IN')} (${calculatedRunway}d runway)</strong>
+              <strong style="color:#059669; font-size:1.1rem; font-weight:800;">${currencySymbol}${remainingWallet.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')} (${calculatedRunway}d runway)</strong>
             </div>
           </div>
         `,
@@ -1180,8 +1195,8 @@ export function SetDailyLimitModal({
       // Campaign is currently paused/off: save settings without deduction
       Swal.fire({
         icon: 'success',
-        title: `Daily Budget Set: ₹${finalAmount.toLocaleString('en-IN')}/day`,
-        html: `Your daily ad spend has been saved as <strong>₹${finalAmount.toLocaleString('en-IN')}/day</strong>.<br/><br/>Your marketing campaign is currently <strong>Paused (Off)</strong>. Click <strong>Start</strong> on your dashboard whenever you are ready to launch ads and deduct today's ad spend.`,
+        title: `Daily Budget Set: ${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}/day`,
+        html: `Your daily ad spend has been saved as <strong>${currencySymbol}${finalAmount.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}/day</strong>.<br/><br/>Your marketing campaign is currently <strong>Paused (Off)</strong>. Click <strong>Start</strong> on your dashboard whenever you are ready to launch ads and deduct today's ad spend.`,
         confirmButtonText: 'Understood',
         confirmButtonColor: '#4f46e5',
       });
@@ -1271,7 +1286,7 @@ export function SetDailyLimitModal({
               CURRENT WALLET BALANCE
             </div>
             <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
-              ₹{Number(walletBalance || 0).toLocaleString('en-IN')}
+              {currencySymbol}{Number(walletBalance || 0).toLocaleString('en-US')}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -1279,14 +1294,14 @@ export function SetDailyLimitModal({
               MINIMUM SPEND
             </div>
             <div style={{ fontSize: '1.20rem', fontWeight: 800, color: '#4338ca', lineHeight: 1.1 }}>
-              ₹300 / day
+              {currencySymbol}{minDailySpend} / day
             </div>
           </div>
         </div>
 
         {/* Enter Daily Ad Spend Amount Label */}
         <div style={{ marginBottom: '8px', fontWeight: 700, fontSize: '0.92rem', color: '#1e293b' }}>
-          Enter Daily Ad Spend Amount (₹):
+          Enter Daily Ad Spend Amount ({savedCurrency}):
         </div>
 
         {/* Amount Input with Currency Symbol */}
@@ -1303,12 +1318,12 @@ export function SetDailyLimitModal({
           }}
         >
           <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#64748b', marginRight: '10px' }}>
-            ₹
+            {currencySymbol}
           </span>
           <input
             type="number"
-            min="300"
-            step="50"
+            min={minDailySpend}
+            step={savedCurrency === 'USD' ? '5' : '50'}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="budget-number-input"
@@ -1455,7 +1470,7 @@ export function SetDailyLimitModal({
             }}
           >
             <span style={{ color: '#e11d48', fontWeight: 700, fontSize: '0.85rem' }}>
-              Amount exceeds wallet balance (₹{Number(walletBalance || 0).toLocaleString('en-IN')}).
+              Amount exceeds wallet balance ({currencySymbol}{Number(walletBalance || 0).toLocaleString('en-US')}).
             </span>
             <button
               type="button"
@@ -1538,6 +1553,9 @@ export function SetDailyLimitModal({
 export function GstTaxInvoiceModal({ isOpen, onClose, invoice, customer }) {
   if (!isOpen || !invoice) return null;
 
+  const invCurrency = String(invoice.currency || customer?.currency || 'INR').toUpperCase();
+  const invSymbol = invoice.currencySymbol || (invCurrency === 'USD' ? '$' : '₹');
+
   const handlePrint = () => {
     window.print();
   };
@@ -1593,19 +1611,23 @@ export function GstTaxInvoiceModal({ isOpen, onClose, invoice, customer }) {
             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
               <td style={{ padding: '10px 8px' }}>{invoice.particulars}</td>
               <td style={{ padding: '10px 8px' }}>{invoice.sacCode}</td>
-              <td style={{ padding: '10px 8px', textAlign: 'right' }}>₹{invoice.baseAmount.toLocaleString('en-IN')}</td>
+              <td style={{ padding: '10px 8px', textAlign: 'right' }}>{invSymbol}{Number(invoice.baseAmount || 0).toLocaleString(invCurrency === 'INR' ? 'en-IN' : 'en-US')}</td>
             </tr>
-            <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
-              <td colSpan={2} style={{ padding: '6px 8px', textAlign: 'right' }}>CGST (9.0%):</td>
-              <td style={{ padding: '6px 8px', textAlign: 'right' }}>₹{invoice.cgst.toLocaleString('en-IN')}</td>
-            </tr>
-            <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
-              <td colSpan={2} style={{ padding: '6px 8px', textAlign: 'right' }}>SGST (9.0%):</td>
-              <td style={{ padding: '6px 8px', textAlign: 'right' }}>₹{invoice.sgst.toLocaleString('en-IN')}</td>
-            </tr>
+            {invCurrency === 'INR' ? (
+              <>
+                <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                  <td colSpan={2} style={{ padding: '6px 8px', textAlign: 'right' }}>CGST (9.0%):</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{invSymbol}{Number(invoice.cgst || 0).toLocaleString('en-IN')}</td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>
+                  <td colSpan={2} style={{ padding: '6px 8px', textAlign: 'right' }}>SGST (9.0%):</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{invSymbol}{Number(invoice.sgst || 0).toLocaleString('en-IN')}</td>
+                </tr>
+              </>
+            ) : null}
             <tr style={{ fontWeight: 800, background: '#f8fafc', fontSize: '0.95rem' }}>
               <td colSpan={2} style={{ padding: '10px 8px', textAlign: 'right', color: '#171347' }}>Total Invoice Amount:</td>
-              <td style={{ padding: '10px 8px', textAlign: 'right', color: '#047857' }}>₹{invoice.totalAmount.toLocaleString('en-IN')}</td>
+              <td style={{ padding: '10px 8px', textAlign: 'right', color: '#047857' }}>{invSymbol}{Number(invoice.totalAmount || 0).toLocaleString(invCurrency === 'INR' ? 'en-IN' : 'en-US')}</td>
             </tr>
           </tbody>
         </table>
@@ -2063,8 +2085,19 @@ export function MarketingGrowthPaymentModal({
   const [selectedPreset, setSelectedPreset] = useState(600);
   const [isProcessing, setIsProcessing] = useState(false);
   const [sweetAlert, setSweetAlert] = useState(null);
+  const walletCurrency = String(customer?.currency || 'INR').toUpperCase();
 
   if (!isOpen) return null;
+
+  if (walletCurrency === 'USD') return (
+    <div className="portal-modal-backdrop" role="presentation">
+      <div className="portal-modal-box" role="dialog" aria-modal="true" aria-label="USD wallet funding unavailable">
+        <h3>USD wallet payments are unavailable</h3>
+        <p>International payment processing is not enabled yet. Your USD wallet and balance remain unchanged.</p>
+        <button type="button" className="btn-portal-secondary" onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
 
   const durationPresets = [
     { days: 1, amount: 300, label: '1 Day', tag: 'Min' },

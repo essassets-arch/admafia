@@ -3,7 +3,7 @@ import countryService, { formatCurrency } from '../services/countryService';
 
 export default function MetaAdsCalculator({ initialCountry = null }) {
   const [country, setCountry] = useState(() => initialCountry || countryService.getCurrentCountry());
-  const minDaily = Number(country?.daily_min_budget || 300);
+  const minDaily = Number(country?.daily_min_budget || 0);
   const maxDaily = minDaily * 10;
   const sliderStep = minDaily === 300 ? 100 : (minDaily === 10 ? 5 : Math.max(1, Math.round(minDaily / 5)));
 
@@ -14,12 +14,14 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
     const unsubscribe = countryService.subscribe((newCountry) => {
       if (newCountry) {
         setCountry(newCountry);
-        const newMin = Number(newCountry.daily_min_budget || 300);
-        setDailyBudget((prev) => (prev < newMin ? newMin : prev));
+        const newMin = Number(newCountry.daily_min_budget);
+        setDailyBudget(newMin);
       }
     });
     return unsubscribe;
   }, []);
+
+  if (!country) return <div className="planner-container" role="status">Pricing is unavailable because we could not determine your location.</div>;
 
   // Recalculate metrics:
   // Formula: Monthly Advertising Budget = Daily Advertising Budget × 30

@@ -3,6 +3,7 @@ import { query, withTransaction } from '../db.js';
 import {
   resolveVisitorCountry,
   getActiveCountryPricingList,
+  getPricingForCountryCode,
   invalidateCountryPricingCache,
 } from '../services/countryDetection.js';
 
@@ -19,40 +20,33 @@ export const countryPricingRouter = express.Router();
 countryPricingRouter.get('/country-detection', async (req, res) => {
   try {
     const detection = await resolveVisitorCountry(req);
-    const allActive = await getActiveCountryPricingList();
 
     // Cache control: prevent shared proxy/CDN caches from serving one visitor's detected country to another
     res.set({
       'Cache-Control': 'private, no-cache, no-store, must-revalidate',
-      'Vary': 'CF-IPCountry, X-Forwarded-For, Accept-Language',
+      'CDN-Cache-Control': 'no-store',
+      'Surrogate-Control': 'no-store',
+      'Vary': 'CF-IPCountry, CF-Connecting-IP, X-Forwarded-For',
     });
 
     return res.json({
       ok: true,
       success: true,
-      country: detection.country,
+      country: getPricingForCountryCode(detection.detectedCode),
       detectedCode: detection.detectedCode,
       isAutoDetected: detection.isAutoDetected,
-      isFallback: Boolean(detection.isFallback),
+      isFallback: false,
+      pricingUnavailable: !detection.country,
+      pricing: detection.country ? getPricingForCountryCode(detection.detectedCode) : null,
       defaultCountry: detection.defaultCountry,
-      countries: allActive,
+      countries: [],
     });
   } catch (err) {
     console.error('[GET /api/public/country-detection] Error:', err);
     return res.status(500).json({
       ok: false,
       error: 'Failed to detect country pricing',
-      country: {
-        country_code: 'IN',
-        country_name: 'India',
-        currency_code: 'INR',
-        currency_symbol: '₹',
-        daily_min_budget: 300,
-        monthly_budget: 9000,
-        min_wallet_topup: 300,
-        phone_code: '+91',
-        flag_emoji: '🇮🇳',
-      },
+      country: null,
     });
   }
 });
@@ -63,10 +57,10 @@ countryPricingRouter.get('/country-detection', async (req, res) => {
  */
 countryPricingRouter.get('/countries', async (req, res) => {
   try {
-    const countries = await getActiveCountryPricingList();
+    res.set({ 'Cache-Control': 'private, no-store', 'CDN-Cache-Control': 'no-store', 'Surrogate-Control': 'no-store' });
     return res.json({
       ok: true,
-      countries,
+      countries: [],
     });
   } catch (err) {
     console.error('[GET /api/public/countries] Error:', err);
@@ -80,10 +74,10 @@ countryPricingRouter.get('/countries', async (req, res) => {
  */
 countryPricingRouter.get('/pricing', async (req, res) => {
   try {
-    const countries = await getActiveCountryPricingList();
+    res.set({ 'Cache-Control': 'private, no-store', 'CDN-Cache-Control': 'no-store', 'Surrogate-Control': 'no-store' });
     return res.json({
       ok: true,
-      pricing: countries,
+      pricing: [getPricingForCountryCode('IN'), getPricingForCountryCode('US')],
     });
   } catch (err) {
     console.error('[GET /api/public/pricing] Error:', err);
@@ -97,47 +91,16 @@ countryPricingRouter.get('/pricing', async (req, res) => {
  */
 countryPricingRouter.get('/pricing/:countryCode', async (req, res) => {
   try {
+    res.set({ 'Cache-Control': 'private, no-store', 'CDN-Cache-Control': 'no-store', 'Surrogate-Control': 'no-store' });
     const { countryCode } = req.params;
     if (!countryCode || countryCode.length > 4) {
       return res.status(400).json({ ok: false, error: 'Invalid country code' });
     }
 
     const cleanCode = countryCode.trim().toUpperCase();
-    const countries = await getActiveCountryPricingList();
-    const matched = countries.find((c) => c.country_code.toUpperCase() === cleanCode);
-
-    if (matched) {
-      return res.json({ ok: true, country: matched });
-    }
-
-    // If not found in active list, check database for inactive or fallback
-    const dbRes = await query(
-      `SELECT * FROM country_pricing WHERE UPPER(country_code) = $1 LIMIT 1`,
-      [cleanCode]
-    );
-
-    if (dbRes.rows.length > 0) {
-      const r = dbRes.rows[0];
-      return res.json({
-        ok: true,
-        country: {
-          ...r,
-          daily_min_budget: Number(r.daily_min_budget),
-          monthly_budget: Number(r.monthly_budget),
-          min_wallet_topup: Number(r.min_wallet_topup),
-          tax_rate: Number(r.tax_rate),
-        },
-      });
-    }
-
-    // Fallback to default country
-    const defaultCountry = countries.find((c) => c.is_default) || countries[0];
-    return res.json({
-      ok: true,
-      country: defaultCountry,
-      isFallback: true,
-      requestedCode: cleanCode,
-    });
+    const twoRulePricing = getPricingForCountryCode(cleanCode);
+    if (twoRulePricing) return res.json({ ok: true, country: twoRulePricing });
+    return res.status(400).json({ ok: false, error: 'Invalid country code' });
   } catch (err) {
     console.error('[GET /api/public/pricing/:countryCode] Error:', err);
     return res.status(500).json({ ok: false, error: 'Failed to fetch country pricing' });
@@ -234,6 +197,12 @@ superadminCountryPricingRouter.post('/', async (req, res) => {
     }
 
     const cleanCode = country_code.trim().toUpperCase();
+    if (cleanCode !== 'IN' && cleanCode !== 'ZZ') {
+      return res.status(400).json({ ok: false, error: 'Only India (INR) and all other countries (USD) pricing rules are supported.' });
+    }
+    if (String(currency_code || '').toUpperCase() !== (cleanCode === 'IN' ? 'INR' : 'USD') || Number(daily_min_budget) !== (cleanCode === 'IN' ? 300 : 10)) {
+      return res.status(400).json({ ok: false, error: 'Currency and daily price are fixed for the selected global pricing rule.' });
+    }
     const cleanDaily = Math.max(1, Number(daily_min_budget) || 10);
     const cleanMonthly = cleanDaily * 30;
     const cleanTopup = Math.max(1, Number(min_wallet_topup) || cleanDaily);
@@ -361,6 +330,17 @@ superadminCountryPricingRouter.put('/:idOrCode', async (req, res) => {
     }
 
     const oldRecord = existingRes.rows[0];
+    if (!['IN', 'ZZ'].includes(String(oldRecord.country_code).toUpperCase())) {
+      return res.status(409).json({ ok: false, error: 'Historical country pricing records are read-only.' });
+    }
+    const expectedCurrency = oldRecord.country_code === 'IN' ? 'INR' : 'USD';
+    if (currency_code && String(currency_code).toUpperCase() !== expectedCurrency) {
+      return res.status(400).json({ ok: false, error: `Pricing rule currency is fixed to ${expectedCurrency}.` });
+    }
+    const expectedDaily = oldRecord.country_code === 'IN' ? 300 : 10;
+    if (daily_min_budget !== undefined && Number(daily_min_budget) !== expectedDaily) {
+      return res.status(400).json({ ok: false, error: `Daily price is fixed to ${expectedCurrency === 'INR' ? '₹300' : '$10'}.` });
+    }
     const cleanDaily = daily_min_budget !== undefined ? Math.max(1, Number(daily_min_budget)) : Number(oldRecord.daily_min_budget);
     const cleanMonthly = cleanDaily * 30;
     const cleanTopup = min_wallet_topup !== undefined ? Math.max(1, Number(min_wallet_topup)) : Number(oldRecord.min_wallet_topup);

@@ -49,6 +49,7 @@ echo "🔨 2/5 Building frontend production assets..."
 cd "$APP_DIR/frontend"
 npm install
 npm run build
+npm run build:ssr
 
 # 3. Check Backend Dependencies
 echo "📦 3/5 Verifying backend dependencies..."

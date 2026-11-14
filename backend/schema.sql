@@ -33,7 +33,7 @@ CREATE INDEX IF NOT EXISTS idx_customer_groups_status ON customer_groups(status)
 CREATE TABLE IF NOT EXISTS customers (
     id                  VARCHAR(64) PRIMARY KEY,
     username            VARCHAR(80) NOT NULL,
-    phone               CHAR(10) NOT NULL,
+    phone               VARCHAR(20) NOT NULL,
     email               VARCHAR(160),
     personal_email      VARCHAR(160),
     password_hash       TEXT NOT NULL,
@@ -68,8 +68,7 @@ CREATE TABLE IF NOT EXISTS customers (
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT uq_customers_phone UNIQUE (phone),
-    CONSTRAINT uq_customers_username UNIQUE (username),
-    CONSTRAINT chk_customers_phone_10digits CHECK (phone ~ '^[0-9]{10}$')
+    CONSTRAINT uq_customers_username UNIQUE (username)
 );
 
 CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
@@ -102,8 +101,7 @@ CREATE TABLE IF NOT EXISTS wallets (
                         REFERENCES customers(id) ON DELETE CASCADE,
     available_balance   NUMERIC(12, 2) NOT NULL DEFAULT 0.00
                         CHECK (available_balance >= 0),
-    daily_ad_spend      NUMERIC(10, 2) NOT NULL DEFAULT 300.00
-                        CHECK (daily_ad_spend >= 300.00),
+    daily_ad_spend      NUMERIC(10, 2) NOT NULL DEFAULT 300.00,
     total_lifetime_paid NUMERIC(12, 2) NOT NULL DEFAULT 0.00
                         CHECK (total_lifetime_paid >= 0),
     total_ad_spent      NUMERIC(12, 2) NOT NULL DEFAULT 0.00
@@ -140,6 +138,7 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
     description         TEXT NOT NULL,
     payment_method      VARCHAR(100) NOT NULL DEFAULT 'Razorpay Secure (UPI/Card)',
     status              VARCHAR(40) NOT NULL DEFAULT 'Verified ✓',
+    currency            VARCHAR(10) NOT NULL DEFAULT 'INR',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     -- Prevents duplicate wallet credit for the same Bank UTR / Razorpay payment ID
@@ -183,11 +182,12 @@ CREATE TABLE IF NOT EXISTS payment_records (
                         REFERENCES customers(id) ON DELETE CASCADE,
     company_name        VARCHAR(180) NOT NULL,
     contact_person      VARCHAR(140) NOT NULL,
-    phone               CHAR(10) NOT NULL,
+    phone               VARCHAR(20) NOT NULL,
     city                VARCHAR(100) DEFAULT 'India',
     tx_type             VARCHAR(32) NOT NULL DEFAULT 'topup'
                         CHECK (tx_type IN ('topup', 'registration', 'invoice')),
-    amount              NUMERIC(12, 2) NOT NULL CHECK (amount >= 300),
+    amount              NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+    currency            VARCHAR(10) NOT NULL DEFAULT 'INR',
     gst_amount          NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     total_amount        NUMERIC(12, 2) NOT NULL,
     payment_mode        VARCHAR(100) NOT NULL DEFAULT 'Razorpay UPI / Online',
@@ -221,6 +221,7 @@ CREATE TABLE IF NOT EXISTS tax_invoices (
     payment_mode        VARCHAR(140) NOT NULL,
     status              VARCHAR(24) NOT NULL DEFAULT 'Paid',
     issued_date         DATE NOT NULL DEFAULT CURRENT_DATE,
+    currency            VARCHAR(10) NOT NULL DEFAULT 'INR',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -235,7 +236,7 @@ CREATE TABLE IF NOT EXISTS pending_verifications (
                         REFERENCES customers(id) ON DELETE CASCADE,
     company_name        VARCHAR(180) NOT NULL,
     contact_person      VARCHAR(140) NOT NULL,
-    phone               CHAR(10) NOT NULL,
+    phone               VARCHAR(20) NOT NULL,
     package_tier        VARCHAR(140) DEFAULT 'Self-Registered (Wallet Top-Up)',
     amount              NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     daily_rate          NUMERIC(10, 2) NOT NULL DEFAULT 300.00,
@@ -290,7 +291,7 @@ CREATE TABLE IF NOT EXISTS leads (
     customer_id         VARCHAR(64) NOT NULL
                         REFERENCES customers(id) ON DELETE CASCADE,
     master_lead_id      VARCHAR(64) REFERENCES master_leads(id) ON DELETE SET NULL,
-    customer_phone      CHAR(10) NOT NULL,
+    customer_phone      VARCHAR(20) NOT NULL,
     customer_username   VARCHAR(80) NOT NULL,
     company_name        VARCHAR(180) NOT NULL,
     category            VARCHAR(100) DEFAULT 'IT & Software',
@@ -407,7 +408,7 @@ CREATE TABLE IF NOT EXISTS sales_tasks (
                         REFERENCES customers(id) ON DELETE CASCADE,
     company_name        VARCHAR(180) NOT NULL,
     contact_person      VARCHAR(140) NOT NULL,
-    phone               CHAR(10) NOT NULL,
+    phone               VARCHAR(20) NOT NULL,
     task_type           VARCHAR(120) NOT NULL,
     priority            VARCHAR(24) NOT NULL DEFAULT 'High'
                         CHECK (priority IN ('Urgent', 'High', 'Normal')),
@@ -589,8 +590,8 @@ CREATE TABLE IF NOT EXISTS marketing_campaigns (
     target_audience     TEXT DEFAULT '',
     start_date          TIMESTAMPTZ NOT NULL,
     end_date            TIMESTAMPTZ,
-    daily_budget        NUMERIC(10, 2) NOT NULL DEFAULT 300.00
-                        CHECK (daily_budget >= 300.00),
+    daily_budget        NUMERIC(10, 2) NOT NULL DEFAULT 300.00,
+    currency            VARCHAR(10) NOT NULL DEFAULT 'INR',
     total_budget        NUMERIC(12, 2) DEFAULT 0.00,
     schedule_settings   TEXT DEFAULT '{}',
     status              VARCHAR(40) NOT NULL DEFAULT 'Draft'
@@ -775,6 +776,29 @@ CREATE TABLE IF NOT EXISTS country_pricing (
 
 CREATE INDEX IF NOT EXISTS idx_country_pricing_code ON country_pricing(country_code);
 CREATE INDEX IF NOT EXISTS idx_country_pricing_active ON country_pricing(is_active);
+
+INSERT INTO country_pricing (
+  id, country_code, country_name, currency_code, currency_symbol,
+  currency_position, decimal_precision, daily_min_budget, monthly_budget,
+  min_wallet_topup, tax_name, tax_rate, payment_gateway, phone_code,
+  flag_emoji, is_active, is_default, effective_date
+) VALUES
+  ('cp_in', 'IN', 'India', 'INR', chr(8377), 'before', 0, 300, 9000, 300, 'GST', 18, 'razorpay', '+91', '', TRUE, TRUE, CURRENT_DATE),
+  ('cp_global', 'ZZ', 'All Other Countries', 'USD', '$', 'before', 2, 10, 300, 10, 'Tax', 0, 'disabled', '', '', TRUE, FALSE, CURRENT_DATE)
+ON CONFLICT (country_code) DO UPDATE SET
+  country_name = EXCLUDED.country_name,
+  currency_code = EXCLUDED.currency_code,
+  currency_symbol = EXCLUDED.currency_symbol,
+  daily_min_budget = EXCLUDED.daily_min_budget,
+  monthly_budget = EXCLUDED.monthly_budget,
+  min_wallet_topup = EXCLUDED.min_wallet_topup,
+  payment_gateway = EXCLUDED.payment_gateway,
+  is_active = EXCLUDED.is_active,
+  is_default = EXCLUDED.is_default,
+  updated_at = NOW();
+
+UPDATE country_pricing SET is_active = FALSE, updated_at = NOW()
+WHERE country_code NOT IN ('IN', 'ZZ');
 
 -- 16B. Country Pricing Audit Logs
 CREATE TABLE IF NOT EXISTS country_pricing_audit_logs (

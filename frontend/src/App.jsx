@@ -50,12 +50,12 @@ const site = {
   instagram: 'https://www.instagram.com/admafia.marketing/',
   facebook: 'https://www.facebook.com/profile.php?id=61596014007136',
   title: 'Get Qualified Leads. Grow Your Business. Increase Your Customers | AdMafia Marketing',
-  desc: 'Stop Searching for Customers. Start Connecting With Them. AdMafia Marketing helps businesses connect with interested people and generate leads from just ₹300/Day.',
+  desc: 'Stop Searching for Customers. Start Connecting With Them. AdMafia Marketing helps businesses connect with interested people and generate leads with transparent daily starting budgets.',
 };
 
 // ---------- CONTENT ----------
 const gets = [
-  ['Affordable Starting Budget', 'Get started with a minimum budget of ₹300 per day.'],
+  ['Affordable Starting Budget', 'Get started with a minimum daily budget.'],
   ['Qualified Customer Leads', 'Connect with potential customers relevant to your business offerings.'],
   ['Customer Contact Details', 'Receive available customer information, including names and phone numbers.'],
   ['Targeted Audience Reach', 'Connect with potential customers based on your business category and preferred locations.'],
@@ -72,7 +72,7 @@ const steps = [
 
 const why = [
   ['Quality-Focused Lead Generation', 'Our approach focuses on connecting businesses with relevant potential customers instead of simply increasing website visits or online engagement.'],
-  ['Affordable Starting Budget', 'Start generating customer enquiries with a minimum starting budget of ₹300 per day.'],
+  ['Affordable Starting Budget', 'Start generating customer enquiries with a minimum daily starting budget.'],
   ['Direct Customer Contact', 'Receive available customer contact information and communicate with potential customers directly.'],
   ['Business-Specific Lead Generation', 'Every business has different customer requirements. We consider your business category, services and preferred audience when planning lead generation.'],
   ['Location-Based Opportunities', 'Connect with potential customers in your preferred cities and service areas.'],
@@ -93,7 +93,7 @@ const industries = [
 const faqs = [
   ['What is AdMafia Marketing?', 'AdMafia Marketing is a lead generation platform that helps businesses connect with potential customers by providing relevant customer enquiries and available contact details.'],
   ['What type of leads will I receive?', 'You can receive customer enquiries relevant to your business category, products or services. The available information may include customer names, phone numbers and details submitted with their enquiry.'],
-  ['What is the minimum starting price?', 'You can start with a minimum budget of ₹300 per day. The actual lead generation results depend on your business category, target location, audience demand and campaign performance.'],
+  ['What is the minimum starting price?', 'You can start with a minimum daily budget. The actual lead generation results depend on your business category, target location, audience demand and campaign performance.'],
   ['Are the leads suitable for my business?', 'Our lead generation approach focuses on your business category, target audience and preferred location to find relevant potential customers. However, no lead generation service can guarantee that every enquiry will become a qualified sales opportunity or paying customer.'],
   ['Can I choose the location for my leads?', 'Yes. You can specify your preferred city, area or service location when sharing your business requirements.'],
   ['Which types of businesses can use AdMafia Marketing?', 'Our platform supports different business categories, including real estate, education, healthcare, home services, automobile businesses, beauty services, retail and professional services, subject to applicable eligibility requirements.'],
@@ -162,15 +162,17 @@ export default function App({ initialCountry = null } = {}) {
   const [activeCountry, setActiveCountry] = useState(() => initialCountry || countryService.getCurrentCountry());
 
   useEffect(() => {
-    return countryService.subscribe((country) => {
-      if (country) setActiveCountry(country);
-    });
+    return countryService.subscribe((country) => setActiveCountry(country || null));
   }, []);
+
+  if (!activeCountry) {
+    return <main className="country-pricing-unavailable" role="status">Pricing is unavailable because we could not determine your location. Please try again from a network with a public IP.</main>;
+  }
 
   const dailyRate = formatDailyRate(activeCountry);
   const dailyRateLower = dailyRate.toLowerCase();
   const dailyBudget = formatDailyBudget(activeCountry);
-  const currencySymbol = activeCountry?.currency_symbol || '₹';
+  const currencySymbol = activeCountry.currency_symbol;
 
   const dynamicGets = [
     ['Affordable Starting Budget', `Get started with a minimum budget of ${dailyBudget} per day.`],
@@ -739,11 +741,7 @@ export default function App({ initialCountry = null } = {}) {
   if (currentView === 'checkout') {
     return (
       <CheckoutPage
-        onPaymentSuccess={(data) => {
-          const target = data?.targetTab || 'dashboard';
-          window.location.hash = `#app/${target === 'profile' ? 'profile' : 'dashboard'}`;
-          setCurrentView('portal');
-        }}
+        country={activeCountry}
         onBackToWebsite={() => {
           window.location.hash = '';
           setCurrentView('landing');
