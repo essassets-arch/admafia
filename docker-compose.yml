@@ -50,6 +50,7 @@ services:
       - "127.0.0.1:5000:5000"
     volumes:
       - ./backend/uploads:/app/uploads
+      - ./frontend/dist:/frontend/dist:ro
     networks:
       - admafia-net
 

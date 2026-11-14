@@ -80,7 +80,7 @@ if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1
   pm2 delete admafia 2>/dev/null || true
   pm2 save 2>/dev/null || true
   # Ensure database container is up first
-  docker compose up -d db
+  docker compose up -d db mongo
   docker compose build --no-cache frontend backend
   docker compose up -d
   # Ensure schema init and purge are executed inside container against postgres db

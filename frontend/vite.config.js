@@ -3,6 +3,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    emptyOutDir: false,
+  },
   ssr: {
     noExternal: ['lucide-react', 'sweetalert2', 'canvas-confetti'],
   },
