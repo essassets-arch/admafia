@@ -45,6 +45,7 @@ services:
       PGDATABASE: admafia_crm
       NODE_ENV: production
       TRUST_PROXY_HEADERS: "true"
+      MONGO_URI: ${MONGO_URI:-mongodb://${MONGO_INITDB_ROOT_USERNAME:-admafia_mongo}:${MONGO_INITDB_ROOT_PASSWORD:-AdMafiaMongoPass2026!}@mongo:27017/${MONGO_INITDB_DATABASE:-admafia_marketing}?authSource=admin}
     ports:
       - "127.0.0.1:5000:5000"
     volumes:
@@ -89,9 +90,31 @@ services:
     networks:
       - admafia-net
 
+  # 5. MongoDB 7.0 Document Database (Marketing Creative & Telemetry)
+  mongo:
+    image: mongo:7.0-jammy
+    container_name: admafia-mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admafia_mongo}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-AdMafiaMongoPass2026!}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-admafia_marketing}
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "127.0.0.1:27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - admafia-net
+
 volumes:
   postgres_data:
   pgadmin_data:
+  mongo_data:
 
 networks:
   admafia-net:

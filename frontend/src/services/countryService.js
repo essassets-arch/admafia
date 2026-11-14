@@ -94,6 +94,9 @@ export const countryService = {
    * Initialize country detection from backend API
    */
   async init() {
+    if (typeof window === 'undefined' || window.__ADMAFIA_IS_SERVER_RENDER__) {
+      return currentCountry;
+    }
     if (initPromise) return initPromise;
 
     initPromise = (async () => {

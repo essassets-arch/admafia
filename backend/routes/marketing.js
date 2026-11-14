@@ -3,6 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { query, withTransaction } from '../db.js';
+import {
+  syncPostToMongo,
+  syncRevisionToMongo,
+  syncReviewToMongo,
+  recordTelemetryEvent
+} from '../services/marketingStorage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -175,6 +181,16 @@ async function logAuditEvent(customerId, entityType, entityId, action, actor, de
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [id, customerId || null, entityType, entityId, action, actor || 'Marketing Operator', JSON.stringify(details), ip]
     );
+    // Asynchronous shadow telemetry stream to MongoDB
+    recordTelemetryEvent({
+      id,
+      customerId,
+      action: `${entityType}_${action}`,
+      postId: entityType === 'post' ? entityId : null,
+      campaignId: entityType === 'campaign' ? entityId : null,
+      details,
+      timestamp: new Date()
+    }).catch(() => {});
   } catch (err) {
     console.error('[Marketing Audit Log Error]:', err.message);
   }
@@ -1072,6 +1088,17 @@ marketingRouter.post('/posts', async (req, res) => {
 
     await logAuditEvent(customerId, 'post', postId, finalStatus === 'Pending Verification' ? 'Submitted Post for Verification' : 'Saved Post Draft', submittedBy, { title, finalStatus });
 
+    syncPostToMongo({
+      id: postId,
+      customer_id: customerId,
+      title: title.trim(),
+      platform,
+      caption: caption.trim(),
+      status: finalStatus,
+      revision_number: 1,
+      created_at: new Date()
+    }).catch(() => {});
+
     res.status(201).json({
       ok: true,
       postId,
@@ -1397,6 +1424,15 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
       rejectionReason,
       correctionInstructions,
     });
+
+    syncReviewToMongo(reviewResult.postId, {
+      revision_number: reviewResult.revisionNumber,
+      decision: reviewResult.decision,
+      reviewer_name: reviewerName,
+      remarks,
+      rejection_reason: rejectionReason,
+      created_at: new Date()
+    }).catch(() => {});
 
     res.json({
       ok: true,

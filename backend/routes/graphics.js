@@ -1,9 +1,15 @@
 import express from 'express';
 import { query, withTransaction } from '../db.js';
+import {
+  syncPostToMongo,
+  syncRevisionToMongo,
+  syncReviewToMongo,
+  recordTelemetryEvent
+} from '../services/marketingStorage.js';
 
 export const graphicsRouter = express.Router();
 
-// Helper: Audit Logger
+// Helper: Audit Logger (PostgreSQL + MongoDB Telemetry)
 async function logAuditEvent(customerId, entityType, entityId, action, actor, details = {}) {
   try {
     const id = `audit_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
@@ -12,6 +18,15 @@ async function logAuditEvent(customerId, entityType, entityId, action, actor, de
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [id, customerId || null, entityType, entityId, action, actor || 'Graphics Designer', JSON.stringify(details)]
     );
+    // Asynchronous shadow telemetry stream to MongoDB
+    recordTelemetryEvent({
+      id,
+      customerId,
+      action: `${entityType}_${action}`,
+      postId: entityId,
+      details,
+      timestamp: new Date()
+    }).catch(() => {});
   } catch (err) {
     console.error('[Graphics Audit Log Error]:', err.message);
   }
@@ -390,6 +405,15 @@ graphicsRouter.post('/upload', async (req, res) => {
       designerNotes,
     });
 
+    syncRevisionToMongo(postId, {
+      revision_number: currentRev,
+      media_url: mediaUrl.trim(),
+      media_type: mediaType,
+      designer_name: designerName,
+      status: 'Pending Verification',
+      created_at: new Date()
+    }).catch(() => {});
+
     res.json({
       ok: true,
       message: 'Artwork submitted successfully to Marketing for verification!',
@@ -482,6 +506,15 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
       mediaUrl,
       revisionSummary,
     });
+
+    syncRevisionToMongo(postId, {
+      revision_number: resultPayload.nextRev,
+      media_url: resultPayload.mediaUrl,
+      media_type: mediaType,
+      designer_name: designerName,
+      status: 'Pending Verification',
+      created_at: new Date()
+    }).catch(() => {});
 
     res.json({
       ok: true,

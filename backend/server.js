@@ -6,6 +6,8 @@ import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { initDatabase, query, withTransaction, getDbStatus } from './db.js';
+import { initMongo, getMongoStatus, isMongoConnected } from './mongo.js';
+import { migrateHistoricalMarketingData } from './services/marketingStorage.js';
 import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
@@ -735,6 +737,7 @@ app.get('/api/health', async (req, res) => {
     res.json({
       ok: true,
       db: getDbStatus(),
+      mongo: getMongoStatus(),
       counts: counts.rows[0] || {},
     });
   } catch (err) {
@@ -5694,6 +5697,21 @@ app.listen(PORT, () => {
       purgeSpecifiedTestUsers().catch((err) => console.warn('[Purge Test Users Warning]', err.message));
 
       // Run daily ad spend pacing evaluation 3s after startup, then every 30 minutes
+      // Initialize MongoDB for Creative Content & Telemetry
+      initMongo()
+        .then((mStatus) => {
+          if (mStatus.connected) {
+            migrateHistoricalMarketingData()
+              .then((etlRes) => {
+                if (etlRes.ok) {
+                  console.log(`[MongoDB ETL] Auto-sync verified (${etlRes.synced?.posts || 0} posts, ${etlRes.synced?.revisions || 0} revisions, ${etlRes.synced?.auditEvents || 0} audit events)`);
+                }
+              })
+              .catch((etlErr) => console.warn('[MongoDB ETL Warning]:', etlErr.message));
+          }
+        })
+        .catch((mErr) => console.warn('[MongoDB Warning]:', mErr.message));
+
       setTimeout(() => {
         processDailyAdSpendPacing()
           .then((res) => console.log(`[Daily Ad Spend Pacing] Initial run completed (${res.processedCount || 0} deducted, ${res.autoPausedCount || 0} paused)`))
