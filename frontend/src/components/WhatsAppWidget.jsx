@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import countryService, { formatDailyRate } from '../services/countryService';
+import { isVisitorAuthenticated, gateOrOpenWhatsApp } from '../utils/whatsappGate';
 
 const WA_NUMBER = '916359120081'; // +91 6359 120 081
 
@@ -9,23 +10,39 @@ export default function WhatsAppWidget() {
   const [country, setCountry] = useState(countryService.getCurrentCountry);
   const [showTooltip, setShowTooltip] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
+  const [isAuth, setIsAuth] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    setIsAuth(isVisitorAuthenticated());
+
+    const syncAuth = () => setIsAuth(isVisitorAuthenticated());
+    window.addEventListener('growthline_customer_registered', syncAuth);
+    window.addEventListener('growthline_active_user_changed', syncAuth);
+    window.addEventListener('admafia_admin_session_changed', syncAuth);
+    window.addEventListener('storage', syncAuth);
+
     const unsubscribe = countryService.subscribe((c) => {
       if (c) setCountry(c);
     });
-    return unsubscribe;
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('growthline_customer_registered', syncAuth);
+      window.removeEventListener('growthline_active_user_changed', syncAuth);
+      window.removeEventListener('admafia_admin_session_changed', syncAuth);
+      window.removeEventListener('storage', syncAuth);
+    };
   }, []);
 
-  // Auto-show teaser bubble after 2.5s for initial visitor engagement
+  // Delay teaser bubble (12s) so hero "Get Qualified Leads" CTA commands first-click attention
   useEffect(() => {
     if (!mounted) return;
     const timer = setTimeout(() => {
       if (!hasInteracted) {
         setShowTooltip(true);
       }
-    }, 2500);
+    }, 12000);
     return () => clearTimeout(timer);
   }, [mounted, hasInteracted]);
 
@@ -34,15 +51,23 @@ export default function WhatsAppWidget() {
   const dailyRate = formatDailyRate(country);
   const dynamicMsg = `Hi Ad Mafia Marketing! I'm interested in receiving verified business leads from ${dailyRate} in ${country?.country_name || 'my area'}. Please guide me.`;
   const waUrl = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(dynamicMsg)}`;
+  const linkHref = isAuth ? waUrl : '/register';
+
+  const handleWhatsAppClick = (e) => {
+    setHasInteracted(true);
+    setShowTooltip(false);
+    gateOrOpenWhatsApp(waUrl, e);
+  };
 
   return (
     <div className="wa-widget-container">
-      {/* 1. Interactive Teaser Bubble - Direct WhatsApp Redirect */}
+      {/* 1. Interactive Teaser Bubble - Gated behind /register for unauthenticated visitors */}
       {showTooltip && (
         <a
-          href={waUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={linkHref}
+          target={isAuth ? '_blank' : undefined}
+          rel={isAuth ? 'noopener noreferrer' : undefined}
+          onClick={handleWhatsAppClick}
           className="wa-teaser-bubble"
           style={{ textDecoration: 'none', color: 'inherit' }}
         >
@@ -72,14 +97,15 @@ export default function WhatsAppWidget() {
         </a>
       )}
 
-      {/* 2. Floating Bottom-Right WhatsApp Action Button - Direct WhatsApp Redirect */}
+      {/* 2. Floating Bottom-Right WhatsApp Action Button - Gated behind /register when logged out */}
       <a
-        href={waUrl}
-        target="_blank"
-        rel="noopener noreferrer"
+        href={linkHref}
+        target={isAuth ? '_blank' : undefined}
+        rel={isAuth ? 'noopener noreferrer' : undefined}
+        onClick={handleWhatsAppClick}
         className="wa-floating-btn"
-        aria-label="Chat directly with Ad Mafia Marketing on WhatsApp"
-        title="Chat on WhatsApp (+91 6359 120 081)"
+        aria-label="Chat with Ad Mafia Marketing on WhatsApp"
+        title={isAuth ? 'Chat on WhatsApp (+91 6359 120 081)' : 'Register to chat with Ad Mafia Growth Support on WhatsApp'}
       >
         <span className="wa-btn-pulse-ring" />
         <span className="wa-badge-dot">1</span>

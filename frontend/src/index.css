@@ -622,8 +622,193 @@ header .btn.alt:hover,
 
 .hero .row {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   flex-wrap: wrap;
+  align-items: center;
+  margin-top: 26px;
+}
+
+/* Primary Conversion Magnet: "Get Qualified Leads" */
+.btn-hero-featured {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 20px 16px 28px;
+  font: 800 1.12rem/1.15 var(--h);
+  letter-spacing: -0.015em;
+  color: #0b0926 !important;
+  background: linear-gradient(135deg, #ffe45e 0%, #ffb800 50%, #f59e0b 100%);
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 6px rgba(255, 184, 0, 0.22),
+    0 14px 36px rgba(255, 184, 0, 0.52),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  animation: heroFeaturedGlow 2.4s ease-in-out infinite;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
+}
+
+.btn-hero-featured::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: -45%;
+  width: 38%;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.68) 50%,
+    transparent 100%
+  );
+  transform: skewX(-22deg);
+  animation: heroFeaturedSheen 3.2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.btn-hero-featured > * {
+  position: relative;
+  z-index: 1;
+}
+
+.btn-hero-featured:hover {
+  transform: translateY(-3px) scale(1.025);
+  background: linear-gradient(135deg, #ffea75 0%, #ffc400 50%, #f59e0b 100%);
+  box-shadow:
+    0 0 0 9px rgba(255, 184, 0, 0.3),
+    0 20px 44px rgba(255, 184, 0, 0.68),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.btn-hero-featured-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #059669;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.28);
+  flex-shrink: 0;
+}
+
+.btn-hero-featured-arrow {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #0f172a;
+  color: #ffd000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.28);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.btn-hero-featured:hover .btn-hero-featured-arrow {
+  transform: translateX(3px);
+  background: #1e1b4b;
+}
+
+.btn-hero-secondary {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  color: #cbd5e1 !important;
+  font-weight: 600 !important;
+  padding: 14px 24px !important;
+}
+
+.btn-hero-secondary:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  color: #ffffff !important;
+}
+
+.hero-cta-trust-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  margin-top: 18px;
+  color: #cbd5e1;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.hero-cta-trust-strip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-cta-trust-strip svg {
+  color: #34d399;
+  flex-shrink: 0;
+}
+
+@keyframes heroFeaturedGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 5px rgba(255, 184, 0, 0.2),
+      0 12px 32px rgba(255, 184, 0, 0.48),
+      inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  }
+  50% {
+    box-shadow:
+      0 0 0 10px rgba(255, 184, 0, 0.34),
+      0 16px 44px rgba(255, 184, 0, 0.68),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+}
+
+@keyframes heroFeaturedSheen {
+  0% {
+    left: -45%;
+  }
+  45%, 100% {
+    left: 135%;
+  }
+}
+
+/* WhatsApp Registration Gate Notice Banner on /register & /login */
+.am-wa-gate-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+  border: 1.5px solid #6ee7b7;
+  color: #064e3b;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.1);
+}
+
+.am-wa-gate-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+  flex-shrink: 0;
+}
+
+.am-wa-gate-banner strong {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #065f46;
+  margin-bottom: 2px;
+}
+
+.am-wa-gate-banner span {
+  display: block;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #047857;
 }
 
 .hero small {
@@ -1512,6 +1697,28 @@ details p {
   .footer-grid {
     grid-template-columns: 1fr;
     gap: 26px;
+  }
+
+  .hero .row.hero-cta-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .btn-hero-featured,
+  .btn-hero-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .btn-hero-featured {
+    padding: 15px 20px;
+    font-size: 1.05rem;
+  }
+
+  .hero-cta-trust-strip {
+    gap: 10px 14px;
+    font-size: 0.82rem;
   }
 
   .stack {

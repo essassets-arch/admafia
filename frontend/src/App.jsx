@@ -20,6 +20,11 @@ import AdminLoginPage from './admin/AdminLoginPage';
 import adminAuthApi from './services/adminAuthApi';
 import { CustomerLoginPage, CustomerRegisterPage } from './portal/AuthPages';
 import crmApi from './services/crmApi';
+import {
+  gateOrOpenWhatsApp,
+  clearPendingWhatsAppRedirect,
+  saveRegisterPrefill,
+} from './utils/whatsappGate';
 import './portal/portal.css';
 
 // One-time cleanup of legacy static/mock data in localStorage for strict customer isolation + JWT v4 enforcement
@@ -532,6 +537,22 @@ export default function App({ initialCountry = null } = {}) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const openRegisterWizard = (e, prefillData = null) => {
+    if (e) e.preventDefault();
+    try {
+      localStorage.removeItem('growthline_active_user');
+      clearPendingWhatsAppRedirect();
+      if (prefillData) {
+        saveRegisterPrefill(prefillData);
+      }
+      window.history.pushState({}, '', '/register');
+    } catch (err) {}
+    setCurrentUser(null);
+    setCurrentView('register');
+    setMobileMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     let ok = true;
@@ -551,8 +572,15 @@ export default function App({ initialCountry = null } = {}) {
 
     if (newErrors.length === 0) {
       setErrors([]);
+      if (!currentUser && !currentAdmin) {
+        openRegisterWizard(null, {
+          contactPerson: trimmedName,
+          mobile: cleanedPhone,
+          companyName: formData.business.trim(),
+        });
+        return;
+      }
       setSent(true);
-      // scroll to contact
       const contactElement = document.getElementById('contact');
       if (contactElement) {
         contactElement.scrollIntoView({ behavior: 'smooth' });
@@ -563,6 +591,7 @@ export default function App({ initialCountry = null } = {}) {
   };
 
   const openPublicWebsitePreview = () => {
+    clearPendingWhatsAppRedirect();
     window.location.hash = '';
     try {
       window.history.pushState({}, '', '/?site=1');
@@ -961,17 +990,7 @@ export default function App({ initialCountry = null } = {}) {
                 </button>
                 <button 
                   type="button" 
-                  onClick={() => {
-                    try {
-                      localStorage.removeItem('growthline_active_user');
-                      sessionStorage.clear();
-                      window.history.pushState({}, '', '/#register');
-                    } catch (e) {}
-                    setCurrentUser(null);
-                    window.location.hash = '#register';
-                    setCurrentView('register');
-                    setMobileMenuOpen(false);
-                  }}
+                  onClick={(e) => openRegisterWizard(e)}
                   className="nav-btn nav-btn-primary desktop-only"
                 >
                   Create Account
@@ -1032,17 +1051,7 @@ export default function App({ initialCountry = null } = {}) {
                     <button
                       type="button"
                       className="nav-btn nav-btn-primary mobile-drawer-auth-btn"
-                      onClick={() => {
-                        try {
-                          localStorage.removeItem('growthline_active_user');
-                          sessionStorage.clear();
-                          window.history.pushState({}, '', '/#register');
-                        } catch (e) {}
-                        setCurrentUser(null);
-                        window.location.hash = '#register';
-                        setCurrentView('register');
-                        setMobileMenuOpen(false);
-                      }}
+                      onClick={(e) => openRegisterWizard(e)}
                     >
                       Create Business Account →
                     </button>
@@ -1134,34 +1143,59 @@ export default function App({ initialCountry = null } = {}) {
               <div className="hero-subhead">
                 Stop Searching for Customers. Start Connecting With Them.
               </div>
-              <div className="row">
+              <div className="row hero-cta-row">
                 {currentAdmin ? (
                   <button
                     type="button"
-                    className="btn"
+                    className="btn btn-hero-featured"
                     onClick={() => {
                       const ws = adminAuthApi.getDefaultWorkspace(currentAdmin) || { path: '/superadmin', view: 'superadmin-portal' };
                       navigateTo(ws.path, ws.view);
                     }}
                   >
-                    Open {adminAuthApi.getDefaultWorkspace(currentAdmin)?.label || 'Admin Workspace'} →
+                    <span>Open {adminAuthApi.getDefaultWorkspace(currentAdmin)?.label || 'Admin Workspace'}</span>
+                    <span className="btn-hero-featured-arrow" aria-hidden="true">
+                      <ArrowRight size={18} strokeWidth={2.75} />
+                    </span>
                   </button>
                 ) : currentUser ? (
                   <button
                     type="button"
-                    className="btn"
+                    className="btn btn-hero-featured"
                     onClick={() => navigateTo('/app/lead#app/dashboard', 'portal')}
                   >
-                    Open Client Dashboard →
+                    <span>Open Client Dashboard</span>
+                    <span className="btn-hero-featured-arrow" aria-hidden="true">
+                      <ArrowRight size={18} strokeWidth={2.75} />
+                    </span>
                   </button>
                 ) : (
-                  <a className="btn" href="#contact">
-                    Get Qualified Leads
+                  <a
+                    className="btn btn-hero-featured"
+                    href="/register"
+                    onClick={(e) => openRegisterWizard(e)}
+                  >
+                    <span className="btn-hero-featured-dot" aria-hidden="true" />
+                    <span>Get Qualified Leads</span>
+                    <span className="btn-hero-featured-arrow" aria-hidden="true">
+                      <ArrowRight size={18} strokeWidth={2.75} />
+                    </span>
                   </a>
                 )}
-                <a className="btn alt" href="#how">
+                <a className="btn alt btn-hero-secondary" href="#how">
                   Start Growing Your Business
                 </a>
+              </div>
+              <div className="hero-cta-trust-strip">
+                <span>
+                  <CheckCircle2 size={15} /> Instant Free Account
+                </span>
+                <span>
+                  <CheckCircle2 size={15} /> Verified Buyer Phone Numbers
+                </span>
+                <span>
+                  <CheckCircle2 size={15} /> Zero Setup Fee
+                </span>
               </div>
             </div>
             <div className="stack" aria-hidden="true">
@@ -1248,7 +1282,7 @@ export default function App({ initialCountry = null } = {}) {
                   Open Client Dashboard →
                 </button>
               ) : (
-                <a className="btn dark" href="#contact">
+                <a className="btn dark" href="/register" onClick={(e) => openRegisterWizard(e)}>
                   Start Generating Leads at {dailyRate}
                 </a>
               )}
@@ -1282,7 +1316,11 @@ export default function App({ initialCountry = null } = {}) {
               We Bring You Opportunities. You Turn Them into Business.
             </p>
             <p style={{ marginTop: '24px' }}>
-              <a className="btn dark" href="#contact">
+              <a
+                className="btn dark"
+                href={currentUser ? '/app/lead#app/dashboard' : '/register'}
+                onClick={(e) => (currentUser ? (e.preventDefault(), navigateTo('/app/lead#app/dashboard', 'portal')) : openRegisterWizard(e))}
+              >
                 Get Started Today
               </a>
             </p>
@@ -1326,7 +1364,11 @@ export default function App({ initialCountry = null } = {}) {
               ))}
             </div>
             <p style={{ marginTop: '36px' }}>
-              <a className="btn dark" href="#contact">
+              <a
+                className="btn dark"
+                href={currentUser ? '/app/lead#app/dashboard' : '/register'}
+                onClick={(e) => (currentUser ? (e.preventDefault(), navigateTo('/app/lead#app/dashboard', 'portal')) : openRegisterWizard(e))}
+              >
                 Get Leads for Your Industry
               </a>
             </p>
@@ -1344,7 +1386,11 @@ export default function App({ initialCountry = null } = {}) {
               Starting at Just {dailyRate}.
             </div>
             <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <a className="btn dark" href="#contact">
+              <a
+                className="btn dark"
+                href={currentUser ? '/app/lead#app/dashboard' : '/register'}
+                onClick={(e) => (currentUser ? (e.preventDefault(), navigateTo('/app/lead#app/dashboard', 'portal')) : openRegisterWizard(e))}
+              >
                 Start Generating Leads
               </a>
               <a 
@@ -1568,7 +1614,7 @@ export default function App({ initialCountry = null } = {}) {
                       </a>
                     </li>
                     <li>
-                      <a href="/register" onClick={(e) => { e.preventDefault(); navigateTo('/register', 'register'); }}>
+                      <a href="/register" onClick={(e) => openRegisterWizard(e)}>
                         <span>Register Business Account</span>
                       </a>
                     </li>
@@ -1600,7 +1646,14 @@ export default function App({ initialCountry = null } = {}) {
                 <li><a href="#how" onClick={(e) => { e.preventDefault(); navigateTo('#how', 'landing'); }}>How Ad Mafia Works</a></li>
                 <li><a href="#why" onClick={(e) => { e.preventDefault(); navigateTo('#why', 'landing'); }}>Why Choose Ad Mafia</a></li>
                 <li><a href="#industries" onClick={(e) => { e.preventDefault(); navigateTo('#industries', 'landing'); }}>Industry Solutions</a></li>
-                <li><a href="#contact" onClick={(e) => { e.preventDefault(); navigateTo('#contact', 'landing'); }}>Get Qualified Leads</a></li>
+                <li>
+                  <a
+                    href={currentUser ? '/app/lead#app/dashboard' : '/register'}
+                    onClick={(e) => (currentUser ? (e.preventDefault(), navigateTo('/app/lead#app/dashboard', 'portal')) : openRegisterWizard(e))}
+                  >
+                    Get Qualified Leads
+                  </a>
+                </li>
               </ul>
             </div>
 
@@ -1622,9 +1675,15 @@ export default function App({ initialCountry = null } = {}) {
                 </li>
                 <li>
                   <a 
-                    href={`https://wa.me/916359120081?text=${encodeURIComponent('Hi Ad Mafia Team, I want to start receiving verified business leads.')}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
+                    href={currentUser || currentAdmin ? `https://wa.me/916359120081?text=${encodeURIComponent('Hi Ad Mafia Team, I want to start receiving verified business leads.')}` : '/register'} 
+                    target={currentUser || currentAdmin ? '_blank' : undefined} 
+                    rel={currentUser || currentAdmin ? 'noopener noreferrer' : undefined}
+                    onClick={(e) =>
+                      gateOrOpenWhatsApp(
+                        `https://wa.me/916359120081?text=${encodeURIComponent('Hi Ad Mafia Team, I want to start receiving verified business leads.')}`,
+                        e
+                      )
+                    }
                     className="footer-contact-item"
                   >
                     <MessageCircle size={15} color="#22c55e" />

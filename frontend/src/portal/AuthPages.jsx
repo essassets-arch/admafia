@@ -24,6 +24,11 @@ import adminAuthApi from '../services/adminAuthApi';
 import countryService, { formatDailyRate, formatDailyBudget } from '../services/countryService';
 import WhatsAppOtpModal from '../components/WhatsAppOtpModal';
 import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion';
+import {
+  hasPendingWhatsAppRedirect,
+  launchPendingWhatsAppIfAny,
+  consumeRegisterPrefill,
+} from '../utils/whatsappGate';
 
 const STRICT_EMAIL_REGEX =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,24}$/;
@@ -144,6 +149,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
 
   // Step 1: Verify WhatsApp | Step 2: Email & Business Details | Step 3: Password & Confirm
   const [step, setStep] = useState(1);
+  const [pendingWhatsApp, setPendingWhatsApp] = useState(false);
 
   const [formData, setFormData] = useState({
     mobile: '',
@@ -155,6 +161,30 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
     confirmPassword: '',
     terms: true,
   });
+
+  useEffect(() => {
+    setPendingWhatsApp(hasPendingWhatsAppRedirect());
+    const prefill = consumeRegisterPrefill();
+    if (prefill) {
+      const rawDigits = String(prefill.mobile || '').replace(/\D/g, '');
+      const normalizedMobile =
+        rawDigits.length === 12 && rawDigits.startsWith('91')
+          ? rawDigits.slice(2)
+          : rawDigits.slice(0, 15);
+      const seedSource = String(prefill.companyName || prefill.contactPerson || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 20);
+      setFormData((prev) => ({
+        ...prev,
+        mobile: normalizedMobile || prev.mobile,
+        contactPerson: prefill.contactPerson || prev.contactPerson,
+        companyName: prefill.companyName || prev.companyName,
+        username: seedSource.length >= 3 ? seedSource : prev.username,
+      }));
+    }
+  }, []);
 
   // Step 1 Inline WhatsApp OTP State
   const [otpSent, setOtpSent] = useState(false);
@@ -545,12 +575,16 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         console.error('Failed to hydrate active customer session', storageErr);
       }
 
+      const openedPendingWa = launchPendingWhatsAppIfAny();
+
       if (onRegistered) {
         onRegistered(newCustomer);
       } else {
         window.history.pushState({}, '', '/app/lead#app/dashboard');
         window.location.hash = '#app/dashboard';
-        window.location.href = '/app/lead#app/dashboard';
+        if (!openedPendingWa) {
+          window.location.href = '/app/lead#app/dashboard';
+        }
       }
     } catch (regErr) {
       const msg = regErr.message || 'Registration could not be completed. Please review your details.';
@@ -734,6 +768,18 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                 Sign In to Workspace
               </button>
             </div>
+
+            {pendingWhatsApp && (
+              <div className="am-wa-gate-banner" role="status">
+                <span className="am-wa-gate-dot" />
+                <div>
+                  <strong>Register first to connect on WhatsApp</strong>
+                  <span>
+                    Complete quick workspace verification — WhatsApp chat with Ad Mafia Growth Support opens automatically right after registration.
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Clean 3-Step Progress Bar */}
             <div className="am-wizard-stepper" aria-label="Account creation progress">
@@ -1362,6 +1408,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
   const [forgotBoxOpen, setForgotBoxOpen] = useState(false);
   const [forgotPhone, setForgotPhone] = useState('');
   const [sendingResetOtp, setSendingResetOtp] = useState(false);
+  const [pendingWhatsApp, setPendingWhatsApp] = useState(false);
 
   // Unified OTP modal for either 'password_reset' or 'verify_phone' (first-login gate)
   const [otpFlow, setOtpFlow] = useState({
@@ -1384,6 +1431,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
   // Redirect away immediately if already authenticated as Customer or Super Admin / Staff
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    setPendingWhatsApp(hasPendingWhatsAppRedirect());
     try {
       const rawCust = localStorage.getItem('growthline_active_user');
       if (rawCust) {
@@ -1403,12 +1451,15 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
   const finalizePortalEntry = (cust) => {
     const safeCust = sanitizeStoredCustomer(cust);
     localStorage.setItem('growthline_active_user', JSON.stringify(safeCust));
+    const openedPendingWa = launchPendingWhatsAppIfAny();
     if (onLoggedIn) {
       onLoggedIn(safeCust);
     } else {
       window.history.pushState({}, '', '/app/lead#app/dashboard');
       window.location.hash = '#app/dashboard';
-      window.location.href = '/app/lead#app/dashboard';
+      if (!openedPendingWa) {
+        window.location.href = '/app/lead#app/dashboard';
+      }
     }
   };
 
@@ -1486,8 +1537,18 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
           password: pwdValue,
         });
         if (staffRes && staffRes.ok) {
+          const openedPendingWa = launchPendingWhatsAppIfAny();
           const dest = staffRes.targetUrl || adminAuthApi.getDefaultWorkspace(staffRes.user)?.path || '/superadmin';
-          window.location.href = dest;
+          if (!openedPendingWa) {
+            window.location.href = dest;
+          } else {
+            try {
+              window.history.pushState({}, '', dest);
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            } catch {
+              window.location.href = dest;
+            }
+          }
           return;
         }
       } catch {}
@@ -1730,6 +1791,18 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
                 Sign In to Workspace
               </button>
             </div>
+
+            {pendingWhatsApp && (
+              <div className="am-wa-gate-banner" role="status">
+                <span className="am-wa-gate-dot" />
+                <div>
+                  <strong>Sign in to continue to WhatsApp Support</strong>
+                  <span>
+                    Sign in to your registered workspace — WhatsApp chat with Ad Mafia Growth Support opens automatically right after login.
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="auth-card-top">
               <h2>Sign In to Workspace</h2>
