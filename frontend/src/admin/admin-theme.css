@@ -716,3 +716,11 @@
   border-top-color: #1e293b !important;
   color: #94a3b8 !important;
 }
+
+/* Success checkmark animation uses white masking shapes (circular-line + fix) that are
+   meant to blend into a white popup — repaint them to the dark popup surface so no
+   white half-circles appear behind the green tick in Dark mode. */
+:root[data-admin-active-theme="dark"] .swal2-icon.swal2-success [class^='swal2-success-circular-line'],
+:root[data-admin-active-theme="dark"] .swal2-icon.swal2-success .swal2-success-fix {
+  background-color: #111827 !important;
+}
