@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import graphicsApi from '../services/graphicsApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
   const [requests, setRequests] = useState([]);
@@ -156,7 +157,11 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
 
       {/* 3. Requests Table */}
       <div className="graphics-table-card">
-        <div style={{ overflowX: 'auto' }}>
+        <SmartTable
+          title="Post Design Requests"
+          exportFilename="graphics-post-requests"
+          defaultPageSize={10}
+        >
           <table className="graphics-table">
             <thead>
               <tr>
@@ -297,7 +302,7 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
               )}
             </tbody>
           </table>
-        </div>
+        </SmartTable>
       </div>
 
       {/* 4. Complete Marketing Brief Modal */}

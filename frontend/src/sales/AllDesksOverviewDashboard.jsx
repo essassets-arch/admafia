@@ -308,7 +308,7 @@ export default function AllDesksOverviewDashboard({
           <div className="desk-breadcrumb">
             SUB ADMIN &amp; SUPPORT OPERATIONS / ALL-IN-ONE COMMAND CENTER
           </div>
-          <h1 className="desk-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 className="desk-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span>Operations Executive Dashboard</span>
             <span
               style={{
@@ -335,22 +335,25 @@ export default function AllDesksOverviewDashboard({
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: '100%' }}>
           {/* Live Indian Standard Time Real-Time Clock Badge */}
           <div
             style={{
               display: 'inline-flex',
               alignItems: 'center',
+              flexWrap: 'wrap',
               gap: 8,
               background: '#f8fafc',
               border: '1px solid #cbd5e1',
-              padding: '6px 14px',
+              padding: '6px 12px',
               borderRadius: 8,
-              fontSize: '0.82rem',
+              fontSize: '0.80rem',
               fontWeight: 700,
               color: '#0f172a',
               boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
               fontVariantNumeric: 'tabular-nums',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
             }}
           >
             <Clock size={15} color="#4f46e5" />
@@ -522,8 +525,8 @@ export default function AllDesksOverviewDashboard({
                 }}
               >
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                       <div
                         style={{
                           width: 36,
@@ -538,11 +541,11 @@ export default function AllDesksOverviewDashboard({
                       >
                         <Icon size={18} strokeWidth={2.2} />
                       </div>
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: '0.68rem', color: d.color, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                           DESK {d.num}
                         </div>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a', overflowWrap: 'anywhere' }}>
                           {d.title}
                         </div>
                       </div>
@@ -600,12 +603,12 @@ export default function AllDesksOverviewDashboard({
           }}
         >
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 8, background: '#f0f9ff', color: '#0284c7', display: 'grid', placeItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: '#f0f9ff', color: '#0284c7', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                   <Layers size={17} />
                 </div>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
                     Live Inbound Leads (Desk 03)
                   </h3>
@@ -639,11 +642,12 @@ export default function AllDesksOverviewDashboard({
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
+                      flexWrap: 'wrap',
                       gap: 12,
                     }}
                   >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
                           {cleanPhone}
                         </span>
@@ -722,7 +726,7 @@ export default function AllDesksOverviewDashboard({
 
           {/* Quick Client Intake Snippet */}
           <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Recently Auto-Verified Customer Accounts
               </div>
@@ -747,9 +751,11 @@ export default function AllDesksOverviewDashboard({
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 8,
                   }}
                 >
-                  <div>
+                  <div style={{ minWidth: 0, flex: '1 1 180px' }}>
                     <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#0f172a' }}>
                       {(() => {
                         const isGen = (s) => !s || s.toLowerCase() === 'registered business' || s.toLowerCase() === 'corporate workspace';
@@ -795,12 +801,12 @@ export default function AllDesksOverviewDashboard({
           }}
         >
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 8, background: '#eef2ff', color: '#4f46e5', display: 'grid', placeItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: '#eef2ff', color: '#4f46e5', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                   <Wallet size={17} />
                 </div>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
                     Wallets &amp; Runway Monitor (Desk 06)
                   </h3>
@@ -809,7 +815,7 @@ export default function AllDesksOverviewDashboard({
                   </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => navigateToDesk('balance_logs', '#balance-logs')}
@@ -848,10 +854,11 @@ export default function AllDesksOverviewDashboard({
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
+                      flexWrap: 'wrap',
                       gap: 12,
                     }}
                   >
-                    <div>
+                    <div style={{ minWidth: 0, flex: '1 1 180px' }}>
                       <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>{(() => {
                           const isGen = (s) => !s || s.toLowerCase() === 'registered business' || s.toLowerCase() === 'corporate workspace';
@@ -889,7 +896,7 @@ export default function AllDesksOverviewDashboard({
 
           {/* Quick Financial Ledger Snippet */}
           <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Payment Collection &amp; Ledger (Desk 05)
               </div>
@@ -914,9 +921,11 @@ export default function AllDesksOverviewDashboard({
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 8,
                   }}
                 >
-                  <div>
+                  <div style={{ minWidth: 0, flex: '1 1 180px' }}>
                     <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#0f172a' }}>
                       {item.customerName || item.client || 'Client Account'}
                     </div>

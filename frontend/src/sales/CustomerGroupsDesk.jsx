@@ -21,6 +21,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function CustomerGroupsDesk({ customers = [] }) {
   // Data States
@@ -469,14 +470,15 @@ export default function CustomerGroupsDesk({ customers = [] }) {
         <div
           className="desk-table-card"
           style={{
-            background: '#ffffff',
-            borderRadius: 12,
-            overflowX: 'auto',
-            WebkitOverflowScrolling: 'touch',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
             marginBottom: 28,
           }}
         >
+          <SmartTable
+            title="Target Categories & Groups"
+            exportFilename="sales-customer-groups"
+            defaultPageSize={10}
+            enableSearch={false}
+          >
           <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -604,6 +606,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
               })}
             </tbody>
           </table>
+          </SmartTable>
         </div>
       )}
 
@@ -638,16 +641,12 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             No leads distributed yet. Click <strong>"Create &amp; Distribute Lead"</strong> above to dispatch your first category lead.
           </div>
         ) : (
-          <div
-            className="desk-table-card"
-            style={{
-              background: '#ffffff',
-              borderRadius: 12,
-              overflowX: 'auto',
-              WebkitOverflowScrolling: 'touch',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-            }}
-          >
+          <div className="desk-table-card">
+            <SmartTable
+              title="Lead Distribution History"
+              exportFilename="lead-distribution-history"
+              defaultPageSize={10}
+            >
             <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -669,7 +668,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 </tr>
               </thead>
               <tbody>
-                {historyList.slice(0, 10).map((h) => (
+                {historyList.map((h) => (
                   <tr key={h.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>{h.title}</div>
@@ -723,6 +722,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 ))}
               </tbody>
             </table>
+            </SmartTable>
           </div>
         )}
       </div>
@@ -885,7 +885,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="sales-btn-secondary"
@@ -898,7 +898,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                   type="submit"
                   className="sales-btn-primary"
                   disabled={isDistributing || previewRecipients.length === 0}
-                  style={{ minWidth: 180 }}
+                  style={{ minWidth: 'min(180px, 100%)' }}
                 >
                   {isDistributing ? (
                     <>
@@ -924,12 +924,12 @@ export default function CustomerGroupsDesk({ customers = [] }) {
           <div
             className="sales-modal-card"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 660, width: '100%', borderRadius: 12, padding: 24 }}
+            style={{ maxWidth: 660, width: '100%', maxHeight: '90vh', overflowY: 'auto', borderRadius: 12, padding: 24 }}
           >
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              <div style={{ minWidth: 0, flex: '1 1 220px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
                     {viewingGroup.name || viewingGroup.category}
                   </h3>
@@ -978,22 +978,14 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             </div>
 
             {/* List Table */}
-            <div
-              style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: 8,
-                overflow: 'hidden',
-                maxHeight: 320,
-                overflowY: 'auto',
-              }}
-            >
+            <div>
               {viewLoading ? (
                 <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>
                   <RefreshCw size={20} className="animate-spin" style={{ margin: '0 auto 8px' }} />
                   Loading customers...
                 </div>
               ) : viewingMembers.length === 0 ? (
-                <div style={{ padding: 36, textAlign: 'center', color: '#64748b' }}>
+                <div style={{ padding: 36, textAlign: 'center', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8 }}>
                   <Users size={32} style={{ margin: '0 auto 8px', color: '#94a3b8' }} />
                   <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#1e293b' }}>
                     0 eligible customers found
@@ -1003,8 +995,13 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                   </p>
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
-                  <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse' }}>
+                <SmartTable
+                  title="Eligible Category Customers"
+                  exportFilename="group-eligible-customers"
+                  defaultPageSize={10}
+                  enableSearch={false}
+                >
+                  <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                         <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
@@ -1101,7 +1098,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                         })}
                     </tbody>
                   </table>
-                </div>
+                </SmartTable>
               )}
             </div>
 
@@ -1210,14 +1207,14 @@ export default function CustomerGroupsDesk({ customers = [] }) {
           <div
             className="sales-modal-card"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 680, width: '100%', borderRadius: 12, padding: 24 }}
+            style={{ maxWidth: 680, width: '100%', maxHeight: '90vh', overflowY: 'auto', borderRadius: 12, padding: 24 }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              <div style={{ minWidth: 0, flex: '1 1 220px' }}>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
                   Distribution Inspection
                 </h3>
-                <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b', overflowWrap: 'anywhere' }}>
                   {inspectItem.title} ({inspectItem.category})
                 </p>
               </div>
@@ -1231,14 +1228,18 @@ export default function CustomerGroupsDesk({ customers = [] }) {
               </button>
             </div>
 
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', maxHeight: 300, overflowY: 'auto' }}>
+            <div>
               {inspectLoading ? (
                 <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>Loading recipients...</div>
               ) : inspectRecipients.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>No recipient records found.</div>
+                <div style={{ padding: 24, textAlign: 'center', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8 }}>No recipient records found.</div>
               ) : (
-                <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
-                  <table style={{ width: '100%', minWidth: 440, borderCollapse: 'collapse' }}>
+                <SmartTable
+                  title="Distribution Recipients"
+                  exportFilename="distribution-recipients"
+                  defaultPageSize={10}
+                >
+                  <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                         <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
@@ -1284,7 +1285,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </SmartTable>
               )}
             </div>
 

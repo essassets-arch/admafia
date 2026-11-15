@@ -7,6 +7,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function MarketingWallet({
   walletBalance = 0,
@@ -990,260 +991,272 @@ export default function MarketingWallet({
 
         {/* Ledger Table */}
         {activeLedgerTab !== 'invoices' ? (
-          <div className="wallet-table-responsive-wrapper">
-            <table className="wallet-exact-table">
-              <thead>
-                <tr>
-                  <th>Transaction ID</th>
-                  <th>Date &amp; Time</th>
-                  <th>Description</th>
-                  <th>Type</th>
-                  <th>Amount</th>
-                  <th>Method</th>
-                  <th>Status</th>
-                  <th>Receipt / Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTxList.length > 0 ? (
-                  filteredTxList.map((tx) => {
-                    const isFailed = isFailedTx(tx);
-                    return (
-                      <tr key={tx.id} style={isFailed ? { background: '#fffcfc' } : {}}>
+          <div className="wallet-table-responsive-wrapper wallet-smart-table-host">
+            <SmartTable
+              title="Wallet Transactions"
+              exportFilename="wallet-transactions"
+              defaultPageSize={10}
+            >
+              <table className="wallet-exact-table">
+                <thead>
+                  <tr>
+                    <th>Transaction ID</th>
+                    <th>Date &amp; Time</th>
+                    <th>Description</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th>Receipt / Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTxList.length > 0 ? (
+                    filteredTxList.map((tx, txIdx) => {
+                      const isFailed = isFailedTx(tx);
+                      return (
+                        <tr key={tx.id || tx.ref || txIdx} style={isFailed ? { background: '#fffcfc' } : {}}>
+                          <td>
+                            <div className="tx-code-wrap">
+                              <code className="tx-ref-code" style={isFailed ? { color: '#dc2626' } : {}}>
+                                {tx.ref || tx.id}
+                              </code>
+                              <button
+                                type="button"
+                                className="btn-copy-tx"
+                                onClick={() => handleCopyTxId(tx.ref || tx.id)}
+                                title="Copy Transaction ID"
+                              >
+                                {copiedTxId === (tx.ref || tx.id) ? '✓' : '⧉'}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="tx-date-cell">{tx.date}</td>
+                          <td className="tx-desc-cell">
+                            <div style={{ fontWeight: 600, color: isFailed ? '#991b1b' : '#1e293b' }}>
+                              {tx.desc}
+                            </div>
+                            {tx.failureReason && (
+                              <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: 2 }}>
+                                Decline Reason: {tx.failureReason}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            {isFailed ? (
+                              <span
+                                className="exact-type-pill pill-failed"
+                                style={{
+                                  background: '#fee2e2',
+                                  color: '#b91c1c',
+                                  border: '1px solid #fecaca',
+                                  fontWeight: 800,
+                                  padding: '3px 8px',
+                                  borderRadius: 9999,
+                                  fontSize: '0.72rem'
+                                }}
+                              >
+                                Failed
+                              </span>
+                            ) : (
+                              <span className={`exact-type-pill ${tx.type === 'Credit' ? 'credit' : 'debit'}`}>
+                                {tx.type}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {isFailed ? (
+                              <strong style={{ color: '#dc2626', textDecoration: 'line-through', fontWeight: 800 }}>
+                                {formatMoney(tx.amount)}
+                              </strong>
+                            ) : (
+                              <strong className={`tx-amount-text ${tx.type === 'Credit' ? 'credit' : 'debit'}`}>
+                                {tx.type === 'Credit'
+                                  ? `+${formatMoney(tx.amount)}`
+                                  : `-${formatMoney(tx.amount)}`}
+                              </strong>
+                            )}
+                          </td>
+                          <td className="tx-method-cell">
+                            {tx.method || (isFailed ? 'Razorpay (Declined)' : tx.type === 'Credit' ? 'Razorpay Verified' : 'Auto-Debit')}
+                          </td>
+                          <td>
+                            {isFailed ? (
+                              <span
+                                className="tx-status-failed-pill"
+                                style={{
+                                  background: '#fff1f2',
+                                  color: '#e11d48',
+                                  border: '1px solid #fecdd3',
+                                  padding: '3px 9px',
+                                  borderRadius: 9999,
+                                  fontSize: '0.74rem',
+                                  fontWeight: 800,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4
+                                }}
+                              >
+                                ✕ Payment Failed
+                              </span>
+                            ) : (
+                              <span className="tx-status-verified-pill">{tx.status || 'Verified ✓'}</span>
+                            )}
+                          </td>
+                          <td>
+                            {isFailed ? (
+                              <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600 }}>—</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (invoices.length > 0 && onViewInvoice) {
+                                    onViewInvoice(invoices[0]);
+                                  } else {
+                                    handlePrintStatement();
+                                  }
+                                }}
+                                className="btn-receipt-view"
+                              >
+                                [Invoice / Receipt]
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="empty-ledger-state-cell">
+                        <div className="empty-ledger-box">
+                          <div
+                            className="empty-ledger-icon"
+                            style={
+                              activeLedgerTab === 'failed'
+                                ? {
+                                    background: '#ecfdf5',
+                                    borderRadius: '50%',
+                                    width: 54,
+                                    height: 54,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    margin: '0 auto 12px'
+                                  }
+                                : {}
+                            }
+                          >
+                            {activeLedgerTab === 'failed' ? (
+                              <CheckCircle2 size={32} color="#059669" />
+                            ) : (
+                              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="empty-ledger-title" style={activeLedgerTab === 'failed' ? { color: '#059669' } : {}}>
+                            {activeLedgerTab === 'failed' ? 'No Failed Transactions' : 'No transactions found'}
+                          </div>
+                          <div className="empty-ledger-subtitle">
+                            {activeLedgerTab === 'failed'
+                              ? 'All your wallet recharge attempts and daily lead pacing auto-cuts have completed successfully with zero transaction errors.'
+                              : 'Transactions will appear here as soon as wallet recharges or daily lead pacing deductions occur.'}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </SmartTable>
+          </div>
+        ) : (
+          /* Invoices Table Tab */
+          <div className="wallet-table-responsive-wrapper wallet-smart-table-host">
+            <SmartTable
+              title="GST Tax Invoices"
+              exportFilename="gst-invoices"
+              defaultPageSize={10}
+            >
+              <table className="wallet-exact-table">
+                <thead>
+                  <tr>
+                    <th>Invoice Number</th>
+                    <th>Invoice Date</th>
+                    <th>Particulars</th>
+                    <th>Taxable Base</th>
+                    <th>18% GST (SAC: 998311)</th>
+                    <th>Total Paid</th>
+                    <th>Status</th>
+                    <th>Receipt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.length > 0 ? (
+                    invoices.map((inv, invIdx) => (
+                      <tr key={inv.invoiceNo || inv.id || invIdx}>
                         <td>
                           <div className="tx-code-wrap">
-                            <code className="tx-ref-code" style={isFailed ? { color: '#dc2626' } : {}}>
-                              {tx.ref || tx.id}
-                            </code>
+                            <code className="tx-ref-code">{inv.invoiceNo}</code>
                             <button
                               type="button"
                               className="btn-copy-tx"
-                              onClick={() => handleCopyTxId(tx.ref || tx.id)}
-                              title="Copy Transaction ID"
+                              onClick={() => handleCopyTxId(inv.invoiceNo)}
+                              title="Copy Invoice Number"
                             >
-                              {copiedTxId === (tx.ref || tx.id) ? '✓' : '⧉'}
+                              {copiedTxId === inv.invoiceNo ? '✓' : '⧉'}
                             </button>
                           </div>
                         </td>
-                        <td className="tx-date-cell">{tx.date}</td>
-                        <td className="tx-desc-cell">
-                          <div style={{ fontWeight: 600, color: isFailed ? '#991b1b' : '#1e293b' }}>
-                            {tx.desc}
-                          </div>
-                          {tx.failureReason && (
-                            <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: 2 }}>
-                              Decline Reason: {tx.failureReason}
-                            </div>
-                          )}
+                        <td className="tx-date-cell">{inv.date}</td>
+                        <td className="tx-desc-cell">{inv.particulars}</td>
+                        <td>{formatMoney(inv.baseAmount)}</td>
+                        <td>
+                          <small style={{ color: '#64748b' }}>
+                            {currency === 'INR' ? `CGST 9% (₹${inv.cgst}) + SGST 9% (₹${inv.sgst})` : 'Tax Inclusive'}
+                          </small>
                         </td>
                         <td>
-                          {isFailed ? (
-                            <span
-                              className="exact-type-pill pill-failed"
-                              style={{
-                                background: '#fee2e2',
-                                color: '#b91c1c',
-                                border: '1px solid #fecaca',
-                                fontWeight: 800,
-                                padding: '3px 8px',
-                                borderRadius: 9999,
-                                fontSize: '0.72rem'
-                              }}
-                            >
-                              Failed
-                            </span>
-                          ) : (
-                            <span className={`exact-type-pill ${tx.type === 'Credit' ? 'credit' : 'debit'}`}>
-                              {tx.type}
-                            </span>
-                          )}
+                          <strong style={{ color: '#0f172a' }}>{formatMoney(inv.totalAmount)}</strong>
                         </td>
                         <td>
-                          {isFailed ? (
-                            <strong style={{ color: '#dc2626', textDecoration: 'line-through', fontWeight: 800 }}>
-                              {formatMoney(tx.amount)}
-                            </strong>
-                          ) : (
-                            <strong className={`tx-amount-text ${tx.type === 'Credit' ? 'credit' : 'debit'}`}>
-                              {tx.type === 'Credit'
-                                ? `+${formatMoney(tx.amount)}`
-                                : `-${formatMoney(tx.amount)}`}
-                            </strong>
-                          )}
-                        </td>
-                        <td className="tx-method-cell">
-                          {tx.method || (isFailed ? 'Razorpay (Declined)' : tx.type === 'Credit' ? 'Razorpay Verified' : 'Auto-Debit')}
+                          <span className="tx-status-verified-pill">Paid ✓</span>
                         </td>
                         <td>
-                          {isFailed ? (
-                            <span
-                              className="tx-status-failed-pill"
-                              style={{
-                                background: '#fff1f2',
-                                color: '#e11d48',
-                                border: '1px solid #fecdd3',
-                                padding: '3px 9px',
-                                borderRadius: 9999,
-                                fontSize: '0.74rem',
-                                fontWeight: 800,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4
-                              }}
-                            >
-                              ✕ Payment Failed
-                            </span>
-                          ) : (
-                            <span className="tx-status-verified-pill">{tx.status || 'Verified ✓'}</span>
-                          )}
-                        </td>
-                        <td>
-                          {isFailed ? (
-                            <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600 }}>—</span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (invoices.length > 0 && onViewInvoice) {
-                                  onViewInvoice(invoices[0]);
-                                } else {
-                                  handlePrintStatement();
-                                }
-                              }}
-                              className="btn-receipt-view"
-                            >
-                              [Invoice / Receipt]
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => onViewInvoice && onViewInvoice(inv)}
+                            className="btn-receipt-view"
+                          >
+                            [Download PDF]
+                          </button>
                         </td>
                       </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="empty-ledger-state-cell">
-                      <div className="empty-ledger-box">
-                        <div
-                          className="empty-ledger-icon"
-                          style={
-                            activeLedgerTab === 'failed'
-                              ? {
-                                  background: '#ecfdf5',
-                                  borderRadius: '50%',
-                                  width: 54,
-                                  height: 54,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  margin: '0 auto 12px'
-                                }
-                              : {}
-                          }
-                        >
-                          {activeLedgerTab === 'failed' ? (
-                            <CheckCircle2 size={32} color="#059669" />
-                          ) : (
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="empty-ledger-state-cell">
+                        <div className="empty-ledger-box">
+                          <div className="empty-ledger-icon">
                             <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8">
                               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                               <polyline points="14 2 14 8 20 8" />
                               <line x1="16" y1="13" x2="8" y2="13" />
                               <line x1="16" y1="17" x2="8" y2="17" />
                             </svg>
-                          )}
+                          </div>
+                          <div className="empty-ledger-title">No GST tax invoices issued yet</div>
+                          <div className="empty-ledger-subtitle">Tax invoices are generated automatically with full GST input credit breakdown on every wallet top-up.</div>
                         </div>
-                        <div className="empty-ledger-title" style={activeLedgerTab === 'failed' ? { color: '#059669' } : {}}>
-                          {activeLedgerTab === 'failed' ? 'No Failed Transactions' : 'No transactions found'}
-                        </div>
-                        <div className="empty-ledger-subtitle">
-                          {activeLedgerTab === 'failed'
-                            ? 'All your wallet recharge attempts and daily lead pacing auto-cuts have completed successfully with zero transaction errors.'
-                            : 'Transactions will appear here as soon as wallet recharges or daily lead pacing deductions occur.'}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          /* Invoices Table Tab */
-          <div className="wallet-table-responsive-wrapper">
-            <table className="wallet-exact-table">
-              <thead>
-                <tr>
-                  <th>Invoice Number</th>
-                  <th>Invoice Date</th>
-                  <th>Particulars</th>
-                  <th>Taxable Base</th>
-                  <th>18% GST (SAC: 998311)</th>
-                  <th>Total Paid</th>
-                  <th>Status</th>
-                  <th>Receipt</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.length > 0 ? (
-                  invoices.map((inv) => (
-                    <tr key={inv.invoiceNo}>
-                      <td>
-                        <div className="tx-code-wrap">
-                          <code className="tx-ref-code">{inv.invoiceNo}</code>
-                          <button
-                            type="button"
-                            className="btn-copy-tx"
-                            onClick={() => handleCopyTxId(inv.invoiceNo)}
-                            title="Copy Invoice Number"
-                          >
-                            {copiedTxId === inv.invoiceNo ? '✓' : '⧉'}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="tx-date-cell">{inv.date}</td>
-                      <td className="tx-desc-cell">{inv.particulars}</td>
-                      <td>{formatMoney(inv.baseAmount)}</td>
-                      <td>
-                        <small style={{ color: '#64748b' }}>
-                          {currency === 'INR' ? `CGST 9% (₹${inv.cgst}) + SGST 9% (₹${inv.sgst})` : 'Tax Inclusive'}
-                        </small>
-                      </td>
-                      <td>
-                        <strong style={{ color: '#0f172a' }}>{formatMoney(inv.totalAmount)}</strong>
-                      </td>
-                      <td>
-                        <span className="tx-status-verified-pill">Paid ✓</span>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => onViewInvoice && onViewInvoice(inv)}
-                          className="btn-receipt-view"
-                        >
-                          [Download PDF]
-                        </button>
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="empty-ledger-state-cell">
-                      <div className="empty-ledger-box">
-                        <div className="empty-ledger-icon">
-                          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                            <line x1="16" y1="13" x2="8" y2="13" />
-                            <line x1="16" y1="17" x2="8" y2="17" />
-                          </svg>
-                        </div>
-                        <div className="empty-ledger-title">No GST tax invoices issued yet</div>
-                        <div className="empty-ledger-subtitle">Tax invoices are generated automatically with full GST input credit breakdown on every wallet top-up.</div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </SmartTable>
           </div>
         )}
       </div>

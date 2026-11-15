@@ -267,6 +267,22 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
 
           <div className="marketing-top-actions">
             <NotificationBell variant="light" />
+            <button
+              type="button"
+              className="mkt-topbar-logout-btn"
+              onClick={() => {
+                if (onSignOut) onSignOut();
+                else {
+                  window.location.hash = '';
+                  window.location.href = '/';
+                }
+              }}
+              title="Sign Out"
+              aria-label="Sign Out"
+            >
+              <LogOut size={16} />
+              <span className="mkt-topbar-logout-label">Logout</span>
+            </button>
             <div className="marketing-live-pill">
               <span className="marketing-live-dot" />
               <span>MongoDB Live Sync</span>

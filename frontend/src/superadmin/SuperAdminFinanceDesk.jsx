@@ -15,6 +15,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import superadminApi from '../services/superadminApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function SuperAdminFinanceDesk() {
   const [activeTab, setActiveTab] = useState('ledger'); // 'ledger' or 'accounts'
@@ -265,7 +266,11 @@ export default function SuperAdminFinanceDesk() {
           </div>
 
           <div className="sa-table-card">
-            <div style={{ overflowX: 'auto' }}>
+            <SmartTable
+              title="Transaction Ledger"
+              exportFilename="sa-finance-ledger"
+              defaultPageSize={25}
+            >
               <table className="sa-table">
                 <thead>
                   <tr>
@@ -363,7 +368,7 @@ export default function SuperAdminFinanceDesk() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </SmartTable>
           </div>
         </div>
       )}
@@ -385,7 +390,11 @@ export default function SuperAdminFinanceDesk() {
           </div>
 
           <div className="sa-table-card">
-            <div style={{ overflowX: 'auto' }}>
+            <SmartTable
+              title="Account Wallets & Balances"
+              exportFilename="sa-account-wallets"
+              defaultPageSize={25}
+            >
               <table className="sa-table">
                 <thead>
                   <tr>
@@ -484,7 +493,7 @@ export default function SuperAdminFinanceDesk() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </SmartTable>
           </div>
         </div>
       )}
@@ -524,7 +533,11 @@ export default function SuperAdminFinanceDesk() {
                   No transaction history recorded for this customer yet.
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
+                <SmartTable
+                  title={`${selectedCustomer.company_name || 'Customer'} Ledger`}
+                  exportFilename={`sa-customer-ledger-${selectedCustomer.id || 'export'}`}
+                  defaultPageSize={10}
+                >
                   <table className="sa-table">
                     <thead>
                       <tr>
@@ -571,7 +584,7 @@ export default function SuperAdminFinanceDesk() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </SmartTable>
               )}
             </div>
 

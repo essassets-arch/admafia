@@ -142,9 +142,9 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
     <div className="sales-modal-overlay" onClick={onClose}>
       <div className="sales-modal-card" style={{ maxWidth: 540, width: '95%' }} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: 12, marginBottom: 16 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: 12, marginBottom: 16 }}>
+          <div style={{ minWidth: 0, flex: '1 1 220px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
               <span className="desk-pill pill-emerald" style={{ fontSize: '0.70rem', fontWeight: 800 }}>
                 💳 Sales Assisted Top-Up
               </span>
@@ -155,7 +155,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
             <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
               Add Money to Client Wallet
             </h3>
-            <div style={{ fontSize: '0.80rem', color: '#64748b', marginTop: 3 }}>
+            <div style={{ fontSize: '0.80rem', color: '#64748b', marginTop: 3, overflowWrap: 'anywhere' }}>
               Client: <strong style={{ color: '#0f172a' }}>{displayName}</strong> • +91 {displayPhone}
             </div>
           </div>
@@ -165,7 +165,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
         </div>
 
         {/* Current Balance Banner */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Current Balance</div>
             <div style={{ fontSize: '1.2rem', fontWeight: 900, color: currentBal > 0 ? '#059669' : '#e11d48' }}>
@@ -192,7 +192,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: 6 }}>
               Select Top-Up Amount (Min. ₹300) <span style={{ color: '#dc2626' }}>*</span>
             </label>
-            <div className="sales-presets-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
+            <div className="sales-presets-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 105px), 1fr))', gap: 8, marginBottom: 8 }}>
               {PRESETS.map((p) => {
                 const isSelected = String(amount) === String(p.amt);
                 return (

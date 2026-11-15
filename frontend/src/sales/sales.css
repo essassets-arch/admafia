@@ -1277,7 +1277,7 @@
   box-sizing: border-box !important;
 }
 
-@media (min-width: 861px) {
+@media (min-width: 961px) {
   .desk-page-container {
     padding: 28px 36px 64px 36px !important;
   }
@@ -1488,6 +1488,66 @@
 .sales-logout-icon:hover {
   color: #dc2626 !important;
   background: #fee2e2 !important;
+}
+
+.sales-sidebar-footer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sales-drawer-website-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-family: inherit;
+  font-size: 0.80rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.sales-drawer-website-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.sales-drawer-signout-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #fef2f2;
+  border: 1.5px solid #fecaca;
+  color: #dc2626;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.sales-drawer-signout-btn:hover,
+.sales-drawer-signout-btn:active {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
 }
 
 /* 5. Additional Polish for Buttons and Badges inside Desks */
@@ -2295,9 +2355,9 @@
 }
 
 /* ==========================================================================
-   TABLET BREAKPOINT (861px – 1024px)
+   TABLET BREAKPOINT (961px – 1024px)
    ========================================================================== */
-@media (max-width: 1024px) {
+@media (min-width: 961px) and (max-width: 1024px) {
   .sales-sidebar {
     width: 240px;
   }
@@ -2336,9 +2396,9 @@
 }
 
 /* ==========================================================================
-   AUTHORITATIVE MOBILE RESPONSIVE SUITE (Phones & Tablets <= 860px)
+   AUTHORITATIVE MOBILE RESPONSIVE SUITE (Phones & Tablets <= 960px)
    ========================================================================== */
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .sales-app-root {
     flex-direction: column !important;
     height: auto !important;
@@ -2352,8 +2412,10 @@
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    height: 60px !important;
-    padding: 0 14px !important;
+    gap: 8px !important;
+    min-height: 56px !important;
+    height: auto !important;
+    padding: 8px 10px !important;
     background: #ffffff !important;
     border-bottom: 1px solid #e2e8f0 !important;
     position: sticky !important;
@@ -2365,12 +2427,54 @@
     box-sizing: border-box !important;
   }
 
+  .sales-mobile-top-left {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
+
+  .sales-mobile-top-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .sales-mobile-logout-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    height: 36px !important;
+    padding: 0 10px !important;
+    border-radius: 9px !important;
+    background: #fef2f2 !important;
+    border: 1px solid #fecaca !important;
+    color: #dc2626 !important;
+    font-family: inherit !important;
+    font-size: 0.76rem !important;
+    font-weight: 800 !important;
+    cursor: pointer !important;
+    flex-shrink: 0 !important;
+    transition: all 0.15s ease !important;
+    box-sizing: border-box !important;
+  }
+
+  .sales-mobile-logout-btn:hover,
+  .sales-mobile-logout-btn:active {
+    background: #fee2e2 !important;
+    border-color: #fca5a5 !important;
+    color: #b91c1c !important;
+  }
+
   .sales-btn-hamburger {
     background: #f8fafc !important;
     border: 1px solid #cbd5e1 !important;
     color: #0f172a !important;
-    width: 40px !important;
-    height: 40px !important;
+    width: 38px !important;
+    height: 38px !important;
     border-radius: 10px !important;
     display: flex !important;
     align-items: center !important;
@@ -2378,6 +2482,7 @@
     cursor: pointer !important;
     transition: all 0.15s ease !important;
     padding: 0 !important;
+    flex-shrink: 0 !important;
   }
 
   .sales-btn-hamburger:active {
@@ -2388,27 +2493,31 @@
   .sales-mobile-brand {
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
+    gap: 7px !important;
+    min-width: 0 !important;
   }
 
   .sales-mobile-brand-text {
     display: flex !important;
     align-items: center !important;
-    gap: 6px !important;
-    font-size: 1.05rem !important;
+    gap: 5px !important;
+    font-size: 0.98rem !important;
     font-weight: 800 !important;
     color: #0f172a !important;
     letter-spacing: -0.01em !important;
+    white-space: nowrap !important;
+    min-width: 0 !important;
   }
 
   .sales-ops-mini-badge {
     background: #4f46e5 !important;
     color: #ffffff !important;
-    font-size: 0.62rem !important;
+    font-size: 0.60rem !important;
     font-weight: 800 !important;
     padding: 1px 5px !important;
     border-radius: 4px !important;
     letter-spacing: 0.04em !important;
+    flex-shrink: 0 !important;
   }
 
   .sales-mobile-active-desk {
@@ -2436,14 +2545,34 @@
     width: 300px !important;
     max-width: 86vw !important;
     height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
     z-index: 9999 !important;
     transform: translateX(-100%) !important;
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
     box-shadow: 4px 0 25px rgba(0, 0, 0, 0.25) !important;
     background: #ffffff !important;
-    overflow-y: auto !important;
+    overflow: hidden !important;
     display: flex !important;
     flex-direction: column !important;
+  }
+
+  .sales-sidebar-top {
+    flex-shrink: 0 !important;
+  }
+
+  .sales-sidebar-menu {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .sales-sidebar-footer {
+    flex-shrink: 0 !important;
+    padding: 12px 14px calc(16px + env(safe-area-inset-bottom, 0px)) 14px !important;
+    border-top: 1px solid #e2e8f0 !important;
+    background: #ffffff !important;
   }
 
   .sales-sidebar.mobile-open {
@@ -2849,6 +2978,50 @@
     text-align: center !important;
   }
 }
+
+/* =============================================================================
+   SMART TABULATOR CONTAINER OVERRIDES & ULTRA-NARROW (<= 380px / <= 600px) HELPERS
+   ============================================================================= */
+.desk-table-card:has(> .am-smart-table-wrap),
+.appr-table-card:has(> .am-smart-table-wrap),
+.tx-table-card:has(> .am-smart-table-wrap) {
+  overflow: visible !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.sales-resp-2col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sales-resp-3col {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .sales-resp-2col,
+  .sales-resp-3col {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .sales-mobile-logout-label {
+    display: none !important;
+  }
+
+  .sales-mobile-logout-btn {
+    width: 36px !important;
+    padding: 0 !important;
+  }
+}
+
 
 
 

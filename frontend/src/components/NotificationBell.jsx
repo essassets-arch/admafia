@@ -13,6 +13,7 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
   const [unreadCount, setUnreadCount] = useState(0);
   const [liveConnected, setLiveConnected] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
+  const [testPushSent, setTestPushSent] = useState(false);
   const [pushPerm, setPushPerm] = useState(() =>
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
@@ -75,6 +76,7 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
   const handleTestPush = async () => {
     if (testingPush) return;
     setTestingPush(true);
+    setTestPushSent(false);
     try {
       if (pushPerm === 'default') {
         await handleEnablePush();
@@ -82,6 +84,9 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
         await enableBrowserPushNotifications({ promptIfDefault: false }).catch(() => {});
       }
       await crmApi.sendTestNotification();
+      setTestPushSent(true);
+      await loadNotifications();
+      setTimeout(() => setTestPushSent(false), 3000);
     } catch (e) {
       // Ignore transient errors
     } finally {
@@ -122,6 +127,7 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
       {pushPerm === 'default' && (
         <button
           type="button"
+          className="am-notif-enable-pill"
           onClick={handleEnablePush}
           title="Enable browser & desktop push notifications"
           style={{
@@ -295,27 +301,28 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 onClick={handleTestPush}
                 disabled={testingPush}
                 title="Send a real Firebase FCM + Live Stream test notification to this device"
                 style={{
-                  background: '#eff6ff',
-                  border: '1px solid #bfdbfe',
+                  background: testPushSent ? '#dcfce7' : '#eff6ff',
+                  border: testPushSent ? '1px solid #86efac' : '1px solid #bfdbfe',
                   borderRadius: '6px',
-                  padding: '3px 8px',
-                  color: '#1d4ed8',
+                  padding: '4px 9px',
+                  color: testPushSent ? '#15803d' : '#1d4ed8',
                   fontSize: '0.72rem',
                   fontWeight: 700,
                   cursor: testingPush ? 'wait' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <Send size={11} /> {testingPush ? 'Sending…' : 'Test Push'}
+                <Send size={11} /> {testingPush ? 'Sending…' : testPushSent ? 'Sent ✓' : 'Test Push'}
               </button>
 
               {unreadCount > 0 && (
@@ -333,11 +340,30 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
                     alignItems: 'center',
                     gap: '4px',
                     padding: 0,
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   <CheckCheck size={14} /> Read all
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Close notifications"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <X size={16} />
+              </button>
             </div>
           </div>
 
@@ -453,17 +479,21 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
 
       <style>{`
         @media (max-width: 640px) {
+          .am-notif-enable-pill {
+            display: none !important;
+          }
           .am-notif-dropdown {
             position: fixed !important;
             top: 60px !important;
-            left: 12px !important;
-            right: 12px !important;
+            left: 10px !important;
+            right: 10px !important;
             width: auto !important;
             max-width: none !important;
+            max-height: calc(100dvh - 80px) !important;
           }
           .am-notif-toast {
-            left: 12px !important;
-            right: 12px !important;
+            left: 10px !important;
+            right: 10px !important;
             width: auto !important;
           }
         }

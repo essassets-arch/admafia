@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function SuperAdminRefundsDesk() {
   const [activeTab, setActiveTab] = useState('paid_customers'); // 'paid_customers' | 'refund_queue' | 'reconciliation'
@@ -546,7 +547,11 @@ export default function SuperAdminRefundsDesk() {
 
           {/* Paid Customers Table */}
           <div className="sa-table-card">
-            <div className="sa-table-wrap">
+            <SmartTable
+              title="Paid Customers & Refund Eligibility"
+              exportFilename="sa-paid-customers-refund-eligibility"
+              defaultPageSize="all"
+            >
               <table className="sa-table">
                 <thead>
                   <tr>
@@ -694,7 +699,7 @@ export default function SuperAdminRefundsDesk() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </SmartTable>
 
             {/* Pagination */}
             {paidPagination.totalPages > 1 && (
@@ -759,7 +764,11 @@ export default function SuperAdminRefundsDesk() {
 
           {/* Refunds Table */}
           <div className="sa-table-card">
-            <div className="sa-table-wrap">
+            <SmartTable
+              title="Refund Requests Queue"
+              exportFilename="sa-refund-requests"
+              defaultPageSize="all"
+            >
               <table className="sa-table">
                 <thead>
                   <tr>
@@ -913,7 +922,7 @@ export default function SuperAdminRefundsDesk() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </SmartTable>
 
             {/* Pagination */}
             {refundPagination.totalPages > 1 && (
@@ -979,7 +988,11 @@ export default function SuperAdminRefundsDesk() {
 
           {/* Reconciliation Table */}
           <div className="sa-table-card">
-            <div className="sa-table-wrap">
+            <SmartTable
+              title="Refund Reconciliation & Audit History"
+              exportFilename="sa-refund-reconciliation"
+              defaultPageSize="all"
+            >
               <table className="sa-table">
                 <thead>
                   <tr>
@@ -1102,7 +1115,7 @@ export default function SuperAdminRefundsDesk() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </SmartTable>
 
             {/* Pagination */}
             {reconPagination.totalPages > 1 && (

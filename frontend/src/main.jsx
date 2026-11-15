@@ -1,14 +1,23 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import 'tabulator-tables/dist/css/tabulator_simple.min.css'
 import './index.css'
 import App from './App.jsx'
+import './components/smart-tabulator.css'
 import './responsive-fixes.css'
 
-// Automatically unregister stale or broken service workers that reject FetchEvents
+// Unregister only stale legacy service workers while preserving Firebase FCM Push SW
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
     for (const reg of registrations) {
-      reg.unregister();
+      const scriptUrl =
+        reg.active?.scriptURL ||
+        reg.waiting?.scriptURL ||
+        reg.installing?.scriptURL ||
+        '';
+      if (!scriptUrl.includes('firebase-messaging-sw.js')) {
+        reg.unregister();
+      }
     }
   }).catch(() => {});
 }

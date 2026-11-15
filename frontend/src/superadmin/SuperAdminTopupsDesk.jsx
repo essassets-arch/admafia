@@ -24,6 +24,7 @@ import {
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import crmApi from '../services/crmApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 const TOPUP_PRESETS = [
   { amount: 600, label: '₹600', runway: '+2 Days Runtime', subtitle: 'Starter Trial' },
@@ -504,7 +505,11 @@ export default function SuperAdminTopupsDesk() {
 
           {/* Customers Table */}
           <div className="sa-table-card">
-            <div style={{ overflowX: 'auto' }}>
+            <SmartTable
+              title="Registered Customers & Instant Top-Up"
+              exportFilename="sa-topup-customers"
+              defaultPageSize={10}
+            >
               <table className="sa-table">
                 <thead>
                   <tr>
@@ -637,7 +642,7 @@ export default function SuperAdminTopupsDesk() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </SmartTable>
           </div>
         </div>
       )}
@@ -683,7 +688,11 @@ export default function SuperAdminTopupsDesk() {
 
           {/* Top-ups Table */}
           <div className="sa-table-card">
-            <div style={{ overflowX: 'auto' }}>
+            <SmartTable
+              title="Top-Up Requests & Verified Ledger"
+              exportFilename="sa-topup-requests"
+              defaultPageSize={25}
+            >
               <table className="sa-table">
                 <thead>
                   <tr>
@@ -815,7 +824,7 @@ export default function SuperAdminTopupsDesk() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </SmartTable>
           </div>
         </div>
       )}

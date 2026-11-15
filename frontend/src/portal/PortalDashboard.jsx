@@ -29,6 +29,7 @@ import {
 } from './PortalModals';
 import crmApi from '../services/crmApi';
 import NotificationBell from '../components/NotificationBell';
+import { useIsMobileViewport } from '../utils/useIsMobileViewport';
 import Swal from 'sweetalert2';
 import {
   evaluateCustomerProfileCompletion,
@@ -63,6 +64,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [currentLang, setCurrentLang] = useState('en');
+  const isMobileViewport = useIsMobileViewport(860);
+  const showSidebarLabels = isMobileViewport || !isSidebarCollapsed;
 
   // Helper to check if an item (lead/transaction/invoice) belongs to the active customer
   const belongsToCustomer = (item, cust) => {
@@ -423,6 +426,16 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       window.history.pushState({}, '', `/app/lead#app/${slug}`);
     } catch (e) {}
     window.location.hash = `#app/${slug}`;
+  };
+
+  const handleNotificationNavigate = (link) => {
+    if (!link) return;
+    const l = String(link).toLowerCase();
+    if (l.includes('wallet')) handleSwitchTab('wallet');
+    else if (l.includes('follow')) handleSwitchTab('followups');
+    else if (l.includes('lead')) handleSwitchTab('leads');
+    else if (l.includes('profile')) handleSwitchTab('profile');
+    else handleSwitchTab('dashboard');
   };
 
   // Modals & Popovers
@@ -1400,39 +1413,69 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     <div className={`portal-app-root ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileDrawerOpen ? 'mobile-drawer-active' : ''}`}>
       {/* Mobile Top Bar (visible on screens <= 860px) */}
       <header className="portal-mobile-top-bar">
-        <button
-          type="button"
-          className="btn-mobile-hamburger"
-          onClick={() => setIsMobileDrawerOpen(true)}
-          title="Open Navigation Menu"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
-        </button>
+        <div className="portal-mobile-top-left">
+          <button
+            type="button"
+            className="btn-mobile-hamburger"
+            onClick={() => setIsMobileDrawerOpen(true)}
+            title="Open Navigation Menu"
+            aria-label="Open Navigation Menu"
+          >
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
 
-        <div className="mobile-brand-title" onClick={() => handleSwitchTab('dashboard')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <img
-            src="/AdMafia-Logo.png"
-            alt="Ad Mafia Marketing"
-            style={{ height: '34px', width: 'auto', objectFit: 'contain', background: '#ffffff', padding: '3px 6px', borderRadius: '6px' }}
-          />
-          <span className="portal-logo-text" style={{ fontSize: '1.04rem' }}>
-            Ad <b>Mafia</b>
-          </span>
+          <div
+            className="mobile-brand-title"
+            onClick={() => handleSwitchTab('dashboard')}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}
+          >
+            <img
+              src="/AdMafia-Logo.png"
+              alt="Ad Mafia Marketing"
+              style={{ height: '30px', width: 'auto', objectFit: 'contain', background: '#ffffff', padding: '2px 5px', borderRadius: '6px', flexShrink: 0 }}
+            />
+            <span className="portal-logo-text" style={{ fontSize: '0.98rem', whiteSpace: 'nowrap' }}>
+              Ad <b>Mafia</b>
+            </span>
+          </div>
         </div>
 
-        <button
-          type="button"
-          className="mobile-wallet-pill"
-          onClick={() => handleSwitchTab('wallet')}
-          title="View Wallet Balance"
-        >
-          <span className="dot-green"></span>
-          <span>{currencySymbol}{walletBalance.toFixed(0)}</span>
-        </button>
+        <div className="portal-mobile-top-actions">
+          <button
+            type="button"
+            className="mobile-wallet-pill"
+            onClick={() => handleSwitchTab('wallet')}
+            title="View Wallet Balance"
+          >
+            <span className="dot-green"></span>
+            <span>{currencySymbol}{walletBalance.toFixed(0)}</span>
+          </button>
+
+          {isMobileViewport && (
+            <NotificationBell
+              variant="light"
+              onNavigateLink={handleNotificationNavigate}
+            />
+          )}
+
+          <button
+            type="button"
+            className="portal-mobile-logout-btn"
+            onClick={() => onSignOut && onSignOut()}
+            title="Sign Out"
+            aria-label="Sign Out"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* Backdrop for mobile drawer */}
@@ -1451,7 +1494,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               src="/AdMafia-Logo.png"
               alt="Ad Mafia Marketing"
               style={{
-                height: isSidebarCollapsed ? '34px' : '40px',
+                height: !showSidebarLabels ? '34px' : '40px',
                 width: 'auto',
                 objectFit: 'contain',
                 background: '#ffffff',
@@ -1459,7 +1502,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 borderRadius: '8px',
               }}
             />
-            {!isSidebarCollapsed && (
+            {showSidebarLabels && (
               <span className="portal-logo-text">
                 Ad <b>Mafia</b> <span>CRM</span>
               </span>
@@ -1488,6 +1531,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             className="btn-mobile-sidebar-close"
             onClick={() => setIsMobileDrawerOpen(false)}
             title="Close Menu"
+            aria-label="Close Menu"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -1498,7 +1542,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
 
         {/* Navigation Items */}
         <nav className="portal-nav-menu">
-          <div className="nav-group-label">{!isSidebarCollapsed && 'LEAD HUB OVERVIEW'}</div>
+          <div className="nav-group-label">{showSidebarLabels && 'LEAD HUB OVERVIEW'}</div>
 
           {/* 1. Lead Hub Overview */}
           <button
@@ -1515,7 +1559,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 <rect x="3" y="16" width="7" height="5" rx="1.5" />
               </svg>
             </span>
-            {!isSidebarCollapsed && <span className="nav-title">Dashboard</span>}
+            {showSidebarLabels && <span className="nav-title">Dashboard</span>}
           </button>
 
           {/* 2. Lead Pipeline (33) */}
@@ -1531,7 +1575,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
               </svg>
             </span>
-            {!isSidebarCollapsed && (
+            {showSidebarLabels && (
               <>
                 <span className="nav-title">Lead Pipeline</span>
                 <span className="nav-badge-count">{leads.filter((l) => l.status !== 'In Follow-up' && l.status !== 'Callback' && l.status !== 'Dropped').length}</span>
@@ -1551,7 +1595,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
               </svg>
             </span>
-            {!isSidebarCollapsed && (
+            {showSidebarLabels && (
               <>
                 <span className="nav-title">Follow-ups</span>
                 <span className="nav-badge-count coral">{pendingFollowupsCount}</span>
@@ -1572,7 +1616,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 <line x1="2" y1="10" x2="22" y2="10" />
               </svg>
             </span>
-            {!isSidebarCollapsed && (
+            {showSidebarLabels && (
               <>
                 <span className="nav-title">Wallet</span>
                 <span className={`nav-badge-wallet ${walletBalance <= 0 ? 'zero' : ''}`}>
@@ -1582,7 +1626,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             )}
           </button>
           <div className="nav-group-label" style={{ marginTop: '16px' }}>
-            {!isSidebarCollapsed && 'ACCOUNT MANAGEMENT'}
+            {showSidebarLabels && 'ACCOUNT MANAGEMENT'}
           </div>
 
           {/* 5. Account / My Profile */}
@@ -1598,7 +1642,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </span>
-            {!isSidebarCollapsed && <span className="nav-title">My Profile</span>}
+            {showSidebarLabels && <span className="nav-title">My Profile</span>}
           </button>
 
           {/* 6. Language Selector Modal */}
@@ -1618,7 +1662,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
               </svg>
             </span>
-            {!isSidebarCollapsed && (
+            {showSidebarLabels && (
               <span className="nav-title">Language ({currentLang.toUpperCase()})</span>
             )}
           </button>
@@ -1639,7 +1683,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
               </svg>
             </span>
-            {!isSidebarCollapsed && <span className="nav-title">Help &amp; Support</span>}
+            {showSidebarLabels && <span className="nav-title">Help &amp; Support</span>}
           </button>
         </nav>
 
@@ -1661,7 +1705,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                   <polyline points="12 19 5 12 12 5" />
                 </svg>
               </span>
-              {!isSidebarCollapsed && <span>Back to Website</span>}
+              {showSidebarLabels && <span>Back to Website</span>}
             </button>
           )}
 
@@ -1675,13 +1719,13 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             title="Sign Out"
           >
             <span className="nav-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
-              </span>
-            {!isSidebarCollapsed && <span>Sign Out</span>}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </span>
+            {showSidebarLabels && <span>Sign Out</span>}
           </button>
         </div>
       </aside>
@@ -1701,7 +1745,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#475569', flexWrap: 'wrap', minWidth: 0 }}>
+          <div className="portal-subheader-company-info" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#475569', flexWrap: 'wrap', minWidth: 0 }}>
             <span
               style={{
                 width: '8px',
@@ -1712,8 +1756,11 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 flexShrink: 0,
               }}
             />
-            <strong style={{ color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>{customer.companyName || customer.username || 'Business Workspace'}</strong>
+            <strong className="portal-subheader-company-name" style={{ color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
+              {customer.companyName || customer.username || 'Business Workspace'}
+            </strong>
             <span
+              className="portal-subheader-verified-badge"
               style={{
                 background: '#dcfce7',
                 color: '#15803d',
@@ -1728,34 +1775,32 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               WhatsApp Verified ✓
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              type="button"
-              className="portal-subheader-wallet-btn"
-              onClick={() => handleSwitchTab('wallet')}
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #cbd5e1',
-                borderRadius: '9px',
-                padding: '6px 12px',
-                fontSize: '0.8rem',
-                fontWeight: 700,
-                color: '#0f172a',
-                cursor: 'pointer',
-              }}
-            >
-              Growth Wallet: {currencySymbol}{walletBalance.toFixed(0)}
-            </button>
-            <NotificationBell
-              variant="light"
-              onNavigateLink={(link) => {
-                if (link.includes('wallet')) handleSwitchTab('wallet');
-                else if (link.includes('lead')) handleSwitchTab('leads');
-                else if (link.includes('profile')) handleSwitchTab('profile');
-                else handleSwitchTab('dashboard');
-              }}
-            />
-          </div>
+
+          {!isMobileViewport && (
+            <div className="portal-subheader-desktop-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                className="portal-subheader-wallet-btn"
+                onClick={() => handleSwitchTab('wallet')}
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '9px',
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                }}
+              >
+                Growth Wallet: {currencySymbol}{walletBalance.toFixed(0)}
+              </button>
+              <NotificationBell
+                variant="light"
+                onNavigateLink={handleNotificationNavigate}
+              />
+            </div>
+          )}
         </div>
         <div className="portal-content-body">
           {activeTab === 'dashboard' && (

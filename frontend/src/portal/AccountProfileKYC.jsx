@@ -377,6 +377,7 @@ export default function AccountProfileKYC({
       {/* Incomplete Profile Alert Strip */}
       {!isProfileComplete && (
         <div
+          className="profile-incomplete-alert-strip"
           style={{
             background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
             border: '1.5px solid #f59e0b',
@@ -390,9 +391,9 @@ export default function AccountProfileKYC({
             gap: '12px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: '1 1 260px' }}>
+          <div className="profile-incomplete-alert-body" style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: '1 1 240px', minWidth: 0 }}>
             <AlertCircle size={20} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 800, color: '#92400e', fontSize: '0.92rem' }}>
                 Profile {profEval.kycPercent}% Complete — {profEval.missingFields.length} required {profEval.missingFields.length === 1 ? 'field' : 'fields'} remaining
               </div>
@@ -403,6 +404,7 @@ export default function AccountProfileKYC({
           </div>
           <button
             type="button"
+            className="btn-complete-missing-fields"
             onClick={handleScrollToEdit}
             style={{
               background: '#d97706',
@@ -468,7 +470,7 @@ export default function AccountProfileKYC({
             </div>
           </div>
 
-          <div style={{ minWidth: '220px' }}>
+          <div className="profile-readiness-col" style={{ minWidth: '200px' }}>
             <div className="progress-bar-container">
               <div className="progress-bar-label">
                 <span>Profile Readiness</span>
@@ -889,7 +891,7 @@ export default function AccountProfileKYC({
         <div className="profile-submit-footer">
           <button
             type="submit"
-            className="btn-portal-primary"
+            className="btn-portal-primary btn-profile-submit-save"
             disabled={isSaving}
             style={{ padding: '14px 34px', fontSize: '1rem', fontWeight: 700 }}
           >

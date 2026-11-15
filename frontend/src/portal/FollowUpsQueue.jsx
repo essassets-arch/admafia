@@ -1,5 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion';
+
+function downloadFollowUpsCsv(rows, filenamePrefix = 'followups-queue') {
+  if (typeof window === 'undefined' || !Array.isArray(rows) || rows.length === 0) return;
+  const escapeCsv = (val) => {
+    const s = String(val ?? '').replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim();
+    if (s.includes(',') || s.includes('"') || s.includes(';')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+  const headers = ['Phone Number', 'Queue Status', 'Security Status', 'Read Status', 'Scheduled At', 'Company'];
+  const lines = [
+    headers.map(escapeCsv).join(','),
+    ...rows.map((r) => [r.phone, r.queueStatus, r.securityStatus, r.readStatus, r.scheduledAt, r.company].map(escapeCsv).join(',')),
+  ];
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 // Helpers
 function formatMinimalMaskedPhone(phone, maskedPhone) {
@@ -11,7 +36,21 @@ function formatMinimalMaskedPhone(phone, maskedPhone) {
 }
 
 function formatMinimalDateTime(createdAt) {
-  if (createdAt && (createdAt.includes('pm') || createdAt.includes('am'))) {
+  if (createdAt && (createdAt.includes('pm') || createdAt.includes('am') || createdAt.includes('PM') || createdAt.includes('AM'))) {
+    return createdAt;
+  }
+  if (createdAt) {
+    const d = new Date(createdAt);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    }
     return createdAt;
   }
   return 'Today, 01:57 pm';
@@ -28,6 +67,10 @@ export default function FollowUpsQueue({
   const [search, setSearch] = useState('');
   const [viewFilter, setViewFilter] = useState('active'); // 'active' | 'dropped'
   const [unmaskedMap, setUnmaskedMap] = useState({});
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const currencySymbol = customer?.currencySymbol || (String(customer?.currency || 'INR').toUpperCase() === 'USD' ? '$' : '₹');
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
   const profEval = evaluateCustomerProfileCompletion(customer);
@@ -94,6 +137,38 @@ export default function FollowUpsQueue({
     return true;
   });
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, viewFilter, pageSize]);
+
+  const totalFilteredCount = filteredLeads.length;
+  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIdx = (safePage - 1) * pageSize;
+  const endIdx = Math.min(startIdx + pageSize, totalFilteredCount);
+  const paginatedLeads = filteredLeads.slice(startIdx, endIdx);
+
+  const pageNumbers = [];
+  const winStart = Math.max(1, safePage - 2);
+  const winEnd = Math.min(totalPages, winStart + 4);
+  const adjStart = Math.max(1, winEnd - 4);
+  for (let p = adjStart; p <= winEnd; p += 1) {
+    pageNumbers.push(p);
+  }
+
+  const handleExportCsv = () => {
+    if (filteredLeads.length === 0) return;
+    const csvRows = filteredLeads.map((item) => ({
+      phone: formatMinimalMaskedPhone(item.phone, item.maskedPhone),
+      queueStatus: item.status === 'Dropped' ? 'Dropped Lead' : 'In Callback Queue',
+      securityStatus: item.status === 'Dropped' ? 'Dropped Lead' : isFullyComplete ? 'Active Lead' : isPaymentDone ? 'Step 2 Required' : 'Step 1 Required',
+      readStatus: item.read ? 'Read' : 'Unread',
+      scheduledAt: formatMinimalDateTime(item.createdAt),
+      company: item.company || item.assignedCompany || customer?.companyName || customer?.name || '',
+    }));
+    downloadFollowUpsCsv(csvRows, viewFilter === 'dropped' ? 'dropped-followups' : 'followups-queue');
+  };
+
   return (
     <div className="portal-followups-feed-page">
       {/* 1. Breadcrumbs */}
@@ -143,7 +218,7 @@ export default function FollowUpsQueue({
             </div>
             <div className="header-wallet-text-col">
               <span className="header-wallet-tag">GROWTH WALLET</span>
-              <strong className="header-wallet-val">₹{walletBalance.toFixed(0)}</strong>
+              <strong className="header-wallet-val">{currencySymbol}{walletBalance.toFixed(0)}</strong>
             </div>
             <button
               type="button"
@@ -200,26 +275,43 @@ export default function FollowUpsQueue({
           )}
         </div>
 
-        <div className="list-date-tabs">
+        <div className="list-controls-actions-row">
+          <div className="list-date-tabs">
+            <button
+              type="button"
+              className={`list-tab-pill ${viewFilter === 'active' ? 'active' : ''}`}
+              onClick={() => setViewFilter('active')}
+            >
+              Active Queue ({followUpLeads.length})
+            </button>
+            <button
+              type="button"
+              className={`list-tab-pill dropped-tab ${viewFilter === 'dropped' ? 'active' : ''}`}
+              onClick={() => setViewFilter('dropped')}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                <span>Dropped ({droppedLeads.length})</span>
+              </span>
+            </button>
+          </div>
+
           <button
             type="button"
-            className={`list-tab-pill ${viewFilter === 'active' ? 'active' : ''}`}
-            onClick={() => setViewFilter('active')}
+            className="btn-leads-csv-export"
+            onClick={handleExportCsv}
+            disabled={filteredLeads.length === 0}
+            title={filteredLeads.length === 0 ? 'No follow-up leads to export' : `Export ${filteredLeads.length} lead(s) to CSV`}
           >
-            Active Queue ({followUpLeads.length})
-          </button>
-          <button
-            type="button"
-            className={`list-tab-pill dropped-tab ${viewFilter === 'dropped' ? 'active' : ''}`}
-            onClick={() => setViewFilter('dropped')}
-          >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-              </svg>
-              <span>Dropped ({droppedLeads.length})</span>
-            </span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span>Export CSV ({filteredLeads.length})</span>
           </button>
         </div>
       </div>
@@ -258,7 +350,7 @@ export default function FollowUpsQueue({
               </p>
             </div>
           ) : (
-            filteredLeads.map((item) => {
+            paginatedLeads.map((item) => {
               const cleanDigits = (item.phone || '').replace(/[^\d]/g, '');
               const targetOrg = item.company || item.assignedCompany || customer?.companyName || customer?.name || 'our team';
               const waGreeting = `https://wa.me/${cleanDigits}?text=Hello,%20thank%20you%20for%20your%20inquiry%20with%20${encodeURIComponent(targetOrg)}.`;
@@ -455,6 +547,60 @@ export default function FollowUpsQueue({
             })
           )}
         </div>
+
+        {/* 5. Pagination & Per-Page Footer Bar */}
+        {totalFilteredCount > 0 && (
+          <div className="portal-leads-pagination-bar">
+            <div className="portal-leads-page-summary">
+              <span>
+                Showing <strong>{startIdx + 1}</strong>–<strong>{endIdx}</strong> of <strong>{totalFilteredCount}</strong> {totalFilteredCount === 1 ? 'lead' : 'leads'}
+              </span>
+              <label className="portal-leads-pagesize-label">
+                <span>Per page:</span>
+                <select
+                  className="portal-leads-pagesize-select"
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="portal-leads-page-controls">
+              <button
+                type="button"
+                className="portal-leads-page-btn nav-btn"
+                disabled={safePage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              >
+                ‹ Prev
+              </button>
+
+              {pageNumbers.map((pNum) => (
+                <button
+                  key={pNum}
+                  type="button"
+                  className={`portal-leads-page-btn ${pNum === safePage ? 'active' : ''}`}
+                  onClick={() => setCurrentPage(pNum)}
+                >
+                  {pNum}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                className="portal-leads-page-btn nav-btn"
+                disabled={safePage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next ›
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

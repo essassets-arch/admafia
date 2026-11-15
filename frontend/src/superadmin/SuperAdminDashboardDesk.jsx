@@ -15,6 +15,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import superadminApi from '../services/superadminApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }) {
   const nav = onNavigateToDesk || onNavigate;
@@ -338,7 +339,11 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
             </button>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <SmartTable
+            title="Recent Financial Activity"
+            exportFilename="sa-recent-transactions"
+            defaultPageSize={10}
+          >
             <table className="sa-table">
               <thead>
                 <tr>
@@ -386,7 +391,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
                 )}
               </tbody>
             </table>
-          </div>
+          </SmartTable>
         </div>
 
         {/* Recent Admin Audit Logs */}

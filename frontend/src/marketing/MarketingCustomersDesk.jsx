@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 const ALL_WEEK_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
@@ -327,7 +328,11 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
 
       {/* 4. Customer Table */}
       <div className="marketing-table-card">
-        <div className="marketing-table-responsive">
+        <SmartTable
+          title="Verified Customers"
+          exportFilename="marketing-customers"
+          defaultPageSize="all"
+        >
           <table className="marketing-table">
             <thead>
               <tr>
@@ -482,7 +487,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
             )}
           </tbody>
           </table>
-        </div>
+        </SmartTable>
 
         {/* Pagination Footer */}
         <div className="marketing-pagination">
@@ -1154,7 +1159,11 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   No transaction history recorded yet for this customer.
                 </div>
               ) : (
-                <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                <SmartTable
+                  title="Authoritative Transaction History"
+                  exportFilename={`customer-wallet-ledger-${walletDrawerCustomer.id || 'export'}`}
+                  defaultPageSize={10}
+                >
                   <table className="marketing-table" style={{ fontSize: '0.84rem' }}>
                     <thead>
                       <tr>
@@ -1196,7 +1205,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </SmartTable>
               )}
             </div>
             <div className="marketing-modal-footer">

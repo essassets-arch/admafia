@@ -12,6 +12,7 @@ import {
   Bell,
 } from 'lucide-react';
 import superadminApi from '../services/superadminApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function SuperAdminGrowthAnalyticsDesk() {
   const [data, setData] = useState(null);
@@ -214,8 +215,12 @@ export default function SuperAdminGrowthAnalyticsDesk() {
             Users who registered &amp; verified WhatsApp OTP but haven&apos;t funded their wallet yet — highest-ROI Sales conversion queue.
           </p>
 
-          <div style={{ overflowX: 'auto', maxHeight: '320px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <SmartTable
+            title="Hot Verified Signups Awaiting First Top-Up"
+            exportFilename="sa-hot-unpaid-signups"
+            defaultPageSize={10}
+          >
+            <table className="sa-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '8px 10px' }}>Business / Phone</th>
@@ -279,7 +284,7 @@ export default function SuperAdminGrowthAnalyticsDesk() {
                 )}
               </tbody>
             </table>
-          </div>
+          </SmartTable>
         </div>
 
         {/* Low-Runway Churn Radar */}
@@ -294,8 +299,12 @@ export default function SuperAdminGrowthAnalyticsDesk() {
             Paid clients whose wallet balance will pause ad delivery within 48 hours. Trigger instant recharge reminders.
           </p>
 
-          <div style={{ overflowX: 'auto', maxHeight: '320px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <SmartTable
+            title="Low-Runway Churn Radar"
+            exportFilename="sa-low-runway-churn-radar"
+            defaultPageSize={10}
+          >
+            <table className="sa-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '8px 10px' }}>Client</th>
@@ -347,7 +356,7 @@ export default function SuperAdminGrowthAnalyticsDesk() {
                 )}
               </tbody>
             </table>
-          </div>
+          </SmartTable>
         </div>
       </div>
 
@@ -363,8 +372,12 @@ export default function SuperAdminGrowthAnalyticsDesk() {
           Compares funded active clients per business vertical against leads dispatched in the last 7 days so Marketing knows where to scale Meta ad budgets.
         </p>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+        <SmartTable
+          title="Category Lead Liquidity Matrix"
+          exportFilename="sa-category-liquidity-matrix"
+          defaultPageSize={10}
+        >
+          <table className="sa-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
                 <th style={{ padding: '10px 12px' }}>Business Category</th>
@@ -417,7 +430,7 @@ export default function SuperAdminGrowthAnalyticsDesk() {
               ))}
             </tbody>
           </table>
-        </div>
+        </SmartTable>
       </div>
 
       {/* Live Security Shield Telemetry */}

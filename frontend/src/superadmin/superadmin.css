@@ -42,6 +42,9 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   z-index: 50;
   transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
@@ -143,9 +146,11 @@
 
 /* Navigation List */
 .sa-nav-list {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 12px 14px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -238,7 +243,9 @@
 
 /* Sidebar Footer */
 .sa-sidebar-footer {
+  flex-shrink: 0;
   padding: 16px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
@@ -387,6 +394,31 @@
   background: #f8fafc;
   color: #0f172a;
   border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.sa-topbar-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #be123c;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sa-topbar-logout-btn:hover {
+  background: #ffe4e6;
+  border-color: #fda4af;
+  color: #9f1239;
   transform: translateY(-1px);
 }
 
@@ -1365,9 +1397,26 @@
     left: 0;
     top: 0;
     width: min(280px, 86vw);
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     z-index: 1200;
     transform: translateX(-100%);
     box-shadow: none;
+  }
+
+  .sa-nav-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .sa-sidebar-footer {
+    flex-shrink: 0;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
 
   .sa-sidebar.open {
@@ -1437,8 +1486,23 @@
   }
 
   .sa-topbar-right {
-    gap: 8px;
+    gap: 6px;
     flex-shrink: 0;
+  }
+
+  .sa-topbar-logout-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+
+  .sa-topbar-logout-label {
+    display: none;
+  }
+
+  .sa-icon-btn {
+    width: 36px;
+    height: 36px;
   }
 
   .sa-admin-pill {

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import graphicsApi from '../services/graphicsApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
   const [approvedPosts, setApprovedPosts] = useState([]);
@@ -223,87 +224,93 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
       ) : (
         /* Table View */
         <div className="graphics-table-card">
-          <table className="graphics-table">
-            <thead>
-              <tr>
-                <th style={{ width: '12%' }}>Artwork</th>
-                <th style={{ width: '22%' }}>Customer &amp; Post</th>
-                <th style={{ width: '28%' }}>Caption &amp; Copy</th>
-                <th style={{ width: '18%' }}>Auditor Decision</th>
-                <th style={{ width: '20%', textAlign: 'right' }}>Campaign Readiness</th>
-              </tr>
-            </thead>
-            <tbody>
-              {approvedPosts.map((p) => (
-                <tr key={p.id}>
-                  <td>
-                    <div
-                      style={{
-                        width: 58,
-                        height: 58,
-                        borderRadius: 8,
-                        overflow: 'hidden',
-                        cursor: 'pointer',
-                        background: '#0f172a',
-                        border: '1px solid #e2e8f0',
-                      }}
-                      onClick={() => setPreviewPost(p)}
-                    >
-                      <img
-                        src={p.mediaUrl}
-                        alt={p.title}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 800, color: '#0f172a' }}>{p.title}</div>
-                    <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
-                      {p.companyName}
-                    </div>
-                    <div style={{ marginTop: 4 }}>
-                      <span className="gfx-pill gfx-pill-slate" style={{ fontSize: '0.66rem' }}>
-                        Rev #{p.revisionNumber} • {p.creativeFormat}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <div
-                      style={{
-                        fontSize: '0.78rem',
-                        color: '#475569',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {p.caption}
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <ShieldCheck size={14} color="#059669" />
-                      <strong style={{ fontSize: '0.80rem', color: '#065f46' }}>{p.reviewerName}</strong>
-                    </div>
-                    <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 2 }}>
-                      {new Date(p.approvedAt).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </div>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span className="gfx-pill gfx-pill-emerald">
-                      Ready for Ad Campaigns
-                    </span>
-                  </td>
+          <SmartTable
+            title="Approved Creatives Registry"
+            exportFilename="graphics-approved-posts"
+            defaultPageSize={10}
+          >
+            <table className="graphics-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '12%' }}>Artwork</th>
+                  <th style={{ width: '22%' }}>Customer &amp; Post</th>
+                  <th style={{ width: '28%' }}>Caption &amp; Copy</th>
+                  <th style={{ width: '18%' }}>Auditor Decision</th>
+                  <th style={{ width: '20%', textAlign: 'right' }}>Campaign Readiness</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {approvedPosts.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <div
+                        style={{
+                          width: 58,
+                          height: 58,
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          background: '#0f172a',
+                          border: '1px solid #e2e8f0',
+                        }}
+                        onClick={() => setPreviewPost(p)}
+                      >
+                        <img
+                          src={p.mediaUrl}
+                          alt={p.title}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 800, color: '#0f172a' }}>{p.title}</div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                        {p.companyName}
+                      </div>
+                      <div style={{ marginTop: 4 }}>
+                        <span className="gfx-pill gfx-pill-slate" style={{ fontSize: '0.66rem' }}>
+                          Rev #{p.revisionNumber} • {p.creativeFormat}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div
+                        style={{
+                          fontSize: '0.78rem',
+                          color: '#475569',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {p.caption}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <ShieldCheck size={14} color="#059669" />
+                        <strong style={{ fontSize: '0.80rem', color: '#065f46' }}>{p.reviewerName}</strong>
+                      </div>
+                      <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 2 }}>
+                        {new Date(p.approvedAt).toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <span className="gfx-pill gfx-pill-emerald">
+                        Ready for Ad Campaigns
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SmartTable>
         </div>
       )}
 

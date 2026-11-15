@@ -29,17 +29,178 @@ canvas {
 }
 
 /* Prevent flex/grid main areas across all portals from blowing out width */
+.sa-container,
+.marketing-layout-root,
+.graphics-layout-root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 .sa-main,
+.sa-main-wrap,
 .sa-content,
+.sa-content-area,
+.sa-content-body,
+.sa-desk-content,
+.marketing-main-wrap,
 .marketing-main-area,
+.marketing-page-container,
 .marketing-page-body,
+.graphics-main-wrap,
 .graphics-main-area,
+.graphics-content-body,
 .graphics-page-body,
 .sales-main-viewport,
 .sales-body-wrap,
 .desk-page-container {
   min-width: 0;
   max-width: 100%;
+}
+
+/* SmartTable & Tabulator v6 Flex/Grid Overflow Safeguards */
+.am-smart-table-wrap,
+.am-tabulator-native-shell,
+.am-st-grid-scroll,
+.am-st-cards-list {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.sa-split-grid > *,
+.mkt-split-grid > *,
+.gfx-rejected-grid > *,
+.gfx-upload-split > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Flatten card wrapper borders & keep column picker dropdown unclipped */
+.sa-table-card > .am-smart-table-wrap,
+.cp-card > .am-smart-table-wrap {
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+}
+
+.sa-table-card:has(> .am-smart-table-wrap),
+.sa-card:has(> .am-smart-table-wrap),
+.cp-card:has(> .am-smart-table-wrap),
+.marketing-table-card:has(> .am-smart-table-wrap),
+.graphics-table-card:has(> .am-smart-table-wrap) {
+  overflow: visible;
+}
+
+/* Harmonize SmartTable inside Super Admin's Light Main Workspace (.sa-main-wrap) */
+.sa-container .sa-main-wrap .am-smart-table-wrap {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+.sa-container .sa-main-wrap .sa-table-card > .am-smart-table-wrap,
+.sa-container .sa-main-wrap .sa-card > .am-smart-table-wrap,
+.sa-container .sa-main-wrap .cp-card > .am-smart-table-wrap {
+  background: transparent;
+}
+
+.sa-container .sa-main-wrap .am-st-toolbar,
+.sa-container .sa-main-wrap .am-st-pagination-bar {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #475569;
+}
+
+.sa-container .sa-main-wrap .am-st-search-input,
+.sa-container .sa-main-wrap .am-st-btn,
+.sa-container .sa-main-wrap .am-st-pagesize-select,
+.sa-container .sa-main-wrap .am-st-page-btn,
+.sa-container .sa-main-wrap .am-st-col-filter-input,
+.sa-container .sa-main-wrap .am-st-mobile-sort-bar select,
+.sa-container .sa-main-wrap .am-st-mobile-filter-item input {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.sa-container .sa-main-wrap .am-st-page-btn.active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #ffffff;
+}
+
+.sa-container .sa-main-wrap .am-st-mode-group {
+  background: #e2e8f0;
+}
+
+.sa-container .sa-main-wrap .am-st-mode-btn {
+  color: #475569;
+}
+
+.sa-container .sa-main-wrap .am-st-mode-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.sa-container .sa-main-wrap .am-st-col-dropdown {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+.sa-container .sa-main-wrap .am-st-col-check-row {
+  color: #1e293b;
+}
+
+.sa-container .sa-main-wrap .am-st-col-check-row:hover {
+  background: #f1f5f9;
+}
+
+.sa-container .sa-main-wrap .am-st-cards-list {
+  background: #f8fafc;
+}
+
+.sa-container .sa-main-wrap .am-st-record-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+.sa-container .sa-main-wrap .am-st-record-card-head {
+  border-bottom-color: #f1f5f9;
+}
+
+.sa-container .sa-main-wrap .am-st-record-primary,
+.sa-container .sa-main-wrap .am-st-record-val {
+  color: #0f172a;
+}
+
+.sa-container .sa-main-wrap .am-st-record-actions {
+  border-top-color: #f1f5f9;
+}
+
+.sa-container .sa-main-wrap .am-st-sortable-th:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.sa-container .sa-main-wrap .am-st-sorted-th {
+  background: #eef2ff !important;
+  color: #3730a3 !important;
+}
+
+.sa-container .sa-main-wrap .am-st-filter-row th.am-st-filter-cell {
+  background: #f8fafc !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+/* Global SweetAlert2 Viewport Safeguards */
+.swal2-container {
+  padding: 12px !important;
+  box-sizing: border-box !important;
+}
+
+.swal2-popup {
+  max-width: calc(100vw - 24px) !important;
+  box-sizing: border-box !important;
 }
 
 /* Universal Touch-Scrollable Table Wrapper Safety Rails */
@@ -92,6 +253,32 @@ canvas {
 
   .mkt-mobile-menu-btn {
     display: inline-flex !important;
+  }
+
+  /* 100dvh + safe-area mobile drawers across portals */
+  .sa-sidebar,
+  .marketing-sidebar.mobile-open,
+  .graphics-sidebar.mobile-open {
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  .sa-nav-list,
+  .marketing-sidebar-nav,
+  .graphics-sidebar-nav {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sa-sidebar-footer,
+  .marketing-sidebar-footer,
+  .graphics-sidebar-footer {
+    flex-shrink: 0 !important;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
 
@@ -173,11 +360,14 @@ canvas {
   .sa-modal,
   .sa-modal-card,
   .marketing-modal,
+  .marketing-modal-box,
   .marketing-modal-card,
   .graphics-modal,
   .graphics-modal-card,
-  .cp-modal {
+  .cp-modal,
+  .cp-modal-card {
     max-width: calc(100vw - 24px) !important;
+    max-height: calc(100dvh - 24px) !important;
     width: 100% !important;
     box-sizing: border-box !important;
   }
@@ -189,10 +379,75 @@ canvas {
     border-radius: 16px !important;
   }
 
+  /* SmartTable 360px Phone Safeguards */
+  .am-st-search-box {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .am-st-toolbar-left,
+  .am-st-toolbar-right {
+    max-width: 100% !important;
+  }
+
+  /* SweetAlert2 360px Compact Phone Fit */
+  .swal2-popup {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    padding: 18px 14px !important;
+    border-radius: 16px !important;
+  }
+
+  .swal2-title {
+    font-size: 1.12rem !important;
+    padding: 8px 6px 0 !important;
+    overflow-wrap: anywhere;
+  }
+
+  .swal2-html-container {
+    margin: 10px 4px 0 !important;
+    font-size: 0.86rem !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  .swal2-input,
+  .swal2-textarea,
+  .swal2-select {
+    margin: 10px 0 4px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    font-size: 0.9rem !important;
+  }
+
+  .swal2-actions {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+    margin-top: 14px !important;
+  }
+
+  .swal2-actions button {
+    margin: 0 !important;
+    flex: 1 1 auto;
+  }
+
   /* Preformatted JSON / URI blocks never push viewport wider than screen */
   pre,
   code {
     max-width: 100%;
     overflow-wrap: anywhere;
+  }
+}
+
+/* ==========================================================================
+   ULTRA-COMPACT PHONE TOPBAR GUARD (<= 440px — 360px / 390px devices)
+   ========================================================================== */
+@media (max-width: 440px) {
+  .mkt-user-pill,
+  .sa-admin-pill {
+    display: none !important;
   }
 }

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import crmApi from '../services/crmApi';
+import { SmartTable } from '../components/SmartTabulator';
 import { resolveCustomerIdentity, formatIndianDateTime } from './OperationalDesksViews';
 
 const formatINR = (val) =>
@@ -699,6 +700,12 @@ export default function MasterTransactionLogsDesk({
 
       {/* 4. Master Transaction Logs Table */}
       <div className="desk-table-card tx-table-card">
+        <SmartTable
+          title="Master Transaction Ledger"
+          exportFilename="master-transactions"
+          defaultPageSize={15}
+          enableSearch={false}
+        >
         <table className="desk-table tx-table">
           <thead>
             <tr>
@@ -1060,6 +1067,7 @@ export default function MasterTransactionLogsDesk({
             )}
           </tbody>
         </table>
+        </SmartTable>
       </div>
 
       {/* 5. TRANSACTION 360° DOSSIER MODAL */}
@@ -1114,6 +1122,8 @@ export default function MasterTransactionLogsDesk({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 12,
                   marginBottom: 18,
                 }}
               >
@@ -1264,6 +1274,8 @@ export default function MasterTransactionLogsDesk({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                  gap: 10,
                   borderBottom: '2px solid #0f172a',
                   paddingBottom: 16,
                   marginBottom: 18,

@@ -18,6 +18,7 @@ import {
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import crmApi from '../services/crmApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function SuperAdminAccountsDesk() {
   const [activeType, setActiveType] = useState('business'); // 'business' or 'user'
@@ -286,7 +287,11 @@ export default function SuperAdminAccountsDesk() {
       {/* 4A. Business Accounts Table */}
       {activeType === 'business' && (
         <div className="sa-table-card">
-          <div style={{ overflowX: 'auto' }}>
+          <SmartTable
+            title="Business Accounts"
+            exportFilename="sa-business-accounts"
+            defaultPageSize={25}
+          >
             <table className="sa-table">
               <thead>
                 <tr>
@@ -431,14 +436,18 @@ export default function SuperAdminAccountsDesk() {
                 )}
               </tbody>
             </table>
-          </div>
+          </SmartTable>
         </div>
       )}
 
       {/* 4B. System Users Table */}
       {activeType === 'user' && (
         <div className="sa-table-card">
-          <div style={{ overflowX: 'auto' }}>
+          <SmartTable
+            title="System Users"
+            exportFilename="sa-system-users"
+            defaultPageSize={25}
+          >
             <table className="sa-table">
               <thead>
                 <tr>
@@ -563,7 +572,7 @@ export default function SuperAdminAccountsDesk() {
                 )}
               </tbody>
             </table>
-          </div>
+          </SmartTable>
         </div>
       )}
 

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 const DAYS_OF_WEEK = [
   { code: 'MON', label: 'Monday', short: 'Mon', initial: 'M' },
@@ -613,7 +614,11 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
 
       {/* 3. Main Customer Marketing Control Table */}
       <div className="marketing-table-card">
-        <div className="marketing-table-responsive">
+        <SmartTable
+          title="Customer Marketing Control"
+          exportFilename="customer-marketing-control"
+          defaultPageSize={10}
+        >
           <table className="marketing-table">
             <thead>
               <tr>
@@ -957,7 +962,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
               })()}
             </tbody>
           </table>
-        </div>
+        </SmartTable>
       </div>
 
       {/* 4. Pacing & Schedule Modal (Set Amount & Days, matching /app/lead#app/dashboard) */}

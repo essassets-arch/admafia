@@ -17,6 +17,7 @@ import {
   Eye,
 } from 'lucide-react';
 import adminAuthApi from '../services/adminAuthApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function SuperAdminCountryPricingDesk() {
   const [countries, setCountries] = useState([]);
@@ -353,7 +354,11 @@ export default function SuperAdminCountryPricingDesk() {
             <div className="cp-count-pill">{filteredCountries.length} countries matching</div>
           </div>
 
-          <div className="cp-table-wrap">
+          <SmartTable
+            title="Country Pricing Master"
+            exportFilename="sa-country-pricing"
+            defaultPageSize={15}
+          >
             <table className="cp-table">
               <thead>
                 <tr>
@@ -443,7 +448,7 @@ export default function SuperAdminCountryPricingDesk() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </SmartTable>
         </div>
       )}
 
@@ -596,7 +601,11 @@ export default function SuperAdminCountryPricingDesk() {
             </div>
           </div>
 
-          <div className="cp-table-wrap">
+          <SmartTable
+            title="Pricing Modification Audit Logs"
+            exportFilename="sa-country-pricing-audit"
+            defaultPageSize={15}
+          >
             <table className="cp-table">
               <thead>
                 <tr>
@@ -648,7 +657,7 @@ export default function SuperAdminCountryPricingDesk() {
                 )}
               </tbody>
             </table>
-          </div>
+          </SmartTable>
         </div>
       )}
 

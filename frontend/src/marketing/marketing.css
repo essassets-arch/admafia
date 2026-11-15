@@ -49,6 +49,9 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   z-index: 40;
 }
 
@@ -92,8 +95,10 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .marketing-nav-item {
@@ -146,7 +151,9 @@
 }
 
 .marketing-sidebar-footer {
+  flex-shrink: 0;
   padding: 14px 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--mkt-border);
   background: #ffffff;
   display: flex;
@@ -215,7 +222,31 @@
 .marketing-top-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+}
+
+.mkt-topbar-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 11px;
+  border-radius: var(--mkt-radius-sm);
+  background: var(--mkt-rose-soft);
+  border: 1px solid #fecdd3;
+  color: #be123c;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.mkt-topbar-logout-btn:hover {
+  background: #ffe4e6;
+  border-color: #fda4af;
+  color: #9f1239;
 }
 
 .marketing-live-pill {
@@ -917,14 +948,29 @@
 
   .marketing-sidebar.mobile-open {
     display: flex !important;
+    flex-direction: column;
     position: fixed !important;
     top: 0;
     left: 0;
-    bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
     width: min(280px, 86vw);
     min-width: 0;
     z-index: 1200;
     box-shadow: 8px 0 30px rgba(15, 23, 42, 0.28);
+  }
+
+  .marketing-sidebar-nav {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .marketing-sidebar-footer {
+    flex-shrink: 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .mkt-drawer-close-btn {
@@ -980,8 +1026,18 @@
   }
 
   .marketing-top-actions {
-    gap: 8px;
+    gap: 6px;
     flex-shrink: 0;
+  }
+
+  .mkt-topbar-logout-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+
+  .mkt-topbar-logout-label {
+    display: none;
   }
 
   .marketing-breadcrumbs {

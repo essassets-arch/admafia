@@ -29,6 +29,7 @@ import {
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import crmApi from '../services/crmApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 const CATEGORIES = [
   'IT & Software',
@@ -1084,7 +1085,11 @@ Role: ${c.role || 'Business Customer'}`;
             </div>
           </div>
 
-          <div className="sa-table-wrap">
+          <SmartTable
+            title="Platform Users & Staff Roster"
+            exportFilename="sa-users-roster"
+            defaultPageSize={10}
+          >
             <table className="sa-table">
               <thead>
                 <tr>
@@ -1199,7 +1204,7 @@ Role: ${c.role || 'Business Customer'}`;
                 )}
               </tbody>
             </table>
-          </div>
+          </SmartTable>
         </div>
       )}
 

@@ -397,6 +397,18 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
             {/* Real-Time FCM & SSE Notification Bell */}
             <NotificationBell variant="light" />
 
+            {/* 1-Tap Sign Out Action */}
+            <button
+              type="button"
+              className="sa-topbar-logout-btn"
+              onClick={onSignOut || (() => (window.location.href = '/login'))}
+              title="Sign Out"
+              aria-label="Sign Out"
+            >
+              <LogOut size={16} />
+              <span className="sa-topbar-logout-label">Sign Out</span>
+            </button>
+
             {/* Super Admin User Profile Pill */}
             <div className="sa-admin-pill" title={`Logged in as ${activeUser.fullName || 'Super Admin'} (${activeUser.email || activeUser.username || ''})`}>
               <div className="sa-admin-avatar">

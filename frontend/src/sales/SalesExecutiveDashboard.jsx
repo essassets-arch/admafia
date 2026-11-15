@@ -26,6 +26,7 @@ import {
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import BalanceLogsDesk from './BalanceLogsDesk';
 import NotificationBell from '../components/NotificationBell';
+import { useIsMobileViewport } from '../utils/useIsMobileViewport';
 import {
   INITIAL_CUSTOMERS,
   INITIAL_REGISTERED_CUSTOMERS,
@@ -160,6 +161,7 @@ const loadStoredVerifications = () => {
 };
 
 export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) {
+  const isMobileViewport = useIsMobileViewport(960);
   const activeUser = adminAuthApi.getCurrentUser() || {
     fullName: 'Principal Sales & Accounts Executive',
     role: 'Sales Executive',
@@ -462,24 +464,26 @@ return (
         style={{
           position: 'fixed',
           top: 16,
-          right: 24,
+          right: 16,
+          maxWidth: 'calc(100vw - 32px)',
           zIndex: 9999,
           background: '#0f172a',
           color: '#ffffff',
-          padding: '12px 20px',
+          padding: '12px 16px',
           borderRadius: 12,
           boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
-          fontSize: '0.86rem',
+          gap: 10,
+          fontSize: '0.84rem',
           fontWeight: 700,
           border: '1px solid #334155',
           animation: 'modal-pop-in 0.2s ease',
+          boxSizing: 'border-box',
         }}
       >
-        <Sparkles size={18} color="#f59e0b" />
-        <span>{newRegAlert}</span>
+        <Sparkles size={18} color="#f59e0b" style={{ flexShrink: 0 }} />
+        <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{newRegAlert}</span>
         <button
           type="button"
           onClick={() => setNewRegAlert(null)}
@@ -490,7 +494,8 @@ return (
             cursor: 'pointer',
             fontWeight: 800,
             fontSize: '1rem',
-            marginLeft: 8,
+            marginLeft: 'auto',
+            flexShrink: 0,
           }}
         >
           ✕
@@ -498,39 +503,51 @@ return (
       </div>
     )}
 
-    {/* MOBILE RESPONSIVE TOP BAR (Visible on mobile/tablet viewports) */}
+    {/* MOBILE RESPONSIVE TOP BAR (Visible on <= 960px viewports) */}
     <header className="sales-mobile-top-bar">
-      <button
-        type="button"
-        className="sales-btn-hamburger"
-        onClick={() => setIsMobileDrawerOpen(true)}
-        aria-label="Open Navigation Menu"
-      >
-        <Menu size={22} />
-      </button>
-      <div className="sales-mobile-brand">
-        <img
-          src="/AdMafia-Logo.png"
-          alt="Ad Mafia"
-          style={{
-            height: 32,
-            width: 'auto',
-            objectFit: 'contain',
-            borderRadius: 6,
-            background: '#ffffff',
-            padding: '2px 4px',
-            border: '1px solid #e2e8f0',
-          }}
-        />
-        <div className="sales-mobile-brand-text">
-          <span>Ad <b>Mafia</b></span>
-          <span className="sales-ops-mini-badge">OPS</span>
+      <div className="sales-mobile-top-left">
+        <button
+          type="button"
+          className="sales-btn-hamburger"
+          onClick={() => setIsMobileDrawerOpen(true)}
+          aria-label="Open Navigation Menu"
+        >
+          <Menu size={20} />
+        </button>
+        <div className="sales-mobile-brand">
+          <img
+            src="/AdMafia-Logo.png"
+            alt="Ad Mafia"
+            style={{
+              height: 30,
+              width: 'auto',
+              objectFit: 'contain',
+              borderRadius: 6,
+              background: '#ffffff',
+              padding: '2px 4px',
+              border: '1px solid #e2e8f0',
+              flexShrink: 0,
+            }}
+          />
+          <div className="sales-mobile-brand-text">
+            <span>Ad <b>Mafia</b></span>
+            <span className="sales-ops-mini-badge">OPS</span>
+          </div>
         </div>
       </div>
-      <div className="sales-mobile-active-desk">
-        <span className="desk-pill pill-indigo" style={{ fontSize: '0.70rem', fontWeight: 800, textTransform: 'uppercase' }}>
-          {activeTab.replace('_', ' ')}
-        </span>
+
+      <div className="sales-mobile-top-actions">
+        {isMobileViewport && <NotificationBell variant="light" />}
+        <button
+          type="button"
+          className="sales-mobile-logout-btn"
+          onClick={onSignOut}
+          title="Sign Out of Sales Desk"
+          aria-label="Sign Out"
+        >
+          <LogOut size={16} />
+          <span className="sales-mobile-logout-label">Logout</span>
+        </button>
       </div>
     </header>
 
@@ -863,9 +880,28 @@ return (
             type="button"
             className="sales-logout-icon"
             title="Sign Out"
+            aria-label="Sign Out"
             onClick={onSignOut}
           >
             <LogOut size={16} />
+          </button>
+        </div>
+        <div className="sales-sidebar-footer-actions">
+          <button
+            type="button"
+            className="sales-drawer-website-btn"
+            onClick={onBackToWebsite}
+          >
+            <ExternalLink size={15} />
+            <span>Back to Website</span>
+          </button>
+          <button
+            type="button"
+            className="sales-drawer-signout-btn"
+            onClick={onSignOut}
+          >
+            <LogOut size={16} />
+            <span>Sign Out</span>
           </button>
         </div>
       </div>
@@ -947,7 +983,7 @@ return (
             </span>
           </div>
 
-          <NotificationBell variant="light" />
+          {!isMobileViewport && <NotificationBell variant="light" />}
 
           <button
             type="button"

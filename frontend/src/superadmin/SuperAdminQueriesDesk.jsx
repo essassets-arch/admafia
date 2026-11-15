@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function SuperAdminQueriesDesk() {
   const [queries, setQueries] = useState([]);
@@ -252,7 +253,11 @@ export default function SuperAdminQueriesDesk() {
 
       {/* 3. Queries Table */}
       <div className="sa-table-card">
-        <div style={{ overflowX: 'auto' }}>
+        <SmartTable
+          title="Customer Queries"
+          exportFilename="sa-customer-queries"
+          defaultPageSize={20}
+        >
           <table className="sa-table">
             <thead>
               <tr>
@@ -365,7 +370,7 @@ export default function SuperAdminQueriesDesk() {
               )}
             </tbody>
           </table>
-        </div>
+        </SmartTable>
       </div>
 
       {/* 4. Query Conversation Drawer / Modal */}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SmartTable } from '../components/SmartTabulator';
 
 export const OPERATIONAL_DESKS_DATA = [
   {
@@ -250,10 +251,13 @@ export default function SubadminDesksReferenceView() {
               fontFamily: 'monospace',
               fontSize: '0.84rem',
               color: '#38bdf8',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
+              overflowWrap: 'anywhere',
             }}
           >
-            <span>📄</span>
-            <strong>d:/crm/docs/SUBADMIN_DESKS_AND_PAGES_REFERENCE.md</strong>
+            <span style={{ flexShrink: 0 }}>📄</span>
+            <strong style={{ wordBreak: 'break-all' }}>d:/crm/docs/SUBADMIN_DESKS_AND_PAGES_REFERENCE.md</strong>
           </div>
           <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
             (Also linked in master <code>d:/crm/README.md</code> &amp; <code>SUBADMIN_SUPPORT_DOCUMENTATION.md</code>)
@@ -325,7 +329,7 @@ export default function SubadminDesksReferenceView() {
                 e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.02)';
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
                 <span
                   style={{
                     width: 28,
@@ -384,8 +388,8 @@ export default function SubadminDesksReferenceView() {
       </div>
 
       {/* 3. Comprehensive Master Reference Table */}
-      <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-        <div style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+      <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
+        <div style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', borderRadius: '18px 18px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
               Master Operational Desks Reference Table
@@ -399,8 +403,13 @@ export default function SubadminDesksReferenceView() {
           </span>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.84rem' }}>
+        <div className="desk-table-card">
+          <SmartTable
+            title="Operational Desks Matrix"
+            exportFilename="desks-reference"
+            defaultPageSize={15}
+          >
+          <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.84rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontSize: '0.74rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 <th style={{ padding: '14px 18px', width: 40 }}>#</th>
@@ -453,6 +462,7 @@ export default function SubadminDesksReferenceView() {
               ))}
             </tbody>
           </table>
+          </SmartTable>
         </div>
       </div>
 

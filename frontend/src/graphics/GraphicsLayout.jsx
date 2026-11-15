@@ -323,6 +323,22 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
 
           <div className="graphics-top-actions">
             <NotificationBell variant="light" />
+            <button
+              type="button"
+              className="gfx-topbar-logout-btn"
+              onClick={() => {
+                if (onSignOut) onSignOut();
+                else {
+                  window.location.hash = '';
+                  window.location.href = '/';
+                }
+              }}
+              title="Exit Graphics"
+              aria-label="Exit Graphics"
+            >
+              <LogOut size={16} />
+              <span className="gfx-topbar-logout-label">Logout</span>
+            </button>
             <div className="graphics-live-pill">
               <span className="graphics-live-dot" />
               <span>MongoDB Live Sync</span>

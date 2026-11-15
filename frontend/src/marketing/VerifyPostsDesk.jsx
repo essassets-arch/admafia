@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function VerifyPostsDesk({ onNavigateToDesk }) {
   const [posts, setPosts] = useState([]);
@@ -281,7 +282,11 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
 
       {/* 3. Review Queue List */}
       <div className="marketing-table-card">
-        <div className="marketing-table-responsive">
+        <SmartTable
+          title="Verify Marketing Posts Queue"
+          exportFilename="marketing-verify-posts"
+          defaultPageSize={10}
+        >
           <table className="marketing-table">
             <thead>
               <tr>
@@ -442,7 +447,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
               )}
             </tbody>
           </table>
-        </div>
+        </SmartTable>
       </div>
 
       {/* 4. History Modal */}

@@ -344,7 +344,7 @@ export default function LeadHubOverview({
             gap: '16px',
           }}
         >
-          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+          <div className="am-profile-urgent-body" style={{ flex: '1 1 280px', minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
               <span
                 style={{
@@ -471,7 +471,7 @@ export default function LeadHubOverview({
         </div>
 
         {/* Right side top: Growth Wallet Card & Complete Registration Button */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginLeft: 'auto' }}>
+        <div className="overview-header-actions-cluster" style={{ display: 'inline-flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginLeft: 'auto', maxWidth: '100%' }}>
           {/* 1. GROWTH WALLET Card */}
           <div
             className="header-ad-wallet-card"

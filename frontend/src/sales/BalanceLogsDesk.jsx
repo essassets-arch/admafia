@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import crmApi from '../services/crmApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 const isTestUser = (c) => {
   if (!c) return false;
@@ -430,7 +431,7 @@ export default function BalanceLogsDesk({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
           gap: 16,
           marginBottom: 20,
         }}
@@ -519,8 +520,8 @@ export default function BalanceLogsDesk({
           border: '1px solid #e5e7eb',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 300px' }}>
-          <div className="desk-search-wrap" style={{ width: '100%', maxWidth: 360 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 300px', flexWrap: 'wrap', minWidth: 0 }}>
+          <div className="desk-search-wrap" style={{ width: '100%', maxWidth: 360, flex: '1 1 200px', minWidth: 0 }}>
             <Search size={15} className="desk-search-icon" />
             <input
               type="text"
@@ -552,7 +553,7 @@ export default function BalanceLogsDesk({
 
           <select
             className="desk-search-input"
-            style={{ width: 'auto', minWidth: 200, padding: '6px 12px', fontSize: '0.82rem', cursor: 'pointer' }}
+            style={{ width: 'auto', minWidth: 'min(200px, 100%)', flex: '1 1 180px', padding: '6px 12px', fontSize: '0.82rem', cursor: 'pointer' }}
             value={selectedCustomerId}
             onChange={(e) => setSelectedCustomerId(e.target.value)}
           >
@@ -566,7 +567,7 @@ export default function BalanceLogsDesk({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', background: '#f1f5f9', padding: 3, borderRadius: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, background: '#f1f5f9', padding: 3, borderRadius: 8 }}>
             <button
               type="button"
               onClick={() => setViewMode('customers')}
@@ -612,8 +613,13 @@ export default function BalanceLogsDesk({
       </div>
 
       {/* 4. Exact Table from Screenshot */}
-      <div className="desk-table-card" style={{ overflowX: 'auto', background: '#ffffff', borderRadius: 12 }}>
-        <table className="desk-table" style={{ width: '100%', minWidth: 960, borderCollapse: 'collapse' }}>
+      <div className="desk-table-card" style={{ background: '#ffffff', borderRadius: 12 }}>
+        <SmartTable
+          title="Customer Balance Logs"
+          exportFilename="balance-logs"
+          defaultPageSize={15}
+        >
+        <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e7eb', background: '#fafafa' }}>
               <th style={{ width: 50, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
@@ -681,7 +687,10 @@ export default function BalanceLogsDesk({
 
                     {/* 2. USER (Avatar + Name) */}
                     <td style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+                        onClick={() => openCustomerStatement(log)}
+                      >
                         <div
                           style={{
                             width: 32,
@@ -771,6 +780,7 @@ export default function BalanceLogsDesk({
             )}
           </tbody>
         </table>
+        </SmartTable>
       </div>
 
       {/* 5. Customer Statement Drawer Modal */}
@@ -783,11 +793,11 @@ export default function BalanceLogsDesk({
           <div
             className="sales-modal-card"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 840, width: '95%' }}
+            style={{ maxWidth: 840, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
           >
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 240px' }}>
                 <div
                   style={{
                     width: 40,
@@ -797,17 +807,18 @@ export default function BalanceLogsDesk({
                     display: 'grid',
                     placeItems: 'center',
                     color: '#fff',
+                    flexShrink: 0,
                   }}
                 >
                   <History size={20} />
                 </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', overflowWrap: 'anywhere' }}>
                     {selectedCustomerForStatement.customer.companyName ||
                       selectedCustomerForStatement.customer.name ||
                       'Customer Balance Statement'}
                   </h3>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2, overflowWrap: 'anywhere' }}>
                     👤 {selectedCustomerForStatement.customer.contactPerson || selectedCustomerForStatement.customer.name} • 📞 +91{' '}
                     {selectedCustomerForStatement.customer.phone} • Account ID:{' '}
                     <code>{selectedCustomerForStatement.customer.id}</code>
@@ -827,7 +838,7 @@ export default function BalanceLogsDesk({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))',
                 gap: 10,
                 marginBottom: 18,
                 background: '#f8fafc',
@@ -883,7 +894,12 @@ export default function BalanceLogsDesk({
             </div>
 
             {/* Customer Statement Table */}
-            <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+            <div>
+              <SmartTable
+                title="Customer Balance Statement"
+                exportFilename="customer-balance-statement"
+                defaultPageSize={10}
+              >
               <table className="desk-table" style={{ width: '100%', fontSize: '0.78rem' }}>
                 <thead>
                   <tr style={{ background: '#fafafa' }}>
@@ -928,6 +944,7 @@ export default function BalanceLogsDesk({
                   )}
                 </tbody>
               </table>
+              </SmartTable>
             </div>
 
             {/* Modal Footer */}

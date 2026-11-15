@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Database,
   HardDrive,
@@ -18,10 +18,12 @@ import {
   ChevronDown,
   ChevronLeft,
   FileJson,
+  Zap,
   X,
 } from 'lucide-react';
 import superadminApi from '../services/superadminApi';
 import { getActiveAuthToken } from '../services/crmApi';
+import { SmartTable, TabulatorDataGrid } from '../components/SmartTabulator';
 
 const isViteDev =
   typeof window !== 'undefined' &&
@@ -86,6 +88,7 @@ export default function SuperAdminDatabaseDesk() {
     totalPages: 1,
   });
   const [expandedDocs, setExpandedDocs] = useState({});
+  const [explorerView, setExplorerView] = useState('tabulator'); // 'tabulator' | 'json'
   const explorerRef = useRef(null);
 
   const loadStatus = async () => {
@@ -226,7 +229,80 @@ export default function SuperAdminDatabaseDesk() {
   const compass = status?.compassGuides || {};
   const snapshots = status?.snapshots || [];
   const collections = mongo.collections || [];
+  const explorerDocs = docsPayload.documents || [];
   const webConsoleHref = status?.webConsoleUrl || compass?.webConsoleUrl || '/db-console/';
+
+  // Dynamically derive Tabulator columns & flattened rows from explorerDocs
+  const { explorerColumns, explorerGridData } = useMemo(() => {
+    if (!Array.isArray(explorerDocs) || explorerDocs.length === 0) {
+      return { explorerColumns: [], explorerGridData: [] };
+    }
+
+    const priorityKeys = [
+      '_id',
+      'id',
+      'companyName',
+      'company_name',
+      'fullName',
+      'full_name',
+      'name',
+      'phone',
+      'email',
+      'status',
+      'role',
+      'available_balance',
+      'balance',
+      'amount',
+      'tx_type',
+      'createdAt',
+      'created_at',
+    ];
+
+    const keySet = new Set();
+    explorerDocs.forEach((doc) => {
+      if (doc && typeof doc === 'object') {
+        Object.keys(doc).forEach((k) => keySet.add(k));
+      }
+    });
+
+    const allKeys = Array.from(keySet);
+    allKeys.sort((a, b) => {
+      const idxA = priorityKeys.indexOf(a);
+      const idxB = priorityKeys.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return 0;
+    });
+
+    const cols = allKeys.map((rawKey, idx) => ({
+      title: rawKey,
+      field: `f_${idx}`,
+      minWidth: rawKey === '_id' || rawKey === 'id' ? 185 : 145,
+      hozAlign: 'left',
+    }));
+
+    const rows = explorerDocs.map((doc) => {
+      const flatRow = {};
+      allKeys.forEach((rawKey, idx) => {
+        const val = doc ? doc[rawKey] : undefined;
+        if (val === null || val === undefined) {
+          flatRow[`f_${idx}`] = '';
+        } else if (typeof val === 'object') {
+          try {
+            flatRow[`f_${idx}`] = JSON.stringify(val);
+          } catch {
+            flatRow[`f_${idx}`] = String(val);
+          }
+        } else {
+          flatRow[`f_${idx}`] = String(val);
+        }
+      });
+      return flatRow;
+    });
+
+    return { explorerColumns: cols, explorerGridData: rows };
+  }, [explorerDocs]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -457,8 +533,12 @@ export default function SuperAdminDatabaseDesk() {
           )}
         </div>
 
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+        <SmartTable
+          title="Live MongoDB Collections"
+          exportFilename="mongodb-live-collections"
+          defaultPageSize={15}
+        >
+          <table className="sa-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
                 <th style={{ padding: '11px 16px', color: '#475569', fontSize: '0.74rem', textTransform: 'uppercase' }}>
@@ -494,7 +574,10 @@ export default function SuperAdminDatabaseDesk() {
                       }}
                     >
                       <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div
+                          onClick={() => handleInspectCollection(col.name)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                        >
                           <Database size={15} color={isSelected ? '#4f46e5' : '#64748b'} />
                           <code
                             style={{
@@ -555,7 +638,7 @@ export default function SuperAdminDatabaseDesk() {
               )}
             </tbody>
           </table>
-        </div>
+        </SmartTable>
       </div>
 
       {/* Inline Live Collection & Document Explorer Panel */}
@@ -598,6 +681,60 @@ export default function SuperAdminDatabaseDesk() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {/* View Toggle: Tabulator Spreadsheet vs Expandable JSON Cards */}
+              <div
+                role="group"
+                aria-label="Document Explorer View Mode"
+                style={{
+                  display: 'inline-flex',
+                  background: '#e2e8f0',
+                  padding: '3px',
+                  borderRadius: '9px',
+                  gap: '2px',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setExplorerView('tabulator')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 11px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: explorerView === 'tabulator' ? '#4f46e5' : 'transparent',
+                    color: explorerView === 'tabulator' ? '#ffffff' : '#334155',
+                    fontSize: '0.76rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Zap size={12} />
+                  <span>Tabulator Table</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExplorerView('json')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 11px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: explorerView === 'json' ? '#4f46e5' : 'transparent',
+                    color: explorerView === 'json' ? '#ffffff' : '#334155',
+                    fontSize: '0.76rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <FileJson size={12} />
+                  <span>&#123; &#125; JSON Cards</span>
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => fetchCollectionDocuments(selectedCollection, docPage, docSearchQuery)}
@@ -766,13 +903,20 @@ export default function SuperAdminDatabaseDesk() {
                 <RefreshCw size={18} className="sa-spin" style={{ marginBottom: '6px' }} />
                 <div>Fetching live documents from <code>{selectedCollection}</code>...</div>
               </div>
-            ) : docsPayload.documents.length === 0 ? (
+            ) : explorerDocs.length === 0 ? (
               <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '0.88rem' }}>
                 No documents found in <code>{selectedCollection}</code>
                 {docSearchQuery ? ` matching "${docSearchQuery}"` : ''}.
               </div>
+            ) : explorerView === 'tabulator' ? (
+              <TabulatorDataGrid
+                columns={explorerColumns}
+                data={explorerGridData}
+                pageSize={20}
+                exportFilename={`mongo-${selectedCollection}`}
+              />
             ) : (
-              docsPayload.documents.map((doc, idx) => {
+              explorerDocs.map((doc, idx) => {
                 const rawId = doc._id ?? doc.id ?? idx;
                 const docId = typeof rawId === 'object' ? JSON.stringify(rawId) : String(rawId);
                 const isExpanded = Boolean(expandedDocs[docId]);
@@ -1105,8 +1249,12 @@ export default function SuperAdminDatabaseDesk() {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+        <SmartTable
+          title="Encrypted Database Snapshots"
+          exportFilename="mongodb-snapshots"
+          defaultPageSize={10}
+        >
+          <table className="sa-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
                 <th style={{ padding: '10px 12px', color: '#475569' }}>Snapshot Archive</th>
@@ -1177,7 +1325,7 @@ export default function SuperAdminDatabaseDesk() {
               )}
             </tbody>
           </table>
-        </div>
+        </SmartTable>
       </div>
     </div>
   );

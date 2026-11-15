@@ -1,0 +1,763 @@
+/* ==========================================================================
+   AD MAFIA — ENTERPRISE SMART TABLE & TABULATOR v6 DESIGN SYSTEM
+   Works seamlessly across Light Portals (Sales, Customer, Marketing, Graphics)
+   and Dark Executive Portals (Super Admin `.sa-container`).
+   ========================================================================== */
+
+.am-smart-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+/* Flatten inner legacy card borders when wrapped inside SmartTable */
+.desk-table-card > .am-smart-table-wrap,
+.tx-table-card > .am-smart-table-wrap,
+.appr-table-card > .am-smart-table-wrap,
+.sa-table-wrap > .am-smart-table-wrap,
+.sa-card > .am-smart-table-wrap,
+.marketing-table-card > .am-smart-table-wrap,
+.graphics-table-card > .am-smart-table-wrap,
+.wallet-table-card > .am-smart-table-wrap {
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+}
+
+/* 1. Toolbar */
+.am-st-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 14px 14px 0 0;
+  flex-wrap: wrap;
+}
+
+.am-st-toolbar-left,
+.am-st-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.am-st-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 210px;
+  max-width: 290px;
+  flex: 1 1 200px;
+}
+
+.am-st-search-ico {
+  position: absolute;
+  left: 10px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.am-st-search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 28px 0 31px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 500;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.am-st-search-input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.am-st-clear-btn {
+  position: absolute;
+  right: 6px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border-radius: 4px;
+}
+
+.am-st-clear-btn:hover {
+  color: #0f172a;
+}
+
+/* Mode Segmented Switcher */
+.am-st-mode-group {
+  display: inline-flex;
+  align-items: center;
+  background: #e2e8f0;
+  padding: 3px;
+  border-radius: 9px;
+  gap: 2px;
+}
+
+.am-st-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 5px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.am-st-mode-btn.active {
+  background: #ffffff;
+  color: #4f46e5;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+}
+
+/* Standard Toolbar Action Buttons */
+.am-st-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 33px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.am-st-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.am-st-btn.active {
+  background: #eef2ff;
+  border-color: #818cf8;
+  color: #4338ca;
+}
+
+/* Column Visibility Popover */
+.am-st-col-menu-anchor {
+  position: relative;
+}
+
+.am-st-col-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  width: 230px;
+  max-width: calc(100vw - 32px);
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+  z-index: 950;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.am-st-col-dropdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 7px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.am-st-col-dropdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.am-st-col-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1e293b;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.am-st-col-check-row:hover {
+  background: #f8fafc;
+}
+
+.am-st-reset-link {
+  background: transparent;
+  border: none;
+  color: #4f46e5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* 2. Grid Scroll Viewport & Sortable Headers */
+.am-st-scroll-viewport {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.am-st-th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.am-st-sortable-th:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.am-st-sorted-th {
+  color: #4338ca !important;
+  background: #eef2ff !important;
+}
+
+.am-st-sort-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #4f46e5;
+}
+
+.am-st-filter-row th.am-st-filter-cell {
+  padding: 6px 10px !important;
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.am-st-col-filter-input {
+  width: 100%;
+  min-width: 80px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  background: #ffffff;
+  color: #0f172a;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.am-st-col-filter-input:focus {
+  border-color: #4f46e5;
+}
+
+/* Compact Density */
+.am-st-compact .am-st-enhanced-table td {
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+  font-size: 0.8rem !important;
+}
+
+/* 3. Mobile-First Stacked Card Mode (`📱 Cards`) */
+.am-st-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.am-st-mobile-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #475569;
+  flex-wrap: wrap;
+}
+
+.am-st-mobile-sort-bar select {
+  flex: 1 1 150px;
+  height: 33px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0 8px;
+}
+
+.am-st-mobile-col-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.am-st-mobile-filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.am-st-mobile-filter-item label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.am-st-mobile-filter-item input {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.am-st-record-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 13px 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.am-st-record-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+}
+
+.am-st-record-primary {
+  font-weight: 700;
+  color: #0f172a;
+  min-width: 0;
+  flex: 1 1 180px;
+  word-break: break-word;
+}
+
+.am-st-record-status {
+  flex-shrink: 0;
+}
+
+.am-st-record-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.am-st-record-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.am-st-record-label {
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.am-st-record-val {
+  font-size: 0.82rem;
+  color: #1e293b;
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.am-st-record-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 9px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.am-st-record-actions > div {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  width: 100%;
+}
+
+.am-st-record-actions button,
+.am-st-record-actions a {
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 36px;
+}
+
+.am-st-empty-card {
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+/* 4. Pagination Footer */
+.am-st-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 0 0 14px 14px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: #475569;
+}
+
+.am-st-page-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.am-st-pagesize-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.am-st-pagesize-select {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.am-st-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.am-st-page-btn {
+  min-width: 31px;
+  height: 31px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.am-st-page-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.am-st-page-btn.active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #ffffff;
+}
+
+.am-st-page-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* 5. Native Tabulator v6 Overrides */
+.am-tabulator-native-shell {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.am-tabulator-native-subbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  background: #eef2ff;
+  border-bottom: 1px solid #c7d2fe;
+  flex-wrap: wrap;
+}
+
+.am-tabulator-engine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #4338ca;
+}
+
+.am-tabulator-mount .tabulator {
+  border: none !important;
+  background: #ffffff !important;
+  font-family: inherit !important;
+  font-size: 0.82rem !important;
+}
+
+.am-tabulator-mount .tabulator-header {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  color: #334155 !important;
+  font-weight: 800 !important;
+}
+
+.am-tabulator-mount .tabulator-col {
+  background: #f8fafc !important;
+  border-right: 1px solid #f1f5f9 !important;
+}
+
+.am-tabulator-mount .tabulator-header-filter input {
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  padding: 4px 7px !important;
+  font-size: 0.74rem !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.am-tabulator-mount .tabulator-footer {
+  background: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+/* ==========================================================================
+   DARK THEME ADAPTATION FOR SUPER ADMIN (`.sa-container`)
+   ========================================================================== */
+.sa-container .am-smart-table-wrap {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+.sa-container .am-st-toolbar,
+.sa-container .am-st-pagination-bar {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
+}
+
+.sa-container .am-st-search-input,
+.sa-container .am-st-btn,
+.sa-container .am-st-pagesize-select,
+.sa-container .am-st-page-btn,
+.sa-container .am-st-col-filter-input,
+.sa-container .am-st-mobile-sort-bar select,
+.sa-container .am-st-mobile-filter-item input {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(148, 163, 184, 0.24);
+  color: #f8fafc;
+}
+
+.sa-container .am-st-page-btn.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #ffffff;
+}
+
+.sa-container .am-st-mode-group {
+  background: rgba(30, 41, 59, 0.95);
+}
+
+.sa-container .am-st-mode-btn {
+  color: #94a3b8;
+}
+
+.sa-container .am-st-mode-btn.active {
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+.sa-container .am-st-col-dropdown {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.sa-container .am-st-col-check-row {
+  color: #e2e8f0;
+}
+
+.sa-container .am-st-col-check-row:hover {
+  background: rgba(51, 65, 85, 0.5);
+}
+
+.sa-container .am-st-cards-list {
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.sa-container .am-st-record-card {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.sa-container .am-st-record-card-head {
+  border-bottom-color: rgba(148, 163, 184, 0.14);
+}
+
+.sa-container .am-st-record-primary,
+.sa-container .am-st-record-val {
+  color: #f1f5f9;
+}
+
+.sa-container .am-st-record-actions {
+  border-top-color: rgba(148, 163, 184, 0.18);
+}
+
+.sa-container .am-st-sortable-th:hover {
+  background: rgba(51, 65, 85, 0.65) !important;
+  color: #ffffff !important;
+}
+
+.sa-container .am-st-sorted-th {
+  background: rgba(79, 70, 229, 0.28) !important;
+  color: #c7d2fe !important;
+}
+
+.sa-container .am-st-filter-row th.am-st-filter-cell {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border-bottom-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+/* ==========================================================================
+   RESPONSIVE BREAKPOINTS FOR SMART TABLE
+   ========================================================================== */
+@media (max-width: 640px) {
+  .am-st-toolbar {
+    padding: 9px 10px;
+    gap: 8px;
+  }
+
+  .am-st-toolbar-left {
+    width: 100%;
+  }
+
+  .am-st-search-box {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .am-st-mode-group {
+    flex: 1 1 auto;
+    justify-content: space-between;
+  }
+
+  .am-st-mode-btn {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 6px 6px;
+  }
+
+  .am-st-toolbar-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .am-st-hide-sm {
+    display: none !important;
+  }
+
+  .am-st-pagination-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .am-st-page-info {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .am-st-page-controls {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .am-st-hide-xs {
+    display: none !important;
+  }
+
+  .am-st-record-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
