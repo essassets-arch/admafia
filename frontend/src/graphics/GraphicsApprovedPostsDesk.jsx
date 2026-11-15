@@ -24,7 +24,7 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'table'
+  const [viewMode, setViewMode] = useState('table'); // 'grid' | 'table'
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 30, totalPages: 1 });
 
   // Fullscreen Preview Modal

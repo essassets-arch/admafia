@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { SmartTable } from '../components/SmartTabulator';
 import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion';
 
 function downloadFollowUpsCsv(rows, filenamePrefix = 'followups-queue') {
@@ -27,9 +28,19 @@ function downloadFollowUpsCsv(rows, filenamePrefix = 'followups-queue') {
 }
 
 // Helpers
-function formatMinimalMaskedPhone(phone, maskedPhone) {
+function formatMinimalMaskedPhone(phone, maskedPhone, isUnmasked = true) {
+  if (!isUnmasked) {
+    if (maskedPhone && /[*•X]/i.test(String(maskedPhone))) {
+      return maskedPhone;
+    }
+    const maskedDigits = String(phone || '').replace(/\D/g, '').slice(-10);
+    if (maskedDigits.length === 10) {
+      return `+91 ${maskedDigits.slice(0, 2)}••••••${maskedDigits.slice(-2)}`;
+    }
+    return maskedPhone || '+91 98••••••23';
+  }
   if (phone) {
-    const digits = phone.replace(/\D/g, '').slice(-10);
+    const digits = String(phone).replace(/\D/g, '').slice(-10);
     return digits.length === 10 ? `+91 ${digits}` : phone;
   }
   return maskedPhone || '+91 9820011223';
@@ -67,8 +78,6 @@ export default function FollowUpsQueue({
   const [search, setSearch] = useState('');
   const [viewFilter, setViewFilter] = useState('active'); // 'active' | 'dropped'
   const [unmaskedMap, setUnmaskedMap] = useState({});
-  const [pageSize, setPageSize] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
 
   const currencySymbol = customer?.currencySymbol || (String(customer?.currency || 'INR').toUpperCase() === 'USD' ? '$' : '₹');
 
@@ -137,25 +146,6 @@ export default function FollowUpsQueue({
     return true;
   });
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, viewFilter, pageSize]);
-
-  const totalFilteredCount = filteredLeads.length;
-  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
-  const safePage = Math.min(Math.max(1, currentPage), totalPages);
-  const startIdx = (safePage - 1) * pageSize;
-  const endIdx = Math.min(startIdx + pageSize, totalFilteredCount);
-  const paginatedLeads = filteredLeads.slice(startIdx, endIdx);
-
-  const pageNumbers = [];
-  const winStart = Math.max(1, safePage - 2);
-  const winEnd = Math.min(totalPages, winStart + 4);
-  const adjStart = Math.max(1, winEnd - 4);
-  for (let p = adjStart; p <= winEnd; p += 1) {
-    pageNumbers.push(p);
-  }
-
   const handleExportCsv = () => {
     if (filteredLeads.length === 0) return;
     const csvRows = filteredLeads.map((item) => ({
@@ -170,7 +160,7 @@ export default function FollowUpsQueue({
   };
 
   return (
-    <div className="portal-followups-feed-page">
+    <div className="portal-followups-feed-page followups-page-wrap">
       {/* 1. Breadcrumbs */}
       <div className="overview-top-breadcrumb-bar">
         <div className="breadcrumb-line">
@@ -316,292 +306,348 @@ export default function FollowUpsQueue({
         </div>
       </div>
 
-      {/* 4. Proper UI List View Card Container */}
-      <div className="proper-list-view-card">
-        {/* Table Header Row */}
-        <div className="list-view-table-header">
-          <div className="col-phone">PHONE NUMBER</div>
-          <div className="col-status">STATUS</div>
-          <div className="col-time">SCHEDULED AT</div>
-          <div className="col-actions">QUICK ACTIONS</div>
-        </div>
-
-        {/* List Items */}
-        <div className="list-view-items-stack">
-          {filteredLeads.length === 0 ? (
-            <div className="proper-list-empty-state">
-              <div className="empty-icon">
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8">
-                  {viewFilter === 'dropped' ? (
-                    <>
-                      <circle cx="11" cy="11" r="8"/>
-                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    </>
-                  ) : (
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                  )}
-                </svg>
-              </div>
-              <h3>{viewFilter === 'dropped' ? 'No dropped leads' : 'No follow-up leads in queue'}</h3>
-              <p>
-                {viewFilter === 'dropped'
-                  ? 'There are currently no dropped leads.'
-                  : 'Click "In Follow-up" on any lead in the Lead Pipeline to move it here.'}
-              </p>
-            </div>
-          ) : (
-            paginatedLeads.map((item) => {
-              const cleanDigits = (item.phone || '').replace(/[^\d]/g, '');
-              const targetOrg = item.company || item.assignedCompany || customer?.companyName || customer?.name || 'our team';
-              const waGreeting = `https://wa.me/${cleanDigits}?text=Hello,%20thank%20you%20for%20your%20inquiry%20with%20${encodeURIComponent(targetOrg)}.`;
-              const isUnmasked = unmaskedMap[item.id];
-              const displayPhone = formatMinimalMaskedPhone(item.phone, item.maskedPhone, isUnmasked);
-              const displayTime = formatMinimalDateTime(item.createdAt);
-
-              return (
-                <div
-                  key={item.id}
-                  className="proper-list-row is-followup-row"
-                >
-                  {/* Col 1: Phone */}
-                  <div className="col-phone">
-                    <div className="phone-icon-circle fup">
-                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+      {/* 4. Tabulator Data Grid for Follow-ups Queue */}
+      <SmartTable
+        title="Follow-ups Queue"
+        defaultPageSize={15}
+        exportFilename="followups-queue"
+      >
+        <table className="cp-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th>Prospect Mobile</th>
+              <th>Queue Status</th>
+              <th>Security / Gate Status</th>
+              <th>Received Time</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredLeads.length === 0 ? (
+              <tr>
+                <td colSpan={5}>
+                  <div className="proper-list-empty-state" style={{ padding: '32px 20px' }}>
+                    <div className="empty-icon">
+                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8">
+                        {viewFilter === 'dropped' ? (
+                          <>
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                          </>
+                        ) : (
+                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                        )}
                       </svg>
                     </div>
+                    <h3>{viewFilter === 'dropped' ? 'No dropped leads' : 'No follow-up leads in queue'}</h3>
+                    <p>
+                      {viewFilter === 'dropped'
+                        ? 'There are currently no dropped leads.'
+                        : 'Click "In Follow-up" on any lead in the Lead Pipeline to move it here.'}
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              filteredLeads.map((item, idx) => {
+                const hasDialablePhone = Boolean(item.phone && !/[*•X]/i.test(String(item.phone)));
+                const cleanDigits = String(item.phone || '').replace(/[^\d]/g, '');
+                const waPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+                const targetOrg = item.company || item.assignedCompany || customer?.companyName || customer?.name || 'Ad Mafia';
+                const waGreeting = `https://wa.me/${waPhone}?text=Hello,%20thank%20you%20for%20your%20inquiry%20with%20${encodeURIComponent(targetOrg)}.`;
+                const isUnmasked =
+                  unmaskedMap[item.id] !== undefined
+                    ? Boolean(unmaskedMap[item.id])
+                    : item.unmasked !== undefined
+                    ? Boolean(item.unmasked)
+                    : hasDialablePhone;
+                const displayPhone = formatMinimalMaskedPhone(item.phone, item.maskedPhone, isUnmasked);
+                const displayTime = formatMinimalDateTime(item.createdAt);
+                const canContact = isUnmasked && hasDialablePhone;
+                const btnCompact = { height: 30, padding: '0 10px', fontSize: '0.76rem', borderRadius: 7 };
 
-                    <div className="phone-text-wrap">
-                      <div className="phone-digits-line">
-                        <span className="phone-strong">{displayPhone}</span>
+                return (
+                  <tr
+                    key={item.id || `fup_lead_${idx}`}
+                    style={!item.read ? { background: '#fbfdff' } : undefined}
+                  >
+                    {/* Col 1: Prospect Mobile */}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <div
+                          className="phone-icon-circle fup"
+                          style={{ width: 34, height: 34, borderRadius: 10, position: 'relative' }}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                          </svg>
+                          {!item.read && (
+                            <span
+                              aria-hidden="true"
+                              style={{
+                                position: 'absolute',
+                                top: -2,
+                                right: -2,
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                background: '#2563eb',
+                                border: '1.5px solid #ffffff',
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        <div className="phone-text-wrap" style={{ gap: 3 }}>
+                          <div className="phone-digits-line" style={{ flexWrap: 'wrap', gap: 6 }}>
+                            <span className="phone-strong" style={{ fontSize: '0.94rem' }}>
+                              {displayPhone}
+                            </span>
+                            {item.unmasked === false && hasDialablePhone && (
+                              <button
+                                type="button"
+                                className="btn-phone-eye-toggle"
+                                onClick={() => togglePhoneReveal(item.id)}
+                                title={isUnmasked ? 'Hide phone number' : 'Reveal phone number'}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                  <circle cx="12" cy="12" r="3" />
+                                </svg>
+                              </button>
+                            )}
+                            {!item.read && <span className="unread-micro-tag">NEW</span>}
+                          </div>
+                        </div>
                       </div>
+                    </td>
+
+                    {/* Col 2: Queue Status */}
+                    <td>
                       {item.status === 'Dropped' ? (
-                        <span className="fup-status-tag" style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}>
+                        <span
+                          className="proper-step-badge"
+                          style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}
+                        >
                           Dropped Lead
                         </span>
                       ) : (
-                        <span className="fup-status-tag">In Callback Queue</span>
+                        <span
+                          className="proper-step-badge"
+                          style={{ background: '#fdf2f8', color: '#be185d', borderColor: '#fbcfe8' }}
+                        >
+                          In Callback Queue
+                        </span>
                       )}
-                    </div>
-                  </div>
+                    </td>
 
-                  {/* Col 2: Dynamic Security Status */}
-                  <div className="col-status">
-                    {item.status === 'Dropped' ? (
-                      <span className="proper-step-badge" style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="15" y1="9" x2="9" y2="15" />
-                          <line x1="9" y1="9" x2="15" y2="15" />
-                        </svg>
-                        <span>Dropped Lead</span>
-                      </span>
-                    ) : isFullyComplete ? (
-                      <span className="proper-step-badge" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        <span>Active Lead ✓</span>
-                      </span>
-                    ) : isPaymentDone ? (
-                      <span className="proper-step-badge" style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} />
-                        <span>Step 2 Required</span>
-                      </span>
-                    ) : (
-                      <span className="proper-step-badge">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2.5">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                        </svg>
-                        <span>Step 1 Required</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Col 3: Time */}
-                  <div className="col-time">
-                    <div className="time-display-wrap">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <polyline points="12 6 12 12 16 14"/>
-                      </svg>
-                      <span>{displayTime}</span>
-                    </div>
-                  </div>
-
-                  {/* Col 4: Actions Row */}
-                  <div className="col-actions">
-                    <div className="list-actions-group">
-                      {/* 1. Call */}
-                      <a
-                        href={`tel:${item.phone}`}
-                        className="btn-list-action call"
-                        title={`Call ${displayPhone}`}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                        </svg>
-                        <span>Call</span>
-                      </a>
-
-                      {/* 2. Chat */}
-                      <a
-                        href={waGreeting}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn-list-action chat"
-                        title="Chat on WhatsApp"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-                        </svg>
-                        <span>Chat</span>
-                      </a>
-
-                      {/* If Dropped, show Restore to Follow-up and Move to Pipeline; else standard actions */}
+                    {/* Col 3: Security / Gate Status */}
+                    <td>
                       {item.status === 'Dropped' ? (
-                        <>
-                          <button
-                            type="button"
-                            className="btn-list-action restore"
-                            onClick={() => handleRestoreToFollowUp(item.id)}
-                            title="Restore lead back to follow-ups queue"
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-                              <polyline points="1 4 1 10 7 10" />
-                              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                            </svg>
-                            <span>Restore</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            className="btn-list-action followup"
-                            onClick={() => handleRestoreToPipeline(item.id)}
-                            title="Restore lead and move to active Lead Pipeline"
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                              <polyline points="15 18 9 12 15 6" />
-                            </svg>
-                            <span>To Pipeline</span>
-                          </button>
-                        </>
+                        <span className="proper-step-badge" style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="15" y1="9" x2="9" y2="15" />
+                            <line x1="9" y1="9" x2="15" y2="15" />
+                          </svg>
+                          <span>Dropped Lead</span>
+                        </span>
+                      ) : isFullyComplete ? (
+                        <span className="proper-step-badge" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          <span>Active Lead ✓</span>
+                        </span>
+                      ) : isPaymentDone ? (
+                        <span className="proper-step-badge" style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} />
+                          <span>Step 2 Required</span>
+                        </span>
                       ) : (
-                        <>
-                          {/* 3. In Follow-up / Move back */}
-                          <button
-                            type="button"
-                            className="btn-list-action followup in-fup"
-                            onClick={() => handleMoveBackToLeads(item.id)}
-                            title="Lead is in follow-up. Click to move back to active leads pipeline."
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                              <polyline points="15 18 9 12 15 6" />
-                            </svg>
-                            <span>In Follow-up</span>
-                          </button>
-
-                          {/* 4. Read (Permanent: once read, stays read) */}
-                          <button
-                            type="button"
-                            className={`btn-list-action read ${item.read ? 'is-read' : ''}`}
-                            onClick={() => handleToggleRead(item)}
-                            disabled={Boolean(item.read)}
-                            title={item.read ? 'Lead Read' : 'Mark as Read'}
-                            style={item.read ? { cursor: 'default', opacity: 0.85 } : undefined}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                              {item.read ? (
-                                <polyline points="20 6 9 17 4 12" />
-                              ) : (
-                                <>
-                                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                  <circle cx="12" cy="12" r="3"/>
-                                </>
-                              )}
-                            </svg>
-                            <span>{item.read ? 'Read ✓' : 'Mark Read'}</span>
-                          </button>
-
-                          {/* 5. Drop */}
-                          <button
-                            type="button"
-                            className="btn-list-action drop"
-                            onClick={() => handleDrop(item.id)}
-                            title="Drop lead and remove from follow-ups"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                              <circle cx="8.5" cy="7" r="4"/>
-                              <line x1="23" y1="11" x2="17" y2="11"/>
-                            </svg>
-                            <span>Drop</span>
-                          </button>
-                        </>
+                        <span className="proper-step-badge">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2.5">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                          <span>Step 1 Required</span>
+                        </span>
                       )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                    </td>
 
-        {/* 5. Pagination & Per-Page Footer Bar */}
-        {totalFilteredCount > 0 && (
-          <div className="portal-leads-pagination-bar">
-            <div className="portal-leads-page-summary">
-              <span>
-                Showing <strong>{startIdx + 1}</strong>–<strong>{endIdx}</strong> of <strong>{totalFilteredCount}</strong> {totalFilteredCount === 1 ? 'lead' : 'leads'}
-              </span>
-              <label className="portal-leads-pagesize-label">
-                <span>Per page:</span>
-                <select
-                  className="portal-leads-pagesize-select"
-                  value={pageSize}
-                  onChange={(e) => setPageSize(Number(e.target.value))}
-                >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-              </label>
-            </div>
+                    {/* Col 4: Received Time */}
+                    <td>
+                      <div className="time-display-wrap">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        <span>{displayTime}</span>
+                      </div>
+                    </td>
 
-            <div className="portal-leads-page-controls">
-              <button
-                type="button"
-                className="portal-leads-page-btn nav-btn"
-                disabled={safePage <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              >
-                ‹ Prev
-              </button>
+                    {/* Col 5: Actions */}
+                    <td style={{ textAlign: 'right' }}>
+                      <div className="list-actions-group" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                        {/* 1. Call */}
+                        {canContact ? (
+                          <a
+                            href={`tel:${item.phone}`}
+                            className="btn-list-action call"
+                            style={btnCompact}
+                            title={`Call ${displayPhone}`}
+                            onClick={() => handleToggleRead(item)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                            </svg>
+                            <span>Call</span>
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-list-action call"
+                            disabled
+                            style={{ ...btnCompact, opacity: 0.5, cursor: 'not-allowed' }}
+                            title="Unlock prospect contact to initiate call"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                            <span>Call</span>
+                          </button>
+                        )}
 
-              {pageNumbers.map((pNum) => (
-                <button
-                  key={pNum}
-                  type="button"
-                  className={`portal-leads-page-btn ${pNum === safePage ? 'active' : ''}`}
-                  onClick={() => setCurrentPage(pNum)}
-                >
-                  {pNum}
-                </button>
-              ))}
+                        {/* 2. Chat */}
+                        {canContact ? (
+                          <a
+                            href={waGreeting}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn-list-action chat"
+                            style={btnCompact}
+                            title="Chat on WhatsApp"
+                            onClick={() => handleToggleRead(item)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                            </svg>
+                            <span>Chat</span>
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-list-action chat"
+                            disabled
+                            style={{ ...btnCompact, opacity: 0.5, cursor: 'not-allowed' }}
+                            title="Unlock prospect contact to chat on WhatsApp"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                            <span>Chat</span>
+                          </button>
+                        )}
 
-              <button
-                type="button"
-                className="portal-leads-page-btn nav-btn"
-                disabled={safePage >= totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              >
-                Next ›
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+                        {/* If Dropped, show Restore to Follow-up and To Pipeline; else Move to Leads + Mark Read + Drop */}
+                        {item.status === 'Dropped' ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-list-action restore"
+                              style={btnCompact}
+                              onClick={() => handleRestoreToFollowUp(item.id)}
+                              title="Restore lead back to follow-ups queue"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                                <polyline points="1 4 1 10 7 10" />
+                                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                              </svg>
+                              <span>Restore</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="btn-list-action followup"
+                              style={btnCompact}
+                              onClick={() => handleRestoreToPipeline(item.id)}
+                              title="Restore lead and move to active Lead Pipeline"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                <polyline points="15 18 9 12 15 6" />
+                              </svg>
+                              <span>To Pipeline</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {/* 3. Move back to active leads */}
+                            <button
+                              type="button"
+                              className="btn-list-action followup in-fup"
+                              style={btnCompact}
+                              onClick={() => handleMoveBackToLeads(item.id)}
+                              title="Move lead back to active Lead Pipeline"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                <polyline points="15 18 9 12 15 6" />
+                              </svg>
+                              <span>Move to Leads</span>
+                            </button>
+
+                            {/* 4. Read (Permanent: once read, stays read) */}
+                            <button
+                              type="button"
+                              className={`btn-list-action read ${item.read ? 'is-read' : ''}`}
+                              style={{
+                                ...btnCompact,
+                                ...(item.read ? { cursor: 'default', opacity: 0.85 } : {}),
+                              }}
+                              onClick={() => handleToggleRead(item)}
+                              disabled={Boolean(item.read)}
+                              title={item.read ? 'Lead Read' : 'Mark as Read'}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                {item.read ? (
+                                  <polyline points="20 6 9 17 4 12" />
+                                ) : (
+                                  <>
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                  </>
+                                )}
+                              </svg>
+                              <span>{item.read ? 'Read ✓' : 'Mark Read'}</span>
+                            </button>
+
+                            {/* 5. Drop */}
+                            <button
+                              type="button"
+                              className="btn-list-action drop"
+                              style={btnCompact}
+                              onClick={() => handleDrop(item.id)}
+                              title="Drop lead and remove from follow-ups"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                <circle cx="8.5" cy="7" r="4" />
+                                <line x1="23" y1="11" x2="17" y2="11" />
+                              </svg>
+                              <span>Drop</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </SmartTable>
     </div>
   );
 }

@@ -449,7 +449,9 @@
 }
 
 .am-tabulator-mount.am-tab-is-empty .tabulator-tableholder {
-  display: none !important;
+  min-height: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
 }
 
 .am-tab-empty-overlay {

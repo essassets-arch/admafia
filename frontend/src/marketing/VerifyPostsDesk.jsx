@@ -453,7 +453,11 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
       {/* 4. History Modal */}
       {historyPost && (
         <div className="marketing-modal-backdrop" onClick={() => setHistoryPost(null)}>
-          <div className="marketing-modal-box" style={{ maxWidth: '680px' }} onClick={(e) => e.stopPropagation()}>
+          <div
+            className="marketing-modal-box"
+            style={{ maxWidth: '820px', width: '100%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="marketing-modal-header">
               <div>
                 <h3 style={{ margin: 0 }}>Review &amp; Revision Audit Trail</h3>
@@ -474,67 +478,95 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                 <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                   <RefreshCw size={18} className="spin" /> Loading audit history...
                 </div>
-              ) : historyData.reviews.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                  No prior reviews recorded for this post yet.
-                </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {historyData.reviews.map((rev) => (
-                    <div
-                      key={rev.id}
-                      style={{
-                        padding: '14px',
-                        borderRadius: '10px',
-                        border: '1.5px solid #e2e8f0',
-                        background: '#f8fafc',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <span
-                          className={`mkt-pill ${
-                            rev.decision === 'Approved'
-                              ? 'mkt-pill-green'
-                              : rev.decision === 'Changes Requested'
-                              ? 'mkt-pill-amber'
-                              : 'mkt-pill-rose'
-                          }`}
-                        >
-                          {rev.decision}
-                        </span>
-                        <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                          {new Date(rev.created_at).toLocaleString('en-IN', {
-                            timeZone: 'Asia/Kolkata',
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true,
-                          })}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a', marginBottom: '4px' }}>
-                        Auditor: {rev.reviewer_name} ({rev.reviewer_role})
-                      </div>
-                      {rev.remarks && (
-                        <div style={{ fontSize: '0.84rem', color: '#475569', marginBottom: '4px' }}>
-                          Remarks: {rev.remarks}
-                        </div>
+                <SmartTable
+                  title="Post Review History"
+                  defaultPageSize={8}
+                  exportFilename="post-review-history"
+                >
+                  <table className="marketing-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th>Decision</th>
+                        <th>Reviewer</th>
+                        <th>Feedback / Corrections</th>
+                        <th>Reviewed At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyData.reviews.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                            No prior reviews recorded for this post yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        historyData.reviews.map((rev, idx) => (
+                          <tr key={rev.id || idx}>
+                            <td>
+                              <span
+                                className={`mkt-pill ${
+                                  rev.decision === 'Approved'
+                                    ? 'mkt-pill-green'
+                                    : rev.decision === 'Changes Requested'
+                                    ? 'mkt-pill-amber'
+                                    : 'mkt-pill-rose'
+                                }`}
+                              >
+                                {rev.decision}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
+                                {rev.reviewer_name || rev.reviewerName || 'Marketing Auditor'}
+                              </div>
+                              {(rev.reviewer_role || rev.reviewerRole) && (
+                                <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                  {rev.reviewer_role || rev.reviewerRole}
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.82rem' }}>
+                                {rev.remarks && (
+                                  <div style={{ color: '#475569' }}>{rev.remarks}</div>
+                                )}
+                                {rev.rejection_reason && (
+                                  <div style={{ color: '#dc2626', fontWeight: 600 }}>
+                                    Reason: {rev.rejection_reason}
+                                  </div>
+                                )}
+                                {rev.correction_instructions && (
+                                  <div style={{ color: '#b45309', fontWeight: 600 }}>
+                                    Instructions: {rev.correction_instructions}
+                                  </div>
+                                )}
+                                {!rev.remarks && !rev.rejection_reason && !rev.correction_instructions && (
+                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                                {rev.created_at
+                                  ? new Date(rev.created_at).toLocaleString('en-IN', {
+                                      timeZone: 'Asia/Kolkata',
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      hour12: true,
+                                    })
+                                  : '—'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
                       )}
-                      {rev.rejection_reason && (
-                        <div style={{ fontSize: '0.84rem', color: '#dc2626', fontWeight: 600 }}>
-                          Reason: {rev.rejection_reason}
-                        </div>
-                      )}
-                      {rev.correction_instructions && (
-                        <div style={{ fontSize: '0.84rem', color: '#b45309', fontWeight: 600 }}>
-                          Instructions: {rev.correction_instructions}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    </tbody>
+                  </table>
+                </SmartTable>
               )}
             </div>
             <div className="marketing-modal-footer">

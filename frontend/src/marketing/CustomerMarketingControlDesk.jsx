@@ -53,6 +53,10 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
   const [savingPacing, setSavingPacing] = useState(false);
   const [processingPacing, setProcessingPacing] = useState(false);
 
+  // Campaign History Modal State
+  const [historyModalCustomer, setHistoryModalCustomer] = useState(null);
+  const [historyCampaigns, setHistoryCampaigns] = useState([]);
+
   // Today calculation (Monday = 0 ... Sunday = 6)
   const currentDayIdx = (new Date().getDay() + 6) % 7;
   const todayItem = DAYS_OF_WEEK[currentDayIdx] || DAYS_OF_WEEK[0];
@@ -503,33 +507,8 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
 
   // View Customer Campaign History Modal
   const handleViewCampaignHistory = (cust, custCampaigns) => {
-    const listHtml = custCampaigns.map((camp, idx) => `
-      <div style="text-align: left; padding: 12px; margin-bottom: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <strong style="color: #0f172a; font-size: 0.92rem;">${idx + 1}. ${camp.name}</strong>
-          <span style="font-size: 0.74rem; font-weight: 800; padding: 2px 8px; border-radius: 9999px; background: ${camp.status === 'Running' ? '#ecfdf5' : '#f1f5f9'}; color: ${camp.status === 'Running' ? '#059669' : '#64748b'};">
-            ${camp.status}
-          </span>
-        </div>
-        <div style="font-size: 0.82rem; color: #475569; margin-top: 4px;">
-          Daily Burn Rate: <strong>₹${camp.dailyBudget}/day</strong> • Platform: <strong>${camp.platform}</strong>
-        </div>
-        <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">
-          Last action: ${camp.lastAction || 'Created'} by ${camp.lastActor || 'Operator'}
-        </div>
-      </div>
-    `).join('');
-
-    Swal.fire({
-      title: `Campaign History: ${cust.name}`,
-      html: `
-        <div style="max-height: 380px; overflow-y: auto; padding-right: 4px;">
-          ${listHtml || '<p style="color:#64748b">No campaign history recorded yet.</p>'}
-        </div>
-      `,
-      confirmButtonText: 'Close',
-      confirmButtonColor: '#4f46e5',
-    });
+    setHistoryModalCustomer(cust);
+    setHistoryCampaigns(Array.isArray(custCampaigns) ? custCampaigns : []);
   };
 
   return (
@@ -1260,6 +1239,131 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Campaign History Modal */}
+      {historyModalCustomer && (
+        <div
+          className="marketing-modal-backdrop"
+          onClick={() => {
+            setHistoryModalCustomer(null);
+            setHistoryCampaigns([]);
+          }}
+        >
+          <div
+            className="marketing-modal-box"
+            style={{ maxWidth: '860px', width: '100%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="marketing-modal-header">
+              <div>
+                <h3 style={{ margin: 0 }}>Campaign History: {historyModalCustomer.name}</h3>
+                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                  Customer ID: {historyModalCustomer.id} • {historyCampaigns.length} recorded campaign(s)
+                </span>
+              </div>
+              <button
+                type="button"
+                className="marketing-btn-close"
+                onClick={() => {
+                  setHistoryModalCustomer(null);
+                  setHistoryCampaigns([]);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="marketing-modal-body">
+              <SmartTable
+                title="Campaign History"
+                defaultPageSize={8}
+                exportFilename="campaign-history"
+              >
+                <table className="marketing-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th>Campaign Name</th>
+                      <th>Status</th>
+                      <th>Daily Budget</th>
+                      <th>Channel</th>
+                      <th>Last Action</th>
+                      <th>Actor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyCampaigns.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                          No campaign history recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      historyCampaigns.map((camp, idx) => (
+                        <tr key={camp.id || idx}>
+                          <td>
+                            <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>
+                              {camp.name || 'Untitled Campaign'}
+                            </strong>
+                            {camp.objective && (
+                              <div className="mkt-cell-sub">{camp.objective}</div>
+                            )}
+                          </td>
+                          <td>
+                            <span
+                              className={`mkt-pill ${
+                                camp.status === 'Running'
+                                  ? 'mkt-pill-green'
+                                  : camp.status === 'Draft'
+                                  ? 'mkt-pill-amber'
+                                  : 'mkt-pill-slate'
+                              }`}
+                            >
+                              {camp.status || 'Draft'}
+                            </span>
+                          </td>
+                          <td>
+                            <strong style={{ color: '#0f172a' }}>
+                              ₹{Number(camp.dailyBudget || 0).toLocaleString('en-IN')}/day
+                            </strong>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: '0.82rem', color: '#334155' }}>
+                              {camp.platform || 'Meta Ads'}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: '0.82rem', color: '#475569' }}>
+                              {camp.lastAction || 'Created'}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: '0.80rem', color: '#64748b' }}>
+                              {camp.lastActor || camp.actor || 'Operator'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </SmartTable>
+            </div>
+
+            <div className="marketing-modal-footer">
+              <button
+                type="button"
+                className="marketing-btn-primary"
+                onClick={() => {
+                  setHistoryModalCustomer(null);
+                  setHistoryCampaigns([]);
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

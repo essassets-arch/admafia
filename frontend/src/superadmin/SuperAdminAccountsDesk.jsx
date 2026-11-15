@@ -665,7 +665,11 @@ export default function SuperAdminAccountsDesk() {
       {/* 6. Status History Drawer / Modal */}
       {historyTarget && (
         <div className="sa-modal-backdrop" onClick={() => setHistoryTarget(null)}>
-          <div className="sa-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="sa-modal-card"
+            style={{ maxWidth: '760px', width: '100%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="sa-modal-header">
               <div>
                 <span className="sa-pill sa-pill-indigo">Status Change Audit Trail</span>
@@ -689,49 +693,70 @@ export default function SuperAdminAccountsDesk() {
                   <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                   <div>Loading status history...</div>
                 </div>
-              ) : statusHistory.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
-                  No prior status changes recorded for this account.
-                </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {statusHistory.map((h) => (
-                    <div
-                      key={h.id}
-                      style={{
-                        padding: 12,
-                        borderRadius: 8,
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span className="sa-pill sa-pill-slate">{h.previous_status}</span>
-                          <span>→</span>
-                          <span className={`sa-pill ${h.new_status === 'active' ? 'sa-pill-green' : 'sa-pill-rose'}`}>
-                            {h.new_status}
-                          </span>
-                        </div>
-                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-                          {new Date(h.created_at).toLocaleString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.82rem', color: '#0f172a', marginTop: 6 }}>
-                        Reason: <strong>{h.reason}</strong>
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
-                        Action by: {h.changed_by}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <SmartTable
+                  title="Account Status History"
+                  defaultPageSize={8}
+                  exportFilename="account-status-history"
+                >
+                  <table className="sa-table">
+                    <thead>
+                      <tr>
+                        <th>Transition</th>
+                        <th>Changed By</th>
+                        <th>Reason</th>
+                        <th>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statusHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
+                            No prior status changes recorded for this account.
+                          </td>
+                        </tr>
+                      ) : (
+                        statusHistory.map((h, idx) => (
+                          <tr key={h.id || idx}>
+                            <td>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <span className="sa-pill sa-pill-slate">{h.previous_status || '—'}</span>
+                                <span style={{ color: '#64748b', fontWeight: 700 }}>→</span>
+                                <span
+                                  className={`sa-pill ${
+                                    h.new_status === 'active' ? 'sa-pill-green' : 'sa-pill-rose'
+                                  }`}
+                                >
+                                  {h.new_status || '—'}
+                                </span>
+                              </div>
+                            </td>
+                            <td>
+                              <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>
+                                {h.changed_by || 'Super Admin'}
+                              </strong>
+                            </td>
+                            <td style={{ fontSize: '0.82rem', color: '#334155' }}>
+                              {h.reason || '—'}
+                            </td>
+                            <td style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                              {h.created_at
+                                ? new Date(h.created_at).toLocaleString('en-IN', {
+                                    timeZone: 'Asia/Kolkata',
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : '—'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </SmartTable>
               )}
             </div>
 

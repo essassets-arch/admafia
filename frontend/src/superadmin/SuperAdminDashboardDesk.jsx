@@ -310,8 +310,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
         </div>
       </div>
 
-      {/* 4. Split Grid: Recent Financial Transactions & Recent Audit Actions */}
-      <div className="sa-split-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 24 }}>
+      {/* 4. Full-Width Stacked Tables: Recent Financial Transactions & Admin Governance Audit */}
+      <div className="sa-split-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
         {/* Recent Transactions */}
         <div className="sa-table-card">
           <div
@@ -415,55 +415,79 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
               type="button"
               className="sa-btn-secondary"
               style={{ padding: '4px 10px', fontSize: '0.76rem' }}
-              onClick={() => onNavigateToDesk && onNavigateToDesk('audit_logs')}
+              onClick={() => (onNavigateToDesk ? onNavigateToDesk('audit_logs') : nav && nav('audit_logs'))}
             >
               All Logs
             </button>
           </div>
 
-          <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {recentAuditActions.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 28, color: '#94a3b8' }}>
-                No administrative actions logged yet.
-              </div>
-            ) : (
-              recentAuditActions.map((log) => (
-                <div
-                  key={log.id}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 3,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="sa-pill sa-pill-indigo" style={{ fontSize: '0.68rem' }}>
-                      {log.action_type.replace(/_/g, ' ')}
-                    </span>
-                    <span style={{ fontSize: '0.70rem', color: '#94a3b8' }}>
-                      {new Date(log.created_at).toLocaleTimeString('en-IN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true,
-                      })}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.80rem', color: '#0f172a', fontWeight: 600, marginTop: 2 }}>
-                    By {log.actor_name} on {log.target_type} ({log.target_id})
-                  </div>
-                  {log.reason && (
-                    <div style={{ fontSize: '0.74rem', color: '#64748b', fontStyle: 'italic' }}>
-                      "{log.reason}"
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+          <SmartTable
+            title="Admin Governance Audit"
+            defaultPageSize={8}
+            exportFilename="admin-governance-audit"
+          >
+            <table className="sa-table">
+              <thead>
+                <tr>
+                  <th>Action Type</th>
+                  <th>Actor</th>
+                  <th>Target</th>
+                  <th>Reason / Summary</th>
+                  <th>Timestamp (IST)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentAuditActions.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: 28, color: '#94a3b8' }}>
+                      No administrative actions logged yet.
+                    </td>
+                  </tr>
+                ) : (
+                  recentAuditActions.map((log, idx) => (
+                    <tr key={log.id || idx}>
+                      <td>
+                        <span className="sa-pill sa-pill-indigo" style={{ fontSize: '0.68rem' }}>
+                          {(log.action_type || 'ADMIN_ACTION').replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td>
+                        <strong style={{ color: '#0f172a', fontSize: '0.82rem' }}>
+                          {log.actor_name || 'Super Admin'}
+                        </strong>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '0.80rem', fontWeight: 600, color: '#334155' }}>
+                          {log.target_type || 'Entity'}
+                        </div>
+                        {log.target_id && (
+                          <div style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: '#64748b' }}>
+                            {log.target_id}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ fontSize: '0.80rem', color: '#475569' }}>
+                        {log.reason || '—'}
+                      </td>
+                      <td style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                        {log.created_at
+                          ? new Date(log.created_at).toLocaleString('en-IN', {
+                              timeZone: 'Asia/Kolkata',
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true,
+                            })
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </SmartTable>
         </div>
       </div>
     </div>

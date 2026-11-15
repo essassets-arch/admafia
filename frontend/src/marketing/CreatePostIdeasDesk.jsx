@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 export default function CreatePostIdeasDesk({
   initialCustomerId = null,
@@ -572,61 +573,125 @@ export default function CreatePostIdeasDesk({
               </div>
             </div>
           </div>
-
-          {/* Customer's Existing Posts Queue */}
-          <div className="marketing-table-card" style={{ padding: '20px', flex: 1 }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: '0.96rem', fontWeight: 800 }}>
-              Recent Posts for this Customer ({recentPosts.length})
-            </h4>
-
-            {loadingPosts ? (
-              <div style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
-                <RefreshCw size={16} className="spin" /> Loading posts...
-              </div>
-            ) : recentPosts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.84rem' }}>
-                No posts created yet for this customer.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
-                {recentPosts.map((p) => (
-                  <div
-                    key={p.id}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <div>
-                      <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>{p.title}</strong>
-                      <div className="mkt-cell-sub">ID: {p.id}</div>
-                    </div>
-                    <span
-                      className={`mkt-pill ${
-                        p.status === 'Approved'
-                          ? 'mkt-pill-green'
-                          : p.status === 'Pending Verification'
-                          ? 'mkt-pill-blue'
-                          : p.status === 'Changes Requested'
-                          ? 'mkt-pill-amber'
-                          : p.status === 'Rejected'
-                          ? 'mkt-pill-rose'
-                          : 'mkt-pill-slate'
-                      }`}
-                    >
-                      {p.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
+      </div>
+
+      {/* 4. Customer's Existing Posts Queue (Full-Width Tabulator) */}
+      <div className="marketing-table-card" style={{ marginTop: '24px' }}>
+        <div
+          style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid #e2e8f0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
+          <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>
+            Recent Posts for this Customer ({recentPosts.length})
+          </h4>
+          <span className="mkt-pill mkt-pill-slate">Customer Posts Queue</span>
+        </div>
+
+        <SmartTable
+          title="Customer Posts Queue"
+          defaultPageSize={8}
+          exportFilename="customer-posts-queue"
+        >
+          <table className="marketing-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th>Post Title</th>
+                <th>Format / Platform</th>
+                <th>Created</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingPosts ? (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px', color: '#64748b' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      <RefreshCw size={16} className="spin" />
+                      <span>Loading posts...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : recentPosts.length === 0 ? (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px', color: '#64748b', fontSize: '0.84rem' }}>
+                    No posts created yet for this customer.
+                  </td>
+                </tr>
+              ) : (
+                recentPosts.map((p, idx) => {
+                  const rawDate = p.createdAt || p.created_at || p.submittedAt || p.updatedAt;
+                  const parsedDate = rawDate ? new Date(rawDate) : null;
+                  const validDate = parsedDate && !Number.isNaN(parsedDate.getTime());
+                  const formatTag = p.creativeFormat || p.creative_format || p.mediaType || p.media_type;
+
+                  return (
+                    <tr key={p.id || idx}>
+                      <td>
+                        <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>
+                          {p.title || 'Untitled Post'}
+                        </strong>
+                        <div className="mkt-cell-sub" style={{ fontFamily: 'monospace', fontSize: '0.74rem' }}>
+                          ID: {p.id}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start' }}>
+                          <span className="mkt-pill mkt-pill-indigo" style={{ fontSize: '0.72rem' }}>
+                            {p.platform || 'Meta Ads'}
+                          </span>
+                          {formatTag && (
+                            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                              {formatTag}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        {validDate ? (
+                          <span style={{ fontSize: '0.78rem', color: '#475569' }}>
+                            {parsedDate.toLocaleDateString('en-IN', {
+                              timeZone: 'Asia/Kolkata',
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          className={`mkt-pill ${
+                            p.status === 'Approved'
+                              ? 'mkt-pill-green'
+                              : p.status === 'Pending Verification'
+                              ? 'mkt-pill-blue'
+                              : p.status === 'Changes Requested'
+                              ? 'mkt-pill-amber'
+                              : p.status === 'Rejected'
+                              ? 'mkt-pill-rose'
+                              : 'mkt-pill-slate'
+                          }`}
+                        >
+                          {p.status || 'Draft'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </SmartTable>
       </div>
     </div>
   );

@@ -50,88 +50,6 @@ import adminAuthApi from '../services/adminAuthApi';
 import { SmartTable } from '../components/SmartTabulator';
 import SalesAddMoneyModal from './SalesAddMoneyModal';
 
-function PaginatedCardList({ items = [], defaultPageSize = 10, gap = 12, renderItem }) {
-  const [pageSize, setPageSize] = useState(defaultPageSize);
-  const [page, setPage] = useState(1);
-
-  const totalItems = items.length;
-  const numericSize = pageSize === 'all' ? Math.max(totalItems, 1) : Number(pageSize) || defaultPageSize;
-  const totalPages = Math.max(1, Math.ceil(totalItems / numericSize));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-
-  useEffect(() => {
-    setPage(1);
-  }, [totalItems]);
-
-  const startIdx = pageSize === 'all' ? 0 : (safePage - 1) * numericSize;
-  const endIdx = pageSize === 'all' ? totalItems : Math.min(startIdx + numericSize, totalItems);
-  const visibleItems = pageSize === 'all' ? items : items.slice(startIdx, endIdx);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap }}>
-      {visibleItems.map((item, idx) => renderItem(item, startIdx + idx))}
-      {totalItems > defaultPageSize && (
-        <div
-          className="am-st-pagination-bar"
-          style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: 12,
-            marginTop: 4,
-          }}
-        >
-          <div className="am-st-page-info">
-            Showing <strong>{startIdx + 1}</strong>–<strong>{endIdx}</strong> of <strong>{totalItems}</strong>
-          </div>
-          <div className="am-st-pagination-right">
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', color: '#64748b', fontWeight: 600 }}>
-              Rows:
-              <select
-                className="am-st-pagesize-select"
-                value={pageSize}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setPageSize(val === 'all' ? 'all' : Number(val));
-                  setPage(1);
-                }}
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value="all">All</option>
-              </select>
-            </label>
-            {pageSize !== 'all' && totalPages > 1 && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="am-st-page-btn"
-                  disabled={safePage <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  ‹ Prev
-                </button>
-                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#334155', padding: '0 6px' }}>
-                  Page {safePage} / {totalPages}
-                </span>
-                <button
-                  type="button"
-                  className="am-st-page-btn"
-                  disabled={safePage >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next ›
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 const formatINR = (val) =>
   new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -360,7 +278,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
     customCompany: '',
     name: '',
     city: '',
-    requirement: 'Inbound Meta Ads Campaign Enquiry',
+    requirement: 'Inbound Ad Mafia Campaign Enquiry',
     budget: '₹1.5L – ₹3.5L',
   });
   const [leadSuccessToast, setLeadSuccessToast] = useState(null);
@@ -445,7 +363,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
       customCompany: '',
       name: '',
       city: matched?.city || '',
-      requirement: 'Inbound Meta Ads Campaign Enquiry',
+      requirement: 'Inbound Ad Mafia Campaign Enquiry',
       budget: '₹1.5L – ₹3.5L',
     });
     setIsAddLeadModalOpen(true);
@@ -1624,116 +1542,162 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
         </div>
       </div>
 
-      {/* Verification Queue Cards */}
-      <PaginatedCardList
-        items={filtered}
-        defaultPageSize={10}
-        gap={12}
-        renderItem={(item) => {
-          const vIdentity = resolveCustomerIdentity(item, customers);
-          return (
-            <div key={item.id} className="desk-card-row">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{vIdentity.displayName}</h3>
-                    <span className={`desk-pill ${item.paymentStatus === 'paid' ? 'pill-emerald' : 'pill-amber'}`}>
-                      {item.paymentStatus === 'paid' ? '✓ Auto-Verified & Paid' : '✓ Auto-Verified (Budget Pending)'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 4 }}>
-                    Contact: <span style={{ fontWeight: 600, color: '#334155' }}>{vIdentity.contactPerson}</span> • Phone: <a href={`tel:${item.phone}`} style={{ color: '#4f46e5' }}>+91 {item.phone}</a> • Submitted: {formatIndianDateTime(item.submittedAt, item.submittedAtRaw || item.submitted_at)}
-                  </div>
-                </div>
-
-                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                  <div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>{formatINR(item.amount)}</div>
-                    <div style={{ fontSize: '0.76rem', color: '#059669', fontWeight: 700 }}>
-                      {item.runwayDays} Days Runway @ ₹300/day
+      {/* Verification Audit SmartTable */}
+      <div className="desk-table-card">
+        <SmartTable title="Verification Audit" defaultPageSize={10} exportFilename="verification-audit">
+          <table className="desk-table">
+            <thead>
+              <tr>
+                <th>Client &amp; Workspace</th>
+                <th>Contact &amp; Phone</th>
+                <th>Gate 1: Payment</th>
+                <th>Gate 2: KYC &amp; Profile</th>
+                <th>Deposit &amp; Runway</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                    <ShieldCheck size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>No Verification Records Found</div>
+                    <div style={{ fontSize: '0.84rem', marginTop: 4 }}>
+                      No customer accounts match the selected verification filter.
                     </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDetail(item)}
-                    className="sales-btn-primary"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '5px 14px',
-                      fontSize: '0.8rem',
-                      borderRadius: 6,
-                      cursor: 'pointer',
-                      background: '#4f46e5',
-                      color: '#ffffff',
-                      border: 'none',
-                      fontWeight: 700
-                    }}
-                    title="View full payment and profile completion audit record"
-                  >
-                    <Eye size={14} />
-                    <span>Detail</span>
-                  </button>
-                </div>
-              </div>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((item) => {
+                  const vIdentity = resolveCustomerIdentity(item, customers);
+                  const isPaid = item.paymentStatus === 'paid';
+                  return (
+                    <tr key={item.id}>
+                      {/* 1. Client & Workspace */}
+                      <td>
+                        <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
+                          {vIdentity.displayName}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                          {vIdentity.username && (
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                color: '#4f46e5',
+                                background: '#eef2ff',
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                fontSize: '0.73rem',
+                              }}
+                            >
+                              @{vIdentity.username}
+                            </span>
+                          )}
+                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                            Submitted: {formatIndianDateTime(item.submittedAt, item.submittedAtRaw || item.submitted_at)}
+                          </span>
+                        </div>
+                      </td>
 
-              {/* Dual Gate Matrix & Information */}
-              <div style={{ marginTop: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  <div>
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 1: Payment Status</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: 700, color: item.paymentStatus === 'paid' ? '#059669' : '#d97706' }}>
-                      {item.paymentStatus === 'paid' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
-                      {item.paymentStatus === 'paid' ? 'Settled (Online Razorpay)' : 'Awaiting Online Top-Up'}
-                    </div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Gate 2: Profile &amp; KYC Status</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', fontWeight: 700, color: '#059669' }}>
-                      <CheckCircle2 size={14} />
-                      <span>100% Completed &amp; Auto-Verified</span>
-                    </div>
-                  </div>
-                </div>
+                      {/* 2. Contact & Phone */}
+                      <td>
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
+                          {vIdentity.contactPerson}
+                        </div>
+                        <div style={{ marginTop: 2 }}>
+                          <a
+                            href={`tel:${item.phone}`}
+                            style={{
+                              color: '#4f46e5',
+                              fontWeight: 800,
+                              fontFamily: 'monospace',
+                              fontSize: '0.86rem',
+                              textDecoration: 'none',
+                            }}
+                          >
+                            +91 {item.phone}
+                          </a>
+                        </div>
+                      </td>
 
-                <div style={{ fontSize: '0.8rem', color: '#475569' }}>
-                  Reference: <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#e2e8f0', padding: '2px 6px', borderRadius: 4, wordBreak: 'break-all' }}>{item.utrNumber || 'Auto-Verified'}</span>
-                </div>
-              </div>
+                      {/* 3. Gate 1: Payment */}
+                      <td>
+                        <span
+                          className={`desk-pill ${isPaid ? 'pill-emerald' : 'pill-amber'}`}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.74rem', fontWeight: 700 }}
+                        >
+                          {isPaid ? <CheckCircle2 size={13} /> : <Clock size={13} />}
+                          {isPaid ? 'Settled (Online Razorpay)' : 'Awaiting Online Top-Up'}
+                        </span>
+                        <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 3, fontFamily: 'monospace' }}>
+                          UTR / Ref: {item.utrNumber || '—'}
+                        </div>
+                      </td>
 
-              {/* Profile Completion & Verification Information Bar (Pure Info) */}
-              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', color: '#059669', fontWeight: 700 }}>
-                  <CheckCircle2 size={15} />
-                  <span>Profile Registration Complete &amp; 100% Auto-Verified</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <div style={{ fontSize: '0.78rem', color: '#475569' }}>
-                    Account State: <strong style={{ color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: 4, border: '1px solid #a7f3d0' }}>Active Live Account</strong>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDetail(item)}
-                    className="desk-action-btn"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: '4px 10px',
-                      fontSize: '0.75rem',
-                      color: '#4f46e5',
-                      fontWeight: 700
-                    }}
-                  >
-                    <FileText size={13} /> View Audit Details
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        }}
-      />
+                      {/* 4. Gate 2: KYC & Profile */}
+                      <td>
+                        <span
+                          className="desk-pill pill-emerald"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.74rem', fontWeight: 800 }}
+                        >
+                          ✓ Auto-Verified
+                        </span>
+                        <div style={{ fontSize: '0.74rem', color: '#059669', fontWeight: 600, marginTop: 3 }}>
+                          100% Completed &amp; Auto-Verified
+                        </div>
+                      </td>
+
+                      {/* 5. Deposit & Runway */}
+                      <td>
+                        <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a' }}>
+                          {formatINR(item.amount)}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, marginTop: 2 }}>
+                          {item.runwayDays || 0} Days @ ₹300/d
+                        </div>
+                      </td>
+
+                      {/* 6. Status */}
+                      <td>
+                        <span className={`desk-pill ${isPaid ? 'pill-emerald' : 'pill-amber'}`} style={{ fontWeight: 800 }}>
+                          {isPaid ? '✓ Paid & Live' : '⏳ Budget Pending'}
+                        </span>
+                      </td>
+
+                      {/* 7. Actions */}
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDetail(item)}
+                          className="sales-btn-primary"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 14px',
+                            fontSize: '0.8rem',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            background: '#4f46e5',
+                            color: '#ffffff',
+                            border: 'none',
+                            fontWeight: 700,
+                          }}
+                          title="View full payment and profile completion audit record"
+                        >
+                          <Eye size={14} />
+                          <span>360° Audit</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </SmartTable>
+      </div>
 
       {/* Customer 360 Detail Modal */}
       {selectedDetail && (() => {
@@ -1786,7 +1750,7 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Business Category</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.category || 'Meta Ads Lead Generation'}</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.category || 'Ad Mafia Lead Generation'}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Target Geography / City</div>
@@ -3213,258 +3177,227 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         </div>
       </div>
 
-      {/* Leads List - Prominently Displays Customer Name, Buyer Phone, Read Status and Actions */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {filtered.length === 0 ? (
-          <div style={{
-            background: '#ffffff',
-            borderRadius: 14,
-            padding: '48px 24px',
-            textAlign: 'center',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
-          }}>
-            <div style={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              background: '#f1f5f9',
-              color: '#64748b',
-              display: 'grid',
-              placeItems: 'center',
-              margin: '0 auto 16px auto'
-            }}>
-              <Search size={24} />
-            </div>
-            <h3 style={{ margin: '0 0 6px 0', fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
-              No Leads Found
-            </h3>
-            <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
-              {selectedCustomerId !== 'all'
-                ? `No leads match the current filters for ${selectedCustomerObj?.companyName || selectedCustomerObj?.name || 'this customer'}.`
-                : 'No inbound leads match your selected search or filter criteria.'}
-            </p>
-            {(selectedCustomerId !== 'all' || filter !== 'all' || search) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedCustomerId('all');
-                  setFilter('all');
-                  setSearch('');
-                }}
-                className="desk-action-btn"
-                style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-              >
-                <RotateCcw size={14} /> Reset All Filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <PaginatedCardList
-            items={filtered}
-            defaultPageSize={10}
-            gap={12}
-            renderItem={(lead) => {
-              const rawDigits = (lead.phone || lead.name || '').replace(/\D/g, '').slice(-10);
-              const cleanPhone = rawDigits.length === 10 ? `+91 ${rawDigits}` : (lead.phone || lead.name);
-              const callDigits = rawDigits.length === 10 ? `+91${rawDigits}` : (lead.phone || '');
-              const targetComp = lead.company || lead.assignedCompany || lead.customerCompanyName || 'Client Account';
-              const matchedCust = resolveCustomerForLead(lead, deskCustomers);
-              const customerName = matchedCust?.companyName || matchedCust?.name || targetComp;
-              const customerPhoneDigits = matchedCust?.phone ? String(matchedCust.phone).replace(/\D/g, '').slice(-10) : (lead.customerPhone ? String(lead.customerPhone).replace(/\D/g, '').slice(-10) : '');
-              const customerUser = matchedCust?.username ? `@${String(matchedCust.username).replace(/^@/, '')}` : (lead.customerUsername ? `@${String(lead.customerUsername).replace(/^@/, '')}` : '');
-              const initialChar = (customerName || 'C').charAt(0).toUpperCase();
-              const isRead = isLeadRead(lead);
-
-              return (
-                <div
-                  key={lead.id}
-                  className="desk-card-row"
-                  style={{
-                    padding: '16px 20px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: 16,
-                    background: '#ffffff',
-                    borderRadius: 12,
-                    border: '1px solid #e2e8f0',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-                  }}
-                >
-                  {/* Left Columns: Buyer Phone Number, Customer Name/Details, and Client Read Status */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', flex: '1 1 auto', minWidth: 0 }}>
-                    {/* Inbound Buyer Phone Number */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                      <div style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 10,
-                        background: '#ecfdf5',
-                        color: '#059669',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        border: '1px solid #a7f3d0'
-                      }}>
-                        <Phone size={18} />
-                      </div>
-                      <div>
-                        <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          Inbound Buyer Phone
-                        </span>
-                        <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', letterSpacing: '0.02em', fontFamily: 'monospace' }}>
-                          {cleanPhone}
-                        </span>
-                      </div>
+      {/* Leads SmartTable */}
+      <div className="desk-table-card">
+        <SmartTable title="Inbound Leads" defaultPageSize={15} exportFilename="sales-inbound-leads">
+          <table className="desk-table">
+            <thead>
+              <tr>
+                <th>Inbound Buyer Phone</th>
+                <th>Assigned Client Account</th>
+                <th>Client Contact</th>
+                <th>Client Read Status</th>
+                <th>Received At</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '48px 24px', color: '#64748b' }}>
+                    <div
+                      style={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: '50%',
+                        background: '#f1f5f9',
+                        color: '#64748b',
+                        display: 'grid',
+                        placeItems: 'center',
+                        margin: '0 auto 12px auto',
+                      }}
+                    >
+                      <Search size={22} />
                     </div>
+                    <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                      No Leads Found
+                    </h3>
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.86rem' }}>
+                      {selectedCustomerId !== 'all'
+                        ? `No leads match the current filters for ${selectedCustomerObj?.companyName || selectedCustomerObj?.name || 'this customer'}.`
+                        : 'No inbound leads match your selected search or filter criteria.'}
+                    </p>
+                    {(selectedCustomerId !== 'all' || filter !== 'all' || search) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomerId('all');
+                          setFilter('all');
+                          setSearch('');
+                        }}
+                        className="desk-action-btn"
+                        style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <RotateCcw size={14} /> Reset All Filters
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((lead) => {
+                  const rawDigits = String(lead.phone || lead.name || '').replace(/\D/g, '').slice(-10);
+                  const cleanPhone = rawDigits.length === 10 ? `+91 ${rawDigits}` : (lead.phone || lead.name || '—');
+                  const callDigits = rawDigits.length === 10 ? `+91${rawDigits}` : (lead.phone || '');
+                  const targetComp = lead.company || lead.assignedCompany || lead.customerCompanyName || 'Client Account';
+                  const matchedCust = resolveCustomerForLead(lead, deskCustomers);
+                  const customerName = matchedCust?.companyName || matchedCust?.name || targetComp;
+                  const customerPhoneDigits = matchedCust?.phone
+                    ? String(matchedCust.phone).replace(/\D/g, '').slice(-10)
+                    : (lead.customerPhone ? String(lead.customerPhone).replace(/\D/g, '').slice(-10) : '');
+                  const customerUser = String(matchedCust?.username || lead.customerUsername || '').replace(/^@/, '').trim();
+                  const isRead = isLeadRead(lead);
+                  const rawTimestamp = lead.createdAt || lead.time || '';
 
-                    {/* Customer / Client Account Details Prominently Displayed */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      flex: '1 1 220px',
-                      minWidth: 0
-                    }}>
-                      <div style={{
-                        width: 38,
-                        height: 38,
-                        minWidth: 38,
-                        borderRadius: 10,
-                        background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-                        color: '#1d4ed8',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 900,
-                        fontSize: '1rem',
-                        border: '1px solid #bfdbfe',
-                        flexShrink: 0
-                      }}>
-                        {initialChar}
-                      </div>
-                      <div style={{ minWidth: 0, flex: '1 1 auto' }}>
-                        <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          Customer / Client Account
-                        </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
-                          <span style={{
-                            fontSize: '1.02rem',
-                            fontWeight: 800,
-                            color: '#1e3a8a',
-                            letterSpacing: '-0.01em',
-                            wordBreak: 'break-word',
-                            overflowWrap: 'anywhere'
-                          }}>
-                            🏢 {customerName}
-                          </span>
-                          {customerPhoneDigits && (
-                            <span style={{
-                              fontSize: '0.76rem',
-                              fontWeight: 700,
+                  return (
+                    <tr key={lead.id}>
+                      {/* 1. Inbound Buyer Phone */}
+                      <td>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                          {cleanPhone}
+                        </div>
+                        {(lead.id || lead.category) && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                            {lead.id && (
+                              <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
+                                {lead.id}
+                              </span>
+                            )}
+                            {lead.category && (
+                              <span
+                                style={{
+                                  fontSize: '0.70rem',
+                                  fontWeight: 700,
+                                  color: '#475569',
+                                  background: '#f1f5f9',
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                }}
+                              >
+                                {lead.category}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 2. Assigned Client Account */}
+                      <td>
+                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#1e3a8a' }}>
+                          🏢 {customerName}
+                        </div>
+                        {customerUser && (
+                          <div style={{ marginTop: 3 }}>
+                            <span
+                              style={{
+                                fontSize: '0.73rem',
+                                fontWeight: 700,
+                                color: '#6366f1',
+                                background: '#eef2ff',
+                                border: '1px solid #c7d2fe',
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                              }}
+                            >
+                              @{customerUser}
+                            </span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 3. Client Contact */}
+                      <td>
+                        {customerPhoneDigits ? (
+                          <span
+                            style={{
+                              fontSize: '0.86rem',
+                              fontWeight: 800,
                               color: '#059669',
-                              background: '#ecfdf5',
-                              border: '1px solid #a7f3d0',
-                              padding: '2px 8px',
-                              borderRadius: 6,
                               fontFamily: 'monospace',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              📞 +91 {customerPhoneDigits}
+                            }}
+                          >
+                            +91 {customerPhoneDigits}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>—</span>
+                        )}
+                      </td>
+
+                      {/* 4. Client Read Status */}
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {isRead ? (
+                            <span className="desk-pill pill-emerald" style={{ fontWeight: 800 }}>
+                              ✓ Marked as Read
+                            </span>
+                          ) : (
+                            <span className="desk-pill pill-amber" style={{ fontWeight: 800 }}>
+                              ⏳ Unread by Client
                             </span>
                           )}
-                          {customerUser && (
-                            <span style={{
-                              fontSize: '0.76rem',
-                              fontWeight: 700,
-                              color: '#6366f1',
-                              background: '#eef2ff',
-                              border: '1px solid #c7d2fe',
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {customerUser}
+                          {lead.priority === 'Urgent' && (
+                            <span className="desk-pill pill-rose" style={{ fontSize: '0.68rem', fontWeight: 800 }}>
+                              Urgent SLA
                             </span>
                           )}
                         </div>
-                      </div>
-                    </div>
+                      </td>
 
-                    {/* Client Read Status Badge: Marked as Read vs Unread */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                      <div>
-                        <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          Client Read Status
+                      {/* 5. Received At */}
+                      <td>
+                        <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#334155' }}>
+                          {rawTimestamp
+                            ? formatIndianDateTime(rawTimestamp, lead.createdAtRaw || lead.created_at)
+                            : '—'}
                         </span>
-                        {isRead ? (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            fontSize: '0.88rem',
-                            fontWeight: 800,
-                            color: '#047857',
-                            background: '#ecfdf5',
-                            border: '1.5px solid #a7f3d0',
-                            padding: '4px 12px',
-                            borderRadius: 9999,
-                            marginTop: 2,
-                            boxShadow: '0 1px 3px rgba(16, 185, 129, 0.12)',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            <CheckCircle2 size={15} strokeWidth={2.6} style={{ color: '#059669' }} />
-                            <span>Marked as Read ✓</span>
-                          </span>
-                        ) : (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            fontSize: '0.88rem',
-                            fontWeight: 800,
-                            color: '#b45309',
-                            background: '#fffbeb',
-                            border: '1.5px solid #fde68a',
-                            padding: '4px 12px',
-                            borderRadius: 9999,
-                            marginTop: 2,
-                            whiteSpace: 'nowrap'
-                          }}>
-                            <Clock size={15} strokeWidth={2.4} style={{ color: '#d97706' }} />
-                            <span>Unread by Client</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                      </td>
 
-                  {/* Right Column: Actions */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
-                    <a
-                      href={`tel:${callDigits}`}
-                      className="desk-action-btn"
-                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap' }}
-                    >
-                      <Phone size={14} /> Direct Call Buyer
-                    </a>
-                    <a
-                      href={`https://wa.me/91${rawDigits}?text=Hello,%20thank%20you%20for%20your%20inquiry%20with%20${encodeURIComponent(customerName)}.`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="desk-action-btn"
-                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap' }}
-                    >
-                      <MessageSquare size={14} /> WhatsApp Buyer
-                    </a>
-                  </div>
-                </div>
-              );
-            }}
-          />
-        )}
+                      {/* 6. Actions */}
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <a
+                            href={`tel:${callDigits}`}
+                            className="desk-action-btn"
+                            style={{
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              padding: '6px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                            }}
+                          >
+                            <Phone size={13} /> Call Buyer
+                          </a>
+                          <a
+                            href={`https://wa.me/91${rawDigits}?text=Hello,%20thank%20you%20for%20your%20inquiry%20with%20${encodeURIComponent(customerName)}.`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="desk-action-btn"
+                            style={{
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              padding: '6px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              background: '#ecfdf5',
+                              color: '#065f46',
+                              borderColor: '#a7f3d0',
+                            }}
+                          >
+                            <MessageSquare size={13} color="#059669" /> WhatsApp
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </SmartTable>
       </div>
 
       {/* ADD LEAD MODAL IN LEAD MANAGEMENT DESK */}
@@ -3639,7 +3572,6 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 export function ProfileCompletionDesk({ customers = [], setCustomers }) {
   const [filterTab, setFilterTab] = useState('all'); // 'all' | 'complete' | 'incomplete'
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState('table'); // 'table' | 'cards'
   const [selectedProfileCust, setSelectedProfileCust] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
@@ -3876,48 +3808,6 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* View Mode Toggle */}
-          <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: 3, borderRadius: 8, border: '1px solid #cbd5e1' }}>
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 6,
-                border: 'none',
-                background: viewMode === 'table' ? '#0f172a' : 'transparent',
-                color: viewMode === 'table' ? '#ffffff' : '#475569',
-                fontWeight: 700,
-                fontSize: '0.82rem',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6
-              }}
-            >
-              📑 Master Table
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('cards')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 6,
-                border: 'none',
-                background: viewMode === 'cards' ? '#0f172a' : 'transparent',
-                color: viewMode === 'cards' ? '#ffffff' : '#475569',
-                fontWeight: 700,
-                fontSize: '0.82rem',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6
-              }}
-            >
-              🗂 Visual Cards
-            </button>
-          </div>
-
           <div style={{ position: 'relative', minWidth: 'min(260px, 100%)', flex: '1 1 240px' }}>
             <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
             <input
@@ -3939,434 +3829,230 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
         </div>
       </div>
 
-      {/* VIEW 1: MASTER TABLE VIEW (Default) */}
-      {viewMode === 'table' && (
-        <div className="desk-table-card">
-          <SmartTable title="Customer Profile Completion" exportFilename="sales-profiles" defaultPageSize={10}>
-            <table className="desk-table">
-              <thead>
+      {/* MASTER SMARTTABLE VIEW */}
+      <div className="desk-table-card">
+        <SmartTable title="Customer Profile Completion" exportFilename="sales-profiles" defaultPageSize={10}>
+          <table className="desk-table">
+            <thead>
+              <tr>
+                <th>Company &amp; Workspace</th>
+                <th>Contact Person &amp; Mobile</th>
+                <th>Work &amp; Backup Email</th>
+                <th>Category &amp; Industry</th>
+                <th>Location (City, State)</th>
+                <th>Website</th>
+                <th>KYC Audit Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayedList.length === 0 ? (
                 <tr>
-                  <th>Company &amp; Workspace</th>
-                  <th>Contact Person &amp; Mobile</th>
-                  <th>Work &amp; Backup Email</th>
-                  <th>Category &amp; Industry</th>
-                  <th>Location (City, State)</th>
-                  <th>Website</th>
-                  <th>KYC Audit Status</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                    <Building2 size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
+                    <div style={{ fontWeight: 700, color: '#334155' }}>No Customer Profiles Found</div>
+                    <div style={{ fontSize: '0.84rem' }}>Try clearing the search query or changing filter tab.</div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {displayedList.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
-                      <Building2 size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
-                      <div style={{ fontWeight: 700, color: '#334155' }}>No Customer Profiles Found</div>
-                      <div style={{ fontSize: '0.84rem' }}>Try clearing the search query or changing filter tab.</div>
-                    </td>
-                  </tr>
-                ) : (
-                  displayedList.map((c) => {
-                    const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
-                    const identity = resolveCustomerIdentity(c, customers);
-                    const companyDisplayName = identity.displayName;
-                    const contactDisplayName = identity.contactPerson;
-                    const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
+              ) : (
+                displayedList.map((c) => {
+                  const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
+                  const identity = resolveCustomerIdentity(c, customers);
+                  const companyDisplayName = identity.displayName;
+                  const contactDisplayName = identity.contactPerson;
+                  const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
 
-                    return (
-                      <tr key={c.id}>
-                        {/* 1. Company & Workspace */}
-                        <td>
-                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>
-                            {companyDisplayName}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 700, color: '#4f46e5', background: '#eef2ff', padding: '1px 6px', borderRadius: 4, fontSize: '0.74rem' }}>
-                              @{c.username || 'user'}
-                            </span>
-                            <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
-                              {c.id}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 2. Contact Person & Mobile */}
-                        <td>
-                          <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.90rem' }}>
-                            {contactDisplayName}
-                          </div>
-                          <div style={{ fontWeight: 800, color: '#059669', fontFamily: 'monospace', fontSize: '0.88rem', marginTop: 2 }}>
-                            +91 {cleanPhone || c.phone}
-                          </div>
-                        </td>
-
-                        {/* 3. Work & Backup Email */}
-                        <td>
-                          <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>
-                            {c.email ? (
-                              <a href={`mailto:${c.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
-                                {c.email}
-                              </a>
-                            ) : (
-                              <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Not Provided</span>
-                            )}
-                          </div>
-                          {c.personalEmail && (
-                            <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2, wordBreak: 'break-all' }}>
-                              Backup: {c.personalEmail}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* 4. Category & Industry */}
-                        <td>
-                          <span
-                            style={{
-                              background: '#f1f5f9',
-                              color: '#334155',
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              fontSize: '0.76rem',
-                              fontWeight: 700,
-                              display: 'inline-block'
-                            }}
-                          >
-                            {c.category || 'General'}
+                  return (
+                    <tr key={c.id}>
+                      {/* 1. Company & Workspace */}
+                      <td>
+                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>
+                          {companyDisplayName}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, color: '#4f46e5', background: '#eef2ff', padding: '1px 6px', borderRadius: 4, fontSize: '0.74rem' }}>
+                            @{c.username || 'user'}
                           </span>
-                          <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
-                            {c.industry || 'Standard Niche'}
-                          </div>
-                        </td>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
+                            {c.id}
+                          </span>
+                        </div>
+                      </td>
 
-                        {/* 5. Location (City, State) */}
-                        <td>
-                          <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.88rem' }}>
-                            {[c.city, c.state].filter(Boolean).join(', ') || '—'}
-                          </div>
-                          <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                            {c.country || 'India'}
-                          </div>
-                        </td>
+                      {/* 2. Contact Person & Mobile */}
+                      <td>
+                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.90rem' }}>
+                          {contactDisplayName}
+                        </div>
+                        <div style={{ fontWeight: 800, color: '#059669', fontFamily: 'monospace', fontSize: '0.88rem', marginTop: 2 }}>
+                          +91 {cleanPhone || c.phone}
+                        </div>
+                      </td>
 
-                        {/* 6. Website */}
-                        <td>
-                          {c.website || c.domain ? (
-                            <a
-                              href={c.website?.startsWith('http') ? c.website : `https://${c.website || c.domain}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600, fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', gap: 3, wordBreak: 'break-all' }}
-                            >
-                              <Globe size={13} /> {c.website || c.domain} ↗
+                      {/* 3. Work & Backup Email */}
+                      <td>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>
+                          {c.email ? (
+                            <a href={`mailto:${c.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
+                              {c.email}
                             </a>
                           ) : (
-                            <span style={{ color: '#94a3b8', fontSize: '0.80rem' }}>—</span>
+                            <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Not Provided</span>
                           )}
-                        </td>
+                        </div>
+                        {c.personalEmail && (
+                          <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2, wordBreak: 'break-all' }}>
+                            Backup: {c.personalEmail}
+                          </div>
+                        )}
+                      </td>
 
-                        {/* 7. KYC Audit Status */}
-                        <td>
-                          <span
+                      {/* 4. Category & Industry */}
+                      <td>
+                        <span
+                          style={{
+                            background: '#f1f5f9',
+                            color: '#334155',
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            display: 'inline-block'
+                          }}
+                        >
+                          {c.category || 'General'}
+                        </span>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                          {c.industry || 'Standard Niche'}
+                        </div>
+                      </td>
+
+                      {/* 5. Location (City, State) */}
+                      <td>
+                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.88rem' }}>
+                          {[c.city, c.state].filter(Boolean).join(', ') || '—'}
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                          {c.country || 'India'}
+                        </div>
+                      </td>
+
+                      {/* 6. Website */}
+                      <td>
+                        {c.website || c.domain ? (
+                          <a
+                            href={c.website?.startsWith('http') ? c.website : `https://${c.website || c.domain}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600, fontSize: '0.84rem', display: 'inline-flex', alignItems: 'center', gap: 3, wordBreak: 'break-all' }}
+                          >
+                            <Globe size={13} /> {c.website || c.domain} ↗
+                          </a>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '0.80rem' }}>—</span>
+                        )}
+                      </td>
+
+                      {/* 7. KYC Audit Status */}
+                      <td>
+                        <span
+                          style={{
+                            background: isComplete ? '#ecfdf5' : '#fffbeb',
+                            color: isComplete ? '#047857' : '#b45309',
+                            border: isComplete ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                            padding: '3px 10px',
+                            borderRadius: 9999,
+                            fontSize: '0.76rem',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                        >
+                          {isComplete ? '✓ 100% KYC Complete' : `⏳ Incomplete (${c.kycPercent || 25}%)`}
+                        </span>
+                      </td>
+
+                      {/* 8. Actions */}
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {/* 1. Details Button */}
+                          <button
+                            type="button"
+                            className="sales-btn-primary"
                             style={{
-                              background: isComplete ? '#ecfdf5' : '#fffbeb',
-                              color: isComplete ? '#047857' : '#b45309',
-                              border: isComplete ? '1px solid #a7f3d0' : '1px solid #fde68a',
-                              padding: '3px 10px',
-                              borderRadius: 9999,
-                              fontSize: '0.76rem',
+                              padding: '5px 12px',
+                              fontSize: '0.78rem',
                               fontWeight: 800,
+                              background: '#4f46e5',
+                              borderColor: '#4338ca',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 4
+                              gap: 5,
+                              boxShadow: '0 2px 6px rgba(79, 70, 229, 0.25)',
+                              cursor: 'pointer'
                             }}
+                            title="View Complete Profile Dossier"
+                            onClick={() => setSelectedProfileCust(c)}
                           >
-                            {isComplete ? '✓ 100% KYC Complete' : `⏳ Incomplete (${c.kycPercent || 25}%)`}
-                          </span>
-                        </td>
+                            <Eye size={13} /> Details
+                          </button>
 
-                        {/* 8. Actions (Details Button) */}
-                        <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
-                            {/* 1. Prominent Details Button */}
+                          {/* 2. Call Shortcut */}
+                          <a
+                            href={`tel:${cleanPhone}`}
+                            className="desk-action-btn"
+                            style={{ padding: '5px 9px', fontSize: '0.76rem', textDecoration: 'none', background: '#f8fafc', color: '#0f172a', borderColor: '#cbd5e1', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            title="Call Partner"
+                          >
+                            <Phone size={13} color="#0284c7" /> Call
+                          </a>
+
+                          {/* 3. WhatsApp Shortcut */}
+                          <a
+                            href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20we%20reviewed%20your%20Ad%20Mafia%20business%20profile.`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="desk-action-btn"
+                            style={{ padding: '5px 9px', fontSize: '0.76rem', textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            title="Open WhatsApp"
+                          >
+                            <MessageSquare size={13} color="#059669" /> WhatsApp
+                          </a>
+
+                          {/* 4. Send Certificate */}
+                          <button
+                            type="button"
+                            className="desk-action-btn"
+                            style={{ padding: '5px 9px', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            title="Send Compliance Certificate"
+                            onClick={() => alert(`Compliance dossier dispatched for ${companyDisplayName} to ${c.email || 'customer'}!`)}
+                          >
+                            <Send size={13} /> Certificate
+                          </button>
+
+                          {/* 5. Conditional +25% Verify */}
+                          {!isComplete && (
                             <button
                               type="button"
                               className="sales-btn-primary"
-                              style={{
-                                padding: '6px 14px',
-                                fontSize: '0.82rem',
-                                fontWeight: 800,
-                                background: '#4f46e5',
-                                borderColor: '#4338ca',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                boxShadow: '0 2px 6px rgba(79, 70, 229, 0.25)',
-                                cursor: 'pointer'
-                              }}
-                              title="View Complete Profile Dossier"
-                              onClick={() => setSelectedProfileCust(c)}
+                              style={{ padding: '5px 10px', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              title="Mark Step Verified (+25%)"
+                              onClick={() => handleToggleCheck(c.id)}
                             >
-                              <Eye size={14} /> Details
+                              <Check size={13} /> +25% Verify
                             </button>
-
-                            {/* WhatsApp Shortcut */}
-                            <a
-                              href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20we%20reviewed%20your%20Ad%20Mafia%20business%20profile.`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="desk-action-btn"
-                              style={{ padding: '6px 9px', textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}
-                              title="Open WhatsApp"
-                            >
-                              <MessageSquare size={14} color="#059669" />
-                            </a>
-
-                            {/* Direct Call Shortcut */}
-                            <a
-                              href={`tel:${cleanPhone}`}
-                              className="desk-action-btn"
-                              style={{ padding: '6px 9px', textDecoration: 'none', background: '#f8fafc', color: '#0f172a', borderColor: '#cbd5e1' }}
-                              title="Call Partner"
-                            >
-                              <Phone size={14} color="#0284c7" />
-                            </a>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </SmartTable>
-        </div>
-      )}
-
-      {/* VIEW 2: VISUAL CARDS VIEW */}
-      {viewMode === 'cards' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {displayedList.length === 0 ? (
-            <div style={{ padding: '40px 20px', textAlign: 'center', background: '#ffffff', borderRadius: 16, border: '1.5px solid #e2e8f0', color: '#64748b' }}>
-              <Building2 size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
-              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#334155' }}>No Customer Profiles Found</h4>
-              <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>Try clearing the search query or changing filter tab.</p>
-            </div>
-          ) : (
-            <PaginatedCardList
-              items={displayedList}
-              defaultPageSize={10}
-              gap={16}
-              renderItem={(c) => {
-                const isComplete = c.kycPercent === 100 || c.profileStatus === 'complete';
-                const identity = resolveCustomerIdentity(c, customers);
-                const companyDisplayName = identity.displayName;
-                const contactDisplayName = identity.contactPerson;
-                const cleanPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
-
-                return (
-                  <div
-                    key={c.id}
-                    className="desk-card-row"
-                    style={{
-                      borderLeft: isComplete ? '5px solid #10b981' : '5px solid #f59e0b',
-                      background: '#ffffff',
-                      padding: '20px',
-                      borderRadius: '16px',
-                      border: '1.5px solid #e2e8f0',
-                      boxShadow: '0 4px 16px rgba(0,0,0,0.03)'
-                    }}
-                  >
-                    {/* Card Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-                      <div style={{ minWidth: 0, flex: '1 1 220px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
-                            {companyDisplayName}
-                          </h3>
-                          <span
-                            style={{
-                              background: isComplete ? '#ecfdf5' : '#fffbeb',
-                              color: isComplete ? '#065f46' : '#b45309',
-                              border: isComplete ? '1px solid #a7f3d0' : '1px solid #fde68a',
-                              padding: '3px 10px',
-                              borderRadius: 9999,
-                              fontSize: '0.78rem',
-                              fontWeight: 800,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 5
-                            }}
-                          >
-                            {isComplete ? '✓ 100% KYC Audit Passed & Verified' : '⏳ Action Required: Profile Audit Incomplete'}
-                          </span>
-                          <span
-                            style={{
-                              background: '#f1f5f9',
-                              color: '#475569',
-                              padding: '3px 8px',
-                              borderRadius: 6,
-                              fontSize: '0.76rem',
-                              fontWeight: 700
-                            }}
-                          >
-                            Category: {c.category || 'Other'}
-                          </span>
+                          )}
                         </div>
-                        <div style={{ fontSize: '0.84rem', color: '#64748b', marginTop: 4 }}>
-                          Workspace ID: <code>{c.id}</code> • Registered Phone: <strong style={{ color: '#0f172a' }}>+91 {cleanPhone}</strong> • Completed: {c.completedAt || c.registeredAt || 'Recently Active'}
-                        </div>
-                      </div>
-
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '1.45rem', fontWeight: 800, color: isComplete ? '#059669' : (c.kycPercent >= 50 ? '#d97706' : '#e11d48') }}>
-                          {isComplete ? '100%' : `${c.kycPercent || 25}%`}
-                        </div>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
-                          Audit Score
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Complete Organization & Contact Details Dossier Grid */}
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
-                        gap: 12,
-                        marginTop: 16,
-                        padding: '16px',
-                        background: '#f8fafc',
-                        borderRadius: 12,
-                        border: '1px solid #edf2f7'
-                      }}
-                    >
-                      <div>
-                        <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person</small>
-                        <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{contactDisplayName}</div>
-                      </div>
-                      <div>
-                        <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Business Email</small>
-                        <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>{c.email || 'Not Provided'}</div>
-                      </div>
-                      <div>
-                        <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Personal / Backup Email</small>
-                        <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#334155', wordBreak: 'break-all' }}>{c.personalEmail || 'Not Provided'}</div>
-                      </div>
-                      <div>
-                        <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone / WhatsApp</small>
-                        <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#059669' }}>+91 {cleanPhone}</div>
-                      </div>
-                      <div>
-                        <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Industry / Niche</small>
-                        <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>{c.industry || c.category || 'Other'}</div>
-                      </div>
-                      <div>
-                        <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company Website</small>
-                        <div style={{ fontSize: '0.94rem', fontWeight: 600, color: '#2563eb', wordBreak: 'break-all' }}>
-                          {c.website || c.domain ? (
-                            <a href={c.website?.startsWith('http') ? c.website : `https://${c.website || c.domain}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>
-                              {c.website || c.domain} ↗
-                            </a>
-                          ) : 'Not Configured'}
-                        </div>
-                      </div>
-                      <div>
-                        <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Headquarters Location</small>
-                        <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>
-                          {c.city ? `${c.city}, ` : ''}{c.state ? `${c.state}, ` : ''}{c.country || 'India'}
-                        </div>
-                      </div>
-                      <div>
-                        <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Wallet Balance &amp; Spend</small>
-                        <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0f172a' }}>
-                          ₹{(c.walletBalance ?? c.balance ?? 0).toLocaleString('en-IN')} <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>(@ ₹{(c.dailyAdSpend ?? c.dailyPacing ?? 300).toLocaleString('en-IN')}/d)</span>
-                        </div>
-                      </div>
-                      <div>
-                        <small style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Lead Distribution Status</small>
-                        <div style={{ fontSize: '0.94rem', fontWeight: 700, color: isComplete ? '#059669' : '#d97706' }}>
-                          {isComplete ? '● Active & Delivering' : '⏸ Pending Verification'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 4 Checklist Checkpoints */}
-                    <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 8 }}>
-                      <div className="desk-check-item">
-                        <CheckCircle2 size={16} color="#059669" />
-                        <span>1. Company Name &amp; Identity</span>
-                      </div>
-                      <div className="desk-check-item">
-                        <CheckCircle2 size={16} color={isComplete ? '#059669' : '#d97706'} />
-                        <span>2. Category &amp; Industry Allocation</span>
-                      </div>
-                      <div className="desk-check-item">
-                        <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
-                        <span>3. Administrator WhatsApp &amp; Email</span>
-                      </div>
-                      <div className="desk-check-item">
-                        <CheckCircle2 size={16} color={isComplete ? '#059669' : '#94a3b8'} />
-                        <span>4. City &amp; Geographic Location</span>
-                      </div>
-                    </div>
-
-                    {/* Actions Bar */}
-                    <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {/* Details Button - Opens Comprehensive Customer Dossier Modal */}
-                      <button
-                        type="button"
-                        className="desk-action-btn"
-                        style={{
-                          background: '#4f46e5',
-                          color: '#ffffff',
-                          borderColor: '#4338ca',
-                          fontWeight: 800,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)'
-                        }}
-                        onClick={() => setSelectedProfileCust(c)}
-                      >
-                        <Eye size={14} /> Details
-                      </button>
-
-                      <a
-                        href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(contactDisplayName)},%20your%20Ad%20Mafia%20business%20profile%20is%20now%20reviewed.`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="desk-action-btn"
-                        style={{ textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}
-                      >
-                        <MessageSquare size={14} color="#059669" /> WhatsApp Partner Desk
-                      </a>
-
-                      <button
-                        type="button"
-                        className="desk-action-btn"
-                        onClick={() => alert(`Compliance dossier dispatched for ${companyDisplayName} to ${c.email || 'customer'}!`)}
-                      >
-                        <Send size={14} /> Send Certificate
-                      </button>
-
-                      {!isComplete && (
-                        <button
-                          type="button"
-                          className="sales-btn-primary"
-                          style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-                          onClick={() => handleToggleCheck(c.id)}
-                        >
-                          <Check size={14} /> Mark Step Verified (+25%)
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              }}
-            />
-          )}
-        </div>
-      )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </SmartTable>
+      </div>
 
       {/* Comprehensive Customer Profile Details Modal (Popup) */}
       {selectedProfileCust && (
@@ -7085,7 +6771,7 @@ export function QuerySupportDesk({
       {/* 6. CUSTOMER QUERY DOSSIER MODAL */}
       {selectedCustDossier && (
         <div className="sales-modal-overlay" onClick={() => setSelectedCustDossier(null)}>
-          <div className="sales-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="sales-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 920, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}>
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: 14, marginBottom: 16 }}>
               <div style={{ minWidth: 0, flex: '1 1 200px' }}>
@@ -7105,104 +6791,152 @@ export function QuerySupportDesk({
               </button>
             </div>
 
-            {/* Queries List */}
-            <div style={{ maxHeight: 380, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4, marginBottom: 16 }}>
-              {getCustomerQueries(selectedCustDossier).length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px 10px', color: '#64748b' }}>
-                  No queries logged yet for this customer.
-                </div>
-              ) : (
-                getCustomerQueries(selectedCustDossier).map((q) => {
-                  const isOpen = q.status === 'open';
-                  return (
-                    <div
-                      key={q.id}
-                      style={{
-                        background: isOpen ? '#fffcf0' : '#f8fafc',
-                        border: isOpen ? '1px solid #fef08a' : '1px solid #e2e8f0',
-                        borderRadius: 10,
-                        padding: '12px 14px',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
-                        <div style={{ minWidth: 0, flex: '1 1 200px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span
-                              className={`desk-pill ${q.priority === 'Urgent'
-                                ? 'pill-rose'
-                                : q.priority === 'High'
-                                  ? 'pill-amber'
-                                  : 'pill-indigo'
+            {/* Queries SmartTable */}
+            <div className="desk-table-card" style={{ marginBottom: 16 }}>
+              <SmartTable title="Customer Queries" defaultPageSize={8} exportFilename="customer-queries">
+                <table className="desk-table">
+                  <thead>
+                    <tr>
+                      <th>Subject &amp; Notes</th>
+                      <th>Category</th>
+                      <th>Priority</th>
+                      <th>Created At</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getCustomerQueries(selectedCustDossier).length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                          No queries logged yet for this customer.
+                        </td>
+                      </tr>
+                    ) : (
+                      getCustomerQueries(selectedCustDossier).map((q) => {
+                        const isOpen = q.status === 'open';
+                        return (
+                          <tr key={q.id}>
+                            {/* 1. Subject & Notes */}
+                            <td style={{ whiteSpace: 'normal', maxWidth: 280 }}>
+                              <div style={{ fontSize: '0.90rem', fontWeight: 800, color: '#0f172a' }}>
+                                {q.subject || 'General Inquiry'}
+                              </div>
+                              {q.internalNotes && (
+                                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 4, lineHeight: 1.35 }}>
+                                  {q.internalNotes}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* 2. Category */}
+                            <td>
+                              <span
+                                style={{
+                                  fontSize: '0.74rem',
+                                  background: '#f1f5f9',
+                                  color: '#334155',
+                                  padding: '2px 8px',
+                                  borderRadius: 6,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {q.category || 'General'}
+                              </span>
+                            </td>
+
+                            {/* 3. Priority */}
+                            <td>
+                              <span
+                                className={`desk-pill ${
+                                  q.priority === 'Urgent'
+                                    ? 'pill-rose'
+                                    : q.priority === 'High'
+                                      ? 'pill-amber'
+                                      : 'pill-indigo'
                                 }`}
-                              style={{ fontSize: '0.66rem', padding: '1px 6px', fontWeight: 800 }}
-                            >
-                              {q.priority}
-                            </span>
-                            <span style={{ fontSize: '0.72rem', background: '#f1f5f9', color: '#334155', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
-                              {q.category}
-                            </span>
-                            <span style={{ fontSize: '0.70rem', color: '#94a3b8' }}>
-                              ⏱️ {q.createdAt}
-                            </span>
-                          </div>
-                          <h4 style={{ margin: '6px 0 2px 0', fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
-                            {q.subject}
-                          </h4>
-                          {q.internalNotes && (
-                            <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 4, background: '#ffffff', padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
-                              {q.internalNotes}
-                            </div>
-                          )}
-                        </div>
+                                style={{ fontSize: '0.72rem', fontWeight: 800 }}
+                              >
+                                {q.priority || 'Normal'}
+                              </span>
+                            </td>
 
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          {/* Toggle Status Button */}
-                          <button
-                            type="button"
-                            className="desk-action-btn"
-                            style={{
-                              background: isOpen ? '#ecfdf5' : '#eff6ff',
-                              color: isOpen ? '#059669' : '#2563eb',
-                              borderColor: isOpen ? '#a7f3d0' : '#bfdbfe',
-                              fontWeight: 700,
-                              fontSize: '0.74rem',
-                              padding: '4px 10px',
-                            }}
-                            onClick={() => handleToggleResolve(q)}
-                            title={isOpen ? 'Mark Ticket as Resolved' : 'Reopen Ticket'}
-                          >
-                            {isOpen ? (
-                              <>
-                                <Check size={13} /> Resolve
-                              </>
-                            ) : (
-                              <>
-                                <RotateCcw size={13} /> Reopen
-                              </>
-                            )}
-                          </button>
+                            {/* 4. Created At */}
+                            <td>
+                              <span style={{ fontSize: '0.80rem', color: '#475569', fontWeight: 600 }}>
+                                {q.createdAt || '—'}
+                              </span>
+                            </td>
 
-                          {/* Delete Query Button */}
-                          <button
-                            type="button"
-                            className="desk-action-btn"
-                            style={{
-                              background: '#fff1f2',
-                              color: '#dc2626',
-                              borderColor: '#fecdd3',
-                              padding: '4px 8px',
-                            }}
-                            onClick={() => handleDeleteQuery(q)}
-                            title="Delete this query"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+                            {/* 5. Status */}
+                            <td>
+                              <span
+                                className={`desk-pill ${isOpen ? 'pill-amber' : 'pill-emerald'}`}
+                                style={{ fontSize: '0.74rem', fontWeight: 800 }}
+                              >
+                                {isOpen ? '⏳ Open' : '✓ Resolved'}
+                              </span>
+                            </td>
+
+                            {/* 6. Actions */}
+                            <td style={{ textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+                                <button
+                                  type="button"
+                                  className="desk-action-btn"
+                                  style={{
+                                    background: isOpen ? '#ecfdf5' : '#eff6ff',
+                                    color: isOpen ? '#059669' : '#2563eb',
+                                    borderColor: isOpen ? '#a7f3d0' : '#bfdbfe',
+                                    fontWeight: 700,
+                                    fontSize: '0.74rem',
+                                    padding: '4px 10px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                  onClick={() => handleToggleResolve(q)}
+                                  title={isOpen ? 'Mark Ticket as Resolved' : 'Reopen Ticket'}
+                                >
+                                  {isOpen ? (
+                                    <>
+                                      <Check size={13} /> Resolve
+                                    </>
+                                  ) : (
+                                    <>
+                                      <RotateCcw size={13} /> Reopen
+                                    </>
+                                  )}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="desk-action-btn"
+                                  style={{
+                                    background: '#fff1f2',
+                                    color: '#dc2626',
+                                    borderColor: '#fecdd3',
+                                    fontWeight: 700,
+                                    fontSize: '0.74rem',
+                                    padding: '4px 8px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                  onClick={() => handleDeleteQuery(q)}
+                                  title="Delete this query"
+                                >
+                                  <Trash2 size={13} /> Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </SmartTable>
             </div>
 
             {/* Modal Footer Controls */}
@@ -7316,65 +7050,143 @@ export function FollowupTasksDesk({ tasks, setTasks }) {
         </div>
       </div>
 
-      {/* Tasks List */}
-      <PaginatedCardList
-        items={filtered}
-        defaultPageSize={10}
-        gap={12}
-        renderItem={(t) => (
-          <div key={t.id} className="desk-card-row">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>{t.type}</h3>
-                  <span className="desk-pill pill-indigo">{t.company}</span>
-                  <span className={`desk-pill ${t.priority === 'Urgent' ? 'pill-rose' : 'pill-amber'}`}>
-                    {t.priority}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 4 }}>
-                  Contact: <span style={{ fontWeight: 600, color: '#334155' }}>{t.contact}</span> • Due: <span style={{ fontWeight: 700, color: '#4f46e5' }}>{t.dueTime}</span>
-                </div>
-              </div>
+      {/* Tasks SmartTable */}
+      <div className="desk-table-card">
+        <SmartTable title="Follow-up Tasks" defaultPageSize={12} exportFilename="followup-tasks">
+          <table className="desk-table">
+            <thead>
+              <tr>
+                <th>Task Type &amp; Notes</th>
+                <th>Client &amp; Contact</th>
+                <th>Priority</th>
+                <th>Due Schedule</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                    <Calendar size={34} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>No Follow-up Tasks Found</div>
+                    <div style={{ fontSize: '0.84rem', marginTop: 4 }}>
+                      No scheduled follow-up tasks match the selected cadence filter.
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((t) => {
+                  const cleanPhone = String(t.phone || '').replace(/\D/g, '').slice(-10);
+                  const isCompleted = t.status === 'completed';
+                  return (
+                    <tr key={t.id}>
+                      {/* 1. Task Type & Notes */}
+                      <td style={{ whiteSpace: 'normal', maxWidth: 320 }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                          {t.type || 'Client Follow-up'}
+                        </div>
+                        {t.notes && (
+                          <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 3, lineHeight: 1.35 }}>
+                            {t.notes}
+                          </div>
+                        )}
+                      </td>
 
-              <div>
-                <span className={`desk-pill ${t.status === 'completed' ? 'pill-emerald' : 'pill-amber'}`}>
-                  {t.status === 'completed' ? 'Completed' : 'Pending'}
-                </span>
-              </div>
-            </div>
+                      {/* 2. Client & Contact */}
+                      <td>
+                        <div style={{ fontWeight: 800, fontSize: '0.90rem', color: '#0f172a' }}>
+                          {t.company || 'Client Workspace'}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+                          {t.contact || 'Account Contact'}
+                          {t.phone ? (
+                            <>
+                              {' • '}
+                              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#059669' }}>
+                                +91 {cleanPhone || t.phone}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+                      </td>
 
-            <p style={{ margin: '8px 0 0 0', fontSize: '0.84rem', color: '#334155', background: '#f8fafc', padding: '8px 12px', borderRadius: 8 }}>
-              {t.notes}
-            </p>
+                      {/* 3. Priority */}
+                      <td>
+                        <span
+                          className={`desk-pill ${t.priority === 'Urgent' ? 'pill-rose' : 'pill-amber'}`}
+                          style={{ fontWeight: 800 }}
+                        >
+                          {t.priority || 'High'}
+                        </span>
+                      </td>
 
-            <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
-              <a href={`tel:${t.phone}`} className="desk-action-btn" style={{ textDecoration: 'none' }}>
-                <Phone size={14} /> Call
-              </a>
-              <a
-                href={`https://wa.me/91${t.phone}?text=Hello%20${encodeURIComponent(t.contact)},%20Ad%20Mafia%20Support%20follow-up%20regarding%20${encodeURIComponent(t.type)}.`}
-                target="_blank"
-                rel="noreferrer"
-                className="desk-action-btn"
-                style={{ textDecoration: 'none' }}
-              >
-                <MessageSquare size={14} /> WhatsApp
-              </a>
-              {t.status !== 'completed' && (
-                <button
-                  type="button"
-                  className="sales-btn-primary"
-                  style={{ padding: '5px 12px', fontSize: '0.78rem' }}
-                  onClick={() => handleCompleteTask(t.id)}
-                >
-                  <Check size={14} /> Mark Complete
-                </button>
+                      {/* 4. Due Schedule */}
+                      <td>
+                        <span style={{ fontWeight: 700, fontSize: '0.86rem', color: '#4f46e5' }}>
+                          {t.dueTime || 'Scheduled'}
+                        </span>
+                      </td>
+
+                      {/* 5. Status */}
+                      <td>
+                        <span
+                          className={`desk-pill ${isCompleted ? 'pill-emerald' : 'pill-amber'}`}
+                          style={{ fontWeight: 800 }}
+                        >
+                          {isCompleted ? 'Completed' : 'Pending'}
+                        </span>
+                      </td>
+
+                      {/* 6. Actions */}
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <a
+                            href={`tel:${cleanPhone || t.phone}`}
+                            className="desk-action-btn"
+                            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', fontSize: '0.78rem' }}
+                          >
+                            <Phone size={13} /> Call
+                          </a>
+                          <a
+                            href={`https://wa.me/91${cleanPhone || t.phone}?text=Hello%20${encodeURIComponent(t.contact || '')},%20Ad%20Mafia%20Support%20follow-up%20regarding%20${encodeURIComponent(t.type || 'your account')}.`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="desk-action-btn"
+                            style={{
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '5px 10px',
+                              fontSize: '0.78rem',
+                              background: '#ecfdf5',
+                              color: '#065f46',
+                              borderColor: '#a7f3d0',
+                            }}
+                          >
+                            <MessageSquare size={13} color="#059669" /> WhatsApp
+                          </a>
+                          {!isCompleted && (
+                            <button
+                              type="button"
+                              className="sales-btn-primary"
+                              style={{ padding: '5px 12px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              onClick={() => handleCompleteTask(t.id)}
+                            >
+                              <Check size={13} /> Mark Complete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
-            </div>
-          </div>
-        )}
-      />
+            </tbody>
+          </table>
+        </SmartTable>
+      </div>
     </div>
   );
 }
@@ -7705,7 +7517,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                             </span>
                           </div>
                           <div className="appr-category-line">
-                            Category: <b>{m.category || 'Meta Ads Lead Generation'}</b>
+                            Category: <b>{m.category || 'Ad Mafia Lead Generation'}</b>
                           </div>
                           <div className="appr-timestamp">
                             Approved: {formatIndianDateTime(m.completedAt || m.registeredAt, m.completedAt || m.registeredAtRaw || m.registered_at)}
@@ -7826,7 +7638,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
 
               <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Business Category</div>
-                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#4f46e5', marginTop: 3 }}>{selectedMember.category || 'Meta Ads Lead Gen'}</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#4f46e5', marginTop: 3 }}>{selectedMember.category || 'Ad Mafia Lead Gen'}</div>
                 <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>{selectedMember.industry || 'Digital Lead Acquisition'}</div>
               </div>
 

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import graphicsApi from '../services/graphicsApi';
+import { SmartTable } from '../components/SmartTabulator';
 
 const CREATIVE_FORMATS = [
   { id: 'Instagram / Facebook Post', label: 'Instagram / Facebook Post' },
@@ -251,154 +252,190 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
       </div>
 
       {/* 3. Content List */}
-      {loading ? (
-        <div className="graphics-table-card" style={{ padding: 40, textAlign: 'center' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#64748b' }}>
-            <RefreshCw size={18} className="spin" />
-            <span>Loading rejected posts queue...</span>
-          </div>
-        </div>
-      ) : rejectedPosts.length === 0 ? (
-        <div className="graphics-table-card" style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>
-          <CheckCircle2 size={36} color="#10b981" style={{ marginBottom: 8 }} />
-          <h4 style={{ margin: '0 0 4px 0', color: '#0f172a' }}>Zero rejected creatives! 🎉</h4>
-          <p style={{ margin: 0, fontSize: '0.84rem' }}>
-            All your submitted designs have passed verification or are currently in review.
-          </p>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {rejectedPosts.map((p) => (
-            <div key={p.id} className="graphics-table-card" style={{ padding: 20 }}>
-              <div className="gfx-rejected-grid" style={{ display: 'grid', gridTemplateColumns: '140px minmax(260px, 1fr) minmax(260px, 1fr) 180px', gap: 18, alignItems: 'center' }}>
-                {/* Artwork Thumbnail */}
-                <div>
-                  <div
-                    style={{
-                      width: 140,
-                      height: 140,
-                      borderRadius: 10,
-                      overflow: 'hidden',
-                      background: '#0f172a',
-                      position: 'relative',
-                      border: '1px solid #fecdd3',
-                    }}
-                  >
-                    {p.mediaUrl ? (
-                      <img
-                        src={p.mediaUrl}
-                        alt={p.title}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', color: '#94a3b8' }}>
-                        No Image
-                      </div>
-                    )}
-                    <span
-                      style={{
-                        position: 'absolute',
-                        top: 6,
-                        left: 6,
-                        background: '#e11d48',
-                        color: '#ffffff',
-                        fontSize: '0.66rem',
-                        fontWeight: 800,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                      }}
-                    >
-                      Rev #{p.revisionNumber}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Customer & Post Info */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    <strong style={{ fontSize: '1rem', color: '#0f172a' }}>{p.title}</strong>
-                    <span className="gfx-pill gfx-pill-rose">{p.status}</span>
-                  </div>
-                  <div style={{ fontSize: '0.80rem', color: '#64748b' }}>
-                    Customer: <strong style={{ color: '#334155' }}>{p.companyName}</strong> • {p.city || 'India'}
-                  </div>
-                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
-                    Platform: <strong>{p.platform}</strong> • Format: <strong>{p.creativeFormat}</strong>
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: '0.78rem',
-                      color: '#475569',
-                      marginTop: 8,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      lineHeight: 1.4,
-                      background: '#f8fafc',
-                      padding: '6px 10px',
-                      borderRadius: 6,
-                    }}
-                  >
-                    "{p.caption}"
-                  </div>
-                </div>
-
-                {/* Mandatory Marketing Rejection Feedback */}
-                <div>
-                  <div className="graphics-rejection-callout">
-                    <strong>⚠️ Marketing Auditor Rejection Reason:</strong>
-                    <div style={{ fontWeight: 600, marginTop: 2 }}>
-                      {p.rejectionReason}
+      <div className="graphics-table-card">
+        <SmartTable
+          title="Rejected & Revision Queue"
+          defaultPageSize={10}
+          exportFilename="graphics-revisions-queue"
+        >
+          <table className="graphics-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th>Artwork</th>
+                <th>Post &amp; Client</th>
+                <th>Rejection Reason &amp; Fix Instructions</th>
+                <th>Reviewed By</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: 40, textAlign: 'center' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#64748b' }}>
+                      <RefreshCw size={18} className="spin" />
+                      <span>Loading rejected posts queue...</span>
                     </div>
-                    {p.correctionInstructions && p.correctionInstructions !== p.rejectionReason && (
-                      <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#881337' }}>
-                        <b>Correction Request:</b> {p.correctionInstructions}
+                  </td>
+                </tr>
+              ) : rejectedPosts.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>
+                    <CheckCircle2 size={36} color="#10b981" style={{ marginBottom: 8 }} />
+                    <h4 style={{ margin: '0 0 4px 0', color: '#0f172a' }}>Zero rejected creatives! 🎉</h4>
+                    <p style={{ margin: 0, fontSize: '0.84rem' }}>
+                      All your submitted designs have passed verification or are currently in review.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                rejectedPosts.map((p) => (
+                  <tr key={p.id}>
+                    {/* 1. Artwork */}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {p.mediaUrl ? (
+                          <a
+                            href={p.mediaUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Click to inspect full-size artwork"
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 8,
+                              overflow: 'hidden',
+                              flexShrink: 0,
+                              display: 'block',
+                              background: '#0f172a',
+                              border: '1px solid #fecdd3',
+                            }}
+                          >
+                            <img
+                              src={p.mediaUrl}
+                              alt={p.title}
+                              style={{ width: 48, height: 48, objectFit: 'cover', display: 'block' }}
+                            />
+                          </a>
+                        ) : (
+                          <div
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 8,
+                              background: '#0f172a',
+                              color: '#94a3b8',
+                              fontSize: '0.66rem',
+                              display: 'grid',
+                              placeItems: 'center',
+                              textAlign: 'center',
+                              flexShrink: 0,
+                              border: '1px solid #e2e8f0',
+                            }}
+                          >
+                            No Image
+                          </div>
+                        )}
+                        <div>
+                          <span className="gfx-pill gfx-pill-rose" style={{ fontSize: '0.66rem' }}>
+                            Rev #{p.revisionNumber || 1}
+                          </span>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 3 }}>
+                            {p.creativeFormat || 'Standard'}
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
-                    Reviewed by <b>{p.reviewerName}</b> on{' '}
-                    {new Date(p.rejectedAt).toLocaleString('en-IN', {
-                      timeZone: 'Asia/Kolkata',
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true,
-                    })}
-                  </div>
-                </div>
+                    </td>
 
-                {/* Reupload & Action Buttons */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch' }}>
-                  <button
-                    type="button"
-                    className="graphics-btn-primary"
-                    style={{ justifyContent: 'center', padding: '9px 14px', fontSize: '0.84rem' }}
-                    onClick={() => handleOpenReupload(p)}
-                  >
-                    <RotateCcw size={14} />
-                    <span>Reupload Fix</span>
-                  </button>
+                    {/* 2. Post & Client */}
+                    <td>
+                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.88rem' }}>
+                        {p.title}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 600, marginTop: 2 }}>
+                        {p.companyName} • <span style={{ color: '#64748b', fontWeight: 400 }}>{p.city || 'India'}</span>
+                      </div>
+                      {p.platform && (
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                          {p.platform}
+                        </div>
+                      )}
+                    </td>
 
-                  <button
-                    type="button"
-                    className="graphics-btn-secondary"
-                    style={{ justifyContent: 'center', padding: '7px 12px', fontSize: '0.78rem' }}
-                    onClick={() => handleViewHistory(p)}
-                  >
-                    <History size={13} />
-                    <span>View Audit Trail</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                    {/* 3. Rejection Reason & Fix Instructions */}
+                    <td>
+                      <div style={{ fontSize: '0.80rem', color: '#be123c', fontWeight: 700 }}>
+                        {p.rejectionReason || 'Returned for revision'}
+                      </div>
+                      {p.correctionInstructions && p.correctionInstructions !== p.rejectionReason && (
+                        <div style={{ fontSize: '0.75rem', color: '#881337', marginTop: 3 }}>
+                          <strong>Fix:</strong> {p.correctionInstructions}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 4. Reviewed By */}
+                    <td>
+                      <div style={{ fontWeight: 700, fontSize: '0.80rem', color: '#0f172a' }}>
+                        {p.reviewerName || 'Marketing Auditor'}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                        {p.rejectedAt
+                          ? new Date(p.rejectedAt).toLocaleString('en-IN', {
+                              timeZone: 'Asia/Kolkata',
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true,
+                            })
+                          : '—'}
+                      </div>
+                    </td>
+
+                    {/* 5. Status */}
+                    <td>
+                      <span
+                        className={`gfx-pill ${
+                          p.status === 'Changes Requested' ? 'gfx-pill-amber' : 'gfx-pill-rose'
+                        }`}
+                      >
+                        {p.status || 'Rejected'}
+                      </span>
+                    </td>
+
+                    {/* 6. Actions */}
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="graphics-btn-primary"
+                          style={{ padding: '6px 10px', fontSize: '0.76rem' }}
+                          onClick={() => handleOpenReupload(p)}
+                        >
+                          <RotateCcw size={13} />
+                          <span>Reupload Fix</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="graphics-btn-secondary"
+                          style={{ padding: '6px 10px', fontSize: '0.76rem' }}
+                          onClick={() => handleViewHistory(p)}
+                        >
+                          <History size={13} />
+                          <span>Audit Trail</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </SmartTable>
+      </div>
 
       {/* 4. Reupload Artwork Modal */}
       {reuploadPost && (
@@ -547,7 +584,11 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
       {/* 5. Complete Audit Trail Modal */}
       {historyPost && (
         <div className="graphics-modal-backdrop" onClick={() => setHistoryPost(null)}>
-          <div className="graphics-modal-card" style={{ maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
+          <div
+            className="graphics-modal-card"
+            style={{ maxWidth: 840, width: '100%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="graphics-modal-header">
               <div>
                 <span className="graphics-brand-tag">Artwork Revision &amp; Review History</span>
@@ -572,96 +613,207 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                   <div style={{ marginTop: 8 }}>Loading history...</div>
                 </div>
               ) : (
-                <div>
-                  <h4 style={{ margin: '0 0 10px 0', fontSize: '0.92rem', color: '#0f172a' }}>
-                    Review Decisions &amp; Auditor Feedback ({historyData.reviews.length})
-                  </h4>
-                  {historyData.reviews.length === 0 ? (
-                    <div style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: 16 }}>No prior reviews logged.</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                      {historyData.reviews.map((rev) => (
-                        <div
-                          key={rev.id}
-                          style={{
-                            padding: 12,
-                            borderRadius: 8,
-                            background: rev.decision === 'Approved' ? '#ecfdf5' : '#fff1f2',
-                            border: `1px solid ${rev.decision === 'Approved' ? '#a7f3d0' : '#fecdd3'}`,
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <strong style={{ color: rev.decision === 'Approved' ? '#065f46' : '#9f1239' }}>
-                              Decision: {rev.decision}
-                            </strong>
-                            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                              {new Date(rev.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                            </span>
-                          </div>
-                          {rev.rejection_reason && (
-                            <div style={{ fontSize: '0.82rem', color: '#be123c', fontWeight: 600, marginTop: 4 }}>
-                              Rejection Reason: {rev.rejection_reason}
-                            </div>
-                          )}
-                          {rev.remarks && (
-                            <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>
-                              Remarks: {rev.remarks}
-                            </div>
-                          )}
-                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 4 }}>
-                            Reviewer: <b>{rev.reviewer_name}</b> ({rev.reviewer_role})
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <h4 style={{ margin: '0 0 10px 0', fontSize: '0.92rem', color: '#0f172a' }}>
-                    Artwork Version Revisions ({historyData.revisions.length})
-                  </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {historyData.revisions.map((ver) => (
-                      <div
-                        key={ver.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 12,
-                          padding: 10,
-                          borderRadius: 8,
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                        }}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.92rem', color: '#0f172a' }}>
+                      Review Decisions &amp; Auditor Feedback ({historyData.reviews.length})
+                    </h4>
+                    <div className="graphics-table-card">
+                      <SmartTable
+                        title="Review Decisions & Auditor Feedback"
+                        defaultPageSize={6}
+                        exportFilename="graphics-review-decisions"
                       >
-                        <img
-                          src={ver.media_url}
-                          alt="Revision"
-                          style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover' }}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 800, fontSize: '0.86rem', color: '#0f172a' }}>
-                            Revision #{ver.revision_number} • {ver.creative_format}
-                          </div>
-                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                            Uploaded by {ver.uploaded_by} on {new Date(ver.uploaded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                          </div>
-                          {ver.designer_notes && (
-                            <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: 2 }}>
-                              {ver.designer_notes}
-                            </div>
-                          )}
-                        </div>
-                        <a
-                          href={ver.media_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="graphics-footer-btn"
-                          style={{ padding: '4px 8px', fontSize: '0.72rem' }}
-                        >
-                          <ExternalLink size={12} />
-                        </a>
-                      </div>
-                    ))}
+                        <table className="graphics-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th>Decision</th>
+                              <th>Reviewer</th>
+                              <th>Rejection Reason &amp; Remarks</th>
+                              <th>Timestamp</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {historyData.reviews.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} style={{ textAlign: 'center', padding: 24, color: '#64748b', fontSize: '0.82rem' }}>
+                                  No prior reviews logged.
+                                </td>
+                              </tr>
+                            ) : (
+                              historyData.reviews.map((rev, idx) => (
+                                <tr key={rev.id || idx}>
+                                  <td>
+                                    <span
+                                      className={`gfx-pill ${
+                                        rev.decision === 'Approved'
+                                          ? 'gfx-pill-emerald'
+                                          : rev.decision === 'Changes Requested'
+                                          ? 'gfx-pill-amber'
+                                          : 'gfx-pill-rose'
+                                      }`}
+                                    >
+                                      {rev.decision}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>
+                                      {rev.reviewer_name || 'Marketing Auditor'}
+                                    </strong>
+                                    {rev.reviewer_role && (
+                                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                        {rev.reviewer_role}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td>
+                                    {rev.rejection_reason && (
+                                      <div style={{ fontSize: '0.80rem', color: '#be123c', fontWeight: 700 }}>
+                                        Reason: {rev.rejection_reason}
+                                      </div>
+                                    )}
+                                    {rev.remarks && (
+                                      <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: rev.rejection_reason ? 2 : 0 }}>
+                                        {rev.remarks}
+                                      </div>
+                                    )}
+                                    {!rev.rejection_reason && !rev.remarks && (
+                                      <span style={{ color: '#94a3b8' }}>—</span>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                      {rev.created_at
+                                        ? new Date(rev.created_at).toLocaleString('en-IN', {
+                                            timeZone: 'Asia/Kolkata',
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })
+                                        : '—'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </SmartTable>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.92rem', color: '#0f172a' }}>
+                      Artwork Version Revisions ({historyData.revisions.length})
+                    </h4>
+                    <div className="graphics-table-card">
+                      <SmartTable
+                        title="Artwork Version Revisions"
+                        defaultPageSize={6}
+                        exportFilename="graphics-artwork-revisions"
+                      >
+                        <table className="graphics-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th>Artwork</th>
+                              <th>Revision &amp; Format</th>
+                              <th>Designer &amp; Notes</th>
+                              <th>Uploaded At</th>
+                              <th style={{ textAlign: 'right' }}>Asset</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {historyData.revisions.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#64748b', fontSize: '0.82rem' }}>
+                                  No artwork revisions recorded.
+                                </td>
+                              </tr>
+                            ) : (
+                              historyData.revisions.map((ver, idx) => (
+                                <tr key={ver.id || idx}>
+                                  <td>
+                                    {ver.media_url ? (
+                                      <img
+                                        src={ver.media_url}
+                                        alt={`Revision ${ver.revision_number}`}
+                                        style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover', display: 'block' }}
+                                      />
+                                    ) : (
+                                      <div
+                                        style={{
+                                          width: 48,
+                                          height: 48,
+                                          borderRadius: 6,
+                                          background: '#0f172a',
+                                          color: '#94a3b8',
+                                          fontSize: '0.66rem',
+                                          display: 'grid',
+                                          placeItems: 'center',
+                                        }}
+                                      >
+                                        No Image
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>
+                                      Revision #{ver.revision_number}
+                                    </div>
+                                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                      {ver.creative_format || 'Standard'}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div style={{ fontWeight: 600, fontSize: '0.80rem', color: '#334155' }}>
+                                      {ver.uploaded_by || 'Graphics Designer'}
+                                    </div>
+                                    {ver.designer_notes && (
+                                      <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: 2 }}>
+                                        {ver.designer_notes}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                      {ver.uploaded_at
+                                        ? new Date(ver.uploaded_at).toLocaleString('en-IN', {
+                                            timeZone: 'Asia/Kolkata',
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })
+                                        : '—'}
+                                    </span>
+                                  </td>
+                                  <td style={{ textAlign: 'right' }}>
+                                    {ver.media_url ? (
+                                      <a
+                                        href={ver.media_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="graphics-footer-btn"
+                                        style={{ padding: '4px 8px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                        title="Open full-resolution asset"
+                                      >
+                                        <ExternalLink size={12} />
+                                        <span>Open</span>
+                                      </a>
+                                    ) : (
+                                      <span style={{ color: '#94a3b8' }}>—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </SmartTable>
+                    </div>
                   </div>
                 </div>
               )}

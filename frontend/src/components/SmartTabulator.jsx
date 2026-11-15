@@ -261,6 +261,11 @@ function TabulatorLiveGrid({
     const flush = () => {
       syncRafRef.current = false;
       setPortalTick((t) => t + 1);
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => {
+          setPortalTick((t) => t + 1);
+        });
+      }
     };
     if (typeof queueMicrotask === 'function') {
       queueMicrotask(flush);
@@ -359,6 +364,7 @@ function TabulatorLiveGrid({
           data: initialData,
           columns: tabCols,
           layout: 'fitColumns',
+          layoutColumnsOnNewData: true,
           responsiveLayout: false,
           movableColumns: true,
           renderVertical: 'basic',
@@ -402,9 +408,24 @@ function TabulatorLiveGrid({
           schedulePortalSync();
         });
 
+        table.on('columnResized', () => {
+          schedulePortalSync();
+        });
+
+        table.on('dataProcessed', () => {
+          schedulePortalSync();
+        });
+
+        table.on('renderComplete', () => {
+          schedulePortalSync();
+        });
+
         table.on('tableBuilt', () => {
           if (cancelled) return;
           setEngineReady(true);
+          try {
+            table.redraw(true);
+          } catch {}
           schedulePortalSync();
         });
 
@@ -429,10 +450,32 @@ function TabulatorLiveGrid({
     };
   }, [headerSchemaSig, schedulePortalSync]);
 
+  // Re-layout automatically if container width transitions from 0 (e.g. tab switch / drawer) to > 0
+  useEffect(() => {
+    if (!engineReady || typeof ResizeObserver === 'undefined' || !mountRef.current) return undefined;
+    let lastW = mountRef.current.clientWidth || 0;
+    const ro = new ResizeObserver((entries) => {
+      const nextW = entries[0]?.contentRect?.width || mountRef.current?.clientWidth || 0;
+      if (nextW > 0 && Math.abs(nextW - lastW) > 2) {
+        const wasZero = lastW === 0;
+        lastW = nextW;
+        if (tabulatorRef.current) {
+          try {
+            tabulatorRef.current.redraw(wasZero);
+          } catch {}
+          schedulePortalSync();
+        }
+      }
+    });
+    ro.observe(mountRef.current);
+    return () => ro.disconnect();
+  }, [engineReady, schedulePortalSync]);
+
   // Update Tabulator rows ONLY when the visible row key order/membership changes
   useEffect(() => {
     if (!engineReady || !tabulatorRef.current) return;
     if (prevRowSigRef.current === rowSequenceSig) return;
+    const wasEmpty = prevRowSigRef.current === '';
     prevRowSigRef.current = rowSequenceSig;
 
     cellHostsRef.current.clear();
@@ -442,26 +485,35 @@ function TabulatorLiveGrid({
       _rowKey: String(rec.key),
     }));
 
+    const finalizeSync = () => {
+      if (wasEmpty && nextRows.length > 0 && tabulatorRef.current) {
+        try {
+          tabulatorRef.current.redraw(true);
+        } catch {}
+      }
+      schedulePortalSync();
+    };
+
     try {
       const maybePromise = tabulatorRef.current.replaceData(nextRows);
       if (maybePromise && typeof maybePromise.then === 'function') {
-        maybePromise.then(() => schedulePortalSync()).catch(() => schedulePortalSync());
+        maybePromise.then(finalizeSync).catch(finalizeSync);
       } else {
-        schedulePortalSync();
+        finalizeSync();
       }
     } catch {
-      schedulePortalSync();
+      finalizeSync();
     }
   }, [rowSequenceSig, pagedRecords, engineReady, schedulePortalSync]);
 
-  // Assemble live React portals for headers + cells
+  // Assemble live React portals for headers + cells (no `isConnected` drop race!)
   const headerPortals = [];
   const cellPortals = [];
 
   if (engineReady && typeof document !== 'undefined') {
     visibleHeaders.forEach((h) => {
       const hostEl = headerHostsRef.current.get(h.idx);
-      if (!hostEl || !hostEl.isConnected) return;
+      if (!hostEl) return;
       const isSorted = sortState.colIdx === h.idx;
       const alignRight = h.thElement?.props?.style?.textAlign === 'right' || h.isActionCol;
 
@@ -522,7 +574,7 @@ function TabulatorLiveGrid({
       const rk = String(rec.key);
       visibleHeaders.forEach((h) => {
         const hostEl = cellHostsRef.current.get(`${rk}::${h.idx}`);
-        if (!hostEl || !hostEl.isConnected) return;
+        if (!hostEl) return;
         const td = rec.tdElements[h.idx];
         const cellChildren = td ? td.props?.children : '—';
         cellPortals.push(
@@ -535,7 +587,7 @@ function TabulatorLiveGrid({
       });
       if (rec.subRows && rec.subRows.length > 0) {
         const subHostEl = subRowHostsRef.current.get(rk);
-        if (subHostEl && subHostEl.isConnected) {
+        if (subHostEl) {
           cellPortals.push(
             createPortal(
               <div className="am-tab-subrow-inner">
@@ -563,7 +615,6 @@ function TabulatorLiveGrid({
       <div
         ref={mountRef}
         className={`am-tabulator-mount ${pagedRecords.length === 0 ? 'am-tab-is-empty' : ''}`}
-        style={!engineReady ? { display: 'none' } : undefined}
       />
       {engineReady && pagedRecords.length === 0 && (
         <div className="am-tab-empty-overlay">{emptyNode}</div>
@@ -633,6 +684,7 @@ export function TabulatorDataGrid({
           data: Array.isArray(data) ? data : [],
           columns: tabCols,
           layout: 'fitColumns',
+          layoutColumnsOnNewData: true,
           responsiveLayout: false,
           movableColumns: true,
           pagination: 'local',
@@ -643,8 +695,15 @@ export function TabulatorDataGrid({
           ...(height ? { maxHeight: height } : {}),
         });
 
+        table.on('tableBuilt', () => {
+          if (cancelled) return;
+          setReady(true);
+          try {
+            table.redraw(true);
+          } catch {}
+        });
+
         instanceRef.current = table;
-        setReady(true);
       })
       .catch((err) => {
         console.warn('[TabulatorDataGrid] Failed to initialize Tabulator:', err);
@@ -652,6 +711,7 @@ export function TabulatorDataGrid({
 
     return () => {
       cancelled = true;
+      setReady(false);
       if (instanceRef.current) {
         try {
           instanceRef.current.destroy();
@@ -756,23 +816,30 @@ export function SmartTable({
   const wrapRef = useRef(null);
   const colMenuRef = useRef(null);
 
-  // Detect if the parent desk section already renders its own search input right above the table
+  // Detect if the parent desk section already renders its own search input right above a single primary table
   useEffect(() => {
     if (typeof document === 'undefined' || !wrapRef.current || !enableSearch || forceSearch) return;
+    if (wrapRef.current.closest('.sales-modal-overlay, .sa-modal-overlay, .marketing-modal-overlay, .graphics-modal-overlay, [role="dialog"]')) {
+      setHasParentSearch(false);
+      return;
+    }
     const hostSection = wrapRef.current.closest(
-      '.desk-page-container, .sales-body-wrap, .sa-desk, .sa-page, .sa-content-body, .sa-desk-content, .marketing-main, .marketing-page-container, .marketing-page-body, .graphics-main, .graphics-content-body, .graphics-page-body, .wallet-ledger-card, .cp-page'
+      '.desk-page-container, .sales-body-wrap, .sa-desk, .sa-page, .sa-content-body, .sa-desk-content, .marketing-main, .marketing-page-container, .marketing-page-body, .graphics-main, .graphics-content-body, .graphics-page-body, .wallet-ledger-card, .cp-page, .portal-page-wrap, .pipeline-page-wrap, .followups-page-wrap'
     );
     if (!hostSection) return;
+    const siblingTables = hostSection.querySelectorAll('.am-smart-table-wrap');
+    if (siblingTables.length > 1) {
+      setHasParentSearch(false);
+      return;
+    }
     const candidateInputs = hostSection.querySelectorAll(
       'input[type="text"], input[type="search"], .desk-search-input, .appr-search-input, .sa-search-input'
     );
     let foundOutside = false;
     candidateInputs.forEach((inp) => {
       if (wrapRef.current && wrapRef.current.contains(inp)) return;
-      if (inp.closest('.sales-modal-overlay, .sa-modal-overlay, [role="dialog"]')) {
-        // Only count modal inputs if this table itself is inside that same modal
-        if (!wrapRef.current.closest('.sales-modal-overlay, .sa-modal-overlay, [role="dialog"]')) return;
-      }
+      if (inp.closest('.am-smart-table-wrap, .am-tabulator-native-shell, form')) return;
+      if (inp.closest('.sales-modal-overlay, .sa-modal-overlay, .marketing-modal-overlay, .graphics-modal-overlay, [role="dialog"]')) return;
       const ph = String(inp.getAttribute('placeholder') || '').toLowerCase();
       const cls = String(inp.className || '').toLowerCase();
       if (ph.includes('search') || ph.includes('filter') || cls.includes('search')) {
