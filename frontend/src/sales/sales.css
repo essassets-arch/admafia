@@ -409,18 +409,18 @@
 .sales-main-viewport {
   flex: 1;
   min-width: 0;
-  width: calc(100% - 270px);
+  width: calc(100% - 295px);
   display: flex;
   flex-direction: column;
   height: 100vh;
   max-height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   background: #f8fafc;
 }
 
 .sales-topbar {
   height: 72px;
+  flex-shrink: 0;
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
   padding: 0 32px;
@@ -720,7 +720,8 @@
    ========================================================================== */
 
 .sales-content-scroll {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -732,8 +733,27 @@
   width: 100%;
   max-width: 100%;
   margin: 0;
-  padding: 28px 36px 64px 36px;
+  padding: 28px 32px 64px 32px;
   box-sizing: border-box;
+}
+
+/* Laptop Proportion Optimization (961px - 1536px, including 125% / 150% Windows DPI Scaling) */
+@media (min-width: 961px) and (max-width: 1536px) {
+  .sales-sidebar {
+    width: 252px;
+  }
+
+  .sales-main-viewport {
+    width: calc(100% - 252px);
+  }
+
+  .sales-topbar {
+    padding: 0 20px;
+  }
+
+  .desk-page-container {
+    padding: 22px 20px 56px 20px;
+  }
 }
 
 .desk-header {

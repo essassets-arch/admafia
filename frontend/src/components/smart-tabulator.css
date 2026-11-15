@@ -335,7 +335,7 @@
 }
 
 .am-tabulator-mount .tabulator-header .tabulator-col .tabulator-col-content {
-  padding: 10px 12px !important;
+  padding: 10px 10px !important;
   width: 100% !important;
   box-sizing: border-box !important;
 }
@@ -442,10 +442,50 @@
 .am-tabulator-mount .tabulator-tableholder {
   width: 100% !important;
   overflow-x: auto !important;
-  overflow-y: visible !important;
+  overflow-y: hidden !important;
   -webkit-overflow-scrolling: touch !important;
   white-space: normal !important;
   background: #ffffff !important;
+}
+
+/* Allow vertical scrolling ONLY on standalone bounded grids (e.g. MongoDB Explorer) */
+.am-tabulator-standalone-mount .tabulator-tableholder {
+  overflow-y: auto !important;
+}
+
+/* Sleek Minimal Pill Scrollbars for Tabulator & Classic Table Viewports */
+.am-tabulator-mount .tabulator-tableholder::-webkit-scrollbar,
+.am-st-scroll-viewport::-webkit-scrollbar,
+.am-st-col-dropdown-list::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.am-tabulator-mount .tabulator-tableholder::-webkit-scrollbar-button,
+.am-st-scroll-viewport::-webkit-scrollbar-button,
+.am-st-col-dropdown-list::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.am-tabulator-mount .tabulator-tableholder::-webkit-scrollbar-track,
+.am-st-scroll-viewport::-webkit-scrollbar-track,
+.am-st-col-dropdown-list::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.am-tabulator-mount .tabulator-tableholder::-webkit-scrollbar-thumb,
+.am-st-scroll-viewport::-webkit-scrollbar-thumb,
+.am-st-col-dropdown-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.38);
+  border-radius: 999px;
+}
+
+.am-tabulator-mount .tabulator-tableholder:hover::-webkit-scrollbar-thumb,
+.am-st-scroll-viewport:hover::-webkit-scrollbar-thumb,
+.am-st-col-dropdown-list:hover::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.65);
 }
 
 .am-tabulator-mount.am-tab-is-empty .tabulator-tableholder {
@@ -474,7 +514,7 @@
   flex-wrap: nowrap !important;
   align-items: stretch !important;
   height: auto !important;
-  min-height: 58px !important;
+  min-height: 56px !important;
   background: #ffffff !important;
   border-bottom: 1px solid #f1f5f9 !important;
   transition: background-color 0.12s ease;
@@ -498,7 +538,7 @@
   align-items: center !important;
   height: auto !important;
   flex: 0 0 auto !important;
-  padding: 12px 12px !important;
+  padding: 11px 10px !important;
   border-right: 1px solid #f8fafc !important;
   white-space: normal !important;
   overflow-x: hidden !important;

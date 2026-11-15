@@ -16449,7 +16449,6 @@
     width: 100% !important;
     box-sizing: border-box !important;
     -webkit-overflow-scrolling: touch !important;
-    scrollbar-width: thin !important;
   }
 
   .seven-day-card-exact {

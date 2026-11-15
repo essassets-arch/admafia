@@ -351,3 +351,121 @@ canvas {
     display: none !important;
   }
 }
+
+/* Compact Super Admin Topbar Profile Text on Laptop Viewports (<= 1360px) */
+@media (max-width: 1360px) {
+  .sa-admin-info {
+    display: none !important;
+  }
+
+  .sa-admin-pill {
+    padding: 4px !important;
+    border-radius: 999px !important;
+  }
+}
+
+/* ==========================================================================
+   MINIMAL EXECUTIVE SCROLLBAR SYSTEM (PLATFORM-WIDE)
+   - Zero Windows ▲/▼/◄/► stepper buttons anywhere in Chrome, Edge, or Safari
+   - Sleek 6px rounded pill thumb on viewports & modals
+   - Auto-reveal 4px invisible-at-rest scrollbar on all 5 portal sidebars
+   - Avoids `scrollbar-width: thin` on WebKit/Blink (which forces native arrows
+     in Chromium 121+ on Windows) while keeping `scrollbar-width: thin` for Firefox
+   ========================================================================== */
+@supports selector(::-webkit-scrollbar) {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-button {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent !important;
+  }
+
+  /* Root document scrollbar track blends seamlessly with #f8fafc canvas (prevents black root compositor backing in Blink) */
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track {
+    background: #f8fafc !important;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.42);
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.72);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent !important;
+  }
+
+  /* Auto-reveal 4px ultra-minimal sidebar scrollbars (clean & borderless at rest) */
+  .sales-sidebar-menu::-webkit-scrollbar,
+  .portal-nav-menu::-webkit-scrollbar,
+  .marketing-sidebar-nav::-webkit-scrollbar,
+  .graphics-sidebar-nav::-webkit-scrollbar,
+  .sa-nav-list::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .sales-sidebar-menu::-webkit-scrollbar-thumb,
+  .portal-nav-menu::-webkit-scrollbar-thumb,
+  .marketing-sidebar-nav::-webkit-scrollbar-thumb,
+  .graphics-sidebar-nav::-webkit-scrollbar-thumb,
+  .sa-nav-list::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+  }
+
+  .sales-sidebar-menu:hover::-webkit-scrollbar-thumb,
+  .portal-nav-menu:hover::-webkit-scrollbar-thumb,
+  .marketing-sidebar-nav:hover::-webkit-scrollbar-thumb,
+  .graphics-sidebar-nav:hover::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.44);
+  }
+
+  .sa-nav-list:hover::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.28);
+  }
+
+  .sales-sidebar-menu::-webkit-scrollbar-thumb:hover,
+  .portal-nav-menu::-webkit-scrollbar-thumb:hover,
+  .marketing-sidebar-nav::-webkit-scrollbar-thumb:hover,
+  .graphics-sidebar-nav::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.68);
+  }
+
+  .sa-nav-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(203, 213, 225, 0.48);
+  }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  html,
+  body,
+  .sales-content-scroll,
+  .portal-main-area,
+  .am-tabulator-mount .tabulator-tableholder,
+  .am-st-scroll-viewport {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+  }
+
+  .sales-sidebar-menu,
+  .portal-nav-menu,
+  .marketing-sidebar-nav,
+  .graphics-sidebar-nav,
+  .sa-nav-list {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+  }
+}

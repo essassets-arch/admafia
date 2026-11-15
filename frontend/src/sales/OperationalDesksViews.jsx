@@ -914,7 +914,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
 
                     {/* 2. Mobile Number (10 Digits) */}
                     <td>
-                      <div style={{ fontWeight: 800, color: '#0f172a', fontFamily: 'monospace', fontSize: '0.92rem' }}>
+                      <div style={{ fontWeight: 800, color: '#0f172a', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.82rem', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>
                         +91 {c.phone}
                       </div>
                       <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>

@@ -183,30 +183,30 @@ function computeTabulatorColSpec(header, totalCols = 6) {
   const dense = totalCols >= 7;
 
   if (label === '#' || lower === 's.no' || lower === 'sr') {
-    return { width: 54, minWidth: 48, widthGrow: 0, hozAlign: 'center', headerHozAlign: 'center' };
+    return { width: 52, minWidth: 46, widthGrow: 0, hozAlign: 'center', headerHozAlign: 'center' };
   }
   if (header.isActionCol) {
-    return { minWidth: dense ? 144 : 160, widthGrow: 1.2, hozAlign: 'right', headerHozAlign: 'right' };
+    return { minWidth: dense ? 132 : 156, widthGrow: 1.15, hozAlign: 'right', headerHozAlign: 'right' };
   }
   if (/username|workspace|business|company|customer|client|account|entity|description|queries|ticket/.test(lower)) {
-    return { minWidth: dense ? 172 : 205, widthGrow: 1.75, hozAlign, headerHozAlign: hozAlign };
+    return { minWidth: dense ? 158 : 200, widthGrow: 1.7, hozAlign, headerHozAlign: hozAlign };
   }
   if (/email|location|purpose|notes|audit|details|address/.test(lower)) {
-    return { minWidth: dense ? 136 : 165, widthGrow: 1.35, hozAlign, headerHozAlign: hozAlign };
+    return { minWidth: dense ? 124 : 160, widthGrow: 1.35, hozAlign, headerHozAlign: hozAlign };
   }
   if (/mobile|phone|contact|whatsapp|date|time|receipt|ref|transaction|utr/.test(lower)) {
-    return { minWidth: dense ? 128 : 150, widthGrow: 1.15, hozAlign, headerHozAlign: hozAlign };
+    return { minWidth: dense ? 122 : 146, widthGrow: 1.15, hozAlign, headerHozAlign: hozAlign };
   }
   if (/wallet|balance|amount|runway|pacing|price|budget|spend|revenue|paid/.test(lower)) {
-    return { minWidth: dense ? 118 : 135, widthGrow: 1.1, hozAlign, headerHozAlign: hozAlign };
+    return { minWidth: dense ? 108 : 132, widthGrow: 1.08, hozAlign, headerHozAlign: hozAlign };
   }
   if (/^(status|state|stage|type|role|mode|tier|priority)$/.test(lower)) {
-    return { minWidth: dense ? 86 : 102, widthGrow: 0.78, hozAlign, headerHozAlign: hozAlign };
+    return { minWidth: dense ? 76 : 98, widthGrow: 0.75, hozAlign, headerHozAlign: hozAlign };
   }
   if (/status|profile|payment|gate|stage|type|method|category|role|compliance|verification/.test(lower)) {
-    return { minWidth: dense ? 112 : 128, widthGrow: 1.0, hozAlign, headerHozAlign: hozAlign };
+    return { minWidth: dense ? 102 : 124, widthGrow: 0.98, hozAlign, headerHozAlign: hozAlign };
   }
-  return { minWidth: dense ? 115 : 132, widthGrow: 1.05, hozAlign, headerHozAlign: hozAlign };
+  return { minWidth: dense ? 104 : 128, widthGrow: 1.02, hozAlign, headerHozAlign: hozAlign };
 }
 
 let portalHostUidSeq = 1;
