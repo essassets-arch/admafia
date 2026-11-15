@@ -194,25 +194,25 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
   const getDeskTitle = () => {
     switch (activeDesk) {
       case 'dashboard':
-        return { title: 'Super Admin Dashboard', subtitle: 'Live command center and operational metrics' };
+        return { title: 'Super Admin Dashboard', subtitle: 'Live command center & operational metrics' };
       case 'growth_analytics':
-        return { title: '10k-Scale Growth, Conversion Funnel & Churn Radar', subtitle: 'Onboarding drop-off funnel, WhatsApp close queue, low-runway alerts & security shield' };
+        return { title: 'Growth & Churn Radar', subtitle: 'Conversion funnel, WhatsApp close queue & low-runway alerts' };
       case 'database_backups':
-        return { title: 'MongoDB Replica Set, Compass & Snapshot Vault', subtitle: 'Live DB telemetry, Compass SSH/local URIs, and AES-256 encrypted oplog backups' };
+        return { title: 'Database & Snapshot Vault', subtitle: 'MongoDB replica set, live explorer & encrypted backups' };
       case 'queries':
-        return { title: 'Customer & Business Queries', subtitle: 'Support desk triage and administrative responses' };
+        return { title: 'Customer & Business Queries', subtitle: 'Support desk triage & administrative responses' };
       case 'finance':
-        return { title: 'Financial Management & Ledger', subtitle: 'Authoritative account balances, transactions & reconciliation' };
+        return { title: 'Financial Management & Ledger', subtitle: 'Authoritative balances, transactions & reconciliation' };
       case 'refunds':
-        return { title: 'Refund Requests Queue', subtitle: 'Review and approve customer wallet refund requests' };
+        return { title: 'Refund Requests Queue', subtitle: 'Review & approve customer wallet refund requests' };
       case 'topups':
-        return { title: 'Account Top-Up & Deposits', subtitle: 'Bank UTR payment verification and wallet credits' };
+        return { title: 'Account Top-Up & Deposits', subtitle: 'Bank UTR verification & instant wallet credits' };
       case 'accounts':
-        return { title: 'Account Governance (Block / Activate)', subtitle: 'Business and system user status management with audit trails' };
+        return { title: 'Account Governance', subtitle: 'Business & staff status management with audit trails' };
       case 'country_pricing':
-        return { title: 'Country Pricing & IP Geolocation Master', subtitle: 'Manage international daily budgets, local currencies, taxes and live IP detection' };
+        return { title: 'Country Pricing & IP Master', subtitle: 'Global daily budgets, local currencies & geolocation' };
       case 'add_user':
-        return { title: 'Add User / Business', subtitle: 'Provision enterprise businesses and assign staff roles' };
+        return { title: 'Add User / Business', subtitle: 'Provision enterprise businesses & assign staff roles' };
       default:
         return { title: 'Super Admin Control Center', subtitle: 'Platform Governance' };
     }
@@ -309,17 +309,17 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
               type="button"
               className="sa-footer-link"
               style={{ fontSize: 11, padding: '7px 8px', justifyContent: 'center' }}
-              onClick={() => (window.location.href = '/app/lead')}
-              title="Open Customer Leads Portal"
+              onClick={() => (window.location.href = '/sales')}
+              title="Switch to Sales Operations Desk"
             >
               <Briefcase size={13} color="#3b82f6" />
-              <span>Leads CRM</span>
+              <span>Sales Desk</span>
             </button>
             <button
               type="button"
               className="sa-footer-link"
               style={{ fontSize: 11, padding: '7px 8px', justifyContent: 'center' }}
-              onClick={onBackToWebsite || (() => (window.location.href = '/'))}
+              onClick={onBackToWebsite || (() => (window.location.href = '/?site=1'))}
               title="Ad Mafia Main Website"
             >
               <ExternalLink size={13} color="#10b981" />

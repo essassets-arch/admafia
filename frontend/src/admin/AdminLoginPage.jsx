@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Lock,
   User,
@@ -24,6 +24,21 @@ export default function AdminLoginPage({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(notice || '');
+
+  // Never show Administrator Sign In if an active admin/staff session is already valid
+  useEffect(() => {
+    const existing = adminAuthApi.getCurrentUser();
+    if (!existing) return;
+    const deptParam =
+      typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '').get('dept') || '' : '';
+    const ws = adminAuthApi.resolveRequestedWorkspace(deptParam);
+    const dest = targetUrl || ws?.path || '/superadmin';
+    if (onLoginSuccess) {
+      onLoginSuccess(existing, dest);
+    } else if (typeof window !== 'undefined') {
+      window.location.replace(dest);
+    }
+  }, [targetUrl, onLoginSuccess]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

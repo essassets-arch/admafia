@@ -20,6 +20,7 @@ import {
   Target,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
+import adminAuthApi from '../services/adminAuthApi';
 import countryService, { formatDailyRate, formatDailyBudget } from '../services/countryService';
 import WhatsAppOtpModal from '../components/WhatsAppOtpModal';
 import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion';
@@ -1378,6 +1379,25 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
     });
   }, []);
 
+  // Redirect away immediately if already authenticated as Customer or Super Admin / Staff
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const rawCust = localStorage.getItem('growthline_active_user');
+      if (rawCust) {
+        const parsed = JSON.parse(rawCust);
+        if (parsed && (parsed.companyName || parsed.name || parsed.phone || parsed.username)) {
+          window.location.replace('/app/lead#app/dashboard');
+          return;
+        }
+      }
+      const ws = adminAuthApi.getDefaultWorkspace();
+      if (ws?.path) {
+        window.location.replace(ws.path);
+      }
+    } catch {}
+  }, []);
+
   const finalizePortalEntry = (cust) => {
     const safeCust = sanitizeStoredCustomer(cust);
     localStorage.setItem('growthline_active_user', JSON.stringify(safeCust));
@@ -1445,9 +1465,24 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
     } catch (apiErr) {
       if (apiErr.message && apiErr.message.toLowerCase().includes('suspended')) {
         setSuspensionError(apiErr.message);
-      } else {
-        setLoginError(apiErr.message || 'Invalid credentials. Please verify your username/mobile and password.');
+        setIsSubmitting(false);
+        return;
       }
+
+      // Seamless staff/Super Admin fallback if an administrator enters staff credentials on /login
+      try {
+        const staffRes = await adminAuthApi.login({
+          identifier: username.trim(),
+          password,
+        });
+        if (staffRes && staffRes.ok) {
+          const dest = staffRes.targetUrl || adminAuthApi.getDefaultWorkspace(staffRes.user)?.path || '/superadmin';
+          window.location.href = dest;
+          return;
+        }
+      } catch {}
+
+      setLoginError(apiErr.message || 'Invalid credentials. Please verify your username/mobile and password.');
       setIsSubmitting(false);
     }
   };

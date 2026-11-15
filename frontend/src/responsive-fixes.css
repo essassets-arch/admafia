@@ -352,7 +352,7 @@ canvas {
   }
 }
 
-/* Compact Super Admin Topbar Profile Text on Laptop Viewports (<= 1360px) */
+/* Compact Super Admin Topbar Profile Text & Clock on Laptop Viewports (<= 1360px / <= 1180px) */
 @media (max-width: 1360px) {
   .sa-admin-info {
     display: none !important;
@@ -361,6 +361,12 @@ canvas {
   .sa-admin-pill {
     padding: 4px !important;
     border-radius: 999px !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .sa-clock-pill {
+    display: none !important;
   }
 }
 

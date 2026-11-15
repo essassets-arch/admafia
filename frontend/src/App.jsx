@@ -215,10 +215,22 @@ const resolveView = () => {
       if (raw) {
         const u = JSON.parse(raw);
         if (u && (u.companyName || u.name || u.phone || u.username)) {
+          try {
+            window.history.replaceState({}, '', '/app/lead#app/dashboard');
+          } catch (e) {}
           return 'portal';
         }
       }
     } catch (e) {}
+    // If Super Admin or Department Staff is already logged in, redirect straight to their workspace
+    const activeAdminWs = adminAuthApi.getDefaultWorkspace();
+    if (activeAdminWs) {
+      try {
+        window.history.replaceState({}, '', activeAdminWs.path);
+      } catch (e) {}
+      window.location.hash = '';
+      return activeAdminWs.view;
+    }
     return 'login';
   }
 
@@ -233,6 +245,15 @@ const resolveView = () => {
     p === '/staff/login' ||
     h.includes('staff/login')
   ) {
+    const deptParam = new URLSearchParams(window.location.search || '').get('dept') || '';
+    const activeAdminWs = adminAuthApi.resolveRequestedWorkspace(deptParam);
+    if (activeAdminWs) {
+      try {
+        window.history.replaceState({}, '', activeAdminWs.path);
+      } catch (e) {}
+      window.location.hash = '';
+      return activeAdminWs.view;
+    }
     return 'admin-login';
   }
 
@@ -259,6 +280,13 @@ const resolveView = () => {
   // 4B. Sales Operations Desks (/sales)
   if (p.startsWith('/sales') || h.startsWith('#sales')) {
     if (h.includes('login') || h === '#sales/login') {
+      if (adminAuthApi.hasAccessTo('Sales')) {
+        try {
+          window.history.replaceState({}, '', '/sales');
+        } catch (e) {}
+        window.location.hash = '';
+        return 'sales-portal';
+      }
       try {
         window.history.replaceState({}, '', '/admin/login?dept=sales');
       } catch (e) {}
@@ -324,12 +352,23 @@ const resolveView = () => {
   if (h.includes('#checkout') || h.includes('#onboarding') || p.startsWith('/checkout') || p.startsWith('/onboarding')) return 'checkout';
 
   // 8. Auth
-  if (h.includes('#auth') || p.startsWith('/auth')) return 'auth';
+  if (h.includes('#auth') || p.startsWith('/auth')) {
+    const activeAdminWs = adminAuthApi.getDefaultWorkspace();
+    if (activeAdminWs) {
+      try {
+        window.history.replaceState({}, '', activeAdminWs.path);
+      } catch (e) {}
+      window.location.hash = '';
+      return activeAdminWs.view;
+    }
+    return 'auth';
+  }
 
   // 9. Root Landing / Homepage Check:
-  // If the customer has already registered or logged in, navigate straight to their Dashboard!
-  // Per User Request: "https://admafia.marketing/ in this if already created account or login so just show dashbaord not again button"
-  if ((p === '/' || p === '') && (!h || h === '' || h === '#')) {
+  // If the customer OR Super Admin / Staff is already logged in (and didn't explicitly click "Website" preview `?site=1`),
+  // open their active dashboard immediately instead of showing Login/Create Account!
+  const explicitSitePreview = new URLSearchParams(window.location.search || '').get('site') === '1';
+  if (!explicitSitePreview && (p === '/' || p === '') && (!h || h === '' || h === '#')) {
     try {
       const raw = localStorage.getItem('growthline_active_user');
       if (raw) {
@@ -342,6 +381,14 @@ const resolveView = () => {
         }
       }
     } catch (e) {}
+
+    const activeAdminWs = adminAuthApi.getDefaultWorkspace();
+    if (activeAdminWs) {
+      try {
+        window.history.replaceState({}, '', activeAdminWs.path);
+      } catch (e) {}
+      return activeAdminWs.view;
+    }
   }
 
   return 'landing';
@@ -374,6 +421,7 @@ export default function App({ initialCountry = null } = {}) {
     } catch (e) {}
     return null;
   });
+  const [currentAdmin, setCurrentAdmin] = useState(() => adminAuthApi.getCurrentUser());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -386,6 +434,7 @@ export default function App({ initialCountry = null } = {}) {
     const syncUser = () => {
       try {
         if (typeof window === 'undefined') return;
+        setCurrentAdmin(adminAuthApi.getCurrentUser());
         const raw = localStorage.getItem('growthline_active_user');
         if (raw) {
           const parsed = JSON.parse(raw);
@@ -400,10 +449,12 @@ export default function App({ initialCountry = null } = {}) {
 
     window.addEventListener('growthline_customer_registered', syncUser);
     window.addEventListener('growthline_active_user_changed', syncUser);
+    window.addEventListener('admafia_admin_session_changed', syncUser);
     window.addEventListener('storage', syncUser);
     return () => {
       window.removeEventListener('growthline_customer_registered', syncUser);
       window.removeEventListener('growthline_active_user_changed', syncUser);
+      window.removeEventListener('admafia_admin_session_changed', syncUser);
       window.removeEventListener('storage', syncUser);
     };
   }, []);
@@ -511,6 +562,15 @@ export default function App({ initialCountry = null } = {}) {
     }
   };
 
+  const openPublicWebsitePreview = () => {
+    window.location.hash = '';
+    try {
+      window.history.pushState({}, '', '/?site=1');
+    } catch (e) {}
+    setCurrentView('landing');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // View: Unified Department & Admin Login (/admin/login or /superadmin/login)
   if (currentView === 'admin-login') {
     return (
@@ -520,14 +580,10 @@ export default function App({ initialCountry = null } = {}) {
           try {
             window.history.pushState({}, '', dest);
           } catch (e) {}
+          setCurrentAdmin(adminAuthApi.getCurrentUser());
           setCurrentView(resolveView());
         }}
-        onBackToWebsite={() => {
-          try { window.history.pushState({}, '', '/'); } catch (e) {}
-          window.location.hash = '';
-          setCurrentView('landing');
-          window.location.href = '/';
-        }}
+        onBackToWebsite={openPublicWebsitePreview}
       />
     );
   }
@@ -540,13 +596,10 @@ export default function App({ initialCountry = null } = {}) {
         targetUrl="/sales"
         onLoginSuccess={(user, targetUrl) => {
           try { window.history.pushState({}, '', targetUrl || '/sales'); } catch(e) {}
+          setCurrentAdmin(adminAuthApi.getCurrentUser());
           setCurrentView(resolveView());
         }}
-        onBackToWebsite={() => {
-          window.location.hash = '';
-          try { window.history.pushState({}, '', '/'); } catch(e) {}
-          setCurrentView('landing');
-        }}
+        onBackToWebsite={openPublicWebsitePreview}
       />
     );
   }
@@ -557,15 +610,12 @@ export default function App({ initialCountry = null } = {}) {
       <SalesExecutiveDashboard
         onSignOut={() => {
           adminAuthApi.logout();
+          setCurrentAdmin(null);
           try { window.history.pushState({}, '', '/admin/login?dept=sales'); } catch (e) {}
           window.location.hash = '';
           setCurrentView('admin-login');
         }}
-        onBackToWebsite={() => {
-          window.location.hash = '';
-          try { window.history.pushState({}, '', '/'); } catch (e) {}
-          setCurrentView('landing');
-        }}
+        onBackToWebsite={openPublicWebsitePreview}
       />
     );
   }
@@ -576,16 +626,12 @@ export default function App({ initialCountry = null } = {}) {
       <MarketingLayout
         onSignOut={() => {
           adminAuthApi.logout();
+          setCurrentAdmin(null);
           try { window.history.pushState({}, '', '/admin/login?dept=marketing'); } catch (e) {}
           window.location.hash = '';
           setCurrentView('admin-login');
         }}
-        onBackToWebsite={() => {
-          try { window.history.pushState({}, '', '/'); } catch (e) {}
-          window.location.hash = '';
-          setCurrentView('landing');
-          window.location.href = '/';
-        }}
+        onBackToWebsite={openPublicWebsitePreview}
       />
     );
   }
@@ -596,16 +642,12 @@ export default function App({ initialCountry = null } = {}) {
       <GraphicsLayout
         onSignOut={() => {
           adminAuthApi.logout();
+          setCurrentAdmin(null);
           try { window.history.pushState({}, '', '/admin/login?dept=graphics'); } catch (e) {}
           window.location.hash = '';
           setCurrentView('admin-login');
         }}
-        onBackToWebsite={() => {
-          try { window.history.pushState({}, '', '/'); } catch (e) {}
-          window.location.hash = '';
-          setCurrentView('landing');
-          window.location.href = '/';
-        }}
+        onBackToWebsite={openPublicWebsitePreview}
       />
     );
   }
@@ -616,16 +658,12 @@ export default function App({ initialCountry = null } = {}) {
       <SuperAdminLayout
         onSignOut={() => {
           adminAuthApi.logout();
+          setCurrentAdmin(null);
           try { window.history.pushState({}, '', '/admin/login?dept=superadmin'); } catch (e) {}
           window.location.hash = '';
           setCurrentView('admin-login');
         }}
-        onBackToWebsite={() => {
-          try { window.history.pushState({}, '', '/'); } catch (e) {}
-          window.location.hash = '';
-          setCurrentView('landing');
-          window.location.href = '/';
-        }}
+        onBackToWebsite={openPublicWebsitePreview}
       />
     );
   }
@@ -669,14 +707,7 @@ export default function App({ initialCountry = null } = {}) {
           setCurrentView('landing');
           window.location.href = '/';
         }}
-        onBackToWebsite={() => {
-          try {
-            window.history.pushState({}, '', '/');
-          } catch(e) {}
-          window.location.hash = '';
-          setCurrentView('landing');
-          window.location.href = '/';
-        }}
+        onBackToWebsite={openPublicWebsitePreview}
       />
     );
   }
@@ -699,12 +730,7 @@ export default function App({ initialCountry = null } = {}) {
           window.location.hash = '#register';
           setCurrentView('register');
         }}
-        onBackToWebsite={() => {
-          try { window.history.pushState({}, '', '/'); } catch(e) {}
-          window.location.hash = '';
-          setCurrentView('landing');
-          window.location.href = '/';
-        }}
+        onBackToWebsite={openPublicWebsitePreview}
       />
     );
   }
@@ -729,14 +755,9 @@ export default function App({ initialCountry = null } = {}) {
         onSwitchToLogin={() => {
           try { window.history.pushState({}, '', '/#login'); } catch(e) {}
           window.location.hash = '#login';
-          setCurrentView('login');
+          setCurrentView(resolveView());
         }}
-        onBackToWebsite={() => {
-          try { window.history.pushState({}, '', '/'); } catch(e) {}
-          window.location.hash = '';
-          setCurrentView('landing');
-          window.location.href = '/';
-        }}
+        onBackToWebsite={openPublicWebsitePreview}
       />
     );
   }
@@ -859,7 +880,37 @@ export default function App({ initialCountry = null } = {}) {
           </nav>
 
           <div className="nav-actions">
-            {currentUser ? (
+            {currentAdmin ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ws = adminAuthApi.getDefaultWorkspace(currentAdmin) || { path: '/superadmin', view: 'superadmin-portal' };
+                    navigateTo(ws.path, ws.view);
+                  }}
+                  className="nav-btn nav-btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <span>{adminAuthApi.getDefaultWorkspace(currentAdmin)?.label || 'Admin Workspace'}</span>
+                  <span style={{ fontSize: '1rem', fontWeight: 900 }}>→</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    adminAuthApi.logout();
+                    setCurrentAdmin(null);
+                    try { window.history.pushState({}, '', '/?site=1'); } catch (e) {}
+                    window.location.hash = '';
+                    setCurrentView('landing');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="nav-btn nav-btn-outline desktop-only"
+                  style={{ color: '#64748b' }}
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : currentUser ? (
               <>
                 <button 
                   type="button" 
@@ -878,10 +929,10 @@ export default function App({ initialCountry = null } = {}) {
                 <button 
                   type="button" 
                   onClick={() => {
+                    crmApi.logout();
                     try {
-                      localStorage.removeItem('growthline_active_user');
                       sessionStorage.clear();
-                      window.history.pushState({}, '', '/');
+                      window.history.pushState({}, '', '/?site=1');
                     } catch (e) {}
                     setCurrentUser(null);
                     window.location.hash = '';
@@ -901,7 +952,7 @@ export default function App({ initialCountry = null } = {}) {
                   onClick={() => {
                     try { window.history.pushState({}, '', '/#login'); } catch (e) {}
                     window.location.hash = '#login';
-                    setCurrentView('login');
+                    setCurrentView(resolveView());
                     setMobileMenuOpen(false);
                   }}
                   className="nav-btn nav-btn-outline"
@@ -945,7 +996,24 @@ export default function App({ initialCountry = null } = {}) {
         {mobileMenuOpen && (
           <div className="mobile-drawer-overlay" onClick={() => setMobileMenuOpen(false)}>
             <div className="mobile-drawer-menu" onClick={(e) => e.stopPropagation()}>
-              {!currentUser && (
+              {currentAdmin ? (
+                <>
+                  <div className="mobile-drawer-section-title">Active Staff Session</div>
+                  <div className="mobile-drawer-auth-cta-row">
+                    <button
+                      type="button"
+                      className="nav-btn nav-btn-primary mobile-drawer-auth-btn"
+                      onClick={() => {
+                        const ws = adminAuthApi.getDefaultWorkspace(currentAdmin) || { path: '/superadmin', view: 'superadmin-portal' };
+                        navigateTo(ws.path, ws.view);
+                      }}
+                    >
+                      Open {adminAuthApi.getDefaultWorkspace(currentAdmin)?.label || 'Admin Workspace'} →
+                    </button>
+                  </div>
+                  <div className="mobile-drawer-divider" />
+                </>
+              ) : !currentUser ? (
                 <>
                   <div className="mobile-drawer-section-title">Client Portal Access</div>
                   <div className="mobile-drawer-auth-cta-row">
@@ -955,7 +1023,7 @@ export default function App({ initialCountry = null } = {}) {
                       onClick={() => {
                         try { window.history.pushState({}, '', '/#login'); } catch (e) {}
                         window.location.hash = '#login';
-                        setCurrentView('login');
+                        setCurrentView(resolveView());
                         setMobileMenuOpen(false);
                       }}
                     >
@@ -981,7 +1049,7 @@ export default function App({ initialCountry = null } = {}) {
                   </div>
                   <div className="mobile-drawer-divider" />
                 </>
-              )}
+              ) : null}
 
               <div className="mobile-drawer-section-title">Website Sections</div>
               <div className="mobile-drawer-links">
@@ -1011,7 +1079,7 @@ export default function App({ initialCountry = null } = {}) {
                 </a>
               </div>
 
-              {currentUser && (
+              {(currentAdmin || currentUser) && (
                 <>
                   <div className="mobile-drawer-divider" />
                   <div className="mobile-drawer-actions">
@@ -1020,12 +1088,18 @@ export default function App({ initialCountry = null } = {}) {
                       className="mobile-drawer-action-card"
                       style={{ borderColor: '#fecaca', background: '#fff5f5' }}
                       onClick={() => {
+                        if (currentAdmin) {
+                          adminAuthApi.logout();
+                          setCurrentAdmin(null);
+                        }
+                        if (currentUser) {
+                          crmApi.logout();
+                          setCurrentUser(null);
+                        }
                         try {
-                          localStorage.removeItem('growthline_active_user');
                           sessionStorage.clear();
-                          window.history.pushState({}, '', '/');
+                          window.history.pushState({}, '', '/?site=1');
                         } catch (e) {}
-                        setCurrentUser(null);
                         window.location.hash = '';
                         setCurrentView('landing');
                         setMobileMenuOpen(false);
@@ -1036,7 +1110,7 @@ export default function App({ initialCountry = null } = {}) {
                       </div>
                       <div>
                         <div className="mobile-drawer-action-title" style={{ color: '#b91c1c' }}>Sign Out</div>
-                        <div className="mobile-drawer-action-sub">Disconnect active customer session</div>
+                        <div className="mobile-drawer-action-sub">Disconnect active session</div>
                       </div>
                     </button>
                   </div>
@@ -1061,7 +1135,18 @@ export default function App({ initialCountry = null } = {}) {
                 Stop Searching for Customers. Start Connecting With Them.
               </div>
               <div className="row">
-                {currentUser ? (
+                {currentAdmin ? (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      const ws = adminAuthApi.getDefaultWorkspace(currentAdmin) || { path: '/superadmin', view: 'superadmin-portal' };
+                      navigateTo(ws.path, ws.view);
+                    }}
+                  >
+                    Open {adminAuthApi.getDefaultWorkspace(currentAdmin)?.label || 'Admin Workspace'} →
+                  </button>
+                ) : currentUser ? (
                   <button
                     type="button"
                     className="btn"
@@ -1421,9 +1506,38 @@ export default function App({ initialCountry = null } = {}) {
 
             {/* Col 2: Customer Workspace */}
             <div className="footer-col">
-              <h4>Customer Workspace</h4>
+              <h4>{currentAdmin ? 'Active Workspace' : 'Customer Workspace'}</h4>
               <ul className="footer-links">
-                {currentUser ? (
+                {currentAdmin ? (
+                  <>
+                    <li>
+                      <a
+                        href={adminAuthApi.getDefaultWorkspace(currentAdmin)?.path || '/superadmin'}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const ws = adminAuthApi.getDefaultWorkspace(currentAdmin) || { path: '/superadmin', view: 'superadmin-portal' };
+                          navigateTo(ws.path, ws.view);
+                        }}
+                      >
+                        <Crown size={14} color="#10b981" />
+                        <span>Go to {adminAuthApi.getDefaultWorkspace(currentAdmin)?.label || 'Admin Workspace'} →</span>
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href="#signout"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          adminAuthApi.logout();
+                          setCurrentAdmin(null);
+                          navigateTo('/?site=1', 'landing');
+                        }}
+                      >
+                        <span style={{ color: '#94a3b8' }}>Sign Out ({currentAdmin.fullName || currentAdmin.role || 'Admin'})</span>
+                      </a>
+                    </li>
+                  </>
+                ) : currentUser ? (
                   <>
                     <li>
                       <a href="/app/lead#app/dashboard" onClick={(e) => { e.preventDefault(); navigateTo('/app/lead#app/dashboard', 'portal'); }}>
@@ -1434,12 +1548,12 @@ export default function App({ initialCountry = null } = {}) {
                     <li>
                       <a href="#signout" onClick={(e) => {
                         e.preventDefault();
+                        crmApi.logout();
                         try {
-                          localStorage.removeItem('growthline_active_user');
                           sessionStorage.clear();
                         } catch (err) {}
                         setCurrentUser(null);
-                        navigateTo('/', 'landing');
+                        navigateTo('/?site=1', 'landing');
                       }}>
                         <span style={{ color: '#94a3b8' }}>Sign Out ({currentUser.companyName || currentUser.name || 'Client'})</span>
                       </a>

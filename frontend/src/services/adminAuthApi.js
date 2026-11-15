@@ -101,28 +101,94 @@ export const adminAuthApi = {
       if (token) {
         localStorage.setItem(TOKEN_KEY, token);
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('admafia_admin_session_changed'));
+      }
     } catch (e) {
       console.warn('[adminAuthApi] Could not save session to localStorage', e);
     }
   },
 
   /**
-   * Get active authenticated user (requires valid JWT token)
+   * Get active authenticated user (requires valid, non-expired JWT token)
    */
   getCurrentUser() {
     try {
+      if (typeof window === 'undefined') return null;
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
       const token = localStorage.getItem(TOKEN_KEY) || '';
-      if (!token || token.includes('_direct') || token.split('.').length !== 3) {
+      const parts = token.split('.');
+      if (!token || token.includes('_direct') || parts.length !== 3) {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(TOKEN_KEY);
         return null;
       }
+      // Verify JWT expiration claim if present
+      try {
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(base64));
+        if (payload && typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
+          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(TOKEN_KEY);
+          return null;
+        }
+      } catch {}
       return JSON.parse(raw);
     } catch (e) {
       return null;
     }
+  },
+
+  /**
+   * Resolve default authorized workspace destination for an active staff/admin user
+   */
+  getDefaultWorkspace(userOverride = null) {
+    const user = userOverride || this.getCurrentUser();
+    if (!user) return null;
+    const role = String(user.role || '').toLowerCase();
+    const dept = String(user.department || '').toLowerCase();
+
+    if (
+      dept === 'super admin' ||
+      role.includes('super admin') ||
+      role === 'operations manager' ||
+      role === 'finance auditor'
+    ) {
+      return { path: '/superadmin', view: 'superadmin-portal', label: 'Super Admin HQ' };
+    }
+    if (dept === 'sales' || role.includes('sales') || role.includes('telecaller')) {
+      return { path: '/sales', view: 'sales-portal', label: 'Sales Desk' };
+    }
+    if (dept === 'marketing' || role.includes('marketing') || role.includes('campaign')) {
+      return { path: '/marketing', view: 'marketing-portal', label: 'Marketing Desk' };
+    }
+    if (dept === 'graphics' || role.includes('graphic') || role.includes('designer')) {
+      return { path: '/graphics', view: 'graphics-portal', label: 'Graphics Studio' };
+    }
+    return { path: '/superadmin', view: 'superadmin-portal', label: 'Admin Workspace' };
+  },
+
+  /**
+   * Resolve workspace respecting an optional `?dept=` query if authorized, else default workspace
+   */
+  resolveRequestedWorkspace(deptQuery = '') {
+    const user = this.getCurrentUser();
+    if (!user) return null;
+    const q = String(deptQuery || '').toLowerCase();
+    if (q.includes('sales') && this.hasAccessTo('Sales')) {
+      return { path: '/sales', view: 'sales-portal', label: 'Sales Desk' };
+    }
+    if (q.includes('marketing') && this.hasAccessTo('Marketing')) {
+      return { path: '/marketing', view: 'marketing-portal', label: 'Marketing Desk' };
+    }
+    if (q.includes('graphics') && this.hasAccessTo('Graphics')) {
+      return { path: '/graphics', view: 'graphics-portal', label: 'Graphics Studio' };
+    }
+    if ((q.includes('superadmin') || q.includes('super admin')) && this.hasAccessTo('Super Admin')) {
+      return { path: '/superadmin', view: 'superadmin-portal', label: 'Super Admin HQ' };
+    }
+    return this.getDefaultWorkspace(user);
   },
 
   /**
@@ -148,6 +214,9 @@ export const adminAuthApi = {
       }).catch(() => {});
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(TOKEN_KEY);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('admafia_admin_session_changed'));
+      }
     } catch (e) {}
   },
 
