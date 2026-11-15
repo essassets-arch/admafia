@@ -17,8 +17,10 @@ import {
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import { SmartTable } from '../components/SmartTabulator';
+import { useAdminTheme } from '../utils/adminTheme';
 
 export default function SuperAdminQueriesDesk() {
+  const { isDark } = useAdminTheme({ syncDocument: false });
   const [queries, setQueries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -272,16 +274,16 @@ export default function SuperAdminQueriesDesk() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--adm-text-muted, #64748b)' }}>
                     <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                     <div>Loading queries...</div>
                   </td>
                 </tr>
               ) : queries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: 48, color: 'var(--adm-text-muted, #94a3b8)' }}>
                     <HelpCircle size={32} style={{ marginBottom: 8 }} />
-                    <div style={{ fontWeight: 700, color: '#0f172a' }}>No matching queries found</div>
+                    <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>No matching queries found</div>
                     <div style={{ fontSize: '0.80rem' }}>Try clearing filters or search criteria.</div>
                   </td>
                 </tr>
@@ -289,10 +291,10 @@ export default function SuperAdminQueriesDesk() {
                 queries.map((q) => (
                   <tr key={q.id}>
                     <td>
-                      <span style={{ fontFamily: 'monospace', fontSize: '0.80rem', fontWeight: 700, color: '#4f46e5' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.80rem', fontWeight: 700, color: isDark ? '#818cf8' : '#4f46e5' }}>
                         {q.id}
                       </span>
-                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #94a3b8)', marginTop: 2 }}>
                         {new Date(q.created_at).toLocaleDateString('en-IN', {
                           day: '2-digit',
                           month: 'short',
@@ -301,26 +303,26 @@ export default function SuperAdminQueriesDesk() {
                     </td>
 
                     <td>
-                      <strong style={{ color: '#0f172a' }}>{q.company_name}</strong>
-                      <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                      <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{q.company_name}</strong>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         {q.contact_name || q.customer_contact || 'Contact Unspecified'}
                       </div>
                       {(q.contact_phone || q.customer_phone) && (
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #94a3b8)' }}>
                           📞 {q.contact_phone || q.customer_phone}
                         </div>
                       )}
                     </td>
 
                     <td>
-                      <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>{q.subject}</strong>
+                      <strong style={{ color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.88rem' }}>{q.subject}</strong>
                       <div style={{ marginTop: 4 }}>
                         <span className="sa-pill sa-pill-slate" style={{ fontSize: '0.66rem' }}>
                           {q.category}
                         </span>
                       </div>
                       {q.last_replied_by && (
-                        <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 4 }}>
+                        <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4 }}>
                           Last reply by <strong>{q.last_replied_by}</strong>
                         </div>
                       )}
@@ -400,7 +402,7 @@ export default function SuperAdminQueriesDesk() {
                 <h3 style={{ margin: '6px 0 2px 0', fontSize: '1.1rem', fontWeight: 800 }}>
                   {selectedQuery.subject}
                 </h3>
-                <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   {selectedQuery.company_name} • ID: {selectedQuery.id}
                 </div>
               </div>
@@ -415,12 +417,12 @@ export default function SuperAdminQueriesDesk() {
               </button>
             </div>
 
-            <div className="sa-modal-body" style={{ background: '#f8fafc' }}>
+            <div className="sa-modal-body" style={{ background: 'var(--adm-bg-subtle, #f8fafc)' }}>
               {/* Status Controls */}
               <div
                 style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: 10,
                   padding: '10px 14px',
                   marginBottom: 16,
@@ -431,7 +433,7 @@ export default function SuperAdminQueriesDesk() {
                   gap: 10,
                 }}
               >
-                <div style={{ fontSize: '0.80rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Quick Action: Mark as
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -472,12 +474,21 @@ export default function SuperAdminQueriesDesk() {
               {/* Messages Thread */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
                 {loadingThread ? (
-                  <div style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
+                  <div style={{ textAlign: 'center', padding: 24, color: 'var(--adm-text-muted, #64748b)' }}>
                     <RefreshCw size={18} className="spin" style={{ margin: '0 auto 6px' }} />
                     <div>Loading thread messages...</div>
                   </div>
                 ) : messages.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: 24, color: '#94a3b8', background: '#ffffff', borderRadius: 8 }}>
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      padding: 24,
+                      color: 'var(--adm-text-muted, #94a3b8)',
+                      background: 'var(--adm-bg-card, #ffffff)',
+                      border: '1px solid var(--adm-border, #e2e8f0)',
+                      borderRadius: 8,
+                    }}
+                  >
                     No messages recorded yet in this conversation thread.
                   </div>
                 ) : (
@@ -487,12 +498,22 @@ export default function SuperAdminQueriesDesk() {
                       style={{
                         padding: 12,
                         borderRadius: 10,
-                        border: m.is_internal_note ? '1px dashed #f59e0b' : '1px solid #e2e8f0',
-                        background: m.is_internal_note
-                          ? '#fffbeb'
+                        border: m.is_internal_note
+                          ? '1px dashed #f59e0b'
                           : m.sender_type === 'admin'
-                          ? '#eef2ff'
-                          : '#ffffff',
+                          ? isDark
+                            ? '1px solid rgba(129, 140, 248, 0.35)'
+                            : '1px solid #c7d2fe'
+                          : '1px solid var(--adm-border, #e2e8f0)',
+                        background: m.is_internal_note
+                          ? isDark
+                            ? 'rgba(245, 158, 11, 0.12)'
+                            : '#fffbeb'
+                          : m.sender_type === 'admin'
+                          ? isDark
+                            ? 'rgba(79, 70, 229, 0.2)'
+                            : '#eef2ff'
+                          : 'var(--adm-bg-card, #ffffff)',
                         alignSelf: m.sender_type === 'admin' && !m.is_internal_note ? 'flex-end' : 'flex-start',
                         maxWidth: '90%',
                       }}
@@ -506,16 +527,20 @@ export default function SuperAdminQueriesDesk() {
                           fontSize: '0.74rem',
                           fontWeight: 700,
                           color: m.is_internal_note
-                            ? '#b45309'
+                            ? isDark
+                              ? '#fbbf24'
+                              : '#b45309'
                             : m.sender_type === 'admin'
-                            ? '#4338ca'
-                            : '#0f172a',
+                            ? isDark
+                              ? '#a5b4fc'
+                              : '#4338ca'
+                            : 'var(--adm-text-primary, #0f172a)',
                         }}
                       >
                         {m.is_internal_note && <Lock size={12} />}
                         <span>{m.sender_name}</span>
                         {m.is_internal_note && <span>(Internal Note)</span>}
-                        <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginLeft: 'auto' }}>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--adm-text-muted, #94a3b8)', marginLeft: 'auto' }}>
                           {new Date(m.created_at).toLocaleTimeString('en-IN', {
                             hour: '2-digit',
                             minute: '2-digit',
@@ -523,7 +548,7 @@ export default function SuperAdminQueriesDesk() {
                           })}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.84rem', color: '#1e293b', whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
+                      <div style={{ fontSize: '0.84rem', color: 'var(--adm-text-secondary, #1e293b)', whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
                         {m.message}
                       </div>
                     </div>
@@ -533,11 +558,11 @@ export default function SuperAdminQueriesDesk() {
 
               {/* Reply Form */}
               <form onSubmit={handleSendReply}>
-                <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12 }}>
+                <div style={{ background: 'var(--adm-bg-input, #ffffff)', border: '1px solid var(--adm-border-strong, #cbd5e1)', borderRadius: 10, padding: 12 }}>
                   <textarea
                     rows={3}
                     className="sa-form-textarea"
-                    style={{ border: 'none', padding: 0, resize: 'none' }}
+                    style={{ border: 'none', padding: 0, resize: 'none', background: 'transparent', color: 'var(--adm-text-primary, #0f172a)' }}
                     placeholder={
                       isInternalNote
                         ? 'Write internal note (hidden from customer)...'
@@ -549,7 +574,7 @@ export default function SuperAdminQueriesDesk() {
 
                   <div
                     style={{
-                      borderTop: '1px solid #f1f5f9',
+                      borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)',
                       paddingTop: 10,
                       marginTop: 8,
                       display: 'flex',
@@ -559,7 +584,7 @@ export default function SuperAdminQueriesDesk() {
                       gap: 8,
                     }}
                   >
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: '#64748b', cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', cursor: 'pointer' }}>
                       <input
                         type="checkbox"
                         checked={isInternalNote}

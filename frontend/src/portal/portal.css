@@ -13583,20 +13583,25 @@
   animation: modalScaleIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-/* Custom slick scrollbar */
+/* Custom minimal pill scrollbar */
 .business-profile-modal-card::-webkit-scrollbar {
-  width: 7px !important;
+  width: 5px !important;
+  height: 5px !important;
+}
+.business-profile-modal-card::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 .business-profile-modal-card::-webkit-scrollbar-track {
-  background: #f1f5f9 !important;
-  border-radius: 10px !important;
+  background: transparent !important;
 }
 .business-profile-modal-card::-webkit-scrollbar-thumb {
-  background: #cbd5e1 !important;
-  border-radius: 10px !important;
+  background: rgba(148, 163, 184, 0.42) !important;
+  border-radius: 999px !important;
 }
 .business-profile-modal-card::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8 !important;
+  background: rgba(100, 116, 139, 0.72) !important;
 }
 
 .biz-modal-top-accent {

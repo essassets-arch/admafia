@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import adminAuthApi from '../services/adminAuthApi';
+import AdminThemeToggle from '../components/AdminThemeToggle';
+import { useAdminTheme } from '../utils/adminTheme';
 import './sales.css';
 
 export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchToCustomerPortal }) {
+  const { theme } = useAdminTheme();
   const [empId, setEmpId] = useState('sales@admafia.marketing');
   const [role, setRole] = useState('Sales Executive');
   const [password, setPassword] = useState('');
@@ -39,7 +42,11 @@ export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchTo
   };
 
   return (
-    <div className="sales-auth-bg">
+    <div className="sales-auth-bg adm-theme-scope" data-admin-theme={theme}>
+      <div className="sales-auth-theme-bar">
+        <AdminThemeToggle />
+      </div>
+
       <div className="sales-auth-card">
         <div style={{ textAlign: 'center' }}>
           <div className="sales-dept-badge">
@@ -61,7 +68,7 @@ export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchTo
         </div>
 
         {error && (
-          <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem', marginBottom: '16px', fontWeight: 600 }}>
+          <div className="sales-auth-error">
             ⚠️ {error}
           </div>
         )}
@@ -139,7 +146,7 @@ export default function SalesLoginPage({ onLoggedIn, onBackToWebsite, onSwitchTo
                 type="button"
                 className="btn-sales-subtle-link"
                 onClick={onBackToWebsite}
-                style={{ color: '#64748b' }}
+                style={{ color: 'var(--adm-text-muted, #64748b)' }}
               >
                 &larr; Back to Public Website
               </button>

@@ -26,6 +26,8 @@ import {
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import BalanceLogsDesk from './BalanceLogsDesk';
 import NotificationBell from '../components/NotificationBell';
+import AdminThemeToggle from '../components/AdminThemeToggle';
+import { useAdminTheme } from '../utils/adminTheme';
 import { useIsMobileViewport } from '../utils/useIsMobileViewport';
 import {
   INITIAL_CUSTOMERS,
@@ -161,6 +163,7 @@ const loadStoredVerifications = () => {
 };
 
 export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) {
+  const { theme } = useAdminTheme();
   const isMobileViewport = useIsMobileViewport(960);
   const activeUser = adminAuthApi.getCurrentUser() || {
     fullName: 'Principal Sales & Accounts Executive',
@@ -457,7 +460,7 @@ const handleVerificationApprove = (approvedItem) => {
 };
 
 return (
-  <div className="sales-app-root">
+  <div className="sales-app-root sales-app-shell adm-theme-scope" data-admin-theme={theme}>
     {/* Real-time Registration Notification Toast */}
     {newRegAlert && (
       <div
@@ -504,11 +507,11 @@ return (
     )}
 
     {/* MOBILE RESPONSIVE TOP BAR (Visible on <= 960px viewports) */}
-    <header className="sales-mobile-top-bar">
+    <header className="sales-mobile-top-bar sales-mobile-header">
       <div className="sales-mobile-top-left">
         <button
           type="button"
-          className="sales-btn-hamburger"
+          className="sales-btn-hamburger sales-mobile-menu-btn"
           onClick={() => setIsMobileDrawerOpen(true)}
           aria-label="Open Navigation Menu"
         >
@@ -522,22 +525,23 @@ return (
               height: 30,
               width: 'auto',
               objectFit: 'contain',
-              borderRadius: 6,
+              borderRadius: 7,
               background: '#ffffff',
-              padding: '2px 4px',
-              border: '1px solid #e2e8f0',
+              padding: '3px 5px',
+              border: '1px solid var(--adm-border, #e2e8f0)',
               flexShrink: 0,
             }}
           />
-          <div className="sales-mobile-brand-text">
+          <div className="sales-mobile-brand-text sales-mobile-brand-title">
             <span>Ad <b>Mafia</b></span>
             <span className="sales-ops-mini-badge">OPS</span>
           </div>
         </div>
       </div>
 
-      <div className="sales-mobile-top-actions">
-        {isMobileViewport && <NotificationBell variant="light" />}
+      <div className="sales-mobile-top-actions sales-mobile-header-actions">
+        <AdminThemeToggle compact />
+        {isMobileViewport && <NotificationBell variant="light" adminThemeAware />}
         <button
           type="button"
           className="sales-mobile-logout-btn"
@@ -565,26 +569,37 @@ return (
       <div className="sales-sidebar-top">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img
-              src="/AdMafia-Logo.png"
-              alt="Ad Mafia Marketing"
+            <div
               style={{
-                height: 42,
-                width: 'auto',
-                objectFit: 'contain',
-                borderRadius: 8,
                 background: '#ffffff',
-                padding: '3px 6px',
-                border: '1px solid #e2e8f0',
+                padding: 4,
+                borderRadius: 9,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.28)',
+                flexShrink: 0,
               }}
-            />
+            >
+              <img
+                src="/AdMafia-Logo.png"
+                alt="Ad Mafia Marketing"
+                style={{
+                  height: 34,
+                  width: 'auto',
+                  objectFit: 'contain',
+                  display: 'block',
+                }}
+              />
+            </div>
             <div>
               <div
+                className="sales-logo-title"
                 style={{
                   fontFamily: "'Bricolage Grotesque', system-ui",
                   fontWeight: 800,
                   fontSize: '1.1rem',
-                  color: '#0f172a',
+                  color: '#ffffff',
                   lineHeight: 1.1,
                 }}
               >
@@ -594,7 +609,7 @@ return (
                 style={{
                   fontSize: '0.66rem',
                   fontWeight: 800,
-                  color: '#4f46e5',
+                  color: '#818cf8',
                   textTransform: 'uppercase',
                   letterSpacing: '0.04em',
                 }}
@@ -607,7 +622,7 @@ return (
           {/* Mobile Drawer Close Button */}
           <button
             type="button"
-            className="sales-mobile-drawer-close"
+            className="sales-mobile-drawer-close sales-drawer-close-btn"
             onClick={() => setIsMobileDrawerOpen(false)}
             aria-label="Close Navigation Menu"
           >
@@ -634,9 +649,9 @@ return (
           <span
             className="sales-nav-badge"
             style={{
-              background: activeTab === 'overview' ? 'rgba(255,255,255,0.22)' : '#eff6ff',
-              color: activeTab === 'overview' ? '#ffffff' : '#1d4ed8',
-              borderColor: activeTab === 'overview' ? 'rgba(255,255,255,0.3)' : '#bfdbfe',
+              background: activeTab === 'overview' ? 'rgba(255,255,255,0.22)' : 'rgba(99, 102, 241, 0.2)',
+              color: activeTab === 'overview' ? '#ffffff' : '#a5b4fc',
+              borderColor: activeTab === 'overview' ? 'rgba(255,255,255,0.34)' : 'rgba(129, 140, 248, 0.35)',
               borderWidth: 1,
               borderStyle: 'solid',
               fontWeight: 800,
@@ -650,7 +665,7 @@ return (
           </span>
         </button>
 
-        <div style={{ height: 1, background: '#f1f5f9', margin: '6px 8px 8px 8px' }} />
+        <div style={{ height: 1, background: 'rgba(255, 255, 255, 0.08)', margin: '6px 8px 8px 8px' }} />
 
         {/* 1. Customer Registrations */}
         <button
@@ -673,9 +688,9 @@ return (
           <span
             className="sales-nav-badge"
             style={{
-              background: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
-              color: activeTab === 'pending_verification' ? '#ffffff' : '#059669',
-              borderColor: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
+              background: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.22)' : 'rgba(16, 185, 129, 0.18)',
+              color: activeTab === 'pending_verification' ? '#ffffff' : '#6ee7b7',
+              borderColor: activeTab === 'pending_verification' ? 'rgba(255,255,255,0.34)' : 'rgba(52, 211, 153, 0.35)',
               borderWidth: 1,
               borderStyle: 'solid',
               fontWeight: 800,
@@ -696,9 +711,9 @@ return (
           <span
             className="sales-nav-badge"
             style={{
-              background: activeTab === 'approved' ? 'rgba(255,255,255,0.22)' : '#f0fdf4',
-              color: activeTab === 'approved' ? '#ffffff' : '#15803d',
-              borderColor: activeTab === 'approved' ? 'rgba(255,255,255,0.3)' : '#bbf7d0',
+              background: activeTab === 'approved' ? 'rgba(255,255,255,0.22)' : 'rgba(34, 197, 94, 0.18)',
+              color: activeTab === 'approved' ? '#ffffff' : '#86efac',
+              borderColor: activeTab === 'approved' ? 'rgba(255,255,255,0.34)' : 'rgba(74, 222, 128, 0.35)',
               borderWidth: 1,
               borderStyle: 'solid',
               fontWeight: 800,
@@ -749,9 +764,9 @@ return (
           <span
             className="sales-nav-badge"
             style={{
-              background: activeTab === 'wallets' ? 'rgba(255,255,255,0.22)' : '#eef2ff',
-              color: activeTab === 'wallets' ? '#ffffff' : '#4338ca',
-              borderColor: activeTab === 'wallets' ? 'rgba(255,255,255,0.3)' : '#c7d2fe',
+              background: activeTab === 'wallets' ? 'rgba(255,255,255,0.22)' : 'rgba(99, 102, 241, 0.2)',
+              color: activeTab === 'wallets' ? '#ffffff' : '#c7d2fe',
+              borderColor: activeTab === 'wallets' ? 'rgba(255,255,255,0.34)' : 'rgba(129, 140, 248, 0.35)',
               borderWidth: 1,
               borderStyle: 'solid',
               fontWeight: 800,
@@ -775,9 +790,9 @@ return (
           <span
             className="sales-nav-badge"
             style={{
-              background: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
-              color: activeTab === 'balance_logs' ? '#ffffff' : '#047857',
-              borderColor: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
+              background: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.22)' : 'rgba(16, 185, 129, 0.18)',
+              color: activeTab === 'balance_logs' ? '#ffffff' : '#6ee7b7',
+              borderColor: activeTab === 'balance_logs' ? 'rgba(255,255,255,0.34)' : 'rgba(52, 211, 153, 0.35)',
               borderWidth: 1,
               borderStyle: 'solid',
               fontWeight: 800,
@@ -793,14 +808,14 @@ return (
           className={`sales-nav-btn ${activeTab === 'failed_transactions' ? 'active' : ''}`}
           onClick={() => navigateToDesk('failed_transactions', '#failed-transactions')}
         >
-          <AlertCircle size={18} strokeWidth={2.2} color={activeTab === 'failed_transactions' ? '#ffffff' : '#ef4444'} style={{ flexShrink: 0 }} />
+          <AlertCircle size={18} strokeWidth={2.2} color={activeTab === 'failed_transactions' ? '#ffffff' : '#fb7185'} style={{ flexShrink: 0 }} />
           <span>Failed Transactions</span>
           <span
             className="sales-nav-badge"
             style={{
-              background: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.25)' : '#fee2e2',
-              color: activeTab === 'failed_transactions' ? '#ffffff' : '#b91c1c',
-              borderColor: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.3)' : '#fca5a5',
+              background: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.25)' : 'rgba(244, 63, 94, 0.2)',
+              color: activeTab === 'failed_transactions' ? '#ffffff' : '#fda4af',
+              borderColor: activeTab === 'failed_transactions' ? 'rgba(255,255,255,0.34)' : 'rgba(251, 113, 133, 0.38)',
               borderWidth: 1,
               borderStyle: 'solid',
               fontWeight: 800,
@@ -824,9 +839,9 @@ return (
           <span
             className="sales-nav-badge"
             style={{
-              background: activeTab === 'transactions' ? 'rgba(255,255,255,0.22)' : '#ecfdf5',
-              color: activeTab === 'transactions' ? '#ffffff' : '#047857',
-              borderColor: activeTab === 'transactions' ? 'rgba(255,255,255,0.3)' : '#a7f3d0',
+              background: activeTab === 'transactions' ? 'rgba(255,255,255,0.22)' : 'rgba(16, 185, 129, 0.18)',
+              color: activeTab === 'transactions' ? '#ffffff' : '#6ee7b7',
+              borderColor: activeTab === 'transactions' ? 'rgba(255,255,255,0.34)' : 'rgba(52, 211, 153, 0.35)',
               borderWidth: 1,
               borderStyle: 'solid',
               fontWeight: 800,
@@ -848,8 +863,12 @@ return (
             <span
               className="sales-nav-badge"
               style={{
-                background: activeTab === 'queries' ? 'rgba(255,255,255,0.22)' : '#fee2e2',
-                color: activeTab === 'queries' ? '#ffffff' : '#b91c1c',
+                background: activeTab === 'queries' ? 'rgba(255,255,255,0.22)' : 'rgba(244, 63, 94, 0.22)',
+                color: activeTab === 'queries' ? '#ffffff' : '#fda4af',
+                borderColor: activeTab === 'queries' ? 'rgba(255,255,255,0.34)' : 'rgba(251, 113, 133, 0.38)',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                fontWeight: 800,
               }}
             >
               {queries.filter((q) => q.status === 'open').length}
@@ -916,7 +935,7 @@ return (
             <span className="sales-pulse-dot" />
             Active Operations Desk
           </span>
-          <span className="sales-topbar-engine-meta" style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span className="sales-topbar-engine-meta" style={{ fontSize: '0.8rem', color: 'var(--adm-text-muted, #64748b)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Platform Ad Engine: <b>₹300/day</b> • <b>{customers.length} Billing Accounts</b>
           </span>
         </div>
@@ -929,19 +948,19 @@ return (
               display: 'inline-flex',
               alignItems: 'center',
               gap: 7,
-              background: '#ffffff',
-              border: '1px solid #cbd5e1',
+              background: 'var(--adm-bg-card, #ffffff)',
+              border: '1px solid var(--adm-border-strong, #cbd5e1)',
               padding: '5px 11px',
               borderRadius: '8px',
               fontSize: '0.79rem',
               fontWeight: 700,
-              color: '#0f172a',
+              color: 'var(--adm-text-primary, #0f172a)',
               boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
               fontVariantNumeric: 'tabular-nums',
               whiteSpace: 'nowrap',
             }}
           >
-            <Clock size={14} color="#4f46e5" style={{ flexShrink: 0 }} />
+            <Clock size={14} color="#6366f1" style={{ flexShrink: 0 }} />
             <span style={{ whiteSpace: 'nowrap' }}>
               {liveNow.toLocaleDateString('en-IN', {
                 weekday: 'short',
@@ -958,15 +977,16 @@ return (
               })}
             </span>
             <span
+              className="sales-clock-live-pill"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 4,
                 fontSize: '0.66rem',
                 fontWeight: 800,
-                color: '#059669',
-                background: '#ecfdf5',
-                border: '1px solid #a7f3d0',
+                color: 'var(--adm-soft-emerald-text, #059669)',
+                background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)',
                 padding: '2px 6px',
                 borderRadius: 4,
                 marginLeft: 2,
@@ -986,7 +1006,9 @@ return (
             </span>
           </div>
 
-          {!isMobileViewport && <NotificationBell variant="light" />}
+          <AdminThemeToggle />
+
+          {!isMobileViewport && <NotificationBell variant="light" adminThemeAware />}
 
           <button
             type="button"

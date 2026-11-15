@@ -448,6 +448,32 @@
   background: #ffffff !important;
 }
 
+/* Live React-portal grids: rows grow to fit portal content (multi-line names, wrapped
+   pills), so the holder must never keep a stale pixel height measured before the
+   portals mounted — otherwise lower rows get clipped (e.g. 2nd row cut in half). */
+.am-tabulator-mount:not(.am-tabulator-standalone-mount):not(.am-tab-is-empty) .tabulator,
+.am-tabulator-mount:not(.am-tabulator-standalone-mount):not(.am-tab-is-empty) .tabulator-tableholder,
+.am-tabulator-mount:not(.am-tabulator-standalone-mount):not(.am-tab-is-empty) .tabulator-tableholder .tabulator-table {
+  height: auto !important;
+  max-height: none !important;
+}
+
+.am-tabulator-mount:not(.am-tabulator-standalone-mount):not(.am-tab-is-empty) .tabulator-tableholder {
+  min-height: 0 !important;
+}
+
+/* Header never reserves an empty band below the column titles */
+.am-tabulator-mount .tabulator-header,
+.am-tabulator-mount .tabulator-header .tabulator-header-contents {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+/* Keep action links (WhatsApp, Recharge Alert, Call, Chat) on a single line */
+.am-tab-cell-inner a:not([href^="mailto:"]) {
+  white-space: nowrap;
+}
+
 /* Allow vertical scrolling ONLY on standalone bounded grids (e.g. MongoDB Explorer) */
 .am-tabulator-standalone-mount .tabulator-tableholder {
   overflow-y: auto !important;
@@ -1079,4 +1105,308 @@
     grid-template-columns: 1fr;
     gap: 8px;
   }
+}
+
+/* ==========================================================================
+   7. EXECUTIVE DARK THEME (`[data-admin-theme="dark"]`) FOR ALL TABULATOR GRIDS
+   ========================================================================== */
+[data-admin-theme="dark"] .am-smart-table-wrap,
+[data-admin-theme="dark"] .am-tabulator-native-shell {
+  background: #111827;
+  border-color: #1e293b;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-admin-theme="dark"] .sa-table-wrap > .am-smart-table-wrap,
+[data-admin-theme="dark"] .sa-table-card > .am-smart-table-wrap,
+[data-admin-theme="dark"] .sa-card > .am-smart-table-wrap,
+[data-admin-theme="dark"] .cp-card > .am-smart-table-wrap,
+[data-admin-theme="dark"] .marketing-table-card > .am-smart-table-wrap,
+[data-admin-theme="dark"] .graphics-table-card > .am-smart-table-wrap,
+[data-admin-theme="dark"] .wallet-table-card > .am-smart-table-wrap {
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-admin-theme="dark"] .am-st-toolbar {
+  background: #0b1120;
+  border-bottom-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-search-input {
+  background: #090e1a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+[data-admin-theme="dark"] .am-st-search-input::placeholder {
+  color: #64748b;
+}
+
+[data-admin-theme="dark"] .am-st-search-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+}
+
+[data-admin-theme="dark"] .am-st-clear-btn:hover {
+  color: #f8fafc;
+}
+
+[data-admin-theme="dark"] .am-st-mode-group {
+  background: #090e1a;
+  border: 1px solid #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-mode-btn {
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .am-st-mode-btn:hover:not(.active) {
+  color: #f8fafc;
+}
+
+[data-admin-theme="dark"] .am-st-mode-btn.active {
+  background: #1e293b;
+  color: #818cf8;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+[data-admin-theme="dark"] .am-st-count-pill {
+  background: rgba(99, 102, 241, 0.14);
+  border-color: rgba(99, 102, 241, 0.32);
+  color: #a5b4fc;
+}
+
+[data-admin-theme="dark"] .am-st-btn {
+  background: #111827;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+[data-admin-theme="dark"] .am-st-btn:hover {
+  background: #1e293b;
+  border-color: #475569;
+  color: #ffffff;
+}
+
+[data-admin-theme="dark"] .am-st-btn.active {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: #6366f1;
+  color: #a5b4fc;
+}
+
+[data-admin-theme="dark"] .am-st-col-dropdown {
+  background: #111827;
+  border-color: #334155;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.55);
+}
+
+[data-admin-theme="dark"] .am-st-col-dropdown-head {
+  color: #94a3b8;
+  border-bottom-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-col-check-row {
+  color: #e2e8f0;
+}
+
+[data-admin-theme="dark"] .am-st-col-check-row:hover {
+  background: #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-reset-link {
+  color: #818cf8;
+}
+
+/* Tabulator Live Engine Dark Surfaces */
+[data-admin-theme="dark"] .am-tabulator-live-wrap,
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator,
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-tableholder,
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-tableholder .tabulator-table,
+[data-admin-theme="dark"] .am-tab-empty-overlay {
+  background: #111827 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-header {
+  background: #0b1120 !important;
+  border-bottom-color: #1e293b !important;
+  color: #94a3b8 !important;
+}
+
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-header .tabulator-col {
+  background: #0b1120 !important;
+  border-right-color: rgba(148, 163, 184, 0.1) !important;
+}
+
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-header .tabulator-col:hover {
+  background: #0f172a !important;
+}
+
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-header .tabulator-col.tabulator-moving {
+  background: #1e1b4b !important;
+  border-color: #818cf8 !important;
+}
+
+[data-admin-theme="dark"] .am-tab-hdr-label,
+[data-admin-theme="dark"] .am-tabulator-standalone-mount .tabulator-header .tabulator-col .tabulator-col-title {
+  color: #94a3b8 !important;
+}
+
+[data-admin-theme="dark"] .am-tab-hdr-inner.is-sorted .am-tab-hdr-label {
+  color: #a5b4fc !important;
+}
+
+[data-admin-theme="dark"] .am-tab-sort-pill.active {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.2);
+}
+
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-row,
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-row.tabulator-row-even {
+  background: #111827 !important;
+  border-bottom-color: rgba(148, 163, 184, 0.1) !important;
+  color: #e2e8f0 !important;
+}
+
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-row:hover,
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-row.tabulator-selectable:hover {
+  background-color: #172033 !important;
+}
+
+[data-admin-theme="dark"] .am-tabulator-mount .tabulator-row .tabulator-cell {
+  border-right-color: rgba(148, 163, 184, 0.06) !important;
+  color: #e2e8f0 !important;
+}
+
+[data-admin-theme="dark"] .am-tab-subrow-host {
+  background: #0b1120;
+  border-top-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-col-filter-input,
+[data-admin-theme="dark"] .am-tabulator-standalone-mount .tabulator-header-filter input {
+  background: #090e1a !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] .am-st-col-filter-input::placeholder,
+[data-admin-theme="dark"] .am-tabulator-standalone-mount .tabulator-header-filter input::placeholder {
+  color: #64748b !important;
+}
+
+/* Classic Table & Standalone Footer in Dark Mode */
+[data-admin-theme="dark"] .am-st-sortable-th:hover {
+  background: #172033 !important;
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] .am-st-sorted-th {
+  color: #a5b4fc !important;
+  background: rgba(99, 102, 241, 0.16) !important;
+}
+
+[data-admin-theme="dark"] .am-st-filter-row th.am-st-filter-cell {
+  background: #0b1120 !important;
+  border-bottom-color: #1e293b !important;
+}
+
+[data-admin-theme="dark"] .am-tabulator-standalone-mount .tabulator-footer {
+  background: #0b1120 !important;
+  border-top-color: #1e293b !important;
+  color: #94a3b8 !important;
+}
+
+[data-admin-theme="dark"] .am-tabulator-standalone-mount .tabulator-footer .tabulator-page {
+  background: #111827 !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+/* Mobile Stacked Cards & Pagination Bar in Dark Mode */
+[data-admin-theme="dark"] .am-st-cards-list {
+  background: #0b1120;
+}
+
+[data-admin-theme="dark"] .am-st-mobile-sort-bar {
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .am-st-mobile-sort-bar select,
+[data-admin-theme="dark"] .am-st-mobile-filter-item input {
+  background: #090e1a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+[data-admin-theme="dark"] .am-st-mobile-col-filters {
+  background: #0f172a;
+  border-bottom-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-record-card {
+  background: #111827;
+  border-color: #1e293b;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+[data-admin-theme="dark"] .am-st-record-card-head {
+  border-bottom-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-record-primary {
+  color: #f8fafc;
+}
+
+[data-admin-theme="dark"] .am-st-record-label {
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .am-st-record-val {
+  color: #e2e8f0;
+}
+
+[data-admin-theme="dark"] .am-st-record-actions {
+  border-top-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-empty-card {
+  background: #111827;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .am-st-pagination-bar {
+  background: #0b1120;
+  border-top-color: #1e293b;
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .am-st-pagesize-label {
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .am-st-pagesize-select {
+  background: #090e1a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+[data-admin-theme="dark"] .am-st-page-btn {
+  background: #111827;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+[data-admin-theme="dark"] .am-st-page-btn:hover:not(:disabled) {
+  background: #1e293b;
+  border-color: #475569;
+  color: #ffffff;
+}
+
+[data-admin-theme="dark"] .am-st-page-btn.active {
+  background: #4f46e5;
+  border-color: #6366f1;
+  color: #ffffff;
 }

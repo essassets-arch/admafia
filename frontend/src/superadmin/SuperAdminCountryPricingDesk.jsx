@@ -18,8 +18,10 @@ import {
 } from 'lucide-react';
 import adminAuthApi from '../services/adminAuthApi';
 import { SmartTable } from '../components/SmartTabulator';
+import { useAdminTheme } from '../utils/adminTheme';
 
 export default function SuperAdminCountryPricingDesk() {
+  const { isDark } = useAdminTheme({ syncDocument: false });
   const [countries, setCountries] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [analytics, setAnalytics] = useState(null);
@@ -456,10 +458,10 @@ export default function SuperAdminCountryPricingDesk() {
       {activeTab === 'test-ip' && (
         <div className="cp-card">
           <div style={{ padding: '24px' }}>
-            <h3 style={{ fontSize: '1.2rem', marginBottom: '8px', color: '#0f172a' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '8px', color: 'var(--adm-text-primary, #0f172a)' }}>
               Test Visitor IP Country Detection
             </h3>
-            <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '20px' }}>
+            <p style={{ color: 'var(--adm-text-muted, #64748b)', fontSize: '0.9rem', marginBottom: '20px' }}>
               Simulate an incoming visitor request with any public IP address to verify how Cloudflare headers and offline MaxMind GeoIP resolve their country, currency, and daily rate.
             </p>
 
@@ -474,7 +476,9 @@ export default function SuperAdminCountryPricingDesk() {
                   minWidth: 'min(220px, 100%)',
                   padding: '10px 14px',
                   borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
+                  border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                  background: 'var(--adm-bg-input, #ffffff)',
+                  color: 'var(--adm-text-primary, #0f172a)',
                   fontFamily: 'monospace',
                 }}
               />
@@ -538,10 +542,10 @@ export default function SuperAdminCountryPricingDesk() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '2.5rem' }}>{testResult.country?.flag_emoji || '🌐'}</span>
                   <div>
-                    <h4 style={{ fontSize: '1.3rem', margin: 0, color: '#0f172a' }}>
+                    <h4 style={{ fontSize: '1.3rem', margin: 0, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {testResult.country?.country_name} ({testResult.country?.country_code})
                     </h4>
-                    <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.95rem' }}>
+                    <span style={{ color: isDark ? '#34d399' : '#059669', fontWeight: 700, fontSize: '0.95rem' }}>
                       Daily Starting Budget: {testResult.country?.currency_symbol}
                       {testResult.country?.daily_min_budget}/Day ({testResult.country?.currency_code})
                     </span>
@@ -559,7 +563,7 @@ export default function SuperAdminCountryPricingDesk() {
                   </div>
                   <div>
                     <small>Auto-Detected</small>
-                    <span style={{ color: testResult.isAutoDetected ? '#059669' : '#d97706', fontWeight: 700 }}>
+                    <span style={{ color: testResult.isAutoDetected ? (isDark ? '#34d399' : '#059669') : (isDark ? '#fbbf24' : '#d97706'), fontWeight: 700 }}>
                       {testResult.isAutoDetected ? 'YES ✓' : 'NO (Fallback)'}
                     </span>
                   </div>
@@ -594,8 +598,8 @@ export default function SuperAdminCountryPricingDesk() {
         <div className="cp-card">
           <div className="cp-card-header">
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Pricing Modification Audit Logs</h3>
-              <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.85rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--adm-text-primary, #0f172a)' }}>Pricing Modification Audit Logs</h3>
+              <p style={{ margin: '4px 0 0', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.85rem' }}>
                 Permanent audit log of every daily rate, tax rate, or currency change made by Super Admin.
               </p>
             </div>
@@ -650,7 +654,7 @@ export default function SuperAdminCountryPricingDesk() {
                 ))}
                 {auditLogs.length === 0 && (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '36px', color: 'var(--adm-text-muted, #94a3b8)' }}>
                       No rate adjustments logged yet. Initial rates seeded into MongoDB master.
                     </td>
                   </tr>
@@ -798,7 +802,7 @@ export default function SuperAdminCountryPricingDesk() {
               </div>
 
               <div className="cp-form-row-2" style={{ marginTop: '12px', alignItems: 'center' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--adm-text-primary, #0f172a)' }}>
                   <input
                     type="checkbox"
                     checked={formData.is_active}
@@ -821,10 +825,12 @@ export default function SuperAdminCountryPricingDesk() {
         </div>
       )}
 
-      {/* Desk Scoped Styles */}
+      {/* Desk Scoped Styles — Theme-Aware (White & Dark) + Single Minimal Scrollbars */}
       <style>{`
         .country-pricing-desk {
-          padding: 24px;
+          padding: 0;
+          width: 100%;
+          color: var(--adm-text-primary, #0f172a);
         }
 
         .cp-alert-banner {
@@ -832,7 +838,7 @@ export default function SuperAdminCountryPricingDesk() {
           align-items: center;
           gap: 10px;
           padding: 12px 18px;
-          border-radius: 8px;
+          border-radius: 10px;
           margin-bottom: 20px;
           font-weight: 600;
         }
@@ -846,44 +852,54 @@ export default function SuperAdminCountryPricingDesk() {
           color: #991b1b;
           border: 1px solid #fecaca;
         }
+        [data-admin-theme="dark"] .cp-alert-banner.success {
+          background: rgba(16, 185, 129, 0.14);
+          color: #6ee7b7;
+          border-color: rgba(16, 185, 129, 0.35);
+        }
+        [data-admin-theme="dark"] .cp-alert-banner.error {
+          background: rgba(239, 68, 68, 0.14);
+          color: #fca5a5;
+          border-color: rgba(239, 68, 68, 0.35);
+        }
 
         .cp-kpi-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
           gap: 16px;
-          margin-bottom: 24px;
+          margin-bottom: 20px;
         }
         .cp-kpi-card {
-          background: #ffffff;
+          background: var(--adm-bg-card, #ffffff);
           padding: 18px;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+          border-radius: 14px;
+          border: 1px solid var(--adm-border, #e2e8f0);
+          box-shadow: var(--adm-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.05));
         }
         .cp-kpi-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          color: #64748b;
+          color: var(--adm-text-muted, #64748b);
           font-size: 0.84rem;
           font-weight: 600;
         }
         .cp-kpi-value {
-          font-size: 1.6rem;
+          font-size: 1.55rem;
           font-weight: 800;
-          color: #0f172a;
+          color: var(--adm-text-primary, #0f172a);
           margin: 8px 0 4px;
         }
         .cp-kpi-sub {
           font-size: 0.78rem;
-          color: #94a3b8;
+          color: var(--adm-text-muted, #94a3b8);
         }
 
         .cp-controls-bar {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 20px;
+          margin-bottom: 18px;
           flex-wrap: wrap;
           gap: 12px;
         }
@@ -891,7 +907,7 @@ export default function SuperAdminCountryPricingDesk() {
           display: flex;
           gap: 8px;
           flex-wrap: wrap;
-          overflow-x: auto;
+          overflow: visible;
           max-width: 100%;
         }
         .cp-tab-btn {
@@ -899,19 +915,24 @@ export default function SuperAdminCountryPricingDesk() {
           align-items: center;
           gap: 6px;
           padding: 8px 16px;
-          border-radius: 8px;
-          border: 1px solid #e2e8f0;
-          background: #ffffff;
-          color: #475569;
+          border-radius: 9px;
+          border: 1px solid var(--adm-border, #e2e8f0);
+          background: var(--adm-bg-card, #ffffff);
+          color: var(--adm-text-body, #475569);
           font-weight: 600;
-          font-size: 0.88rem;
+          font-size: 0.86rem;
           cursor: pointer;
           transition: all 0.2s;
+        }
+        .cp-tab-btn:hover {
+          border-color: var(--adm-border-strong, #cbd5e1);
+          color: var(--adm-text-primary, #0f172a);
         }
         .cp-tab-btn.active {
           background: #4f46e5;
           color: #ffffff;
           border-color: #4f46e5;
+          box-shadow: 0 4px 12px rgba(79, 70, 229, 0.28);
         }
         .cp-add-btn {
           display: inline-flex;
@@ -921,17 +942,21 @@ export default function SuperAdminCountryPricingDesk() {
           background: #059669;
           color: #ffffff;
           border: none;
-          border-radius: 8px;
+          border-radius: 9px;
           font-weight: 700;
           cursor: pointer;
+          transition: background 0.16s ease;
+        }
+        .cp-add-btn:hover {
+          background: #047857;
         }
 
         .cp-card {
-          background: #ffffff;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          overflow: hidden;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+          background: var(--adm-bg-card, #ffffff);
+          border-radius: 14px;
+          border: 1px solid var(--adm-border, #e2e8f0);
+          overflow: visible;
+          box-shadow: var(--adm-shadow-card, 0 1px 3px rgba(0, 0, 0, 0.05));
         }
         .cp-card-header {
           display: flex;
@@ -940,61 +965,70 @@ export default function SuperAdminCountryPricingDesk() {
           flex-wrap: wrap;
           gap: 10px;
           padding: 16px 20px;
-          border-bottom: 1px solid #f1f5f9;
+          border-radius: 14px 14px 0 0;
+          border-bottom: 1px solid var(--adm-border, #e2e8f0);
         }
         .cp-search-wrap {
           display: flex;
           align-items: center;
           gap: 8px;
-          background: #f8fafc;
-          border: 1px solid #cbd5e1;
+          background: var(--adm-bg-input, #f8fafc);
+          border: 1px solid var(--adm-border-strong, #cbd5e1);
           padding: 6px 12px;
           border-radius: 8px;
           width: min(320px, 100%);
         }
         .cp-search-wrap input {
-          border: none;
-          background: transparent;
+          border: none !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          color: var(--adm-text-primary, #0f172a) !important;
           outline: none;
           font-size: 0.88rem;
           width: 100%;
+          padding: 2px 0 !important;
         }
         .cp-count-pill {
           font-size: 0.8rem;
-          color: #64748b;
+          color: var(--adm-text-muted, #64748b);
           font-weight: 600;
         }
-
-        .cp-table-wrap {
-          overflow-x: auto;
+        .cp-muted-text {
+          color: var(--adm-text-muted, #64748b);
         }
+
         .cp-table {
           width: 100%;
           border-collapse: collapse;
           font-size: 0.88rem;
           text-align: left;
+          color: var(--adm-text-body, #334155);
         }
         .cp-table th {
-          background: #f8fafc;
+          background: var(--adm-bg-subtle, #f8fafc);
           padding: 12px 16px;
-          color: #475569;
+          color: var(--adm-text-muted, #475569);
           font-weight: 700;
-          font-size: 0.8rem;
+          font-size: 0.78rem;
           text-transform: uppercase;
           letter-spacing: 0.03em;
-          border-bottom: 1px solid #e2e8f0;
+          border-bottom: 1px solid var(--adm-border, #e2e8f0);
         }
         .cp-table td {
           padding: 14px 16px;
-          border-bottom: 1px solid #f1f5f9;
+          border-bottom: 1px solid var(--adm-border-subtle, #f1f5f9);
           vertical-align: middle;
+          color: var(--adm-text-body, #334155);
         }
-        .cp-table tr:hover {
-          background: #f8fafc;
+        .cp-table td strong {
+          color: var(--adm-text-primary, #0f172a);
+        }
+        .cp-table tbody tr:hover {
+          background: var(--adm-bg-hover, #f8fafc);
         }
         .inactive-row {
-          opacity: 0.55;
-          background: #fafafa;
+          opacity: 0.6;
+          background: var(--adm-bg-subtle, #fafafa);
         }
 
         .cp-country-cell {
@@ -1013,11 +1047,11 @@ export default function SuperAdminCountryPricingDesk() {
           margin-top: 2px;
         }
         .cp-iso-code code {
-          background: #f1f5f9;
+          background: var(--adm-bg-muted, #f1f5f9);
           padding: 2px 6px;
           border-radius: 4px;
           font-size: 0.75rem;
-          color: #475569;
+          color: var(--adm-text-secondary, #475569);
         }
         .default-pill {
           background: #dbeafe;
@@ -1027,23 +1061,33 @@ export default function SuperAdminCountryPricingDesk() {
           border-radius: 4px;
           font-weight: 700;
         }
+        [data-admin-theme="dark"] .default-pill {
+          background: rgba(59, 130, 246, 0.2);
+          color: #93c5fd;
+        }
 
         .cp-rate-tag {
           font-size: 1rem;
           color: #059669;
         }
+        .cp-rate-tag strong {
+          color: inherit;
+        }
+        [data-admin-theme="dark"] .cp-rate-tag {
+          color: #34d399;
+        }
         .cp-rate-tag .unit {
-          color: #64748b;
+          color: var(--adm-text-muted, #64748b);
           font-size: 0.8rem;
         }
         .cp-monthly-tag {
           font-weight: 700;
-          color: #0f172a;
+          color: var(--adm-text-primary, #0f172a);
         }
         .cp-tax-pill {
           display: inline-block;
-          background: #f1f5f9;
-          color: #334155;
+          background: var(--adm-bg-muted, #f1f5f9);
+          color: var(--adm-text-body, #334155);
           padding: 3px 8px;
           border-radius: 6px;
           font-size: 0.8rem;
@@ -1055,6 +1099,10 @@ export default function SuperAdminCountryPricingDesk() {
           padding: 2px 6px;
           border-radius: 4px;
           font-size: 0.78rem;
+        }
+        [data-admin-theme="dark"] .cp-gateway-code {
+          background: rgba(139, 92, 246, 0.2);
+          color: #c4b5fd;
         }
 
         .cp-status-pill {
@@ -1073,14 +1121,22 @@ export default function SuperAdminCountryPricingDesk() {
           background: #fee2e2;
           color: #b91c1c;
         }
+        [data-admin-theme="dark"] .cp-status-pill.active {
+          background: rgba(16, 185, 129, 0.18);
+          color: #34d399;
+        }
+        [data-admin-theme="dark"] .cp-status-pill.inactive {
+          background: rgba(239, 68, 68, 0.18);
+          color: #fca5a5;
+        }
 
         .cp-edit-btn {
           display: inline-flex;
           align-items: center;
           gap: 4px;
-          background: #f8fafc;
-          border: 1px solid #cbd5e1;
-          color: #334155;
+          background: var(--adm-bg-subtle, #f8fafc);
+          border: 1px solid var(--adm-border-strong, #cbd5e1);
+          color: var(--adm-text-body, #334155);
           padding: 5px 10px;
           border-radius: 6px;
           font-size: 0.8rem;
@@ -1088,27 +1144,28 @@ export default function SuperAdminCountryPricingDesk() {
           cursor: pointer;
         }
         .cp-edit-btn:hover {
-          background: #f1f5f9;
-          border-color: #94a3b8;
+          background: var(--adm-bg-muted, #f1f5f9);
+          color: var(--adm-text-primary, #0f172a);
         }
 
         .cp-preset-ip-btn {
-          background: #f1f5f9;
-          border: 1px solid #cbd5e1;
+          background: var(--adm-bg-muted, #f1f5f9);
+          border: 1px solid var(--adm-border-strong, #cbd5e1);
           padding: 6px 12px;
           border-radius: 6px;
           font-size: 0.82rem;
           cursor: pointer;
           font-weight: 600;
-          color: #334155;
+          color: var(--adm-text-body, #334155);
         }
         .cp-preset-ip-btn:hover {
-          background: #e2e8f0;
+          background: var(--adm-bg-hover, #e2e8f0);
+          color: var(--adm-text-primary, #0f172a);
         }
 
         .cp-test-result-box {
-          background: #f8fafc;
-          border: 1px solid #cbd5e1;
+          background: var(--adm-bg-subtle, #f8fafc);
+          border: 1px solid var(--adm-border-strong, #cbd5e1);
           border-radius: 10px;
           padding: 20px;
         }
@@ -1118,11 +1175,12 @@ export default function SuperAdminCountryPricingDesk() {
           gap: 16px;
           margin-top: 14px;
           padding-top: 14px;
-          border-top: 1px solid #e2e8f0;
+          border-top: 1px solid var(--adm-border, #e2e8f0);
+          color: var(--adm-text-primary, #0f172a);
         }
         .cp-test-details-grid small {
           display: block;
-          color: #64748b;
+          color: var(--adm-text-muted, #64748b);
           font-size: 0.75rem;
           text-transform: uppercase;
           margin-bottom: 4px;
@@ -1136,23 +1194,25 @@ export default function SuperAdminCountryPricingDesk() {
         }
         .cp-action-tag.insert { background: #dcfce7; color: #15803d; }
         .cp-action-tag.update { background: #dbeafe; color: #1e40af; }
+        [data-admin-theme="dark"] .cp-action-tag.insert { background: rgba(16, 185, 129, 0.18); color: #34d399; }
+        [data-admin-theme="dark"] .cp-action-tag.update { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+
         .cp-log-json {
           margin: 0;
           font-size: 0.72rem;
           max-height: 80px;
           overflow-y: auto;
-          background: #f1f5f9;
-          padding: 6px;
-          border-radius: 4px;
+          background: var(--adm-bg-muted, #f1f5f9);
+          color: var(--adm-text-secondary, #1e293b);
+          padding: 6px 8px;
+          border-radius: 6px;
         }
 
         .cp-modal-backdrop {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(15, 23, 42, 0.6);
+          inset: 0;
+          background: rgba(15, 23, 42, 0.65);
+          backdrop-filter: blur(4px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1160,11 +1220,15 @@ export default function SuperAdminCountryPricingDesk() {
           padding: 16px;
         }
         .cp-modal-card {
-          background: #ffffff;
-          border-radius: 12px;
+          background: var(--adm-bg-card, #ffffff);
+          border: 1px solid var(--adm-border, #e2e8f0);
+          border-radius: 14px;
           width: 100%;
           max-width: 600px;
-          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);
+          max-height: min(90dvh, 740px);
+          display: flex;
+          flex-direction: column;
+          box-shadow: var(--adm-shadow-modal, 0 20px 25px -5px rgba(0, 0, 0, 0.2));
           overflow: hidden;
         }
         .cp-modal-header {
@@ -1172,21 +1236,30 @@ export default function SuperAdminCountryPricingDesk() {
           justify-content: space-between;
           align-items: center;
           padding: 16px 20px;
-          border-bottom: 1px solid #e2e8f0;
+          border-bottom: 1px solid var(--adm-border, #e2e8f0);
+          flex-shrink: 0;
         }
         .cp-modal-header h3 {
           margin: 0;
           font-size: 1.15rem;
-          color: #0f172a;
+          color: var(--adm-text-primary, #0f172a);
         }
         .cp-modal-close {
           background: transparent;
           border: none;
-          color: #64748b;
+          color: var(--adm-text-muted, #64748b);
           cursor: pointer;
+          padding: 4px;
+          border-radius: 6px;
+        }
+        .cp-modal-close:hover {
+          background: var(--adm-bg-muted, #f1f5f9);
+          color: var(--adm-text-primary, #0f172a);
         }
         .cp-modal-form {
           padding: 20px;
+          overflow-y: auto;
+          flex: 1 1 auto;
         }
         .cp-form-row-2 {
           display: grid;
@@ -1204,14 +1277,16 @@ export default function SuperAdminCountryPricingDesk() {
           display: block;
           font-size: 0.8rem;
           font-weight: 700;
-          color: #334155;
+          color: var(--adm-text-body, #334155);
           margin-bottom: 4px;
         }
         .cp-input-group input, .cp-input-group select {
           width: 100%;
           padding: 8px 12px;
-          border-radius: 6px;
-          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          border: 1px solid var(--adm-border-strong, #cbd5e1);
+          background: var(--adm-bg-input, #ffffff);
+          color: var(--adm-text-primary, #0f172a);
           font-size: 0.88rem;
           outline: none;
         }
@@ -1224,14 +1299,14 @@ export default function SuperAdminCountryPricingDesk() {
           gap: 10px;
           margin-top: 20px;
           padding-top: 16px;
-          border-top: 1px solid #f1f5f9;
+          border-top: 1px solid var(--adm-border, #f1f5f9);
         }
         .cp-btn-secondary {
-          background: #f1f5f9;
-          color: #334155;
-          border: none;
+          background: var(--adm-bg-muted, #f1f5f9);
+          color: var(--adm-text-body, #334155);
+          border: 1px solid var(--adm-border-strong, #cbd5e1);
           padding: 8px 16px;
-          border-radius: 6px;
+          border-radius: 8px;
           font-weight: 600;
           cursor: pointer;
         }
@@ -1240,14 +1315,11 @@ export default function SuperAdminCountryPricingDesk() {
           color: #ffffff;
           border: none;
           padding: 8px 18px;
-          border-radius: 6px;
+          border-radius: 8px;
           font-weight: 700;
           cursor: pointer;
         }
         @media (max-width: 640px) {
-          .country-pricing-desk {
-            padding: 14px 4px;
-          }
           .cp-form-row-2,
           .cp-form-row-3 {
             grid-template-columns: 1fr;

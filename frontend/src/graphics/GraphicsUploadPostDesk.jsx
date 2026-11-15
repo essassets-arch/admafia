@@ -175,11 +175,11 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
     const confirm = await Swal.fire({
       title: 'Submit Artwork to Marketing?',
       html: `
-        <div style="text-align: left; font-size: 0.88rem; color: #334155; line-height: 1.5;">
+        <div style="text-align: left; font-size: 0.88rem; line-height: 1.5;">
           <div>Customer: <strong>${selectedRequest?.companyName || 'Client'}</strong></div>
           <div>Post Title: <strong>${selectedRequest?.title}</strong></div>
           <div>Format: <strong>${creativeFormat}</strong></div>
-          <div style="margin-top: 8px; padding: 10px; background: #eef2ff; border-radius: 8px; color: #4338ca;">
+          <div style="margin-top: 8px; padding: 10px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.28); border-radius: 8px; color: #6366f1;">
             ✓ Artwork will enter Marketing's <strong>Verify Posts</strong> queue for compliance review.
           </div>
         </div>
@@ -245,11 +245,11 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
           <form onSubmit={handleSubmitArtwork}>
             {/* Step 1: Select Marketing Post Request */}
             <div style={{ marginBottom: 18 }}>
-              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
                 1. Select Marketing Post Request *
               </label>
               {loadingRequests ? (
-                <div style={{ fontSize: '0.84rem', color: '#64748b' }}>Loading active marketing requests...</div>
+                <div style={{ fontSize: '0.84rem', color: 'var(--adm-text-muted, #64748b)' }}>Loading active marketing requests...</div>
               ) : (
                 <select
                   className="graphics-select"
@@ -270,16 +270,17 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
 
             {/* Step 2: File Upload Area */}
             <div style={{ marginBottom: 18 }}>
-              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
                 2. Upload Finished Artwork (PNG, JPG, WEBP) *
               </label>
               <div
+                className={`gfx-upload-dropzone ${(localPreview || mediaUrl) ? 'has-preview' : ''}`.trim()}
                 style={{
-                  border: '2px dashed #cbd5e1',
+                  border: '2px dashed var(--adm-border-strong, #cbd5e1)',
                   borderRadius: 12,
                   padding: 24,
                   textAlign: 'center',
-                  background: (localPreview || mediaUrl) ? '#f8fafc' : '#ffffff',
+                  background: (localPreview || mediaUrl) ? 'var(--adm-bg-subtle, #f8fafc)' : 'var(--adm-bg-card, #ffffff)',
                   cursor: 'pointer',
                   position: 'relative',
                   transition: 'border-color 0.15s',
@@ -303,7 +304,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                 {uploadingFile ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                     <RefreshCw size={28} className="spin" color="#6366f1" />
-                    <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#4f46e5' }}>Uploading artwork to repository...</span>
+                    <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#6366f1' }}>Uploading artwork to repository...</span>
                   </div>
                 ) : (localPreview || mediaUrl) ? (
                   <div>
@@ -317,17 +318,17 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                         }
                       }}
                     />
-                    <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>
+                    <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#10b981', fontWeight: 700 }}>
                       ✓ Artwork Uploaded Successfully (Click or drag to replace)
                     </div>
                   </div>
                 ) : (
                   <div>
                     <UploadCloud size={32} color="#94a3b8" style={{ marginBottom: 8 }} />
-                    <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#1e293b' }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--adm-text-secondary, #1e293b)' }}>
                       Drag &amp; drop artwork or click to browse
                     </div>
-                    <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 4 }}>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4 }}>
                       PNG, JPG, or WEBP up to 15MB • Minimum recommended: 1080x1080
                     </div>
                   </div>
@@ -337,7 +338,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
 
             {/* Step 3: Designer Notes & Specifications */}
             <div style={{ marginBottom: 22 }}>
-              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
                 3. Designer Notes &amp; Specifications
               </label>
               <textarea
@@ -370,56 +371,54 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
           <div className="graphics-table-card" style={{ padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <FileText size={18} color="#6366f1" />
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>Marketing Creative Brief</h3>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>Marketing Creative Brief</h3>
             </div>
 
             {selectedRequest ? (
               <div>
-                <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 14 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>
+                <div className="gfx-spec-panel" style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: 12, borderRadius: 8, border: '1px solid var(--adm-border, #e2e8f0)', marginBottom: 14 }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                     {selectedRequest.companyName}
                   </div>
-                  <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                     {selectedRequest.customerCategory} • ID: {selectedRequest.id}
                   </div>
                 </div>
 
                 <div style={{ marginBottom: 12 }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
                     Post Title
                   </span>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a', marginTop: 2 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                     {selectedRequest.title}
                   </div>
                 </div>
 
                 {selectedRequest.ideaTitle && (
                   <div style={{ marginBottom: 12 }}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
                       Concept / Idea Reference
                     </span>
-                    <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#4f46e5', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#6366f1', marginTop: 2 }}>
                       💡 {selectedRequest.ideaTitle}
                     </div>
                   </div>
                 )}
 
                 <div style={{ marginBottom: 12 }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
                     Post Caption &amp; Ad Copy
                   </span>
                   <div
                     style={{
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
+                      background: 'var(--adm-bg-subtle, #ffffff)',
+                      border: '1px solid var(--adm-border, #e2e8f0)',
                       borderRadius: 8,
                       padding: 10,
                       fontSize: '0.82rem',
-                      color: '#334155',
+                      color: 'var(--adm-text-body, #334155)',
                       lineHeight: 1.4,
                       whiteSpace: 'pre-wrap',
-                      maxHeight: 160,
-                      overflowY: 'auto',
                       marginTop: 4,
                     }}
                   >
@@ -428,13 +427,13 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                 </div>
 
                 <div className="gfx-specs-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
-                  <div style={{ background: '#f8fafc', padding: 8, borderRadius: 6 }}>
-                    <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>Platform</span>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{selectedRequest.platform}</div>
+                  <div className="gfx-spec-panel" style={{ background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border, #e2e8f0)', padding: 8, borderRadius: 6 }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>Platform</span>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{selectedRequest.platform}</div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: 8, borderRadius: 6 }}>
-                    <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>CTA</span>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{selectedRequest.callToAction}</div>
+                  <div className="gfx-spec-panel" style={{ background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border, #e2e8f0)', padding: 8, borderRadius: 6 }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>CTA</span>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{selectedRequest.callToAction}</div>
                   </div>
                 </div>
 
@@ -445,8 +444,8 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                 )}
               </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '36px 12px', color: '#64748b' }}>
-                <Layers size={32} color="#cbd5e1" style={{ marginBottom: 8 }} />
+              <div style={{ textAlign: 'center', padding: '36px 12px', color: 'var(--adm-text-muted, #64748b)' }}>
+                <Layers size={32} style={{ color: 'var(--adm-border-strong, #cbd5e1)', marginBottom: 8 }} />
                 <div style={{ fontSize: '0.86rem' }}>Select a request from the dropdown to load its marketing brief.</div>
               </div>
             )}

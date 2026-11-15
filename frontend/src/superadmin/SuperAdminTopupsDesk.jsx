@@ -25,6 +25,7 @@ import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import crmApi from '../services/crmApi';
 import { SmartTable } from '../components/SmartTabulator';
+import { useAdminTheme } from '../utils/adminTheme';
 
 const TOPUP_PRESETS = [
   { amount: 600, label: '₹600', runway: '+2 Days Runtime', subtitle: 'Starter Trial' },
@@ -36,6 +37,7 @@ const TOPUP_PRESETS = [
 ];
 
 export default function SuperAdminTopupsDesk() {
+  const { isDark } = useAdminTheme({ syncDocument: false });
   const [activeTab, setActiveTab] = useState('customers'); // 'customers' | 'requests' | 'history'
 
   // Top-Up Requests Queue
@@ -525,14 +527,14 @@ export default function SuperAdminTopupsDesk() {
                 <tbody>
                   {customersLoading ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--adm-text-muted, #64748b)' }}>
                         <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                         <div>Loading registered businesses from MongoDB...</div>
                       </td>
                     </tr>
                   ) : filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: 48, color: 'var(--adm-text-muted, #94a3b8)' }}>
                         No registered businesses match your search.
                       </td>
                     </tr>
@@ -547,36 +549,36 @@ export default function SuperAdminTopupsDesk() {
                       return (
                         <tr key={c.id}>
                           <td>
-                            <strong style={{ color: '#0f172a', fontSize: '0.92rem' }}>
+                            <strong style={{ color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.92rem' }}>
                               {cName}
                             </strong>
-                            <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                               Contact: {cContact}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontFamily: 'monospace' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #94a3b8)', fontFamily: 'monospace' }}>
                               ID: {c.id}
                             </div>
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 600, color: '#334155' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--adm-text-body, #334155)' }}>
                               📱 +91 {c.phone}
                             </div>
                             {c.email && (
-                              <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                              <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                 {c.email}
                               </div>
                             )}
-                            <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #94a3b8)' }}>
                               {c.city || 'India'}
                             </div>
                           </td>
 
                           <td>
-                            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: bal > 0 ? '#059669' : '#dc2626' }}>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: bal > 0 ? (isDark ? '#34d399' : '#059669') : (isDark ? '#f87171' : '#dc2626') }}>
                               ₹{bal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </div>
-                            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>
                               Pacing: ₹{dailyRate}/day
                             </span>
                           </td>
@@ -596,7 +598,7 @@ export default function SuperAdminTopupsDesk() {
                           </td>
 
                           <td>
-                            <strong style={{ color: '#1e293b' }}>
+                            <strong style={{ color: 'var(--adm-text-secondary, #1e293b)' }}>
                               ₹{Number(c.total_lifetime_paid ?? c.lifetimePaid ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </strong>
                           </td>
@@ -707,15 +709,15 @@ export default function SuperAdminTopupsDesk() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--adm-text-muted, #64748b)' }}>
                         <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                         <div>Loading top-up ledger...</div>
                       </td>
                     </tr>
                   ) : topups.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
-                        <FileCheck2 size={36} style={{ margin: '0 auto 10px', color: '#cbd5e1' }} />
+                      <td colSpan={6} style={{ textAlign: 'center', padding: 48, color: 'var(--adm-text-muted, #94a3b8)' }}>
+                        <FileCheck2 size={36} style={{ margin: '0 auto 10px', color: 'var(--adm-text-muted, #cbd5e1)' }} />
                         <div>No top-up records found.</div>
                       </td>
                     </tr>
@@ -725,10 +727,10 @@ export default function SuperAdminTopupsDesk() {
                       .map((t) => (
                         <tr key={t.id}>
                           <td>
-                            <code style={{ fontSize: '0.80rem', color: '#4f46e5', fontWeight: 700 }}>
+                            <code style={{ fontSize: '0.80rem', color: isDark ? '#818cf8' : '#4f46e5', fontWeight: 700 }}>
                               {t.id}
                             </code>
-                            <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                               {new Date(t.created_at).toLocaleString('en-IN', {
                                 day: '2-digit',
                                 month: 'short',
@@ -739,26 +741,26 @@ export default function SuperAdminTopupsDesk() {
                           </td>
 
                           <td>
-                            <strong style={{ color: '#0f172a' }}>{t.company_name}</strong>
-                            <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                            <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{t.company_name}</strong>
+                            <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                               Contact: {t.contact_person}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #94a3b8)' }}>
                               📱 +91 {t.phone}
                             </div>
                           </td>
 
                           <td>
-                            <strong style={{ fontSize: '1.05rem', color: '#059669' }}>
+                            <strong style={{ fontSize: '1.05rem', color: isDark ? '#34d399' : '#059669' }}>
                               ₹{Number(t.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </strong>
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 600, fontFamily: 'monospace', color: '#1e293b' }}>
+                            <div style={{ fontWeight: 600, fontFamily: 'monospace', color: 'var(--adm-text-secondary, #1e293b)' }}>
                               {t.reference_utr}
                             </div>
-                            <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                               {t.payment_method}
                             </div>
                           </td>
@@ -803,7 +805,7 @@ export default function SuperAdminTopupsDesk() {
                               </div>
                             ) : (
                               <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                   By {t.processed_by || 'Admin'}
                                 </span>
                                 <button
@@ -849,7 +851,7 @@ export default function SuperAdminTopupsDesk() {
 
             <form onSubmit={handleSubmitReject}>
               <div className="sa-modal-body">
-                <p style={{ margin: '0 0 12px 0', fontSize: '0.84rem', color: '#475569' }}>
+                <p style={{ margin: '0 0 12px 0', fontSize: '0.84rem', color: 'var(--adm-text-body, #475569)' }}>
                   Provide a mandatory administrative reason for rejecting the top-up request for <strong>{rejectingTopup.company_name}</strong> (₹{Number(rejectingTopup.amount).toLocaleString('en-IN')}).
                 </p>
 
@@ -891,10 +893,16 @@ export default function SuperAdminTopupsDesk() {
       {showManualModal && (
         <div className="sa-modal-backdrop" onClick={() => setShowManualModal(false)}>
           <div className="sa-modal-card" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-            <div className="sa-modal-header" style={{ background: '#ecfdf5', borderBottom: '1px solid #a7f3d0' }}>
+            <div
+              className="sa-modal-header"
+              style={{
+                background: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5',
+                borderBottom: isDark ? '1px solid rgba(16, 185, 129, 0.28)' : '1px solid #a7f3d0',
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Zap size={18} color="#059669" />
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#065f46' }}>
+                <Zap size={18} color={isDark ? '#34d399' : '#059669'} />
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: isDark ? '#6ee7b7' : '#065f46' }}>
                   Select Customer &amp; Top-Up Ad Wallet
                 </h3>
               </div>
@@ -911,8 +919,8 @@ export default function SuperAdminTopupsDesk() {
               <div className="sa-modal-body" style={{ padding: 22 }}>
                 {/* 1. Customer Selector Dropdown */}
                 <div className="sa-form-group" style={{ marginBottom: 14 }}>
-                  <label className="sa-form-label" style={{ fontWeight: 800, color: '#0f172a' }}>
-                    <Building2 size={14} color="#059669" /> 1. Select Target Customer Account *
+                  <label className="sa-form-label" style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
+                    <Building2 size={14} color={isDark ? '#34d399' : '#059669'} /> 1. Select Target Customer Account *
                   </label>
                   <select
                     className="sa-select"
@@ -938,8 +946,8 @@ export default function SuperAdminTopupsDesk() {
                 {selectedCustomer && (
                   <div
                     style={{
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
+                      background: 'var(--adm-bg-subtle, #f8fafc)',
+                      border: '1px solid var(--adm-border, #e2e8f0)',
                       borderRadius: 10,
                       padding: '12px 16px',
                       marginBottom: 16,
@@ -948,21 +956,21 @@ export default function SuperAdminTopupsDesk() {
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#64748b' }}>Account:</span>
-                      <strong style={{ color: '#0f172a' }}>{selectedCustomer.company_name || selectedCustomer.companyName || selectedCustomer.name}</strong>
+                      <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Account:</span>
+                      <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{selectedCustomer.company_name || selectedCustomer.companyName || selectedCustomer.name}</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#64748b' }}>Contact &amp; Mobile:</span>
-                      <span>{selectedCustomer.contact_person || selectedCustomer.contactPerson || selectedCustomer.name} (+91 {selectedCustomer.phone})</span>
+                      <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Contact &amp; Mobile:</span>
+                      <span style={{ color: 'var(--adm-text-body, #334155)' }}>{selectedCustomer.contact_person || selectedCustomer.contactPerson || selectedCustomer.name} (+91 {selectedCustomer.phone})</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 4, borderTop: '1px dashed #cbd5e1' }}>
-                      <span style={{ color: '#64748b' }}>Current Available Balance:</span>
-                      <strong style={{ color: '#059669', fontSize: '0.96rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 4, borderTop: '1px dashed var(--adm-border-strong, #cbd5e1)' }}>
+                      <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Current Available Balance:</span>
+                      <strong style={{ color: isDark ? '#34d399' : '#059669', fontSize: '0.96rem' }}>
                         ₹{Number(selectedCustomer.available_balance ?? selectedCustomer.balance ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </strong>
                     </div>
                     {manualForm.amount && parseFloat(manualForm.amount) > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, color: '#2563eb', fontWeight: 700 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, color: isDark ? '#60a5fa' : '#2563eb', fontWeight: 700 }}>
                         <span>New Balance After Top-Up:</span>
                         <span>
                           ₹{(Number(selectedCustomer.available_balance ?? selectedCustomer.balance ?? 0) + parseFloat(manualForm.amount)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -975,8 +983,8 @@ export default function SuperAdminTopupsDesk() {
 
                 {/* 2. Top-Up Amount Presets */}
                 <div style={{ marginBottom: 16 }}>
-                  <label className="sa-form-label" style={{ fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
-                    <Wallet size={14} color="#059669" /> 2. Top-Up Amount Presets (₹300/day pacing)
+                  <label className="sa-form-label" style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6 }}>
+                    <Wallet size={14} color={isDark ? '#34d399' : '#059669'} /> 2. Top-Up Amount Presets (₹300/day pacing)
                   </label>
                   <div className="sa-presets-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                     {TOPUP_PRESETS.map((p) => {
@@ -988,9 +996,17 @@ export default function SuperAdminTopupsDesk() {
                           style={{
                             padding: '10px 8px',
                             borderRadius: 8,
-                            border: isSelected ? '2px solid #059669' : '1px solid #cbd5e1',
-                            background: isSelected ? '#ecfdf5' : '#ffffff',
-                            color: isSelected ? '#065f46' : '#1e293b',
+                            border: isSelected ? '2px solid #10b981' : '1px solid var(--adm-border-strong, #cbd5e1)',
+                            background: isSelected
+                              ? isDark
+                                ? 'rgba(16, 185, 129, 0.16)'
+                                : '#ecfdf5'
+                              : 'var(--adm-bg-card, #ffffff)',
+                            color: isSelected
+                              ? isDark
+                                ? '#6ee7b7'
+                                : '#065f46'
+                              : 'var(--adm-text-secondary, #1e293b)',
                             cursor: 'pointer',
                             textAlign: 'center',
                             transition: 'all 0.15s ease',
@@ -998,7 +1014,7 @@ export default function SuperAdminTopupsDesk() {
                           onClick={() => setManualForm({ ...manualForm, amount: String(p.amount) })}
                         >
                           <div style={{ fontWeight: 800, fontSize: '0.94rem' }}>{p.label}</div>
-                          <div style={{ fontSize: '0.70rem', color: isSelected ? '#059669' : '#64748b' }}>{p.runway}</div>
+                          <div style={{ fontSize: '0.70rem', color: isSelected ? (isDark ? '#34d399' : '#059669') : 'var(--adm-text-muted, #64748b)' }}>{p.runway}</div>
                         </button>
                       );
                     })}
@@ -1009,7 +1025,7 @@ export default function SuperAdminTopupsDesk() {
                 <div className="sa-form-group" style={{ marginBottom: 14 }}>
                   <label className="sa-form-label">Or Custom Amount (INR) *</label>
                   <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: '#64748b' }}>
+                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--adm-text-muted, #64748b)' }}>
                       ₹
                     </span>
                     <input
@@ -1034,7 +1050,7 @@ export default function SuperAdminTopupsDesk() {
                     </label>
                     <button
                       type="button"
-                      style={{ background: 'transparent', border: 'none', color: '#059669', fontSize: '0.74rem', fontWeight: 700, cursor: 'pointer' }}
+                      style={{ background: 'transparent', border: 'none', color: isDark ? '#34d399' : '#059669', fontSize: '0.74rem', fontWeight: 700, cursor: 'pointer' }}
                       onClick={() => setManualForm({ ...manualForm, referenceUtr: `TOP_${Date.now().toString().slice(-6)}_${Math.random().toString(36).substr(2, 4).toUpperCase()}` })}
                     >
                       <Sparkles size={12} style={{ display: 'inline', marginRight: 2 }} /> Auto-Generate

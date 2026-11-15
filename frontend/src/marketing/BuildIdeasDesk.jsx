@@ -192,9 +192,9 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
       </div>
 
       {/* 2. Customer Selector Bar */}
-      <div className="marketing-controls-card" style={{ background: '#ffffff' }}>
+      <div className="marketing-controls-card" style={{ background: 'var(--adm-bg-card, #ffffff)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, flexWrap: 'wrap' }}>
-          <label style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
+          <label style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
             Target Customer:
           </label>
           <select
@@ -249,7 +249,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
               className="mkt-form-input"
               value={selectedCustomer ? selectedCustomer.name : 'No customer selected'}
               disabled
-              style={{ background: '#f8fafc', color: '#0f172a', fontWeight: 700 }}
+              style={{ background: 'var(--adm-bg-subtle, #f8fafc)', color: 'var(--adm-text-primary, #0f172a)', fontWeight: 700 }}
             />
           </div>
 
@@ -386,7 +386,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
             <div
               style={{
                 padding: '16px 20px',
-                borderBottom: '1px solid #e2e8f0',
+                borderBottom: '1px solid var(--adm-border, #e2e8f0)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -418,14 +418,14 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--adm-text-muted, #64748b)' }}>
                         <RefreshCw size={16} className="spin" /> Loading customer ideas...
                       </td>
                     </tr>
                   ) : customerIdeas.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '40px 16px', color: '#64748b' }}>
-                        <Lightbulb size={32} style={{ color: '#cbd5e1', marginBottom: '8px' }} />
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--adm-text-muted, #64748b)' }}>
+                        <Lightbulb size={32} style={{ color: 'var(--adm-border-strong, #cbd5e1)', marginBottom: '8px' }} />
                         <p style={{ margin: 0, fontSize: '0.85rem' }}>
                           No ideas saved yet for this customer. Fill the form above to structure and save your first campaign idea.
                         </p>
@@ -435,11 +435,11 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
                     customerIdeas.map((idea) => (
                       <tr key={idea.id}>
                         <td>
-                          <strong style={{ fontSize: '0.90rem', color: '#0f172a', display: 'block' }}>
+                          <strong style={{ fontSize: '0.90rem', color: 'var(--adm-text-primary, #0f172a)', display: 'block' }}>
                             {idea.title}
                           </strong>
                           {idea.concept && (
-                            <p style={{ margin: '4px 0 0 0', fontSize: '0.80rem', color: '#475569', lineHeight: 1.4 }}>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.80rem', color: 'var(--adm-text-body, #475569)', lineHeight: 1.4 }}>
                               {idea.concept.length > 140
                                 ? `${idea.concept.substring(0, 140)}...`
                                 : idea.concept}
@@ -468,7 +468,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
                           </span>
                         </td>
                         <td>
-                          <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                             {idea.createdAt
                               ? new Date(idea.createdAt).toLocaleDateString('en-IN', {
                                   timeZone: 'Asia/Kolkata',

@@ -151,12 +151,12 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
     const confirm = await Swal.fire({
       title: `Submit Revision #${nextRev}?`,
       html: `
-        <div style="text-align: left; font-size: 0.88rem; color: #334155; line-height: 1.5;">
+        <div style="text-align: left; font-size: 0.88rem; line-height: 1.5;">
           <div>Customer: <strong>${reuploadPost.companyName}</strong></div>
           <div>New Creative Version: <strong>Revision #${nextRev}</strong></div>
-          <div style="margin-top: 8px; padding: 10px; background: #eef2ff; border-radius: 8px; color: #4338ca;">
+          <div style="margin-top: 8px; padding: 10px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.28); border-radius: 8px; color: #6366f1;">
             ✓ The corrected creative will return to Marketing's <strong>Verify Posts</strong> queue for review.
-            <div style="font-size: 0.78rem; color: #64748b; margin-top: 4px;">Previous rejected version and feedback are preserved in audit history.</div>
+            <div style="font-size: 0.78rem; opacity: 0.85; margin-top: 4px;">Previous rejected version and feedback are preserved in audit history.</div>
           </div>
         </div>
       `,
@@ -273,7 +273,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
               {loading ? (
                 <tr>
                   <td colSpan={6} style={{ padding: 40, textAlign: 'center' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#64748b' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--adm-text-muted, #64748b)' }}>
                       <RefreshCw size={18} className="spin" />
                       <span>Loading rejected posts queue...</span>
                     </div>
@@ -281,9 +281,9 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                 </tr>
               ) : rejectedPosts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>
+                  <td colSpan={6} style={{ padding: 48, textAlign: 'center', color: 'var(--adm-text-muted, #64748b)' }}>
                     <CheckCircle2 size={36} color="#10b981" style={{ marginBottom: 8 }} />
-                    <h4 style={{ margin: '0 0 4px 0', color: '#0f172a' }}>Zero rejected creatives! 🎉</h4>
+                    <h4 style={{ margin: '0 0 4px 0', color: 'var(--adm-text-primary, #0f172a)' }}>Zero rejected creatives! 🎉</h4>
                     <p style={{ margin: 0, fontSize: '0.84rem' }}>
                       All your submitted designs have passed verification or are currently in review.
                     </p>
@@ -309,7 +309,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                               flexShrink: 0,
                               display: 'block',
                               background: '#0f172a',
-                              border: '1px solid #fecdd3',
+                              border: '1px solid rgba(244, 63, 94, 0.4)',
                             }}
                           >
                             <img
@@ -331,7 +331,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                               placeItems: 'center',
                               textAlign: 'center',
                               flexShrink: 0,
-                              border: '1px solid #e2e8f0',
+                              border: '1px solid var(--adm-border, #e2e8f0)',
                             }}
                           >
                             No Image
@@ -341,7 +341,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                           <span className="gfx-pill gfx-pill-rose" style={{ fontSize: '0.66rem' }}>
                             Rev #{p.revisionNumber || 1}
                           </span>
-                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 3 }}>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3 }}>
                             {p.creativeFormat || 'Standard'}
                           </div>
                         </div>
@@ -350,14 +350,14 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
 
                     {/* 2. Post & Client */}
                     <td>
-                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.88rem' }}>
+                      <div style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.88rem' }}>
                         {p.title}
                       </div>
-                      <div style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 600, marginTop: 2 }}>
-                        {p.companyName} • <span style={{ color: '#64748b', fontWeight: 400 }}>{p.city || 'India'}</span>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-body, #334155)', fontWeight: 600, marginTop: 2 }}>
+                        {p.companyName} • <span style={{ color: 'var(--adm-text-muted, #64748b)', fontWeight: 400 }}>{p.city || 'India'}</span>
                       </div>
                       {p.platform && (
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                           {p.platform}
                         </div>
                       )}
@@ -365,11 +365,11 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
 
                     {/* 3. Rejection Reason & Fix Instructions */}
                     <td>
-                      <div style={{ fontSize: '0.80rem', color: '#be123c', fontWeight: 700 }}>
+                      <div style={{ fontSize: '0.80rem', color: '#f43f5e', fontWeight: 700 }}>
                         {p.rejectionReason || 'Returned for revision'}
                       </div>
                       {p.correctionInstructions && p.correctionInstructions !== p.rejectionReason && (
-                        <div style={{ fontSize: '0.75rem', color: '#881337', marginTop: 3 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-body, #475569)', marginTop: 3 }}>
                           <strong>Fix:</strong> {p.correctionInstructions}
                         </div>
                       )}
@@ -377,10 +377,10 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
 
                     {/* 4. Reviewed By */}
                     <td>
-                      <div style={{ fontWeight: 700, fontSize: '0.80rem', color: '#0f172a' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.80rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                         {p.reviewerName || 'Marketing Auditor'}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         {p.rejectedAt
                           ? new Date(p.rejectedAt).toLocaleString('en-IN', {
                               timeZone: 'Asia/Kolkata',
@@ -443,7 +443,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
           <div className="graphics-modal-card" style={{ maxWidth: 660 }} onClick={(e) => e.stopPropagation()}>
             <div className="graphics-modal-header">
               <div>
-                <span className="graphics-brand-tag" style={{ color: '#e11d48' }}>
+                <span className="graphics-brand-tag" style={{ color: '#f43f5e' }}>
                   Reupload Corrected Artwork (Revision #{(reuploadPost.revisionNumber || 1) + 1})
                 </span>
                 <h3 style={{ margin: '4px 0 0 0', fontSize: '1.2rem', fontWeight: 800 }}>
@@ -452,7 +452,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
               </div>
               <button
                 type="button"
-                className="graphics-footer-btn"
+                className="graphics-btn-secondary"
                 style={{ padding: 6, borderRadius: '50%' }}
                 onClick={() => setReuploadPost(null)}
               >
@@ -468,23 +468,24 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                   <div style={{ fontWeight: 700, marginTop: 4, fontSize: '0.90rem' }}>
                     "{reuploadPost.rejectionReason}"
                   </div>
-                  <div style={{ fontSize: '0.74rem', color: '#9f1239', marginTop: 4 }}>
+                  <div style={{ fontSize: '0.74rem', opacity: 0.85, marginTop: 4 }}>
                     Auditor: {reuploadPost.reviewerName}
                   </div>
                 </div>
 
                 {/* Upload New File */}
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
+                  <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
                     1. Upload Corrected Artwork Image (PNG, JPG, WEBP) *
                   </label>
                   <div
+                    className={`gfx-upload-dropzone ${(localPreview || newMediaUrl) ? 'has-preview' : ''}`.trim()}
                     style={{
-                      border: '2px dashed #cbd5e1',
+                      border: '2px dashed var(--adm-border-strong, #cbd5e1)',
                       borderRadius: 10,
                       padding: 20,
                       textAlign: 'center',
-                      background: (localPreview || newMediaUrl) ? '#f8fafc' : '#ffffff',
+                      background: (localPreview || newMediaUrl) ? 'var(--adm-bg-subtle, #f8fafc)' : 'var(--adm-bg-card, #ffffff)',
                       position: 'relative',
                     }}
                   >
@@ -506,7 +507,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                     {uploadingFile ? (
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                         <RefreshCw size={24} className="spin" color="#6366f1" />
-                        <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#4f46e5' }}>Uploading corrected file...</span>
+                        <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#6366f1' }}>Uploading corrected file...</span>
                       </div>
                     ) : (localPreview || newMediaUrl) ? (
                       <div>
@@ -520,17 +521,17 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                             }
                           }}
                         />
-                        <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>
+                        <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#10b981', fontWeight: 700 }}>
                           ✓ Corrected File Ready for Resubmission (Click to change)
                         </div>
                       </div>
                     ) : (
                       <div>
                         <UploadCloud size={28} color="#94a3b8" style={{ marginBottom: 6 }} />
-                        <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#1e293b' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--adm-text-secondary, #1e293b)' }}>
                           Drag &amp; drop corrected image or click to browse
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                           PNG, JPG, WEBP up to 15MB
                         </div>
                       </div>
@@ -540,7 +541,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
 
                 {/* What Was Fixed */}
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: '#334155', marginBottom: 6, textTransform: 'uppercase' }}>
+                  <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
                     2. Revision Correction Notes (How feedback was addressed)
                   </label>
                   <textarea
@@ -598,7 +599,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
               </div>
               <button
                 type="button"
-                className="graphics-footer-btn"
+                className="graphics-btn-secondary"
                 style={{ padding: 6, borderRadius: '50%' }}
                 onClick={() => setHistoryPost(null)}
               >
@@ -608,14 +609,14 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
 
             <div className="graphics-modal-body">
               {loadingHistory ? (
-                <div style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
+                <div style={{ textAlign: 'center', padding: 24, color: 'var(--adm-text-muted, #64748b)' }}>
                   <RefreshCw size={20} className="spin" />
                   <div style={{ marginTop: 8 }}>Loading history...</div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
                   <div>
-                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.92rem', color: '#0f172a' }}>
+                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.92rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                       Review Decisions &amp; Auditor Feedback ({historyData.reviews.length})
                     </h4>
                     <div className="graphics-table-card">
@@ -636,7 +637,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                           <tbody>
                             {historyData.reviews.length === 0 ? (
                               <tr>
-                                <td colSpan={4} style={{ textAlign: 'center', padding: 24, color: '#64748b', fontSize: '0.82rem' }}>
+                                <td colSpan={4} style={{ textAlign: 'center', padding: 24, color: 'var(--adm-text-muted, #64748b)', fontSize: '0.82rem' }}>
                                   No prior reviews logged.
                                 </td>
                               </tr>
@@ -657,32 +658,32 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                                     </span>
                                   </td>
                                   <td>
-                                    <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>
+                                    <strong style={{ fontSize: '0.82rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                                       {rev.reviewer_name || 'Marketing Auditor'}
                                     </strong>
                                     {rev.reviewer_role && (
-                                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                         {rev.reviewer_role}
                                       </div>
                                     )}
                                   </td>
                                   <td>
                                     {rev.rejection_reason && (
-                                      <div style={{ fontSize: '0.80rem', color: '#be123c', fontWeight: 700 }}>
+                                      <div style={{ fontSize: '0.80rem', color: '#f43f5e', fontWeight: 700 }}>
                                         Reason: {rev.rejection_reason}
                                       </div>
                                     )}
                                     {rev.remarks && (
-                                      <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: rev.rejection_reason ? 2 : 0 }}>
+                                      <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)', marginTop: rev.rejection_reason ? 2 : 0 }}>
                                         {rev.remarks}
                                       </div>
                                     )}
                                     {!rev.rejection_reason && !rev.remarks && (
-                                      <span style={{ color: '#94a3b8' }}>—</span>
+                                      <span style={{ color: 'var(--adm-text-muted, #94a3b8)' }}>—</span>
                                     )}
                                   </td>
                                   <td>
-                                    <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                    <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                       {rev.created_at
                                         ? new Date(rev.created_at).toLocaleString('en-IN', {
                                             timeZone: 'Asia/Kolkata',
@@ -705,7 +706,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                   </div>
 
                   <div>
-                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.92rem', color: '#0f172a' }}>
+                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.92rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                       Artwork Version Revisions ({historyData.revisions.length})
                     </h4>
                     <div className="graphics-table-card">
@@ -727,7 +728,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                           <tbody>
                             {historyData.revisions.length === 0 ? (
                               <tr>
-                                <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#64748b', fontSize: '0.82rem' }}>
+                                <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--adm-text-muted, #64748b)', fontSize: '0.82rem' }}>
                                   No artwork revisions recorded.
                                 </td>
                               </tr>
@@ -759,25 +760,25 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                                     )}
                                   </td>
                                   <td>
-                                    <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>
+                                    <div style={{ fontWeight: 800, fontSize: '0.84rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                                       Revision #{ver.revision_number}
                                     </div>
-                                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                    <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                       {ver.creative_format || 'Standard'}
                                     </div>
                                   </td>
                                   <td>
-                                    <div style={{ fontWeight: 600, fontSize: '0.80rem', color: '#334155' }}>
+                                    <div style={{ fontWeight: 600, fontSize: '0.80rem', color: 'var(--adm-text-secondary, #334155)' }}>
                                       {ver.uploaded_by || 'Graphics Designer'}
                                     </div>
                                     {ver.designer_notes && (
-                                      <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: 2 }}>
+                                      <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>
                                         {ver.designer_notes}
                                       </div>
                                     )}
                                   </td>
                                   <td>
-                                    <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                    <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                       {ver.uploaded_at
                                         ? new Date(ver.uploaded_at).toLocaleString('en-IN', {
                                             timeZone: 'Asia/Kolkata',
@@ -796,7 +797,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                                         href={ver.media_url}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="graphics-footer-btn"
+                                        className="graphics-btn-secondary"
                                         style={{ padding: '4px 8px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                                         title="Open full-resolution asset"
                                       >
@@ -804,7 +805,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                                         <span>Open</span>
                                       </a>
                                     ) : (
-                                      <span style={{ color: '#94a3b8' }}>—</span>
+                                      <span style={{ color: 'var(--adm-text-muted, #94a3b8)' }}>—</span>
                                     )}
                                   </td>
                                 </tr>

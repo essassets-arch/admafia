@@ -30,13 +30,17 @@
   --mkt-shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.08);
 }
 
-/* 1. Main Layout & Frame */
+/* 1. Main Layout & Frame (100dvh App Shell) */
 .marketing-layout-root {
   display: flex;
-  min-height: 100vh;
-  background-color: #f8fafc;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  width: 100%;
+  background-color: var(--adm-bg-canvas, #f8fafc);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  color: var(--mkt-dark);
+  color: var(--adm-text-primary, var(--mkt-dark));
 }
 
 .marketing-sidebar {
@@ -138,16 +142,27 @@
 
 .marketing-nav-badge {
   font-size: 0.72rem;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 999px;
   font-weight: 700;
-  background: var(--mkt-slate-100);
-  color: var(--mkt-slate-700);
+  background: rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  flex-shrink: 0;
+}
+
+.marketing-nav-badge.urgent {
+  background: #f59e0b;
+  color: #ffffff;
 }
 
 .marketing-nav-item.active .marketing-nav-badge {
-  background: var(--mkt-primary);
-  color: #ffffff;
+  background: #ffffff;
+  color: #4338ca;
+}
+
+.marketing-nav-item.active .marketing-nav-badge.urgent {
+  background: #fbbf24;
+  color: #0f172a;
 }
 
 .marketing-sidebar-footer {
@@ -183,18 +198,43 @@
   border-color: #fecdd3;
 }
 
-/* 2. Main Content Area */
+/* 2. Main Content Area (Single Scrollable 100dvh Viewport) */
 .marketing-main-wrap {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-y: auto;
   overflow-x: hidden;
+  background-color: var(--adm-bg-canvas, #f8fafc);
+}
+
+.marketing-main-wrap::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.marketing-main-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.marketing-main-wrap::-webkit-scrollbar-thumb {
+  background: var(--adm-scroll-thumb, rgba(148, 163, 184, 0.42));
+  border-radius: 999px;
+}
+
+.marketing-main-wrap::-webkit-scrollbar-thumb:hover {
+  background: var(--adm-scroll-thumb-hover, rgba(100, 116, 139, 0.72));
 }
 
 .marketing-top-bar {
   height: 64px;
-  background: #ffffff;
+  min-height: 64px;
+  flex-shrink: 0;
+  background: var(--adm-bg-topbar, #ffffff);
   border-bottom: 1px solid var(--mkt-border);
   padding: 0 28px;
   display: flex;
@@ -598,6 +638,12 @@
   border: 1px solid #bfdbfe;
 }
 
+.mkt-pill-indigo {
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+}
+
 .mkt-pill-amber {
   background: #fffbeb;
   color: #d97706;
@@ -744,6 +790,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .marketing-modal-header h3 {
@@ -775,6 +822,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 /* 11. Form Elements */
@@ -1103,4 +1151,340 @@
     padding-right: 16px;
   }
 }
+
+/* =============================================================================
+   14. UNIFIED EXECUTIVE DARK MODE (`[data-admin-theme="dark"]`)
+   ============================================================================= */
+
+[data-admin-theme="dark"].marketing-layout-root,
+[data-admin-theme="dark"] .marketing-main-wrap,
+[data-admin-theme="dark"] .marketing-page-container {
+  background-color: var(--adm-bg-canvas, #0b1120);
+  color: var(--adm-text-primary, #f8fafc);
+}
+
+[data-admin-theme="dark"] .marketing-top-bar {
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom-color: var(--adm-border, #1e293b);
+}
+
+[data-admin-theme="dark"] .marketing-breadcrumbs {
+  color: var(--adm-text-muted, #94a3b8);
+}
+
+[data-admin-theme="dark"] .marketing-breadcrumbs strong {
+  color: var(--adm-text-primary, #f8fafc);
+}
+
+[data-admin-theme="dark"] .marketing-live-pill {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+[data-admin-theme="dark"] .marketing-clock-tag {
+  background: var(--adm-bg-card, #111827);
+  border-color: var(--adm-border-strong, #334155);
+  color: var(--adm-text-secondary, #e2e8f0);
+}
+
+[data-admin-theme="dark"] .mkt-hero-banner {
+  border: 1px solid #1e293b;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Cards, KPI Tiles, Filter Bars & Table Containers */
+[data-admin-theme="dark"] .marketing-stat-card,
+[data-admin-theme="dark"] .marketing-controls-card,
+[data-admin-theme="dark"] .marketing-table-card {
+  background: var(--adm-bg-card, #111827);
+  border-color: var(--adm-border, #1e293b);
+  color: var(--adm-text-primary, #f8fafc);
+  box-shadow: var(--adm-shadow-card, 0 8px 26px rgba(0, 0, 0, 0.36));
+}
+
+[data-admin-theme="dark"] .marketing-stat-card.urgent {
+  border-color: #f59e0b !important;
+}
+
+[data-admin-theme="dark"] .marketing-header-title-col h1,
+[data-admin-theme="dark"] .marketing-stat-value,
+[data-admin-theme="dark"] .mkt-cell-primary {
+  color: var(--adm-text-primary, #f8fafc);
+}
+
+[data-admin-theme="dark"] .marketing-header-title-col p,
+[data-admin-theme="dark"] .marketing-stat-label,
+[data-admin-theme="dark"] .marketing-stat-sub,
+[data-admin-theme="dark"] .mkt-cell-sub,
+[data-admin-theme="dark"] .mkt-form-help {
+  color: var(--adm-text-muted, #94a3b8);
+}
+
+/* Search Inputs, Form Controls & Selects */
+[data-admin-theme="dark"] .marketing-search-input,
+[data-admin-theme="dark"] .marketing-select,
+[data-admin-theme="dark"] .mkt-form-input,
+[data-admin-theme="dark"] .mkt-form-textarea,
+[data-admin-theme="dark"] .mkt-form-select {
+  background: var(--adm-bg-input, #090e1a);
+  border-color: var(--adm-border-strong, #334155);
+  color: var(--adm-text-primary, #f8fafc);
+}
+
+[data-admin-theme="dark"] .marketing-search-input:focus,
+[data-admin-theme="dark"] .marketing-select:focus,
+[data-admin-theme="dark"] .mkt-form-input:focus,
+[data-admin-theme="dark"] .mkt-form-textarea:focus,
+[data-admin-theme="dark"] .mkt-form-select:focus {
+  background: var(--adm-bg-input, #090e1a);
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+}
+
+[data-admin-theme="dark"] .mkt-form-input:disabled {
+  background: var(--adm-bg-subtle, #0f172a) !important;
+  border-color: var(--adm-border, #1e293b) !important;
+  color: var(--adm-text-body, #cbd5e1) !important;
+}
+
+[data-admin-theme="dark"] .mkt-form-label {
+  color: var(--adm-text-secondary, #e2e8f0);
+}
+
+/* Tables & Pagination */
+[data-admin-theme="dark"] .marketing-table th {
+  background: #0b1120;
+  color: #94a3b8;
+  border-bottom-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .marketing-table td {
+  color: #e2e8f0;
+  border-bottom-color: rgba(148, 163, 184, 0.12);
+}
+
+[data-admin-theme="dark"] .marketing-table tr:hover td {
+  background: #172033;
+}
+
+[data-admin-theme="dark"] .marketing-pagination {
+  background: #0f172a;
+  border-top-color: #1e293b;
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .marketing-page-btn {
+  background: #172033;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+[data-admin-theme="dark"] .marketing-page-btn:hover:not(:disabled) {
+  background: #1e293b;
+  border-color: #475569;
+  color: #ffffff;
+}
+
+/* Buttons & Filter Tabs */
+[data-admin-theme="dark"] .marketing-btn-refresh {
+  background: #172033;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+[data-admin-theme="dark"] .marketing-btn-refresh:hover:not(:disabled) {
+  background: #1e293b;
+  border-color: #6366f1;
+  color: #ffffff;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action {
+  background: #172033;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action:hover {
+  background: #1e293b;
+  border-color: #475569;
+  color: #ffffff;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action.active {
+  background: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.35);
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action.primary {
+  background: rgba(99, 102, 241, 0.16) !important;
+  border-color: rgba(99, 102, 241, 0.38) !important;
+  color: #a5b4fc !important;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action.primary:hover {
+  background: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action.success {
+  background: rgba(16, 185, 129, 0.16) !important;
+  border-color: rgba(16, 185, 129, 0.38) !important;
+  color: #34d399 !important;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action.success:hover {
+  background: #059669 !important;
+  border-color: #059669 !important;
+  color: #ffffff !important;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action.warning {
+  background: rgba(245, 158, 11, 0.16) !important;
+  border-color: rgba(245, 158, 11, 0.38) !important;
+  color: #fbbf24 !important;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action.warning:hover {
+  background: #d97706 !important;
+  border-color: #d97706 !important;
+  color: #ffffff !important;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action.danger {
+  background: rgba(244, 63, 94, 0.16) !important;
+  border-color: rgba(244, 63, 94, 0.38) !important;
+  color: #fda4af !important;
+}
+
+[data-admin-theme="dark"] .mkt-btn-table-action.danger:hover {
+  background: #e11d48 !important;
+  border-color: #e11d48 !important;
+  color: #ffffff !important;
+}
+
+/* Status Pills */
+[data-admin-theme="dark"] .mkt-pill-green {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .mkt-pill-blue {
+  background: rgba(59, 130, 246, 0.16) !important;
+  color: #60a5fa !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .mkt-pill-indigo {
+  background: rgba(99, 102, 241, 0.18) !important;
+  color: #a5b4fc !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .mkt-pill-amber {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .mkt-pill-rose {
+  background: rgba(244, 63, 94, 0.15) !important;
+  color: #fda4af !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .mkt-pill-slate {
+  background: rgba(148, 163, 184, 0.14) !important;
+  color: #cbd5e1 !important;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+}
+
+/* Post Idea / Meta Feed Simulator Card */
+[data-admin-theme="dark"] .mkt-feed-preview-card {
+  background: #0f172a;
+  border-color: #334155;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-admin-theme="dark"] .mkt-feed-header {
+  border-bottom-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .mkt-feed-author-name,
+[data-admin-theme="dark"] .mkt-feed-caption {
+  color: #f8fafc;
+}
+
+[data-admin-theme="dark"] .mkt-feed-sponsored {
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .mkt-feed-hashtags {
+  color: #818cf8;
+}
+
+[data-admin-theme="dark"] .mkt-feed-cta-bar {
+  background: #172033;
+  border-color: #334155;
+}
+
+[data-admin-theme="dark"] .mkt-feed-cta-text {
+  color: #e2e8f0;
+}
+
+/* Day Schedule Buttons & Upload Dropzones */
+[data-admin-theme="dark"] .mkt-day-card {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+[data-admin-theme="dark"] .mkt-day-card.selected {
+  background: rgba(79, 70, 229, 0.18) !important;
+  border-color: #6366f1 !important;
+}
+
+[data-admin-theme="dark"] .mkt-upload-dropzone {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+/* Modals */
+[data-admin-theme="dark"] .marketing-modal-backdrop {
+  background: rgba(2, 6, 23, 0.76);
+}
+
+[data-admin-theme="dark"] .marketing-modal-box {
+  background: #111827;
+  border-color: #334155;
+  color: #f8fafc;
+  box-shadow: var(--adm-shadow-modal, 0 28px 64px rgba(0, 0, 0, 0.65));
+}
+
+[data-admin-theme="dark"] .marketing-modal-header {
+  background: #0f172a;
+  border-bottom-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .marketing-modal-header h3 {
+  color: #f8fafc;
+}
+
+[data-admin-theme="dark"] .marketing-btn-close {
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .marketing-btn-close:hover {
+  color: #ffffff;
+}
+
+[data-admin-theme="dark"] .marketing-modal-footer {
+  background: #0f172a;
+  border-top-color: #1e293b;
+}
+
 

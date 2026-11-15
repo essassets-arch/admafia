@@ -142,21 +142,21 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
     <div className="sales-modal-overlay" onClick={onClose}>
       <div className="sales-modal-card" style={{ maxWidth: 540, width: '95%' }} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid var(--adm-border, #e2e8f0)', paddingBottom: 12, marginBottom: 16 }}>
           <div style={{ minWidth: 0, flex: '1 1 220px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
               <span className="desk-pill pill-emerald" style={{ fontSize: '0.70rem', fontWeight: 800 }}>
                 💳 Sales Assisted Top-Up
               </span>
-              <span className="desk-pill" style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.70rem', fontWeight: 700 }}>
+              <span className="desk-pill" style={{ background: 'var(--adm-bg-muted, #f1f5f9)', color: 'var(--adm-text-body, #475569)', fontSize: '0.70rem', fontWeight: 700 }}>
                 Instant Activation
               </span>
             </div>
-            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
               Add Money to Client Wallet
             </h3>
-            <div style={{ fontSize: '0.80rem', color: '#64748b', marginTop: 3, overflowWrap: 'anywhere' }}>
-              Client: <strong style={{ color: '#0f172a' }}>{displayName}</strong> • +91 {displayPhone}
+            <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3, overflowWrap: 'anywhere' }}>
+              Client: <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{displayName}</strong> • +91 {displayPhone}
             </div>
           </div>
           <button type="button" className="desk-close-btn" onClick={onClose}>
@@ -165,15 +165,15 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
         </div>
 
         {/* Current Balance Banner */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
           <div>
-            <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Current Balance</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Current Balance</div>
             <div style={{ fontSize: '1.2rem', fontWeight: 900, color: currentBal > 0 ? '#059669' : '#e11d48' }}>
               {formatINR(currentBal)}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Runway</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Runway</div>
             <div style={{ fontSize: '0.90rem', fontWeight: 800, color: currentBal > 0 ? '#059669' : '#e11d48' }}>
               {Math.floor(currentBal / (customer.dailyPacing || 300))} Days
             </div>
@@ -181,7 +181,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
         </div>
 
         {errorMsg && (
-          <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', color: '#be123c', padding: '10px 14px', borderRadius: 8, fontSize: '0.82rem', marginBottom: 14 }}>
+          <div style={{ background: 'var(--adm-soft-rose-bg, #fff1f2)', border: '1px solid var(--adm-soft-rose-border, #fecdd3)', color: 'var(--adm-soft-rose-text, #be123c)', padding: '10px 14px', borderRadius: 8, fontSize: '0.82rem', marginBottom: 14 }}>
             ⚠️ {errorMsg}
           </div>
         )}
@@ -189,7 +189,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
         <form onSubmit={handleSubmit}>
           {/* Amount Presets */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-body, #334155)', marginBottom: 6 }}>
               Select Top-Up Amount (Min. ₹300) <span style={{ color: '#dc2626' }}>*</span>
             </label>
             <div className="sales-presets-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 105px), 1fr))', gap: 8, marginBottom: 8 }}>
@@ -201,9 +201,9 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
                     type="button"
                     onClick={() => setAmount(String(p.amt))}
                     style={{
-                      border: isSelected ? '2px solid #059669' : '1px solid #cbd5e1',
-                      background: isSelected ? '#ecfdf5' : '#ffffff',
-                      color: isSelected ? '#065f46' : '#1e293b',
+                      border: isSelected ? '2px solid #059669' : '1px solid var(--adm-border-strong, #cbd5e1)',
+                      background: isSelected ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-bg-card, #ffffff)',
+                      color: isSelected ? 'var(--adm-soft-emerald-text, #065f46)' : 'var(--adm-text-secondary, #1e293b)',
                       borderRadius: 8,
                       padding: '8px 4px',
                       cursor: 'pointer',
@@ -213,13 +213,13 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
                     }}
                   >
                     <div>{p.label}</div>
-                    <div style={{ fontSize: '0.66rem', color: isSelected ? '#047857' : '#64748b', fontWeight: 600 }}>{p.runway}</div>
+                    <div style={{ fontSize: '0.66rem', color: isSelected ? 'var(--adm-soft-emerald-text, #047857)' : 'var(--adm-text-muted, #64748b)', fontWeight: 600 }}>{p.runway}</div>
                   </button>
                 );
               })}
             </div>
             <div style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 12, top: 9, color: '#64748b', fontWeight: 700 }}>₹</span>
+              <span style={{ position: 'absolute', left: 12, top: 9, color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>₹</span>
               <input
                 type="number"
                 min="300"
@@ -227,7 +227,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
                 placeholder="Or enter custom amount (e.g. 1500)"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                style={{ width: '100%', padding: '9px 12px 9px 28px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.90rem', fontWeight: 700 }}
+                style={{ width: '100%', padding: '9px 12px 9px 28px', border: '1px solid var(--adm-border-strong, #cbd5e1)', borderRadius: 8, fontSize: '0.90rem', fontWeight: 700 }}
                 required
               />
             </div>
@@ -235,13 +235,13 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
 
           {/* Payment Method */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-body, #334155)', marginBottom: 6 }}>
               Payment Mode Received <span style={{ color: '#dc2626' }}>*</span>
             </label>
             <select
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.86rem' }}
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--adm-border-strong, #cbd5e1)', borderRadius: 8, fontSize: '0.86rem' }}
             >
               <option value="Instant UPI / GPay Transfer">Instant UPI (Google Pay / PhonePe / Paytm)</option>
               <option value="Corporate IMPS / Direct Deposit">Bank IMPS / NEFT Transfer</option>
@@ -254,7 +254,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
           {/* Reference UTR */}
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 4 }}>
-              <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-body, #334155)' }}>
                 Bank Reference UTR / Transaction ID <span style={{ color: '#dc2626' }}>*</span>
               </label>
               <button
@@ -270,28 +270,28 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
               placeholder="e.g. 431920849102 or CASH-REC-01"
               value={referenceUtr}
               onChange={(e) => setReferenceUtr(e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.86rem', fontFamily: 'monospace', fontWeight: 700 }}
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--adm-border-strong, #cbd5e1)', borderRadius: 8, fontSize: '0.86rem', fontFamily: 'monospace', fontWeight: 700 }}
               required
             />
           </div>
 
           {/* Sales Person Identity */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-body, #334155)', marginBottom: 6 }}>
               Credited By (Sales Executive Identity)
             </label>
             <input
               type="text"
               value={salesPersonName}
               onChange={(e) => setSalesPersonName(e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.86rem', background: '#f8fafc' }}
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--adm-border-strong, #cbd5e1)', borderRadius: 8, fontSize: '0.86rem', background: 'var(--adm-bg-subtle, #f8fafc)' }}
               required
             />
           </div>
 
           {/* Notes */}
           <div style={{ marginBottom: 18 }}>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-body, #334155)', marginBottom: 6 }}>
               Remarks / Internal Notes (Optional)
             </label>
             <input
@@ -299,7 +299,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
               placeholder="e.g. Client confirmed on WhatsApp; 5 days Meta Ads"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: '0.86rem' }}
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--adm-border-strong, #cbd5e1)', borderRadius: 8, fontSize: '0.86rem' }}
             />
           </div>
 

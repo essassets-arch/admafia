@@ -5,29 +5,59 @@
 /* 1. SALES LOGIN SCREEN */
 .sales-auth-bg {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
-  background: radial-gradient(circle at top right, #1e1b4b 0%, #0f172a 100%);
+  background: radial-gradient(circle at top right, #e0e7ff 0%, #f8fafc 55%, #f1f5f9 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 32px 16px;
   box-sizing: border-box;
   font-family: 'Figtree', system-ui, sans-serif;
-  color: #f8fafc;
+  color: var(--adm-text-primary, #0f172a);
+  position: relative;
+}
+
+.sales-auth-theme-bar {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
 }
 
 .sales-auth-card {
   width: 100%;
   max-width: 480px;
-  background: #ffffff;
-  color: #0f172a;
+  background: var(--adm-bg-card, #ffffff);
+  color: var(--adm-text-primary, #0f172a);
   border-radius: 24px;
   padding: 36px 32px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--adm-border, #e2e8f0);
+}
+
+.sales-auth-card form {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.sales-auth-error {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+  font-weight: 600;
 }
 
 .sales-auth-card::before {
@@ -211,12 +241,14 @@
    2. SALES EXECUTIVE DASHBOARD WORKSPACE
    ========================================================================== */
 
-.sales-app-root {
+.sales-app-root,
+.sales-app-shell {
   display: flex;
   height: 100vh;
-  max-height: 100vh;
-  background: #f8fafc;
-  color: #0f172a;
+  height: 100dvh;
+  max-height: 100dvh;
+  background: var(--adm-bg-canvas, #f8fafc);
+  color: var(--adm-text-primary, #0f172a);
   font-family: 'Figtree', system-ui, -apple-system, sans-serif;
   overflow: hidden;
 }
@@ -413,9 +445,10 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   overflow: hidden;
-  background: #f8fafc;
+  background: var(--adm-bg-canvas, #f8fafc);
 }
 
 .sales-topbar {
@@ -963,33 +996,6 @@
   background: #fafafa;
 }
 
-/* Custom Smooth Horizontal Scrollbar for Table Sliding on Small Screens & Laptops */
-.desk-table-card::-webkit-scrollbar,
-.appr-table-card::-webkit-scrollbar,
-.tx-table-card::-webkit-scrollbar {
-  height: 8px;
-}
-
-.desk-table-card::-webkit-scrollbar-track,
-.appr-table-card::-webkit-scrollbar-track,
-.tx-table-card::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
-}
-
-.desk-table-card::-webkit-scrollbar-thumb,
-.appr-table-card::-webkit-scrollbar-thumb,
-.tx-table-card::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-
-.desk-table-card::-webkit-scrollbar-thumb:hover,
-.appr-table-card::-webkit-scrollbar-thumb:hover,
-.tx-table-card::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
 /* Desk Pills & Badges */
 .desk-pill {
   display: inline-flex;
@@ -1273,7 +1279,8 @@
 /* ==========================================================================
    FULL WIDTH VIEWPORT OVERRIDES FOR ALL 9 OPERATIONAL DESKS
    ========================================================================== */
-.sales-app-root {
+.sales-app-root,
+.sales-app-shell {
   width: 100vw !important;
   max-width: 100vw !important;
 }
@@ -1558,9 +1565,9 @@
   height: 38px;
   padding: 0 12px;
   border-radius: 10px;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
-  color: #334155;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e2e8f0;
   font-family: inherit;
   font-size: 0.80rem;
   font-weight: 700;
@@ -1570,9 +1577,9 @@
 }
 
 .sales-drawer-website-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-  color: #0f172a;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #ffffff;
 }
 
 .sales-drawer-signout-btn {
@@ -1584,9 +1591,9 @@
   height: 40px;
   padding: 0 12px;
   border-radius: 10px;
-  background: #fef2f2;
-  border: 1.5px solid #fecaca;
-  color: #dc2626;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1.5px solid rgba(248, 113, 113, 0.32);
+  color: #fca5a5;
   font-family: inherit;
   font-size: 0.82rem;
   font-weight: 800;
@@ -1597,9 +1604,9 @@
 
 .sales-drawer-signout-btn:hover,
 .sales-drawer-signout-btn:active {
-  background: #fee2e2;
-  border-color: #fca5a5;
-  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.24);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
 }
 
 /* 5. Additional Polish for Buttons and Badges inside Desks */
@@ -2451,12 +2458,13 @@
    AUTHORITATIVE MOBILE RESPONSIVE SUITE (Phones & Tablets <= 960px)
    ========================================================================== */
 @media (max-width: 960px) {
-  .sales-app-root {
+  .sales-app-root,
+  .sales-app-shell {
     flex-direction: column !important;
-    height: auto !important;
-    min-height: 100vh !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
   }
 
   /* Mobile Sticky Top Header */
@@ -2467,9 +2475,10 @@
     gap: 8px !important;
     min-height: 56px !important;
     height: auto !important;
+    flex-shrink: 0 !important;
     padding: 8px 10px !important;
-    background: #ffffff !important;
-    border-bottom: 1px solid #e2e8f0 !important;
+    background: var(--adm-bg-card, #ffffff) !important;
+    border-bottom: 1px solid var(--adm-border, #e2e8f0) !important;
     position: sticky !important;
     top: 0 !important;
     left: 0 !important;
@@ -2522,9 +2531,9 @@
   }
 
   .sales-btn-hamburger {
-    background: #f8fafc !important;
-    border: 1px solid #cbd5e1 !important;
-    color: #0f172a !important;
+    background: var(--adm-bg-subtle, #f8fafc) !important;
+    border: 1px solid var(--adm-border-strong, #cbd5e1) !important;
+    color: var(--adm-text-primary, #0f172a) !important;
     width: 38px !important;
     height: 38px !important;
     border-radius: 10px !important;
@@ -2538,7 +2547,7 @@
   }
 
   .sales-btn-hamburger:active {
-    background: #e2e8f0 !important;
+    background: var(--adm-bg-muted, #e2e8f0) !important;
     transform: scale(0.96) !important;
   }
 
@@ -2555,7 +2564,7 @@
     gap: 5px !important;
     font-size: 0.98rem !important;
     font-weight: 800 !important;
-    color: #0f172a !important;
+    color: var(--adm-text-primary, #0f172a) !important;
     letter-spacing: -0.01em !important;
     white-space: nowrap !important;
     min-width: 0 !important;
@@ -2582,13 +2591,13 @@
     display: block !important;
     position: fixed !important;
     inset: 0 !important;
-    background: rgba(15, 23, 42, 0.6) !important;
-    backdrop-filter: blur(3px) !important;
+    background: rgba(15, 23, 42, 0.65) !important;
+    backdrop-filter: blur(4px) !important;
     z-index: 9998 !important;
     animation: fadeIn 0.2s ease !important;
   }
 
-  /* Slide-Out Drawer Navigation */
+  /* Slide-Out Drawer Navigation (Unified Executive Obsidian Dark) */
   .sales-sidebar {
     position: fixed !important;
     top: 0 !important;
@@ -2602,8 +2611,9 @@
     z-index: 9999 !important;
     transform: translateX(-100%) !important;
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    box-shadow: 4px 0 25px rgba(0, 0, 0, 0.25) !important;
-    background: #ffffff !important;
+    box-shadow: 4px 0 30px rgba(0, 0, 0, 0.45) !important;
+    background: linear-gradient(180deg, #090d16 0%, #0f172a 100%) !important;
+    border-right: 1px solid #1e293b !important;
     overflow: hidden !important;
     display: flex !important;
     flex-direction: column !important;
@@ -2623,8 +2633,8 @@
   .sales-sidebar-footer {
     flex-shrink: 0 !important;
     padding: 12px 14px calc(16px + env(safe-area-inset-bottom, 0px)) 14px !important;
-    border-top: 1px solid #e2e8f0 !important;
-    background: #ffffff !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: rgba(0, 0, 0, 0.22) !important;
   }
 
   .sales-sidebar.mobile-open {
@@ -2638,15 +2648,15 @@
     width: 34px !important;
     height: 34px !important;
     border-radius: 8px !important;
-    background: #f1f5f9 !important;
-    border: 1px solid #e2e8f0 !important;
-    color: #64748b !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    color: #cbd5e1 !important;
     cursor: pointer !important;
   }
 
   .sales-mobile-drawer-close:active {
-    background: #fee2e2 !important;
-    color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.2) !important;
+    color: #fca5a5 !important;
   }
 
   /* Hide Desktop Topbar on Mobile */
@@ -2654,18 +2664,25 @@
     display: none !important;
   }
 
-  /* Main Viewport & Scroll Area */
+  /* Main Viewport & Single Vertical Scroll Area */
   .sales-main-viewport {
     width: 100% !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
     height: auto !important;
-    min-height: calc(100vh - 60px) !important;
-    overflow: visible !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
   }
 
   .sales-content-scroll {
-    overflow-y: visible !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
     height: auto !important;
     width: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
   /* Desk Page Container: Trim padding for phone screens */
@@ -2870,6 +2887,15 @@
 
 /* Mobile Auth Card & Modal Helpers (<= 640px) */
 @media (max-width: 640px) {
+  .sales-auth-bg {
+    padding-top: 64px !important;
+  }
+
+  .sales-auth-theme-bar {
+    top: 12px;
+    right: 12px;
+  }
+
   .sales-auth-card {
     padding: 20px 16px !important;
     border-radius: 16px !important;
@@ -3012,7 +3038,7 @@
   .desk-card-row > div:first-child > div {
     padding-left: 0 !important;
     border-left: none !important;
-    border-top: 1px solid #f1f5f9 !important;
+    border-top: 1px solid var(--adm-border-subtle, #f1f5f9) !important;
     padding-top: 10px !important;
   }
   .desk-card-row > div:first-child > div:first-child {
@@ -3078,3 +3104,827 @@
 
 
 
+/* =============================================================================
+   UNIFIED SALES PORTAL DARK & WHITE THEME SYSTEM + MINIMAL SCROLLBAR TOKENS
+   ============================================================================= */
+
+.adm-theme-scope,
+[data-admin-theme="light"] {
+  --adm-btn-primary-bg: #0f172a;
+  --adm-btn-primary-border: #0f172a;
+  --adm-receipt-total-bg: #0f172a;
+  --adm-bg-hover: #f8fafc;
+  --adm-row-failed-bg: #fffcfc;
+  --adm-row-pending-bg: #fffdf7;
+  --adm-row-debit-bg: #fafbff;
+  --adm-text-accent-navy: #1e3a8a;
+  --adm-soft-indigo-bg: #eef2ff;
+  --adm-soft-indigo-border: #c7d2fe;
+  --adm-soft-indigo-text: #4338ca;
+  --adm-soft-blue-bg: #eff6ff;
+  --adm-soft-blue-border: #bfdbfe;
+  --adm-soft-blue-text: #1d4ed8;
+  --adm-soft-sky-bg: #f0f9ff;
+  --adm-soft-sky-border: #bae6fd;
+  --adm-soft-sky-text: #0284c7;
+  --adm-soft-cyan-bg: #ecfeff;
+  --adm-soft-emerald-bg: #ecfdf5;
+  --adm-soft-emerald-border: #a7f3d0;
+  --adm-soft-emerald-text: #065f46;
+  --adm-soft-amber-bg: #fffbeb;
+  --adm-soft-amber-border: #fde68a;
+  --adm-soft-amber-text: #92400e;
+  --adm-soft-rose-bg: #fff1f2;
+  --adm-soft-rose-border: #fecdd3;
+  --adm-soft-rose-text: #be123c;
+  --adm-soft-purple-bg: #f5f3ff;
+  --adm-soft-purple-border: #ddd6fe;
+  --adm-soft-purple-text: #6b21a8;
+}
+
+[data-admin-theme="dark"] {
+  --adm-btn-primary-bg: #4f46e5;
+  --adm-btn-primary-border: #6366f1;
+  --adm-receipt-total-bg: #1e293b;
+  --adm-bg-hover: rgba(99, 102, 241, 0.1);
+  --adm-row-failed-bg: rgba(244, 63, 94, 0.08);
+  --adm-row-pending-bg: rgba(245, 158, 11, 0.08);
+  --adm-row-debit-bg: rgba(99, 102, 241, 0.07);
+  --adm-text-accent-navy: #93c5fd;
+  --adm-soft-indigo-bg: rgba(99, 102, 241, 0.16);
+  --adm-soft-indigo-border: rgba(99, 102, 241, 0.36);
+  --adm-soft-indigo-text: #a5b4fc;
+  --adm-soft-blue-bg: rgba(59, 130, 246, 0.16);
+  --adm-soft-blue-border: rgba(59, 130, 246, 0.36);
+  --adm-soft-blue-text: #93c5fd;
+  --adm-soft-sky-bg: rgba(14, 165, 233, 0.16);
+  --adm-soft-sky-border: rgba(14, 165, 233, 0.36);
+  --adm-soft-sky-text: #38bdf8;
+  --adm-soft-cyan-bg: rgba(6, 182, 212, 0.16);
+  --adm-soft-emerald-bg: rgba(16, 185, 129, 0.15);
+  --adm-soft-emerald-border: rgba(16, 185, 129, 0.36);
+  --adm-soft-emerald-text: #6ee7b7;
+  --adm-soft-amber-bg: rgba(245, 158, 11, 0.15);
+  --adm-soft-amber-border: rgba(245, 158, 11, 0.36);
+  --adm-soft-amber-text: #fcd34d;
+  --adm-soft-rose-bg: rgba(244, 63, 94, 0.15);
+  --adm-soft-rose-border: rgba(244, 63, 94, 0.36);
+  --adm-soft-rose-text: #fda4af;
+  --adm-soft-purple-bg: rgba(139, 92, 246, 0.16);
+  --adm-soft-purple-border: rgba(139, 92, 246, 0.36);
+  --adm-soft-purple-text: #c4b5fd;
+}
+
+/* Unified Executive Obsidian Dark Sidebar (Both White & Dark Modes) */
+.sales-app-shell .sales-sidebar {
+  background: linear-gradient(180deg, #090d16 0%, #0f172a 100%) !important;
+  border-right: 1px solid #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+.sales-app-shell .sales-sidebar-top {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.sales-app-shell .sales-nav-group-title {
+  color: #64748b !important;
+}
+
+.sales-app-shell .sales-nav-btn {
+  color: #94a3b8 !important;
+}
+
+.sales-app-shell .sales-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #ffffff !important;
+}
+
+.sales-app-shell .sales-nav-btn.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.24) 0%, rgba(79, 70, 229, 0.14) 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(99, 102, 241, 0.42) !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.35) !important;
+}
+
+.sales-app-shell .sales-nav-badge {
+  background: rgba(148, 163, 184, 0.16) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(148, 163, 184, 0.24) !important;
+}
+
+.sales-app-shell .sales-nav-btn.active .sales-nav-badge {
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+  border-color: rgba(165, 180, 252, 0.45) !important;
+}
+
+.sales-app-shell .sales-sidebar-footer {
+  background: rgba(0, 0, 0, 0.24) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.sales-app-shell .sales-rep-card {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+}
+
+.sales-app-shell .sales-rep-card:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+.sales-app-shell .sales-rep-name {
+  color: #f8fafc !important;
+}
+
+.sales-app-shell .sales-rep-role {
+  color: #94a3b8 !important;
+}
+
+.sales-app-shell .sales-logout-icon {
+  color: #94a3b8 !important;
+}
+
+.sales-app-shell .sales-logout-icon:hover {
+  color: #fca5a5 !important;
+  background: rgba(239, 68, 68, 0.18) !important;
+}
+
+.sales-app-shell .btn-sales-signout {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #cbd5e1 !important;
+}
+
+.sales-app-shell .btn-sales-signout:hover {
+  background: rgba(239, 68, 68, 0.18) !important;
+  border-color: rgba(248, 113, 113, 0.4) !important;
+  color: #fca5a5 !important;
+}
+
+/* =============================================================================
+   DARK MODE OVERRIDES ([data-admin-theme="dark"])
+   ============================================================================= */
+
+/* 1. Sales Login Page */
+.sales-auth-bg[data-admin-theme="dark"],
+[data-admin-theme="dark"] .sales-auth-bg {
+  background: radial-gradient(circle at top right, #1e1b4b 0%, #0b1120 55%, #060913 100%) !important;
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .sales-auth-card,
+.sales-auth-bg[data-admin-theme="dark"] .sales-auth-card {
+  background: var(--adm-bg-card) !important;
+  border-color: var(--adm-border-strong) !important;
+  color: var(--adm-text-primary) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-admin-theme="dark"] .sales-auth-error,
+.sales-auth-bg[data-admin-theme="dark"] .sales-auth-error {
+  background: rgba(239, 68, 68, 0.14) !important;
+  border-color: rgba(248, 113, 113, 0.35) !important;
+  color: #fca5a5 !important;
+}
+
+[data-admin-theme="dark"] .sales-dept-badge,
+.sales-auth-bg[data-admin-theme="dark"] .sales-dept-badge {
+  background: rgba(59, 130, 246, 0.16) !important;
+  border-color: rgba(96, 165, 250, 0.35) !important;
+  color: #93c5fd !important;
+}
+
+[data-admin-theme="dark"] .sales-brand-logo,
+.sales-auth-bg[data-admin-theme="dark"] .sales-brand-logo,
+[data-admin-theme="dark"] .sales-auth-header h2,
+.sales-auth-bg[data-admin-theme="dark"] .sales-auth-header h2 {
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] .sales-brand-logo span,
+.sales-auth-bg[data-admin-theme="dark"] .sales-brand-logo span {
+  background: rgba(245, 158, 11, 0.18) !important;
+  color: #fcd34d !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .sales-auth-header p,
+.sales-auth-bg[data-admin-theme="dark"] .sales-auth-header p {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .sales-demo-credentials-box,
+.sales-auth-bg[data-admin-theme="dark"] .sales-demo-credentials-box {
+  background: var(--adm-bg-subtle) !important;
+  border-color: var(--adm-border) !important;
+  color: var(--adm-text-body) !important;
+}
+
+[data-admin-theme="dark"] .sales-demo-credentials-box .demo-title,
+.sales-auth-bg[data-admin-theme="dark"] .sales-demo-credentials-box .demo-title {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .sales-demo-credentials-box .demo-row,
+.sales-auth-bg[data-admin-theme="dark"] .sales-demo-credentials-box .demo-row {
+  color: var(--adm-text-body) !important;
+}
+
+[data-admin-theme="dark"] .sales-form-group label,
+.sales-auth-bg[data-admin-theme="dark"] .sales-form-group label {
+  color: var(--adm-text-secondary) !important;
+}
+
+[data-admin-theme="dark"] .sales-form-group input,
+[data-admin-theme="dark"] .sales-form-group select,
+.sales-auth-bg[data-admin-theme="dark"] .sales-form-group input,
+.sales-auth-bg[data-admin-theme="dark"] .sales-form-group select {
+  background: var(--adm-bg-input) !important;
+  border-color: var(--adm-border-strong) !important;
+  color: var(--adm-text-primary) !important;
+  color-scheme: dark;
+}
+
+[data-admin-theme="dark"] .sales-form-group input::placeholder,
+.sales-auth-bg[data-admin-theme="dark"] .sales-form-group input::placeholder {
+  color: #64748b !important;
+}
+
+[data-admin-theme="dark"] .btn-sales-subtle-link,
+.sales-auth-bg[data-admin-theme="dark"] .btn-sales-subtle-link {
+  color: #818cf8 !important;
+}
+
+/* 2. App Shell, Topbar & Mobile Header */
+.sales-app-shell[data-admin-theme="dark"],
+[data-admin-theme="dark"] .sales-app-shell {
+  background: var(--adm-bg-canvas) !important;
+  color: var(--adm-text-primary) !important;
+  color-scheme: dark;
+}
+
+[data-admin-theme="dark"] .sales-main-viewport {
+  background: var(--adm-bg-canvas) !important;
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .sales-topbar {
+  background: rgba(15, 23, 42, 0.92) !important;
+  backdrop-filter: blur(12px) !important;
+  border-bottom-color: var(--adm-border) !important;
+}
+
+[data-admin-theme="dark"] .sales-dept-indicator {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .sales-quota-pill {
+  background: var(--adm-bg-muted) !important;
+  border-color: var(--adm-border-strong) !important;
+}
+
+[data-admin-theme="dark"] .sales-quota-pill .target-text {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .sales-quota-pill .target-val {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .sales-status-badge {
+  background: rgba(16, 185, 129, 0.14) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  color: #6ee7b7 !important;
+}
+
+[data-admin-theme="dark"] .sales-mobile-top-bar {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border-bottom-color: var(--adm-border) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .sales-btn-hamburger {
+  background: var(--adm-bg-muted) !important;
+  border-color: var(--adm-border-strong) !important;
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .sales-mobile-brand-text {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .sales-mobile-logout-btn {
+  background: rgba(239, 68, 68, 0.14) !important;
+  border-color: rgba(248, 113, 113, 0.35) !important;
+  color: #fca5a5 !important;
+}
+
+[data-admin-theme="dark"] .sales-mobile-logout-btn:hover,
+[data-admin-theme="dark"] .sales-mobile-logout-btn:active {
+  background: rgba(239, 68, 68, 0.24) !important;
+  border-color: rgba(248, 113, 113, 0.5) !important;
+  color: #fecaca !important;
+}
+
+/* 3. Desk Typography, Breadcrumbs & KPI Cards */
+[data-admin-theme="dark"] .desk-breadcrumb {
+  color: #818cf8 !important;
+}
+
+[data-admin-theme="dark"] .desk-title {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .desk-subtitle {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .sales-kpi-card,
+[data-admin-theme="dark"] .desk-kpi-card,
+[data-admin-theme="dark"] .appr-kpi-card,
+[data-admin-theme="dark"] .ov-kpi-card,
+[data-admin-theme="dark"] .wallet-kpi-card {
+  background: var(--adm-bg-card) !important;
+  border-color: var(--adm-border) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28) !important;
+}
+
+[data-admin-theme="dark"] .sales-kpi-card:hover,
+[data-admin-theme="dark"] .desk-kpi-card:hover,
+[data-admin-theme="dark"] .appr-kpi-card:hover {
+  border-color: var(--adm-border-strong) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-admin-theme="dark"] .sales-kpi-card .kpi-label,
+[data-admin-theme="dark"] .desk-kpi-label,
+[data-admin-theme="dark"] .appr-kpi-label {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .sales-kpi-card .kpi-value,
+[data-admin-theme="dark"] .desk-kpi-val,
+[data-admin-theme="dark"] .appr-kpi-val {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .desk-kpi-sub,
+[data-admin-theme="dark"] .appr-kpi-sub {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .appr-kpi-icon-wrap.emerald {
+  background: rgba(16, 185, 129, 0.16) !important;
+  color: #34d399 !important;
+}
+
+[data-admin-theme="dark"] .appr-kpi-icon-wrap.indigo {
+  background: rgba(99, 102, 241, 0.18) !important;
+  color: #818cf8 !important;
+}
+
+[data-admin-theme="dark"] .appr-kpi-icon-wrap.cyan {
+  background: rgba(14, 165, 233, 0.18) !important;
+  color: #38bdf8 !important;
+}
+
+[data-admin-theme="dark"] .text-emerald { color: #34d399 !important; }
+[data-admin-theme="dark"] .text-rose { color: #fb7185 !important; }
+[data-admin-theme="dark"] .text-amber { color: #fbbf24 !important; }
+[data-admin-theme="dark"] .text-indigo { color: #818cf8 !important; }
+[data-admin-theme="dark"] .text-warn { color: #fb923c !important; }
+
+/* 4. Filter Bars, Tabs, Search & Form Inputs */
+[data-admin-theme="dark"] .appr-filter-bar,
+[data-admin-theme="dark"] .tx-filter-bar {
+  background: var(--adm-bg-card) !important;
+  border-color: var(--adm-border) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22) !important;
+}
+
+[data-admin-theme="dark"] .desk-tabs,
+[data-admin-theme="dark"] .appr-tabs-wrap,
+[data-admin-theme="dark"] .tx-tabs {
+  background: var(--adm-bg-subtle) !important;
+  border: 1px solid var(--adm-border) !important;
+}
+
+[data-admin-theme="dark"] .desk-tab,
+[data-admin-theme="dark"] .appr-tab-btn {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .desk-tab:hover,
+[data-admin-theme="dark"] .appr-tab-btn:hover {
+  color: var(--adm-text-primary) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+[data-admin-theme="dark"] .desk-tab.active,
+[data-admin-theme="dark"] .appr-tab-btn.active {
+  background: var(--adm-bg-muted) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--adm-border-strong) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-admin-theme="dark"] .appr-tab-btn.tab-healthy.active {
+  color: #34d399 !important;
+}
+
+[data-admin-theme="dark"] .appr-tab-btn.tab-low.active {
+  color: #fbbf24 !important;
+}
+
+[data-admin-theme="dark"] .appr-tab-count {
+  background: rgba(148, 163, 184, 0.16) !important;
+  color: #cbd5e1 !important;
+}
+
+[data-admin-theme="dark"] .appr-tab-btn.active .appr-tab-count {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+[data-admin-theme="dark"] .desk-search-input,
+[data-admin-theme="dark"] .appr-search-input,
+[data-admin-theme="dark"] .appr-select-input,
+[data-admin-theme="dark"] .tx-select,
+[data-admin-theme="dark"] .clean-input,
+[data-admin-theme="dark"] .desk-form-input {
+  background: var(--adm-bg-input) !important;
+  border-color: var(--adm-border-strong) !important;
+  color: var(--adm-text-primary) !important;
+  color-scheme: dark;
+}
+
+[data-admin-theme="dark"] .desk-search-input::placeholder,
+[data-admin-theme="dark"] .appr-search-input::placeholder,
+[data-admin-theme="dark"] .clean-input::placeholder,
+[data-admin-theme="dark"] .desk-form-input::placeholder {
+  color: #64748b !important;
+}
+
+[data-admin-theme="dark"] .desk-search-input:focus,
+[data-admin-theme="dark"] .appr-search-input:focus,
+[data-admin-theme="dark"] .appr-select-input:focus,
+[data-admin-theme="dark"] .tx-select:focus,
+[data-admin-theme="dark"] .clean-input:focus,
+[data-admin-theme="dark"] .desk-form-input:focus {
+  background: #0d1526 !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22) !important;
+}
+
+[data-admin-theme="dark"] .appr-search-clear:hover {
+  color: var(--adm-text-primary) !important;
+  background: var(--adm-bg-muted) !important;
+}
+
+[data-admin-theme="dark"] .desk-form-label {
+  color: var(--adm-text-body) !important;
+}
+
+/* Native Inputs & Selects inside Sales App Shell in Dark Mode */
+[data-admin-theme="dark"] .sales-app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-admin-theme="dark"] .sales-app-shell select,
+[data-admin-theme="dark"] .sales-app-shell textarea {
+  background-color: var(--adm-bg-input) !important;
+  border-color: var(--adm-border-strong) !important;
+  color: var(--adm-text-primary) !important;
+  color-scheme: dark;
+}
+
+[data-admin-theme="dark"] .sales-app-shell select option {
+  background-color: #111827;
+  color: #f8fafc;
+}
+
+/* 5. Tables, Rows & Wallet Cells */
+[data-admin-theme="dark"] .desk-table-card,
+[data-admin-theme="dark"] .appr-table-card,
+[data-admin-theme="dark"] .tx-table-card {
+  background: var(--adm-bg-card) !important;
+  border-color: var(--adm-border) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28) !important;
+}
+
+[data-admin-theme="dark"] .desk-table-card:has(> .am-smart-table-wrap),
+[data-admin-theme="dark"] .appr-table-card:has(> .am-smart-table-wrap),
+[data-admin-theme="dark"] .tx-table-card:has(> .am-smart-table-wrap) {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+[data-admin-theme="dark"] .desk-table th,
+[data-admin-theme="dark"] .appr-table-card th,
+[data-admin-theme="dark"] .tx-table th {
+  background: var(--adm-bg-subtle) !important;
+  color: var(--adm-text-muted) !important;
+  border-bottom-color: var(--adm-border) !important;
+}
+
+[data-admin-theme="dark"] .desk-table td,
+[data-admin-theme="dark"] .appr-table-card td,
+[data-admin-theme="dark"] .tx-table td {
+  border-bottom-color: var(--adm-border-subtle) !important;
+  color: var(--adm-text-body) !important;
+}
+
+[data-admin-theme="dark"] .desk-table tr:hover td,
+[data-admin-theme="dark"] .appr-table-card tr:hover td,
+[data-admin-theme="dark"] .tx-table tr:hover td {
+  background: rgba(99, 102, 241, 0.06) !important;
+}
+
+[data-admin-theme="dark"] .appr-client-name,
+[data-admin-theme="dark"] .appr-phone {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .appr-client-lead,
+[data-admin-theme="dark"] .appr-daily-rate {
+  color: var(--adm-text-body) !important;
+}
+
+[data-admin-theme="dark"] .appr-client-meta,
+[data-admin-theme="dark"] .appr-timestamp {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .appr-category-line {
+  color: #a5b4fc !important;
+}
+
+[data-admin-theme="dark"] .appr-badge-verified {
+  background: rgba(16, 185, 129, 0.14) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  color: #6ee7b7 !important;
+}
+
+[data-admin-theme="dark"] .appr-wallet-card {
+  background: var(--adm-bg-subtle) !important;
+  border-color: var(--adm-border) !important;
+}
+
+[data-admin-theme="dark"] .appr-wallet-card.is-low {
+  background: rgba(244, 63, 94, 0.1) !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .appr-wallet-tag {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .appr-status-badge.badge-live {
+  color: #34d399 !important;
+}
+
+[data-admin-theme="dark"] .appr-status-badge.badge-low {
+  color: #fb7185 !important;
+}
+
+[data-admin-theme="dark"] .appr-wallet-alert {
+  border-top-color: rgba(248, 113, 113, 0.35) !important;
+  color: #fca5a5 !important;
+}
+
+/* 6. Pills, Badges, Progress Bars & Row Cards */
+[data-admin-theme="dark"] .pill-indigo {
+  background: rgba(99, 102, 241, 0.18) !important;
+  color: #a5b4fc !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .pill-emerald,
+[data-admin-theme="dark"] .desk-badge-count-green {
+  background: rgba(16, 185, 129, 0.16) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .pill-rose,
+[data-admin-theme="dark"] .desk-badge-count-alert,
+[data-admin-theme="dark"] .desk-speed-timer {
+  background: rgba(244, 63, 94, 0.16) !important;
+  color: #fda4af !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .pill-amber {
+  background: rgba(245, 158, 11, 0.16) !important;
+  color: #fcd34d !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .desk-progress-bar {
+  background: var(--adm-bg-muted) !important;
+}
+
+[data-admin-theme="dark"] .desk-card-row,
+[data-admin-theme="dark"] .desk-group-card,
+[data-admin-theme="dark"] .ov-card,
+[data-admin-theme="dark"] .wallet-card {
+  background: var(--adm-bg-card) !important;
+  border-color: var(--adm-border) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24) !important;
+}
+
+[data-admin-theme="dark"] .desk-card-row:hover,
+[data-admin-theme="dark"] .desk-group-card:hover {
+  border-color: #6366f1 !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36) !important;
+}
+
+[data-admin-theme="dark"] .desk-group-card.active {
+  background: rgba(79, 70, 229, 0.16) !important;
+  border-color: #6366f1 !important;
+}
+
+[data-admin-theme="dark"] .desk-modal-box,
+[data-admin-theme="dark"] .desk-check-item {
+  background: var(--adm-bg-subtle) !important;
+  border-color: var(--adm-border) !important;
+  color: var(--adm-text-body) !important;
+}
+
+[data-admin-theme="dark"] .desk-check-item:hover {
+  background: var(--adm-bg-muted) !important;
+}
+
+[data-admin-theme="dark"] .desk-box-label {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .desk-box-val {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .desk-preset-btn {
+  background: var(--adm-bg-subtle) !important;
+  border-color: var(--adm-border-strong) !important;
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .desk-preset-btn:hover {
+  background: var(--adm-bg-muted) !important;
+  border-color: #818cf8 !important;
+}
+
+[data-admin-theme="dark"] .desk-preset-btn.active {
+  background: rgba(79, 70, 229, 0.22) !important;
+  border-color: #6366f1 !important;
+  color: #c7d2fe !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22) !important;
+}
+
+[data-admin-theme="dark"] .desk-close-btn {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .desk-close-btn:hover {
+  color: var(--adm-text-primary) !important;
+  background: var(--adm-bg-muted) !important;
+}
+
+/* 7. Kanban Board & Deal Cards */
+[data-admin-theme="dark"] .sales-kanban-col {
+  background: var(--adm-bg-subtle) !important;
+  border-color: var(--adm-border) !important;
+}
+
+[data-admin-theme="dark"] .sales-kanban-header {
+  border-bottom-color: var(--adm-border) !important;
+}
+
+[data-admin-theme="dark"] .sales-kanban-title {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .sales-kanban-count {
+  background: var(--adm-bg-muted) !important;
+  border-color: var(--adm-border-strong) !important;
+  color: var(--adm-text-body) !important;
+}
+
+[data-admin-theme="dark"] .sales-deal-card {
+  background: var(--adm-bg-card) !important;
+  border-color: var(--adm-border) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
+[data-admin-theme="dark"] .sales-deal-card:hover {
+  border-color: var(--adm-border-strong) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35) !important;
+}
+
+[data-admin-theme="dark"] .deal-company-name {
+  color: var(--adm-text-primary) !important;
+}
+
+[data-admin-theme="dark"] .deal-contact-subline {
+  color: var(--adm-text-muted) !important;
+}
+
+[data-admin-theme="dark"] .deal-value-pill {
+  background: rgba(16, 185, 129, 0.16) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  color: #6ee7b7 !important;
+}
+
+[data-admin-theme="dark"] .deal-package-tag {
+  background: var(--adm-bg-muted) !important;
+  border-color: var(--adm-border-strong) !important;
+  color: var(--adm-text-body) !important;
+}
+
+[data-admin-theme="dark"] .deal-actions-row {
+  border-top-color: var(--adm-border-subtle) !important;
+}
+
+[data-admin-theme="dark"] .btn-deal-advance {
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+  border: 1px solid #6366f1 !important;
+}
+
+[data-admin-theme="dark"] .btn-deal-advance:hover {
+  background: #4338ca !important;
+}
+
+/* 8. Action & Secondary Buttons + Modals */
+[data-admin-theme="dark"] .sales-btn-secondary,
+[data-admin-theme="dark"] .btn-sales-secondary,
+[data-admin-theme="dark"] .desk-action-btn,
+[data-admin-theme="dark"] .appr-action-btn {
+  background: var(--adm-bg-muted) !important;
+  border-color: #475569 !important;
+  color: var(--adm-text-secondary) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-admin-theme="dark"] .sales-btn-secondary:hover,
+[data-admin-theme="dark"] .btn-sales-secondary:hover,
+[data-admin-theme="dark"] .desk-action-btn:hover,
+[data-admin-theme="dark"] .appr-action-btn:hover {
+  background: #273549 !important;
+  border-color: #64748b !important;
+  color: #ffffff !important;
+}
+
+[data-admin-theme="dark"] .desk-action-btn.btn-warn {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(248, 113, 113, 0.38) !important;
+  color: #fca5a5 !important;
+}
+
+[data-admin-theme="dark"] .desk-action-btn.btn-warn:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+  border-color: rgba(248, 113, 113, 0.55) !important;
+  color: #fecaca !important;
+}
+
+[data-admin-theme="dark"] .desk-action-btn.btn-success,
+[data-admin-theme="dark"] .appr-action-btn.appr-action-wa {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(52, 211, 153, 0.38) !important;
+  color: #6ee7b7 !important;
+}
+
+[data-admin-theme="dark"] .desk-action-btn.btn-success:hover,
+[data-admin-theme="dark"] .appr-action-btn.appr-action-wa:hover {
+  background: rgba(16, 185, 129, 0.25) !important;
+  border-color: rgba(52, 211, 153, 0.55) !important;
+  color: #a7f3d0 !important;
+}
+
+[data-admin-theme="dark"] .appr-action-btn.appr-action-call:hover {
+  background: rgba(59, 130, 246, 0.2) !important;
+  border-color: rgba(96, 165, 250, 0.5) !important;
+  color: #93c5fd !important;
+}
+
+[data-admin-theme="dark"] .appr-action-btn.appr-action-profile {
+  background: rgba(99, 102, 241, 0.18) !important;
+  border-color: rgba(129, 140, 248, 0.4) !important;
+  color: #a5b4fc !important;
+}
+
+[data-admin-theme="dark"] .appr-action-btn.appr-action-profile:hover {
+  background: rgba(99, 102, 241, 0.28) !important;
+  border-color: rgba(129, 140, 248, 0.6) !important;
+  color: #e0e7ff !important;
+}
+
+[data-admin-theme="dark"] .sales-modal-overlay {
+  background: rgba(2, 6, 23, 0.78) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+[data-admin-theme="dark"] .sales-modal-card {
+  background: var(--adm-bg-card) !important;
+  border: 1px solid var(--adm-border-strong) !important;
+  color: var(--adm-text-primary) !important;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.68), 0 0 0 1px rgba(148, 163, 184, 0.12) !important;
+}

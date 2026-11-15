@@ -30,8 +30,10 @@ import {
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import { SmartTable } from '../components/SmartTabulator';
+import { useAdminTheme } from '../utils/adminTheme';
 
 export default function SuperAdminRefundsDesk() {
+  const { isDark } = useAdminTheme({ syncDocument: false });
   const [activeTab, setActiveTab] = useState('paid_customers'); // 'paid_customers' | 'refund_queue' | 'reconciliation'
 
   // Tab 1: Paid Customers State
@@ -423,11 +425,17 @@ export default function SuperAdminRefundsDesk() {
         >
           <div className="sa-stat-top">
             <span className="sa-stat-title">Verified Paid Customers</span>
-            <div className="sa-stat-icon-wrap" style={{ background: '#ecfdf5', color: '#059669' }}>
+            <div
+              className="sa-stat-icon-wrap"
+              style={{
+                background: isDark ? 'rgba(16, 185, 129, 0.16)' : '#ecfdf5',
+                color: isDark ? '#34d399' : '#059669',
+              }}
+            >
               <Users size={18} />
             </div>
           </div>
-          <div className="sa-stat-val" style={{ color: '#059669' }}>
+          <div className="sa-stat-val" style={{ color: isDark ? '#34d399' : '#059669' }}>
             {paidSummary.totalPaidCustomers}
           </div>
           <div className="sa-stat-sub">
@@ -438,11 +446,17 @@ export default function SuperAdminRefundsDesk() {
         <div className="sa-stat-card">
           <div className="sa-stat-top">
             <span className="sa-stat-title">Total Lifetime Deposited</span>
-            <div className="sa-stat-icon-wrap" style={{ background: '#eff6ff', color: '#2563eb' }}>
+            <div
+              className="sa-stat-icon-wrap"
+              style={{
+                background: isDark ? 'rgba(59, 130, 246, 0.16)' : '#eff6ff',
+                color: isDark ? '#60a5fa' : '#2563eb',
+              }}
+            >
               <ArrowUpRight size={18} />
             </div>
           </div>
-          <div className="sa-stat-val" style={{ color: '#2563eb' }}>
+          <div className="sa-stat-val" style={{ color: isDark ? '#60a5fa' : '#2563eb' }}>
             ₹{Number(paidSummary.totalAmountPaid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="sa-stat-sub">
@@ -453,11 +467,17 @@ export default function SuperAdminRefundsDesk() {
         <div className="sa-stat-card">
           <div className="sa-stat-top">
             <span className="sa-stat-title">Total Refundable Balance</span>
-            <div className="sa-stat-icon-wrap" style={{ background: '#fffbeb', color: '#d97706' }}>
+            <div
+              className="sa-stat-icon-wrap"
+              style={{
+                background: isDark ? 'rgba(245, 158, 11, 0.16)' : '#fffbeb',
+                color: isDark ? '#fbbf24' : '#d97706',
+              }}
+            >
               <Wallet size={18} />
             </div>
           </div>
-          <div className="sa-stat-val" style={{ color: '#d97706' }}>
+          <div className="sa-stat-val" style={{ color: isDark ? '#fbbf24' : '#d97706' }}>
             ₹{Number(paidSummary.totalRefundableBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="sa-stat-sub">
@@ -475,8 +495,20 @@ export default function SuperAdminRefundsDesk() {
             <div
               className="sa-stat-icon-wrap"
               style={{
-                background: pendingRefundsCount > 0 ? '#fff1f2' : '#f1f5f9',
-                color: pendingRefundsCount > 0 ? '#e11d48' : '#64748b',
+                background:
+                  pendingRefundsCount > 0
+                    ? isDark
+                      ? 'rgba(244, 63, 94, 0.16)'
+                      : '#fff1f2'
+                    : isDark
+                    ? 'rgba(148, 163, 184, 0.14)'
+                    : '#f1f5f9',
+                color:
+                  pendingRefundsCount > 0
+                    ? isDark
+                      ? '#fb7185'
+                      : '#e11d48'
+                    : 'var(--adm-text-muted, #64748b)',
               }}
             >
               <RotateCcw size={18} />
@@ -484,7 +516,14 @@ export default function SuperAdminRefundsDesk() {
           </div>
           <div
             className="sa-stat-val"
-            style={{ color: pendingRefundsCount > 0 ? '#e11d48' : '#0f172a' }}
+            style={{
+              color:
+                pendingRefundsCount > 0
+                  ? isDark
+                    ? '#fb7185'
+                    : '#e11d48'
+                  : 'var(--adm-text-primary, #0f172a)',
+            }}
           >
             {pendingRefundsCount}
           </div>
@@ -567,14 +606,14 @@ export default function SuperAdminRefundsDesk() {
                 <tbody>
                   {paidLoading ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: 'var(--adm-text-muted, #64748b)' }}>
                         <RefreshCw size={20} className="sa-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
                         Loading registered paid customers...
                       </td>
                     </tr>
                   ) : paidCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: 'var(--adm-text-muted, #94a3b8)' }}>
                         No registered paid customers found matching your search.
                       </td>
                     </tr>
@@ -588,13 +627,13 @@ export default function SuperAdminRefundsDesk() {
                       return (
                         <tr key={cust.id}>
                           <td>
-                            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.92rem' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.92rem' }}>
                               {cust.company_name}
                             </div>
-                            <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                               <code>{cust.id}</code> &bull; {cust.contact_person}
                             </div>
-                            <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #94a3b8)', marginTop: 2 }}>
                               📞 +91 {cust.phone} {cust.email ? `• ✉️ ${cust.email}` : ''} {cust.city ? `• 📍 ${cust.city}` : ''}
                             </div>
                           </td>
@@ -606,7 +645,7 @@ export default function SuperAdminRefundsDesk() {
                                 Payment Verified ✓
                               </span>
                               {cust.paid_receipts_count > 0 && (
-                                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                   <Receipt size={11} style={{ display: 'inline', marginRight: 3 }} />
                                   {cust.paid_receipts_count} receipts recorded
                                 </span>
@@ -623,19 +662,19 @@ export default function SuperAdminRefundsDesk() {
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 800, color: '#059669', fontSize: '0.95rem' }}>
+                            <div style={{ fontWeight: 800, color: isDark ? '#34d399' : '#059669', fontSize: '0.95rem' }}>
                               ₹{lifetimePaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #94a3b8)', marginTop: 2 }}>
                               Cumulative Deposited
                             </div>
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.90rem' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.90rem' }}>
                               ₹{availBal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                               Ad Spent: ₹{Number(cust.total_ad_spent || 0).toFixed(0)}
                             </div>
                           </td>
@@ -644,13 +683,13 @@ export default function SuperAdminRefundsDesk() {
                             <div
                               style={{
                                 fontWeight: 800,
-                                color: hasRefundableBalance ? '#d97706' : '#94a3b8',
+                                color: hasRefundableBalance ? (isDark ? '#fbbf24' : '#d97706') : 'var(--adm-text-muted, #94a3b8)',
                                 fontSize: '0.95rem',
                               }}
                             >
                               ₹{bankRefundCap.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: hasRefundableBalance ? '#059669' : '#94a3b8', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.72rem', color: hasRefundableBalance ? (isDark ? '#34d399' : '#059669') : 'var(--adm-text-muted, #94a3b8)', marginTop: 2 }}>
                               {hasRefundableBalance ? 'Eligible for Bank Return' : 'Zero Refund Cap'}
                             </div>
                           </td>
@@ -658,7 +697,7 @@ export default function SuperAdminRefundsDesk() {
                           <td>
                             {cust.last_payment_date ? (
                               <div>
-                                <div style={{ fontSize: '0.78rem', color: '#0f172a', fontWeight: 600 }}>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-primary, #0f172a)', fontWeight: 600 }}>
                                   {new Date(cust.last_payment_date).toLocaleDateString('en-IN', {
                                     day: '2-digit',
                                     month: 'short',
@@ -666,13 +705,13 @@ export default function SuperAdminRefundsDesk() {
                                   })}
                                 </div>
                                 {cust.last_utr_ref && (
-                                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                                     <code>{cust.last_utr_ref}</code>
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>Verified Initial Credit</span>
+                              <span style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #94a3b8)' }}>Verified Initial Credit</span>
                             )}
                           </td>
 
@@ -785,14 +824,14 @@ export default function SuperAdminRefundsDesk() {
                 <tbody>
                   {refundsLoading ? (
                     <tr>
-                      <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: 'var(--adm-text-muted, #64748b)' }}>
                         <RefreshCw size={20} className="sa-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
                         Loading refund requests queue...
                       </td>
                     </tr>
                   ) : refunds.length === 0 ? (
                     <tr>
-                      <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: 'var(--adm-text-muted, #94a3b8)' }}>
                         No refund requests found matching the selected filter.
                       </td>
                     </tr>
@@ -806,7 +845,7 @@ export default function SuperAdminRefundsDesk() {
                         <tr key={rf.id}>
                           <td>
                             <code style={{ fontSize: '0.80rem' }}>{rf.id}</code>
-                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #94a3b8)', marginTop: 2 }}>
                               {new Date(rf.created_at).toLocaleDateString('en-IN', {
                                 day: '2-digit',
                                 month: 'short',
@@ -817,24 +856,24 @@ export default function SuperAdminRefundsDesk() {
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{rf.company_name}</div>
-                            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                            <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{rf.company_name}</div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                               {rf.contact_person} &bull; {rf.phone}
                             </div>
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 800, color: '#e11d48', fontSize: '0.95rem' }}>
+                            <div style={{ fontWeight: 800, color: isDark ? '#fb7185' : '#e11d48', fontSize: '0.95rem' }}>
                               ₹{amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 700, color: hasSufficientBal ? '#059669' : '#e11d48' }}>
+                            <div style={{ fontWeight: 700, color: hasSufficientBal ? (isDark ? '#34d399' : '#059669') : (isDark ? '#fb7185' : '#e11d48') }}>
                               ₹{availBal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                             {!hasSufficientBal && rf.status === 'Pending' && (
-                              <div style={{ fontSize: '0.68rem', color: '#e11d48', fontWeight: 700 }}>
+                              <div style={{ fontSize: '0.68rem', color: isDark ? '#fb7185' : '#e11d48', fontWeight: 700 }}>
                                 ⚠️ Insufficient Balance
                               </div>
                             )}
@@ -844,21 +883,30 @@ export default function SuperAdminRefundsDesk() {
                             {rf.original_tx_ref ? (
                               <code>{rf.original_tx_ref}</code>
                             ) : (
-                              <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>None Provided</span>
+                              <span style={{ color: 'var(--adm-text-muted, #94a3b8)', fontSize: '0.78rem' }}>None Provided</span>
                             )}
                           </td>
 
                           <td>
-                            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)' }}>
                               {rf.reason}
                             </div>
                             {rf.supporting_info && (
-                              <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                                 {rf.supporting_info}
                               </div>
                             )}
                             {rf.rejection_reason && (
-                              <div style={{ fontSize: '0.74rem', color: '#e11d48', marginTop: 4, background: '#fff1f2', padding: '3px 6px', borderRadius: 4 }}>
+                              <div
+                                style={{
+                                  fontSize: '0.74rem',
+                                  color: isDark ? '#fda4af' : '#e11d48',
+                                  marginTop: 4,
+                                  background: isDark ? 'rgba(244, 63, 94, 0.16)' : '#fff1f2',
+                                  padding: '3px 6px',
+                                  borderRadius: 4,
+                                }}
+                              >
                                 Rejection: {rf.rejection_reason}
                               </div>
                             )}
@@ -877,7 +925,7 @@ export default function SuperAdminRefundsDesk() {
                               {rf.status}
                             </span>
                             {rf.reviewed_by && (
-                              <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 3 }}>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3 }}>
                                 By: {rf.reviewed_by}
                               </div>
                             )}
@@ -911,7 +959,7 @@ export default function SuperAdminRefundsDesk() {
                                 </button>
                               </div>
                             ) : (
-                              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                              <span style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                 {rf.status === 'Approved' || rf.status === 'Completed' ? '✓ Completed' : 'Closed'}
                               </span>
                             )}
@@ -1008,14 +1056,14 @@ export default function SuperAdminRefundsDesk() {
                 <tbody>
                   {reconLoading ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: 'var(--adm-text-muted, #64748b)' }}>
                         <RefreshCw size={20} className="sa-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
                         Loading authoritative refund reconciliation ledger...
                       </td>
                     </tr>
                   ) : reconRecords.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: 'var(--adm-text-muted, #94a3b8)' }}>
                         No refund reconciliation records found.
                       </td>
                     </tr>
@@ -1027,11 +1075,11 @@ export default function SuperAdminRefundsDesk() {
                       return (
                         <tr key={r.refund_id}>
                           <td>
-                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.company_name}</div>
-                            <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                            <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{r.company_name}</div>
+                            <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                               <code>{r.customer_id}</code> &bull; {r.contact_person}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #94a3b8)' }}>
                               📞 +91 {r.phone}
                             </div>
                           </td>
@@ -1041,39 +1089,39 @@ export default function SuperAdminRefundsDesk() {
                               <div>
                                 <code>{r.verified_utr}</code>
                                 {deposit.receipt_number && (
-                                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                                     Receipt: {deposit.receipt_number}
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <span style={{ color: '#94a3b8', fontSize: '0.76rem' }}>Direct Account Credit</span>
+                              <span style={{ color: 'var(--adm-text-muted, #94a3b8)', fontSize: '0.76rem' }}>Direct Account Credit</span>
                             )}
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 800, color: '#059669', fontSize: '0.90rem' }}>
+                            <div style={{ fontWeight: 800, color: isDark ? '#34d399' : '#059669', fontSize: '0.90rem' }}>
                               ₹{Number(r.total_lifetime_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                               Avail: ₹{Number(r.available_balance || 0).toFixed(2)}
                             </div>
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 600, color: '#4f46e5', fontSize: '0.88rem' }}>
+                            <div style={{ fontWeight: 600, color: isDark ? '#818cf8' : '#4f46e5', fontSize: '0.88rem' }}>
                               ₹{Number(r.total_ad_spent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #94a3b8)', marginTop: 2 }}>
                               Delivered Ad Spend
                             </div>
                           </td>
 
                           <td>
-                            <div style={{ fontWeight: 800, color: '#e11d48', fontSize: '0.92rem' }}>
+                            <div style={{ fontWeight: 800, color: isDark ? '#fb7185' : '#e11d48', fontSize: '0.92rem' }}>
                               ₹{Number(r.requested_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                               <code>{r.refund_id}</code>
                             </div>
                           </td>
@@ -1085,13 +1133,13 @@ export default function SuperAdminRefundsDesk() {
                                   {r.provider_ref}
                                 </span>
                                 {r.reviewed_by && (
-                                  <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 2 }}>
+                                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                                     By: {r.reviewed_by}
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <span style={{ color: '#94a3b8', fontSize: '0.76rem' }}>Awaiting Approval</span>
+                              <span style={{ color: 'var(--adm-text-muted, #94a3b8)', fontSize: '0.76rem' }}>Awaiting Approval</span>
                             )}
                           </td>
 
@@ -1160,8 +1208,8 @@ export default function SuperAdminRefundsDesk() {
                     width: 36,
                     height: 36,
                     borderRadius: 9,
-                    background: '#fef2f2',
-                    color: '#e11d48',
+                    background: isDark ? 'rgba(244, 63, 94, 0.16)' : '#fef2f2',
+                    color: isDark ? '#fb7185' : '#e11d48',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1173,7 +1221,7 @@ export default function SuperAdminRefundsDesk() {
                   <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
                     Issue Customer Refund
                   </h3>
-                  <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b' }}>
+                  <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                     Authoritative bank return with ledger deduction &amp; reconciliation
                   </p>
                 </div>
@@ -1217,8 +1265,8 @@ export default function SuperAdminRefundsDesk() {
                 {selectedCustomerForRefund && (
                   <div
                     style={{
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
+                      background: 'var(--adm-bg-subtle, #f8fafc)',
+                      border: '1px solid var(--adm-border, #e2e8f0)',
                       borderRadius: 10,
                       padding: '14px 16px',
                       marginBottom: 16,
@@ -1226,24 +1274,24 @@ export default function SuperAdminRefundsDesk() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.90rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.90rem' }}>
                           {selectedCustomerForRefund.company_name}
                         </div>
-                        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                           Contact: {selectedCustomerForRefund.contact_person} &bull; +91 {selectedCustomerForRefund.phone}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#059669', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.72rem', color: isDark ? '#34d399' : '#059669', marginTop: 2 }}>
                           Total Lifetime Paid: ₹{Number(selectedCustomerForRefund.total_lifetime_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>
+                        <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 700 }}>
                           MAX BANK-REFUNDABLE
                         </div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: isDark ? '#34d399' : '#059669' }}>
                           ₹{Number(selectedCustomerForRefund.eligible_bank_refundable || selectedCustomerForRefund.available_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </div>
-                        <div style={{ fontSize: '0.70rem', color: '#64748b' }}>
+                        <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)' }}>
                           Wallet Avail: ₹{Number(selectedCustomerForRefund.available_balance || 0).toFixed(2)}
                         </div>
                       </div>
@@ -1251,8 +1299,8 @@ export default function SuperAdminRefundsDesk() {
 
                     {/* Verified Deposits Trace */}
                     {Array.isArray(selectedCustomerForRefund.verified_deposits) && selectedCustomerForRefund.verified_deposits.length > 0 && (
-                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', marginBottom: 4 }}>
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--adm-border, #e2e8f0)' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--adm-text-body, #475569)', marginBottom: 4 }}>
                           VERIFIED BANK PAYMENTS ON FILE:
                         </div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1285,7 +1333,7 @@ export default function SuperAdminRefundsDesk() {
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#4f46e5',
+                          color: isDark ? '#818cf8' : '#4f46e5',
                           fontSize: '0.74rem',
                           fontWeight: 700,
                           cursor: 'pointer',
@@ -1403,18 +1451,18 @@ export default function SuperAdminRefundsDesk() {
               <div className="sa-modal-body">
                 <div
                   style={{
-                    background: '#fff1f2',
-                    border: '1px solid #fecdd3',
+                    background: isDark ? 'rgba(244, 63, 94, 0.14)' : '#fff1f2',
+                    border: isDark ? '1px solid rgba(244, 63, 94, 0.35)' : '1px solid #fecdd3',
                     borderRadius: 8,
                     padding: '12px 14px',
                     marginBottom: 16,
                   }}
                 >
-                  <div style={{ fontSize: '0.86rem', color: '#9f1239', fontWeight: 700 }}>
+                  <div style={{ fontSize: '0.86rem', color: isDark ? '#fda4af' : '#9f1239', fontWeight: 700 }}>
                     Target Request: {rejectingRefund.id} ({rejectingRefund.company_name})
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4 }}>
-                    Requested Amount: <strong>₹{Number(rejectingRefund.amount || 0).toFixed(2)}</strong>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4 }}>
+                    Requested Amount: <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>₹{Number(rejectingRefund.amount || 0).toFixed(2)}</strong>
                   </div>
                 </div>
 

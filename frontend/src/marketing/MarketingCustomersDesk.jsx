@@ -212,7 +212,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
       {/* 2. Top Summary KPI Cards */}
       <div className="marketing-stats-grid">
         <div className="marketing-stat-card">
-          <div className="marketing-stat-icon-wrap" style={{ background: '#eef2ff', color: '#4f46e5' }}>
+          <div className="marketing-stat-icon-wrap" style={{ background: 'rgba(79, 70, 229, 0.12)', color: '#4f46e5' }}>
             <Users size={24} />
           </div>
           <div className="marketing-stat-info">
@@ -223,7 +223,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
         </div>
 
         <div className="marketing-stat-card">
-          <div className="marketing-stat-icon-wrap" style={{ background: '#ecfdf5', color: '#059669' }}>
+          <div className="marketing-stat-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669' }}>
             <Wallet size={24} />
           </div>
           <div className="marketing-stat-info">
@@ -236,7 +236,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
         </div>
 
         <div className="marketing-stat-card">
-          <div className="marketing-stat-icon-wrap" style={{ background: '#fffbeb', color: '#d97706' }}>
+          <div className="marketing-stat-icon-wrap" style={{ background: 'rgba(245, 158, 11, 0.14)', color: '#d97706' }}>
             <CheckCircle2 size={24} />
           </div>
           <div className="marketing-stat-info">
@@ -349,7 +349,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
               {loading ? (
                 <tr>
                   <td colSpan={7} style={{ textAlign: 'center', padding: '40px' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--adm-text-muted, #64748b)' }}>
                       <RefreshCw size={18} className="spin" />
                       <span>Loading customers from database...</span>
                     </div>
@@ -357,10 +357,10 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <div style={{ maxWidth: '320px', margin: '0 auto' }}>
-                      <Building size={36} style={{ color: '#cbd5e1', marginBottom: '12px' }} />
-                      <h4 style={{ margin: '0 0 6px 0', color: '#0f172a' }}>No completed customers found</h4>
+                      <Building size={36} style={{ color: 'var(--adm-border-strong, #cbd5e1)', marginBottom: '12px' }} />
+                      <h4 style={{ margin: '0 0 6px 0', color: 'var(--adm-text-primary, #0f172a)' }}>No completed customers found</h4>
                       <p style={{ fontSize: '0.84rem', margin: 0 }}>
                         No records match the current filters. Adjust your search or clear filters to view all verified registrations.
                       </p>
@@ -449,12 +449,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                     </td>
                     <td>
                       <span
-                        className="mkt-pill"
-                        style={{
-                          background: c.approvedPostsCount > 0 ? '#eff6ff' : '#f8fafc',
-                          color: c.approvedPostsCount > 0 ? '#2563eb' : '#94a3b8',
-                          borderColor: c.approvedPostsCount > 0 ? '#bfdbfe' : '#e2e8f0',
-                        }}
+                        className={`mkt-pill ${c.approvedPostsCount > 0 ? 'mkt-pill-blue' : 'mkt-pill-slate'}`}
                       >
                         {c.approvedPostsCount} Approved
                       </span>
@@ -527,7 +522,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="marketing-modal-header" style={{ padding: '16px 22px', borderBottom: '1px solid #e2e8f0' }}>
+            <div className="marketing-modal-header" style={{ padding: '16px 22px', borderBottom: '1px solid var(--adm-border, #e2e8f0)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <div
                   style={{
@@ -549,41 +544,36 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {selectedCustomer.companyName || selectedCustomer.name}
                     </h3>
                     <span className="mkt-pill mkt-pill-green" style={{ fontSize: '0.72rem' }}>
                       ✓ 100% KYC Verified
                     </span>
                     <span
-                      className="mkt-pill"
-                      style={{
-                        fontSize: '0.72rem',
-                        background: selectedCustomer.profileStatus === 'complete' ? '#ecfdf5' : '#fef3c7',
-                        color: selectedCustomer.profileStatus === 'complete' ? '#059669' : '#b45309',
-                        borderColor: selectedCustomer.profileStatus === 'complete' ? '#a7f3d0' : '#fde68a',
-                      }}
+                      className={`mkt-pill ${selectedCustomer.profileStatus === 'complete' ? 'mkt-pill-green' : 'mkt-pill-amber'}`}
+                      style={{ fontSize: '0.72rem' }}
                     >
                       {selectedCustomer.profileStatus === 'complete' ? 'Profile Complete ✓' : 'Profile Incomplete'}
                     </span>
                     {selectedCustomer.paymentStatus === 'paid' && (
-                      <span className="mkt-pill" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0', fontSize: '0.72rem' }}>
+                      <span className="mkt-pill mkt-pill-green" style={{ fontSize: '0.72rem' }}>
                         Paid Customer
                       </span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', fontSize: '0.78rem', color: '#64748b', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', flexWrap: 'wrap' }}>
                     <span>
-                      Handle: <strong style={{ color: '#4f46e5' }}>@{selectedCustomer.username || 'user'}</strong>
+                      Handle: <strong style={{ color: '#6366f1' }}>@{selectedCustomer.username || 'user'}</strong>
                     </span>
                     <span>•</span>
                     <span>
-                      Customer ID: <code style={{ fontFamily: 'monospace', color: '#334155' }}>{selectedCustomer.customerId || selectedCustomer.id}</code>
+                      Customer ID: <code style={{ fontFamily: 'monospace', color: 'var(--adm-text-body, #334155)' }}>{selectedCustomer.customerId || selectedCustomer.id}</code>
                     </span>
                     <button
                       type="button"
                       onClick={() => copyToClipboard(selectedCustomer.customerId || selectedCustomer.id, 'id')}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'id' ? '#059669' : '#94a3b8', display: 'inline-flex', alignItems: 'center' }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'id' ? '#059669' : 'var(--adm-text-muted, #94a3b8)', display: 'inline-flex', alignItems: 'center' }}
                       title="Copy Customer ID"
                     >
                       {copiedField === 'id' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
@@ -610,9 +600,9 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   gap: '12px',
                   marginBottom: '20px',
                   padding: '14px',
-                  background: 'linear-gradient(to right, #f8fafc, #f1f5f9)',
+                  background: 'var(--adm-bg-subtle, #f8fafc)',
                   borderRadius: '12px',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                 }}
               >
                 <div>
@@ -622,7 +612,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
                     ₹{(selectedCustomer.availableBalance || 0).toLocaleString('en-IN')}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '2px' }}>
                     {selectedCustomer.runwayDays || Math.floor((selectedCustomer.availableBalance || 0) / Math.max(selectedCustomer.dailyAdSpend || 300, 1))} Days Runway
                   </div>
                 </div>
@@ -631,10 +621,10 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   <div className="mkt-form-help" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <CreditCard size={12} /> Daily Burn Rate
                   </div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
-                    ₹{selectedCustomer.dailyAdSpend || 300}<span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>/day</span>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'monospace' }}>
+                    ₹{selectedCustomer.dailyAdSpend || 300}<span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--adm-text-muted, #64748b)' }}>/day</span>
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '2px' }}>
                     {(selectedCustomer.activeDays || []).length} of 7 Days Active
                   </div>
                 </div>
@@ -654,7 +644,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '4px' }}>
                     {selectedCustomer.isDeductedToday ? '✓ Charged Today' : 'Not Charged Today'}
                   </div>
                 </div>
@@ -663,10 +653,10 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   <div className="mkt-form-help" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Target size={12} /> Leads &amp; Creatives
                   </div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#4f46e5' }}>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#6366f1' }}>
                     {selectedCustomer.totalLeadsCount || 0} Leads
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '2px' }}>
                     {selectedCustomer.approvedPostsCount || 0} Approved • {selectedCustomer.ideasCount || 0} Ideas
                   </div>
                 </div>
@@ -675,29 +665,29 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
               {/* Section 1: Business Profile & Intake (Information Filled by Customer) */}
               <div
                 style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: '10px',
                   padding: '16px',
                   marginBottom: '16px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
-                  <Building2 size={16} style={{ color: '#4f46e5' }} />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)', paddingBottom: '8px' }}>
+                  <Building2 size={16} style={{ color: '#6366f1' }} />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                     Company &amp; Business Intake Details
                   </h4>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
                   <div>
                     <div className="mkt-form-help">Company Legal Name</div>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                       {selectedCustomer.companyName || selectedCustomer.name}
                     </div>
                   </div>
                   <div>
                     <div className="mkt-form-help">Authorized Owner / Signatory</div>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                       {selectedCustomer.contactPerson || selectedCustomer.owner || 'N/A'}
                     </div>
                   </div>
@@ -707,26 +697,26 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   </div>
                   <div>
                     <div className="mkt-form-help">Industry / Target Niche</div>
-                    <div style={{ fontWeight: 600, color: '#334155' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--adm-text-body, #334155)' }}>
                       {selectedCustomer.industry || 'General Business'}
                     </div>
                   </div>
                 </div>
 
-                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed #f1f5f9' }}>
+                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed var(--adm-border, #e2e8f0)' }}>
                   <div className="mkt-form-help">Website / Landing Page</div>
                   {selectedCustomer.website ? (
                     <a
                       href={selectedCustomer.website.startsWith('http') ? selectedCustomer.website : `https://${selectedCustomer.website}`}
                       target="_blank"
                       rel="noreferrer"
-                      style={{ color: '#4f46e5', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px', wordBreak: 'break-all' }}
+                      style={{ color: '#6366f1', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px', wordBreak: 'break-all' }}
                     >
                       <Globe size={13} />
                       {selectedCustomer.website} <ExternalLink size={12} />
                     </a>
                   ) : (
-                    <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--adm-text-muted, #94a3b8)', fontStyle: 'italic', fontSize: '0.85rem' }}>
                       Not Provided
                     </span>
                   )}
@@ -736,16 +726,16 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
               {/* Section 2: Contact Information & Identity */}
               <div
                 style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: '10px',
                   padding: '16px',
                   marginBottom: '16px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)', paddingBottom: '8px' }}>
                   <User size={16} style={{ color: '#059669' }} />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                     Primary Contact &amp; Account Identity
                   </h4>
                 </div>
@@ -755,14 +745,14 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <a
                         href={`tel:${selectedCustomer.phone}`}
-                        style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0f172a', textDecoration: 'none' }}
+                        style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--adm-text-primary, #0f172a)', textDecoration: 'none' }}
                       >
                         +91 {selectedCustomer.phone}
                       </a>
                       <button
                         type="button"
                         onClick={() => copyToClipboard(selectedCustomer.phone, 'phone')}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'phone' ? '#059669' : '#94a3b8' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'phone' ? '#059669' : 'var(--adm-text-muted, #94a3b8)' }}
                         title="Copy Phone Number"
                       >
                         {copiedField === 'phone' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
@@ -777,21 +767,21 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                         <>
                           <a
                             href={`mailto:${selectedCustomer.email}`}
-                            style={{ fontWeight: 600, color: '#4f46e5', textDecoration: 'none', wordBreak: 'break-all' }}
+                            style={{ fontWeight: 600, color: '#6366f1', textDecoration: 'none', wordBreak: 'break-all' }}
                           >
                             {selectedCustomer.email}
                           </a>
                           <button
                             type="button"
                             onClick={() => copyToClipboard(selectedCustomer.email, 'email')}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'email' ? '#059669' : '#94a3b8' }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'email' ? '#059669' : 'var(--adm-text-muted, #94a3b8)' }}
                             title="Copy Work Email"
                           >
                             {copiedField === 'email' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
                           </button>
                         </>
                       ) : (
-                        <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>N/A</span>
+                        <span style={{ color: 'var(--adm-text-muted, #94a3b8)', fontStyle: 'italic', fontSize: '0.85rem' }}>N/A</span>
                       )}
                     </div>
                   </div>
@@ -803,21 +793,21 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                         <>
                           <a
                             href={`mailto:${selectedCustomer.personalEmail}`}
-                            style={{ fontWeight: 600, color: '#4f46e5', textDecoration: 'none', wordBreak: 'break-all' }}
+                            style={{ fontWeight: 600, color: '#6366f1', textDecoration: 'none', wordBreak: 'break-all' }}
                           >
                             {selectedCustomer.personalEmail}
                           </a>
                           <button
                             type="button"
                             onClick={() => copyToClipboard(selectedCustomer.personalEmail, 'pemail')}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'pemail' ? '#059669' : '#94a3b8' }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'pemail' ? '#059669' : 'var(--adm-text-muted, #94a3b8)' }}
                             title="Copy Personal Email"
                           >
                             {copiedField === 'pemail' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
                           </button>
                         </>
                       ) : (
-                        <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>Not Provided</span>
+                        <span style={{ color: 'var(--adm-text-muted, #94a3b8)', fontStyle: 'italic', fontSize: '0.85rem' }}>Not Provided</span>
                       )}
                     </div>
                   </div>
@@ -825,13 +815,13 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   <div>
                     <div className="mkt-form-help">Login Username</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                         @{selectedCustomer.username || 'user'}
                       </span>
                       <button
                         type="button"
                         onClick={() => copyToClipboard(selectedCustomer.username, 'username')}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'username' ? '#059669' : '#94a3b8' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: copiedField === 'username' ? '#059669' : 'var(--adm-text-muted, #94a3b8)' }}
                         title="Copy Username"
                       >
                         {copiedField === 'username' ? <Check size={13} style={{ color: '#059669' }} /> : <Copy size={13} />}
@@ -844,35 +834,35 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
               {/* Section 3: Headquarters & Location Territory */}
               <div
                 style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: '10px',
                   padding: '16px',
                   marginBottom: '16px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)', paddingBottom: '8px' }}>
                   <MapPin size={16} style={{ color: '#d97706' }} />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                     Headquarters &amp; Operating Territory
                   </h4>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
                   <div>
                     <div className="mkt-form-help">City / Territory</div>
-                    <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {selectedCustomer.city || 'Not Provided'}
                     </div>
                   </div>
                   <div>
                     <div className="mkt-form-help">State / Province</div>
-                    <div style={{ fontWeight: 600, color: '#334155' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--adm-text-body, #334155)' }}>
                       {selectedCustomer.state || '—'}
                     </div>
                   </div>
                   <div>
                     <div className="mkt-form-help">Country</div>
-                    <div style={{ fontWeight: 600, color: '#334155' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--adm-text-body, #334155)' }}>
                       {selectedCustomer.country || 'India'}
                     </div>
                   </div>
@@ -882,23 +872,23 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
               {/* Section 4: Marketing Campaign & Weekly Pacing Engine */}
               <div
                 style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: '10px',
                   padding: '16px',
                   marginBottom: '16px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)', paddingBottom: '8px' }}>
                   <Calendar size={16} style={{ color: '#2563eb' }} />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                     Marketing Campaign &amp; Weekly Pacing Control
                   </h4>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
                   <div>
                     <div className="mkt-form-help">Active Campaign Name</div>
-                    <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {selectedCustomer.campaignName || 'No Active Campaign'}
                     </div>
                   </div>
@@ -932,7 +922,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   </div>
                 </div>
 
-                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed #f1f5f9' }}>
+                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed var(--adm-border, #e2e8f0)' }}>
                   <div className="mkt-form-help" style={{ marginBottom: '6px' }}>
                     Active Weekly Marketing Days ({(selectedCustomer.activeDays || []).length} of 7 Days Active)
                   </div>
@@ -942,17 +932,11 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                       return (
                         <span
                           key={day}
+                          className={`mkt-pill ${isActive ? 'mkt-pill-green' : 'mkt-pill-slate'}`}
                           style={{
                             padding: '4px 10px',
                             borderRadius: '6px',
                             fontSize: '0.74rem',
-                            fontWeight: 700,
-                            background: isActive ? '#ecfdf5' : '#f1f5f9',
-                            color: isActive ? '#059669' : '#94a3b8',
-                            border: isActive ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px',
                           }}
                         >
                           {day} {isActive ? '✓' : ''}
@@ -966,41 +950,41 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
               {/* Section 5: Registration & Onboarding Audit Trail */}
               <div
                 style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: '10px',
                   padding: '16px',
                   marginBottom: '16px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)', paddingBottom: '8px' }}>
                   <ShieldCheck size={16} style={{ color: '#059669' }} />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                     Registration &amp; KYC Audit Trail
                   </h4>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
                   <div>
                     <div className="mkt-form-help">Registration Source</div>
-                    <div style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: '#475569', wordBreak: 'break-all' }}>
+                    <div style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: 'var(--adm-text-body, #475569)', wordBreak: 'break-all' }}>
                       {selectedCustomer.registeredFrom || 'https://admafia.marketing/#register'}
                     </div>
                   </div>
                   <div>
                     <div className="mkt-form-help">Registration Date &amp; Time</div>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {formatISTDate(selectedCustomer.registeredAt)}
                     </div>
                   </div>
                   <div>
                     <div className="mkt-form-help">Profile Completion Timestamp</div>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {selectedCustomer.completedAt ? formatISTDate(selectedCustomer.completedAt) : '100% KYC Verified'}
                     </div>
                   </div>
                   <div>
                     <div className="mkt-form-help">Total Lifetime Deposits</div>
-                    <div style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
+                    <div style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--adm-text-primary, #0f172a)' }}>
                       ₹{(selectedCustomer.totalPaid || 0).toLocaleString('en-IN')}
                     </div>
                   </div>
@@ -1026,8 +1010,8 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
               {/* Section 6: Deliverables Summary */}
               <div
                 style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-subtle, #f8fafc)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: '10px',
                   padding: '14px 16px',
                 }}
@@ -1035,13 +1019,13 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyItems: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: '140px' }}>
                     <div className="mkt-form-help">Dispatched Leads</div>
-                    <strong style={{ fontSize: '1rem', color: '#0f172a' }}>
+                    <strong style={{ fontSize: '1rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                       {selectedCustomer.totalLeadsCount || 0} Leads
                     </strong>
                   </div>
                   <div style={{ flex: 1, minWidth: '140px' }}>
                     <div className="mkt-form-help">Marketing Ideas</div>
-                    <strong style={{ fontSize: '1rem', color: '#4f46e5' }}>
+                    <strong style={{ fontSize: '1rem', color: '#6366f1' }}>
                       {selectedCustomer.ideasCount || 0} Ideas
                     </strong>
                   </div>
@@ -1062,7 +1046,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
             </div>
 
             {/* Modal Footer Actions */}
-            <div className="marketing-modal-footer" style={{ padding: '14px 22px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div className="marketing-modal-footer" style={{ padding: '14px 22px', borderTop: '1px solid var(--adm-border, #e2e8f0)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <button
                 type="button"
                 className="mkt-btn-table-action primary"
@@ -1129,8 +1113,8 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '16px',
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-subtle, #f8fafc)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: '12px',
                   marginBottom: '16px',
                 }}
@@ -1143,7 +1127,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
                 </div>
                 <div>
                   <div className="mkt-form-help">Daily Budget Pacing</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                     ₹{walletDrawerCustomer.dailyAdSpend}/day
                   </div>
                 </div>
@@ -1151,11 +1135,11 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
 
               <h4 style={{ margin: '14px 0 10px 0', fontSize: '0.95rem' }}>Authoritative Transaction History</h4>
               {loadingWalletTx ? (
-                <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--adm-text-muted, #64748b)' }}>
                   <RefreshCw size={18} className="spin" /> Loading ledger records...
                 </div>
               ) : walletTransactions.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--adm-text-muted, #64748b)' }}>
                   No transaction history recorded yet for this customer.
                 </div>
               ) : (

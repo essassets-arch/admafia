@@ -259,20 +259,20 @@ export default function SubadminDesksReferenceView() {
             <span style={{ flexShrink: 0 }}>📄</span>
             <strong style={{ wordBreak: 'break-all' }}>d:/crm/docs/SUBADMIN_DESKS_AND_PAGES_REFERENCE.md</strong>
           </div>
-          <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
             (Also linked in master <code>d:/crm/README.md</code> &amp; <code>SUBADMIN_SUPPORT_DOCUMENTATION.md</code>)
           </span>
         </div>
       </div>
 
       {/* 2. Visual Mermaid Topology Card */}
-      <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 18, padding: '22px 24px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
+      <div style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1.5px solid var(--adm-border, #e2e8f0)', borderRadius: 18, padding: '22px 24px', boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: 'var(--adm-text-primary, #0f172a)' }}>
               Summary of the 9 Desks &amp; Page Breakdown
             </h2>
-            <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '3px 0 0 0' }}>
+            <p style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)', margin: '3px 0 0 0' }}>
               Architecture map linking the Sub Admin root hub to its 9 operational desks.
             </p>
           </div>
@@ -283,8 +283,8 @@ export default function SubadminDesksReferenceView() {
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
                 style={{
-                  background: selectedCategory === cat ? '#0f172a' : '#f1f5f9',
-                  color: selectedCategory === cat ? '#ffffff' : '#475569',
+                  background: selectedCategory === cat ? 'var(--adm-btn-primary-bg, #0f172a)' : 'var(--adm-bg-muted, #f1f5f9)',
+                  color: selectedCategory === cat ? '#ffffff' : 'var(--adm-text-body, #475569)',
                   border: 'none',
                   padding: '6px 12px',
                   borderRadius: 8,
@@ -307,8 +307,8 @@ export default function SubadminDesksReferenceView() {
               key={desk.id}
               onClick={() => setActiveModalDesk(desk)}
               style={{
-                background: '#ffffff',
-                border: '1.5px solid #e2e8f0',
+                background: 'var(--adm-bg-card, #ffffff)',
+                border: '1.5px solid var(--adm-border, #e2e8f0)',
                 borderRadius: 14,
                 padding: '16px 18px',
                 cursor: 'pointer',
@@ -325,7 +325,7 @@ export default function SubadminDesksReferenceView() {
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.borderColor = '#e2e8f0';
+                e.currentTarget.style.borderColor = 'var(--adm-border, #e2e8f0)';
                 e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.02)';
               }}
             >
@@ -348,17 +348,17 @@ export default function SubadminDesksReferenceView() {
 
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   {desk.badgeCount !== null && (
-                    <span style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fecaca', padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 800 }}>
+                    <span style={{ background: 'var(--adm-soft-rose-bg, #fee2e2)', color: '#dc2626', border: '1px solid var(--adm-soft-rose-border, #fecaca)', padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 800 }}>
                       Badge: {desk.badgeCount}
                     </span>
                   )}
-                  <span style={{ fontSize: '0.7rem', color: '#64748b', background: '#f8fafc', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted, #64748b)', background: 'var(--adm-bg-subtle, #f8fafc)', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
                     {desk.category}
                   </span>
                 </div>
               </div>
 
-              <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
+              <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', margin: '0 0 4px 0' }}>
                 {desk.name}
               </h3>
 
@@ -370,15 +370,15 @@ export default function SubadminDesksReferenceView() {
                 {desk.component}
               </div>
 
-              <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 12px 0', lineHeight: 1.4, flex: 1 }}>
+              <p style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', margin: '0 0 12px 0', lineHeight: 1.4, flex: 1 }}>
                 {desk.workflows[0]}
               </p>
 
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>
                   {desk.workflows.length} Core Workflows
                 </span>
-                <span style={{ fontSize: '0.76rem', color: '#0f172a', fontWeight: 800 }}>
+                <span style={{ fontSize: '0.76rem', color: 'var(--adm-text-primary, #0f172a)', fontWeight: 800 }}>
                   Details &rarr;
                 </span>
               </div>
@@ -388,17 +388,17 @@ export default function SubadminDesksReferenceView() {
       </div>
 
       {/* 3. Comprehensive Master Reference Table */}
-      <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-        <div style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0', borderRadius: '18px 18px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+      <div style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1.5px solid var(--adm-border, #e2e8f0)', borderRadius: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
+        <div style={{ padding: '18px 24px', background: 'var(--adm-bg-subtle, #f8fafc)', borderBottom: '1.5px solid var(--adm-border, #e2e8f0)', borderRadius: '18px 18px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--adm-text-primary, #0f172a)' }}>
               Master Operational Desks Reference Table
             </h3>
-            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '2px 0 0 0' }}>
+            <p style={{ fontSize: '0.8rem', color: 'var(--adm-text-muted, #64748b)', margin: '2px 0 0 0' }}>
               Full screen-by-screen breakdown as documented in SUBADMIN_DESKS_AND_PAGES_REFERENCE.md
             </p>
           </div>
-          <span style={{ fontSize: '0.74rem', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '4px 10px', borderRadius: 6, fontWeight: 800 }}>
+          <span style={{ fontSize: '0.74rem', background: 'var(--adm-soft-emerald-bg, #ecfdf5)', color: '#059669', border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)', padding: '4px 10px', borderRadius: 6, fontWeight: 800 }}>
             9 Desks Active
           </span>
         </div>
@@ -411,7 +411,7 @@ export default function SubadminDesksReferenceView() {
           >
           <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.84rem' }}>
             <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontSize: '0.74rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <tr style={{ background: 'var(--adm-bg-subtle, #f8fafc)', borderBottom: '1px solid var(--adm-border, #e2e8f0)', color: 'var(--adm-text-body, #475569)', fontSize: '0.74rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 <th style={{ padding: '14px 18px', width: 40 }}>#</th>
                 <th style={{ padding: '14px 18px', width: 200 }}>Desk Name</th>
                 <th style={{ padding: '14px 18px', width: 150 }}>Route</th>
@@ -425,31 +425,31 @@ export default function SubadminDesksReferenceView() {
                 <tr
                   key={desk.id}
                   style={{
-                    borderBottom: '1px solid #f1f5f9',
-                    background: idx % 2 === 0 ? '#ffffff' : '#fcfdff',
+                    borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)',
+                    background: idx % 2 === 0 ? 'var(--adm-bg-card, #ffffff)' : 'var(--adm-bg-subtle, #fcfdff)',
                   }}
                 >
                   <td style={{ padding: '16px 18px', fontWeight: 800, color: desk.accentColor }}>{desk.num}</td>
                   <td style={{ padding: '16px 18px' }}>
-                    <strong style={{ color: '#0f172a', display: 'block', fontSize: '0.88rem' }}>{desk.name}</strong>
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>{desk.category}</span>
+                    <strong style={{ color: 'var(--adm-text-primary, #0f172a)', display: 'block', fontSize: '0.88rem' }}>{desk.name}</strong>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 600 }}>{desk.category}</span>
                   </td>
                   <td style={{ padding: '16px 18px', fontFamily: 'monospace', color: '#4f46e5', fontWeight: 700 }}>
                     {desk.route}
                   </td>
                   <td style={{ padding: '16px 18px' }}>
                     {desk.badgeCount !== null ? (
-                      <span style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fecaca', padding: '2px 8px', borderRadius: 999, fontSize: '0.74rem', fontWeight: 800 }}>
+                      <span style={{ background: 'var(--adm-soft-rose-bg, #fee2e2)', color: '#dc2626', border: '1px solid var(--adm-soft-rose-border, #fecaca)', padding: '2px 8px', borderRadius: 999, fontSize: '0.74rem', fontWeight: 800 }}>
                         {desk.badgeCount} ({desk.badge})
                       </span>
                     ) : (
-                      <span style={{ color: '#64748b', fontSize: '0.8rem' }}>{desk.badge}</span>
+                      <span style={{ color: 'var(--adm-text-muted, #64748b)', fontSize: '0.8rem' }}>{desk.badge}</span>
                     )}
                   </td>
                   <td style={{ padding: '16px 18px', fontFamily: 'monospace', color: '#059669', fontWeight: 700 }}>
                     {desk.component}
                   </td>
-                  <td style={{ padding: '16px 18px', color: '#334155', lineHeight: 1.45 }}>
+                  <td style={{ padding: '16px 18px', color: 'var(--adm-text-body, #334155)', lineHeight: 1.45 }}>
                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                       {desk.workflows.map((wf, wIdx) => (
                         <li key={wIdx} style={{ marginBottom: 3 }}>
@@ -469,8 +469,8 @@ export default function SubadminDesksReferenceView() {
       {/* 4. Verification & Production Build Status */}
       <div
         style={{
-          background: '#ecfdf5',
-          border: '1.5px solid #a7f3d0',
+          background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+          border: '1.5px solid var(--adm-soft-emerald-border, #a7f3d0)',
           borderRadius: 16,
           padding: '18px 24px',
           display: 'flex',
@@ -485,23 +485,23 @@ export default function SubadminDesksReferenceView() {
             ✓
           </div>
           <div>
-            <strong style={{ fontSize: '0.98rem', color: '#065f46', display: 'block' }}>
+            <strong style={{ fontSize: '0.98rem', color: 'var(--adm-soft-emerald-text, #065f46)', display: 'block' }}>
               System Build &amp; Contract Verification Passed
             </strong>
-            <span style={{ fontSize: '0.82rem', color: '#047857' }}>
+            <span style={{ fontSize: '0.82rem', color: 'var(--adm-soft-emerald-text, #047857)' }}>
               Both backend and frontend production builds passed cleanly with 0 errors across all 9 desks.
             </span>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 10, fontFamily: 'monospace', fontSize: '0.78rem', flexWrap: 'wrap' }}>
-          <span style={{ background: '#ffffff', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: 8, color: '#065f46', fontWeight: 700 }}>
+          <span style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)', padding: '6px 12px', borderRadius: 8, color: 'var(--adm-soft-emerald-text, #065f46)', fontWeight: 700 }}>
             crm-backend-nest: tsc (0 errors)
           </span>
-          <span style={{ background: '#ffffff', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: 8, color: '#065f46', fontWeight: 700 }}>
+          <span style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)', padding: '6px 12px', borderRadius: 8, color: 'var(--adm-soft-emerald-text, #065f46)', fontWeight: 700 }}>
             crm-frontend: vite build (0 errors)
           </span>
-          <span style={{ background: '#ffffff', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: 8, color: '#065f46', fontWeight: 700 }}>
+          <span style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)', padding: '6px 12px', borderRadius: 8, color: 'var(--adm-soft-emerald-text, #065f46)', fontWeight: 700 }}>
             admafia: vite build (0 errors)
           </span>
         </div>
@@ -516,31 +516,31 @@ export default function SubadminDesksReferenceView() {
                 <span style={{ fontSize: '0.74rem', fontWeight: 800, color: activeModalDesk.accentColor, textTransform: 'uppercase' }}>
                   Desk #{activeModalDesk.num} Breakdown
                 </span>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: '2px 0 0 0', color: '#0f172a' }}>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: '2px 0 0 0', color: 'var(--adm-text-primary, #0f172a)' }}>
                   {activeModalDesk.name}
                 </h2>
               </div>
               <button
                 type="button"
                 onClick={() => setActiveModalDesk(null)}
-                style={{ background: '#f1f5f9', border: 'none', width: 30, height: 30, borderRadius: '50%', cursor: 'pointer', fontWeight: 800 }}
+                style={{ background: 'var(--adm-bg-muted, #f1f5f9)', border: 'none', width: 30, height: 30, borderRadius: '50%', cursor: 'pointer', fontWeight: 800 }}
               >
                 ✕
               </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: '0.88rem' }}>
-              <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Route &amp; View Component</div>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>Route &amp; View Component</div>
                 <div style={{ fontFamily: 'monospace', color: '#4f46e5', fontWeight: 700, marginTop: 2 }}>{activeModalDesk.route}</div>
                 <div style={{ fontFamily: 'monospace', color: '#059669', fontWeight: 700, fontSize: '0.82rem' }}>{activeModalDesk.component}</div>
               </div>
 
               <div>
-                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: 6 }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--adm-text-body, #475569)', textTransform: 'uppercase', marginBottom: 6 }}>
                   Key Workflows &amp; Operations
                 </div>
-                <ul style={{ margin: 0, paddingLeft: 20, color: '#334155', lineHeight: 1.5 }}>
+                <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--adm-text-body, #334155)', lineHeight: 1.5 }}>
                   {activeModalDesk.workflows.map((wf, idx) => (
                     <li key={idx} style={{ marginBottom: 6 }}>
                       {wf}
@@ -551,12 +551,12 @@ export default function SubadminDesksReferenceView() {
 
               {activeModalDesk.kpis && (
                 <div>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: 6 }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--adm-text-body, #475569)', textTransform: 'uppercase', marginBottom: 6 }}>
                     Tracked KPIs &amp; Audited Metrics
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {activeModalDesk.kpis.map((kpi, kIdx) => (
-                      <span key={kIdx} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', padding: '4px 10px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 700 }}>
+                      <span key={kIdx} style={{ background: 'var(--adm-soft-blue-bg, #eff6ff)', border: '1px solid var(--adm-soft-blue-border, #bfdbfe)', color: 'var(--adm-soft-blue-text, #1e40af)', padding: '4px 10px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 700 }}>
                         {kpi}
                       </span>
                     ))}
@@ -566,12 +566,12 @@ export default function SubadminDesksReferenceView() {
 
               {activeModalDesk.filters && (
                 <div>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: 6 }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--adm-text-body, #475569)', textTransform: 'uppercase', marginBottom: 6 }}>
                     Queue Filter Tabs
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {activeModalDesk.filters.map((fil, fIdx) => (
-                      <span key={fIdx} style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#475569', padding: '3px 8px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 600 }}>
+                      <span key={fIdx} style={{ background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border-strong, #cbd5e1)', color: 'var(--adm-text-body, #475569)', padding: '3px 8px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 600 }}>
                         {fil}
                       </span>
                     ))}
@@ -579,11 +579,11 @@ export default function SubadminDesksReferenceView() {
                 </div>
               )}
 
-              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{ borderTop: '1px solid var(--adm-border, #e2e8f0)', paddingTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
                 <button
                   type="button"
                   onClick={() => setActiveModalDesk(null)}
-                  style={{ background: '#0f172a', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+                  style={{ background: 'var(--adm-btn-primary-bg, #0f172a)', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
                 >
                   Close Breakdown
                 </button>

@@ -36,6 +36,13 @@ canvas {
   min-height: 100dvh;
 }
 
+.portal-app-root,
+.portal-main-area {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
 .sa-main,
 .sa-main-wrap,
 .sa-content,
@@ -84,12 +91,22 @@ canvas {
   background: transparent;
 }
 
-.sa-table-card:has(> .am-smart-table-wrap),
-.sa-card:has(> .am-smart-table-wrap),
-.cp-card:has(> .am-smart-table-wrap),
-.marketing-table-card:has(> .am-smart-table-wrap),
-.graphics-table-card:has(> .am-smart-table-wrap) {
-  overflow: visible;
+/* Prevent outer table-card wrappers from creating a 2nd horizontal scrollbar or clipping column dropdowns */
+.responsive-table-wrap:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.sa-table-wrap:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.sa-table-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.sa-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.cp-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.cp-table-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.marketing-table-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.graphics-table-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.desk-table-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.appr-table-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.tx-table-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.wallet-table-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.proper-list-view-card:has(.am-smart-table-wrap, .am-tabulator-native-shell),
+.wallet-table-responsive-wrapper:has(.am-smart-table-wrap, .am-tabulator-native-shell) {
+  overflow: visible !important;
 }
 
 /* Global SweetAlert2 Viewport Safeguards */
@@ -371,99 +388,150 @@ canvas {
 }
 
 /* ==========================================================================
-   MINIMAL EXECUTIVE SCROLLBAR SYSTEM (PLATFORM-WIDE)
-   - Zero Windows ▲/▼/◄/► stepper buttons anywhere in Chrome, Edge, or Safari
-   - Sleek 6px rounded pill thumb on viewports & modals
-   - Auto-reveal 4px invisible-at-rest scrollbar on all 5 portal sidebars
-   - Avoids `scrollbar-width: thin` on WebKit/Blink (which forces native arrows
-     in Chromium 121+ on Windows) while keeping `scrollbar-width: thin` for Firefox
+   MINIMAL EXECUTIVE SCROLLBAR SYSTEM (GLOBAL — ALL PANELS & MODALS)
+   - Applied directly at top level so Chromium/Blink, WebKit/Safari, and Edge
+     ALWAYS activate `::-webkit-scrollbar` (Blink rejects `selector(::-webkit-*)`
+     inside `@supports`, which previously skipped custom scrollbars in Chrome!).
+   - Zero Windows ▲/▼/◄/► stepper arrow buttons anywhere on the platform.
+   - Sleek 6px rounded pill thumb on viewports, 5px on tables/modals/dropdowns,
+     and 4px auto-reveal thumb on all 5 portal sidebars.
+   - Firefox-only `scrollbar-width: thin` is strictly gated behind
+     `@supports (-moz-appearance: none)` so Chromium never disables WebKit styling.
    ========================================================================== */
-@supports selector(::-webkit-scrollbar) {
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  ::-webkit-scrollbar-button {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: transparent !important;
-  }
-
-  /* Root document scrollbar track blends seamlessly with #f8fafc canvas (prevents black root compositor backing in Blink) */
-  html::-webkit-scrollbar-track,
-  body::-webkit-scrollbar-track {
-    background: #f8fafc !important;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.42);
-    border-radius: 999px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: rgba(100, 116, 139, 0.72);
-  }
-
-  ::-webkit-scrollbar-corner {
-    background: transparent !important;
-  }
-
-  /* Auto-reveal 4px ultra-minimal sidebar scrollbars (clean & borderless at rest) */
-  .sales-sidebar-menu::-webkit-scrollbar,
-  .portal-nav-menu::-webkit-scrollbar,
-  .marketing-sidebar-nav::-webkit-scrollbar,
-  .graphics-sidebar-nav::-webkit-scrollbar,
-  .sa-nav-list::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-
-  .sales-sidebar-menu::-webkit-scrollbar-thumb,
-  .portal-nav-menu::-webkit-scrollbar-thumb,
-  .marketing-sidebar-nav::-webkit-scrollbar-thumb,
-  .graphics-sidebar-nav::-webkit-scrollbar-thumb,
-  .sa-nav-list::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 999px;
-  }
-
-  .sales-sidebar-menu:hover::-webkit-scrollbar-thumb,
-  .portal-nav-menu:hover::-webkit-scrollbar-thumb,
-  .marketing-sidebar-nav:hover::-webkit-scrollbar-thumb,
-  .graphics-sidebar-nav:hover::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.44);
-  }
-
-  .sa-nav-list:hover::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.28);
-  }
-
-  .sales-sidebar-menu::-webkit-scrollbar-thumb:hover,
-  .portal-nav-menu::-webkit-scrollbar-thumb:hover,
-  .marketing-sidebar-nav::-webkit-scrollbar-thumb:hover,
-  .graphics-sidebar-nav::-webkit-scrollbar-thumb:hover {
-    background: rgba(100, 116, 139, 0.68);
-  }
-
-  .sa-nav-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(203, 213, 225, 0.48);
-  }
+:root {
+  --adm-root-scroll-track: #f8fafc;
+  --adm-scroll-thumb: rgba(148, 163, 184, 0.42);
+  --adm-scroll-thumb-hover: rgba(100, 116, 139, 0.72);
 }
 
-@supports not selector(::-webkit-scrollbar) {
-  html,
-  body,
-  .sales-content-scroll,
-  .portal-main-area,
-  .am-tabulator-mount .tabulator-tableholder,
-  .am-st-scroll-viewport {
+:root[data-admin-active-theme="dark"] {
+  --adm-root-scroll-track: #0b1120;
+  --adm-scroll-thumb: rgba(148, 163, 184, 0.28);
+  --adm-scroll-thumb-hover: rgba(203, 213, 225, 0.54);
+  color-scheme: dark;
+}
+
+:root[data-admin-active-theme="light"] {
+  --adm-root-scroll-track: #f8fafc;
+  color-scheme: light;
+}
+
+::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+/* Root document scrollbar track blends seamlessly with active canvas (zero black compositor gutter in Chrome) */
+:root::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background: var(--adm-root-scroll-track, #f8fafc) !important;
+}
+
+::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: var(--adm-scroll-thumb, rgba(148, 163, 184, 0.42));
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--adm-scroll-thumb-hover, rgba(100, 116, 139, 0.72));
+}
+
+::-webkit-scrollbar-corner,
+*::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+/* Ultra-slim 5px scrollbars inside modals, dropdowns, code viewers, and tables */
+.sales-modal-card::-webkit-scrollbar,
+.sa-modal::-webkit-scrollbar,
+.sa-modal-card::-webkit-scrollbar,
+.sa-modal-body::-webkit-scrollbar,
+.marketing-modal::-webkit-scrollbar,
+.marketing-modal-box::-webkit-scrollbar,
+.marketing-modal-card::-webkit-scrollbar,
+.graphics-modal::-webkit-scrollbar,
+.graphics-modal-card::-webkit-scrollbar,
+.cp-modal::-webkit-scrollbar,
+.cp-modal-card::-webkit-scrollbar,
+.am-notif-scroll-list::-webkit-scrollbar,
+.swal2-popup::-webkit-scrollbar,
+.swal2-html-container::-webkit-scrollbar,
+pre::-webkit-scrollbar,
+textarea::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+/* Auto-reveal 4px ultra-minimal sidebar scrollbars across all 5 portals (invisible at rest) */
+.sales-sidebar-menu::-webkit-scrollbar,
+.portal-nav-menu::-webkit-scrollbar,
+.marketing-sidebar-nav::-webkit-scrollbar,
+.graphics-sidebar-nav::-webkit-scrollbar,
+.sa-nav-list::-webkit-scrollbar {
+  width: 4px !important;
+  height: 4px !important;
+}
+
+.sales-sidebar-menu::-webkit-scrollbar-thumb,
+.portal-nav-menu::-webkit-scrollbar-thumb,
+.marketing-sidebar-nav::-webkit-scrollbar-thumb,
+.graphics-sidebar-nav::-webkit-scrollbar-thumb,
+.sa-nav-list::-webkit-scrollbar-thumb {
+  background: transparent !important;
+  border-radius: 999px !important;
+}
+
+.portal-nav-menu:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.42) !important;
+}
+
+.portal-nav-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7) !important;
+}
+
+/* Dark Obsidian Executive Sidebars across Super Admin, Sales, Marketing, and Graphics */
+.sa-nav-list:hover::-webkit-scrollbar-thumb,
+.sales-sidebar-menu:hover::-webkit-scrollbar-thumb,
+.marketing-sidebar-nav:hover::-webkit-scrollbar-thumb,
+.graphics-sidebar-nav:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28) !important;
+}
+
+.sa-nav-list::-webkit-scrollbar-thumb:hover,
+.sales-sidebar-menu::-webkit-scrollbar-thumb:hover,
+.marketing-sidebar-nav::-webkit-scrollbar-thumb:hover,
+.graphics-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(203, 213, 225, 0.5) !important;
+}
+
+/* Firefox ONLY (Gecko) — never matched by Chrome, Edge, or Safari */
+@supports (-moz-appearance: none) {
+  * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+    scrollbar-color: var(--adm-scroll-thumb, rgba(148, 163, 184, 0.42)) transparent;
+  }
+
+  :root,
+  html,
+  body {
+    scrollbar-width: thin;
+    scrollbar-color: var(--adm-scroll-thumb, rgba(148, 163, 184, 0.42)) var(--adm-root-scroll-track, #f8fafc);
   }
 
   .sales-sidebar-menu,
@@ -472,6 +540,6 @@ canvas {
   .graphics-sidebar-nav,
   .sa-nav-list {
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+    scrollbar-color: rgba(148, 163, 184, 0.24) transparent;
   }
 }

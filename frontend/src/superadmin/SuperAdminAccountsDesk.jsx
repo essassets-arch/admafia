@@ -19,8 +19,10 @@ import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import crmApi from '../services/crmApi';
 import { SmartTable } from '../components/SmartTabulator';
+import { useAdminTheme } from '../utils/adminTheme';
 
 export default function SuperAdminAccountsDesk() {
+  const { isDark } = useAdminTheme({ syncDocument: false });
   const [activeType, setActiveType] = useState('business'); // 'business' or 'user'
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -307,14 +309,14 @@ export default function SuperAdminAccountsDesk() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--adm-text-muted, #64748b)' }}>
                       <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                       <div>Loading business accounts...</div>
                     </td>
                   </tr>
                 ) : accounts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: 48, color: 'var(--adm-text-muted, #94a3b8)' }}>
                       No business accounts found.
                     </td>
                   </tr>
@@ -322,8 +324,8 @@ export default function SuperAdminAccountsDesk() {
                   accounts.map((b) => (
                     <tr key={b.id}>
                       <td>
-                        <strong style={{ color: '#0f172a' }}>{b.company_name}</strong>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{b.company_name}</strong>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                           ID: <span style={{ fontFamily: 'monospace' }}>{b.id}</span>
                         </div>
                         <span className="sa-pill sa-pill-slate" style={{ fontSize: '0.64rem', marginTop: 3 }}>
@@ -332,29 +334,29 @@ export default function SuperAdminAccountsDesk() {
                       </td>
 
                       <td>
-                        <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>{b.contact_person}</div>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--adm-text-primary, #0f172a)' }}>{b.contact_person}</div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                           📞 {b.phone} • {b.city || 'India'}
                         </div>
                       </td>
 
                       <td>
-                        <div style={{ fontWeight: 800, color: Number(b.available_balance) > 0 ? '#059669' : '#dc2626' }}>
+                        <div style={{ fontWeight: 800, color: Number(b.available_balance) > 0 ? (isDark ? '#34d399' : '#059669') : (isDark ? '#f87171' : '#dc2626') }}>
                           ₹{Number(b.available_balance || 0).toFixed(2)}
                         </div>
                       </td>
 
                       <td>
-                        <div style={{ fontSize: '0.80rem', fontWeight: 600 }}>
+                        <div style={{ fontSize: '0.80rem', fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)' }}>
                           {b.running_campaigns || 0} active ads
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>
                           {b.total_leads || 0} total leads
                         </div>
                       </td>
 
                       <td>
-                        <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                           {new Date(b.registered_at || b.created_at).toLocaleDateString('en-IN', {
                             day: '2-digit',
                             month: 'short',
@@ -463,14 +465,14 @@ export default function SuperAdminAccountsDesk() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--adm-text-muted, #64748b)' }}>
                       <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                       <div>Loading system users...</div>
                     </td>
                   </tr>
                 ) : accounts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: 48, color: 'var(--adm-text-muted, #94a3b8)' }}>
                       No system users found.
                     </td>
                   </tr>
@@ -478,15 +480,15 @@ export default function SuperAdminAccountsDesk() {
                   accounts.map((u) => (
                     <tr key={u.id}>
                       <td>
-                        <strong style={{ color: '#0f172a' }}>{u.full_name}</strong>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b', fontFamily: 'monospace' }}>
+                        <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{u.full_name}</strong>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', fontFamily: 'monospace' }}>
                           @{u.username}
                         </div>
                       </td>
 
                       <td>
-                        <div style={{ fontSize: '0.80rem', color: '#0f172a' }}>{u.email}</div>
-                        {u.phone && <div style={{ fontSize: '0.72rem', color: '#64748b' }}>📞 {u.phone}</div>}
+                        <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-primary, #0f172a)' }}>{u.email}</div>
+                        {u.phone && <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>📞 {u.phone}</div>}
                       </td>
 
                       <td>
@@ -496,13 +498,13 @@ export default function SuperAdminAccountsDesk() {
                       </td>
 
                       <td>
-                        <span style={{ fontSize: '0.80rem', color: u.business_name ? '#0f172a' : '#94a3b8' }}>
+                        <span style={{ fontSize: '0.80rem', color: u.business_name ? 'var(--adm-text-primary, #0f172a)' : 'var(--adm-text-muted, #94a3b8)' }}>
                           {u.business_name || 'Platform Level'}
                         </span>
                       </td>
 
                       <td>
-                        <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                           {new Date(u.created_at).toLocaleDateString('en-IN', {
                             day: '2-digit',
                             month: 'short',
@@ -603,17 +605,45 @@ export default function SuperAdminAccountsDesk() {
               <div className="sa-modal-body">
                 <div
                   style={{
-                    background: targetNewStatus === 'active' ? '#ecfdf5' : '#fff1f2',
-                    border: `1px solid ${targetNewStatus === 'active' ? '#a7f3d0' : '#fecdd3'}`,
+                    background:
+                      targetNewStatus === 'active'
+                        ? isDark
+                          ? 'rgba(16, 185, 129, 0.14)'
+                          : '#ecfdf5'
+                        : isDark
+                        ? 'rgba(244, 63, 94, 0.14)'
+                        : '#fff1f2',
+                    border: `1px solid ${
+                      targetNewStatus === 'active'
+                        ? isDark
+                          ? 'rgba(16, 185, 129, 0.35)'
+                          : '#a7f3d0'
+                        : isDark
+                        ? 'rgba(244, 63, 94, 0.35)'
+                        : '#fecdd3'
+                    }`,
                     borderRadius: 8,
                     padding: '12px 14px',
                     marginBottom: 16,
                   }}
                 >
-                  <div style={{ fontSize: '0.86rem', color: targetNewStatus === 'active' ? '#065f46' : '#9f1239', fontWeight: 700 }}>
+                  <div
+                    style={{
+                      fontSize: '0.86rem',
+                      color:
+                        targetNewStatus === 'active'
+                          ? isDark
+                            ? '#6ee7b7'
+                            : '#065f46'
+                          : isDark
+                          ? '#fda4af'
+                          : '#9f1239',
+                      fontWeight: 700,
+                    }}
+                  >
                     Target: {selectedTarget.company_name || selectedTarget.full_name} ({selectedTarget.id})
                   </div>
-                  <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 4 }}>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4 }}>
                     {targetNewStatus === 'suspended'
                       ? '⚠️ Blocking this business will automatically pause running ad campaigns and hold wallet pacing.'
                       : '✓ Reactivating will restore normal workspace permissions and campaign eligibility.'}
@@ -689,7 +719,7 @@ export default function SuperAdminAccountsDesk() {
 
             <div className="sa-modal-body">
               {loadingHistory ? (
-                <div style={{ textAlign: 'center', padding: 32, color: '#64748b' }}>
+                <div style={{ textAlign: 'center', padding: 32, color: 'var(--adm-text-muted, #64748b)' }}>
                   <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                   <div>Loading status history...</div>
                 </div>
@@ -711,7 +741,7 @@ export default function SuperAdminAccountsDesk() {
                     <tbody>
                       {statusHistory.length === 0 ? (
                         <tr>
-                          <td colSpan={4} style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
+                          <td colSpan={4} style={{ textAlign: 'center', padding: 32, color: 'var(--adm-text-muted, #94a3b8)' }}>
                             No prior status changes recorded for this account.
                           </td>
                         </tr>
@@ -721,7 +751,7 @@ export default function SuperAdminAccountsDesk() {
                             <td>
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                 <span className="sa-pill sa-pill-slate">{h.previous_status || '—'}</span>
-                                <span style={{ color: '#64748b', fontWeight: 700 }}>→</span>
+                                <span style={{ color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>→</span>
                                 <span
                                   className={`sa-pill ${
                                     h.new_status === 'active' ? 'sa-pill-green' : 'sa-pill-rose'
@@ -732,14 +762,14 @@ export default function SuperAdminAccountsDesk() {
                               </div>
                             </td>
                             <td>
-                              <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>
+                              <strong style={{ fontSize: '0.82rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                                 {h.changed_by || 'Super Admin'}
                               </strong>
                             </td>
-                            <td style={{ fontSize: '0.82rem', color: '#334155' }}>
+                            <td style={{ fontSize: '0.82rem', color: 'var(--adm-text-body, #334155)' }}>
                               {h.reason || '—'}
                             </td>
-                            <td style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                            <td style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                               {h.created_at
                                 ? new Date(h.created_at).toLocaleString('en-IN', {
                                     timeZone: 'Asia/Kolkata',

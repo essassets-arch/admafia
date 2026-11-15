@@ -46,7 +46,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
       count: summary?.completedCustomersCount || 0,
       badge: 'Completed Profiles',
       color: '#4f46e5',
-      bg: '#eef2ff',
+      bg: 'rgba(79, 70, 229, 0.12)',
     },
     {
       id: 'build_ideas',
@@ -56,7 +56,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
       count: summary?.totalIdeasCount || 0,
       badge: 'Strategic Ideas',
       color: '#0ea5e9',
-      bg: '#f0f9ff',
+      bg: 'rgba(14, 165, 233, 0.12)',
     },
     {
       id: 'create_posts',
@@ -66,7 +66,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
       count: summary?.totalPostsCount || 0,
       badge: 'Total Creatives',
       color: '#8b5cf6',
-      bg: '#f5f3ff',
+      bg: 'rgba(139, 92, 246, 0.12)',
     },
     {
       id: 'verify_posts',
@@ -76,7 +76,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
       count: summary?.pendingVerificationPosts || 0,
       badge: 'Pending Audit',
       color: '#d97706',
-      bg: '#fffbeb',
+      bg: 'rgba(245, 158, 11, 0.14)',
       urgent: (summary?.pendingVerificationPosts || 0) > 0,
     },
     {
@@ -87,7 +87,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
       count: summary?.activeCampaignsCount || 0,
       badge: 'Active Campaigns',
       color: '#10b981',
-      bg: '#ecfdf5',
+      bg: 'rgba(16, 185, 129, 0.12)',
     },
   ];
 
@@ -175,7 +175,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
       </div>
 
       {/* 2. Operations Desks Cards */}
-      <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', color: '#0f172a' }}>
+      <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', color: 'var(--adm-text-primary, #0f172a)' }}>
         Marketing Operational Desks
       </h3>
 
@@ -185,14 +185,14 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
           return (
             <div
               key={d.id}
-              className="marketing-stat-card"
+              className={`marketing-stat-card ${d.urgent ? 'urgent' : ''}`.trim()}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'stretch',
                 padding: '24px',
                 cursor: 'pointer',
-                border: d.urgent ? '1.5px solid #f59e0b' : '1px solid #e2e8f0',
+                border: d.urgent ? '1.5px solid #f59e0b' : '1px solid var(--adm-border, #e2e8f0)',
               }}
               onClick={() => onNavigateToDesk && onNavigateToDesk(d.id)}
             >
@@ -212,17 +212,17 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
                   <Icon size={24} />
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'monospace' }}>
                     {d.count}
                   </div>
                   <span style={{ fontSize: '0.74rem', fontWeight: 700, color: d.color }}>{d.badge}</span>
                 </div>
               </div>
 
-              <h4 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+              <h4 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                 {d.title}
               </h4>
-              <p style={{ margin: '0 0 20px 0', fontSize: '0.84rem', color: '#64748b', lineHeight: 1.5, flex: 1 }}>
+              <p style={{ margin: '0 0 20px 0', fontSize: '0.84rem', color: 'var(--adm-text-muted, #64748b)', lineHeight: 1.5, flex: 1 }}>
                 {d.desc}
               </p>
 
@@ -231,7 +231,7 @@ export default function MarketingDashboard({ onNavigateToDesk }) {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  borderTop: '1px solid #f1f5f9',
+                  borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)',
                   paddingTop: '14px',
                   color: d.color,
                   fontWeight: 700,

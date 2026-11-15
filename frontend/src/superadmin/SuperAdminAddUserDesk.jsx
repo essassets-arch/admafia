@@ -30,6 +30,7 @@ import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import crmApi from '../services/crmApi';
 import { SmartTable } from '../components/SmartTabulator';
+import { useAdminTheme } from '../utils/adminTheme';
 
 const CATEGORIES = [
   'IT & Software',
@@ -76,6 +77,7 @@ const generateRandomPassword = (prefix = 'AdMafia@') => {
 };
 
 export default function SuperAdminAddUserDesk() {
+  const { isDark } = useAdminTheme({ syncDocument: false });
   const [activeTab, setActiveTab] = useState('business'); // 'business' | 'user' | 'roster'
   const [loading, setLoading] = useState(false);
   const [businesses, setBusinesses] = useState([]);
@@ -627,7 +629,7 @@ Role: ${c.role || 'Business Customer'}`;
                       }}
                     />
                   </div>
-                  <small style={{ color: '#64748b', fontSize: '11px', marginTop: '4px' }}>
+                  <small style={{ color: 'var(--adm-text-muted, #64748b)', fontSize: '11px', marginTop: '4px' }}>
                     Customer logs into dashboard using this 10-digit number.
                   </small>
                 </div>
@@ -642,7 +644,7 @@ Role: ${c.role || 'Business Customer'}`;
                     value={bizForm.email}
                     onChange={(e) => setBizForm({ ...bizForm, email: e.target.value })}
                   />
-                  <small style={{ color: '#64748b', fontSize: '11px', marginTop: '4px' }}>
+                  <small style={{ color: 'var(--adm-text-muted, #64748b)', fontSize: '11px', marginTop: '4px' }}>
                     Used for notifications, invoices, and email-based login.
                   </small>
                 </div>
@@ -660,7 +662,7 @@ Role: ${c.role || 'Business Customer'}`;
                     value={bizForm.username}
                     onChange={(e) => setBizForm({ ...bizForm, username: e.target.value.toLowerCase().replace(/\s+/g, '') })}
                   />
-                  <small style={{ color: '#64748b', fontSize: '11px', marginTop: '4px' }}>
+                  <small style={{ color: 'var(--adm-text-muted, #64748b)', fontSize: '11px', marginTop: '4px' }}>
                     Defaults to <code>biz_&lt;mobile&gt;</code> if left blank.
                   </small>
                 </div>
@@ -716,24 +718,24 @@ Role: ${c.role || 'Business Customer'}`;
                     value={bizForm.initialBalance}
                     onChange={(e) => setBizForm({ ...bizForm, initialBalance: e.target.value })}
                   />
-                  <small style={{ color: '#64748b', fontSize: '11px', marginTop: '4px' }}>
+                  <small style={{ color: 'var(--adm-text-muted, #64748b)', fontSize: '11px', marginTop: '4px' }}>
                     If entered &gt; 0, automatically provisions verified ledger deposit.
                   </small>
                 </div>
               </div>
 
               {/* Row 5: PROMINENT PORTAL LOGIN PASSWORD */}
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                  <label style={{ fontSize: '0.84rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                    <Lock size={15} color="#4f46e5" /> Customer Portal Login Password *
+                  <label style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--adm-text-secondary, #1e293b)', display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                    <Lock size={15} color={isDark ? '#818cf8' : '#4f46e5'} /> Customer Portal Login Password *
                   </label>
                   <button
                     type="button"
                     style={{
                       background: 'transparent',
                       border: 'none',
-                      color: '#4f46e5',
+                      color: isDark ? '#818cf8' : '#4f46e5',
                       fontSize: '0.78rem',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -759,8 +761,9 @@ Role: ${c.role || 'Business Customer'}`;
                         fontWeight: 600,
                         letterSpacing: showBizPassword ? '0.02em' : '0.12em',
                         borderRadius: 8,
-                        border: '1px solid #cbd5e1',
-                        background: '#ffffff',
+                        border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                        background: 'var(--adm-bg-input, #ffffff)',
+                        color: 'var(--adm-text-primary, #0f172a)',
                       }}
                       placeholder="Enter customer login password"
                       value={bizForm.password}
@@ -775,7 +778,7 @@ Role: ${c.role || 'Business Customer'}`;
                         transform: 'translateY(-50%)',
                         background: 'transparent',
                         border: 'none',
-                        color: '#64748b',
+                        color: 'var(--adm-text-muted, #64748b)',
                         cursor: 'pointer',
                       }}
                       onClick={() => setShowBizPassword(!showBizPassword)}
@@ -786,7 +789,7 @@ Role: ${c.role || 'Business Customer'}`;
                   </div>
                 </div>
 
-                <div style={{ marginTop: 8, fontSize: '0.76rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ marginTop: 8, fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <CheckCircle2 size={13} color="#10b981" />
                   <span>The business owner logs into <code>https://admafia.marketing/portal</code> using their 10-digit mobile (+91), email, or username with this password.</span>
                 </div>
@@ -933,24 +936,24 @@ Role: ${c.role || 'Business Customer'}`;
                       </option>
                     ))}
                   </select>
-                  <small style={{ color: '#64748b', fontSize: '11px', marginTop: '4px' }}>
+                  <small style={{ color: 'var(--adm-text-muted, #64748b)', fontSize: '11px', marginTop: '4px' }}>
                     Select a business if this user manages a client's customer dashboard.
                   </small>
                 </div>
               </div>
 
               {/* Row 4: PROMINENT USER LOGIN PASSWORD */}
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                  <label style={{ fontSize: '0.84rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
-                    <Lock size={15} color="#4f46e5" /> User Login Password *
+                  <label style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--adm-text-secondary, #1e293b)', display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                    <Lock size={15} color={isDark ? '#818cf8' : '#4f46e5'} /> User Login Password *
                   </label>
                   <button
                     type="button"
                     style={{
                       background: 'transparent',
                       border: 'none',
-                      color: '#4f46e5',
+                      color: isDark ? '#818cf8' : '#4f46e5',
                       fontSize: '0.78rem',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -976,8 +979,9 @@ Role: ${c.role || 'Business Customer'}`;
                         fontWeight: 600,
                         letterSpacing: showUserPassword ? '0.02em' : '0.12em',
                         borderRadius: 8,
-                        border: '1px solid #cbd5e1',
-                        background: '#ffffff',
+                        border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                        background: 'var(--adm-bg-input, #ffffff)',
+                        color: 'var(--adm-text-primary, #0f172a)',
                       }}
                       placeholder="Enter user login password"
                       value={userForm.password}
@@ -992,7 +996,7 @@ Role: ${c.role || 'Business Customer'}`;
                         transform: 'translateY(-50%)',
                         background: 'transparent',
                         border: 'none',
-                        color: '#64748b',
+                        color: 'var(--adm-text-muted, #64748b)',
                         cursor: 'pointer',
                       }}
                       onClick={() => setShowUserPassword(!showUserPassword)}
@@ -1003,7 +1007,7 @@ Role: ${c.role || 'Business Customer'}`;
                   </div>
                 </div>
 
-                <div style={{ marginTop: 8, fontSize: '0.76rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ marginTop: 8, fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <CheckCircle2 size={13} color="#10b981" />
                   <span>With this username/email and password, user signs into <code>https://admafia.marketing/portal</code> to open the Customer Dashboard.</span>
                 </div>
@@ -1105,7 +1109,7 @@ Role: ${c.role || 'Business Customer'}`;
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', padding: '36px', color: '#94a3b8' }}>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '36px', color: 'var(--adm-text-muted, #94a3b8)' }}>
                       No staff members match the selected search criteria.
                     </td>
                   </tr>
@@ -1121,11 +1125,11 @@ Role: ${c.role || 'Business Customer'}`;
                     return (
                       <tr key={u.id}>
                         <td>
-                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{u.full_name}</div>
-                          <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>
+                          <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{u.full_name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>
                             <code>{u.username}</code> &bull; {u.email}
                           </div>
-                          {u.phone && <div style={{ fontSize: 11, color: '#64748b' }}>📱 +91 {u.phone}</div>}
+                          {u.phone && <div style={{ fontSize: 11, color: 'var(--adm-text-muted, #64748b)' }}>📱 +91 {u.phone}</div>}
                         </td>
                         <td>
                           <span className={`sa-role-badge sa-role-${roleClass}`}>
@@ -1135,8 +1139,8 @@ Role: ${c.role || 'Business Customer'}`;
                         </td>
                         <td>
                           {u.business_name ? (
-                            <span style={{ fontSize: 13, color: '#1e293b', fontWeight: 600 }}>
-                              <Building2 size={12} style={{ display: 'inline', marginRight: 4, color: '#4f46e5' }} />
+                            <span style={{ fontSize: 13, color: 'var(--adm-text-secondary, #1e293b)', fontWeight: 600 }}>
+                              <Building2 size={12} style={{ display: 'inline', marginRight: 4, color: isDark ? '#818cf8' : '#4f46e5' }} />
                               {u.business_name}
                             </span>
                           ) : (
@@ -1161,7 +1165,7 @@ Role: ${c.role || 'Business Customer'}`;
                             {u.status === 'active' ? 'Active' : 'Suspended'}
                           </span>
                         </td>
-                        <td style={{ fontSize: 12, color: '#64748b' }}>
+                        <td style={{ fontSize: 12, color: 'var(--adm-text-muted, #64748b)' }}>
                           {u.last_login_at
                             ? new Date(u.last_login_at).toLocaleString('en-IN', {
                                 day: '2-digit',
@@ -1216,10 +1220,16 @@ Role: ${c.role || 'Business Customer'}`;
             style={{ maxWidth: 540 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sa-modal-header" style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
+            <div
+              className="sa-modal-header"
+              style={{
+                background: isDark ? 'rgba(16, 185, 129, 0.12)' : '#f0fdf4',
+                borderBottom: isDark ? '1px solid rgba(16, 185, 129, 0.28)' : '1px solid #bbf7d0',
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CheckCircle2 size={20} color="#16a34a" />
-                <h3 style={{ margin: 0, color: '#166534', fontSize: '1.05rem', fontWeight: 800 }}>
+                <CheckCircle2 size={20} color={isDark ? '#34d399' : '#16a34a'} />
+                <h3 style={{ margin: 0, color: isDark ? '#6ee7b7' : '#166534', fontSize: '1.05rem', fontWeight: 800 }}>
                   {credentialModal.data.title}
                 </h3>
               </div>
@@ -1233,43 +1243,43 @@ Role: ${c.role || 'Business Customer'}`;
             </div>
 
             <div style={{ padding: 24 }}>
-              <p style={{ margin: '0 0 16px 0', fontSize: '0.86rem', color: '#475569' }}>
+              <p style={{ margin: '0 0 16px 0', fontSize: '0.86rem', color: 'var(--adm-text-body, #475569)' }}>
                 The account has been recorded in MongoDB. You can launch the Customer Dashboard immediately or copy credentials for the customer.
               </p>
 
               {/* Credentials Card Box */}
               <div
                 style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-subtle, #f8fafc)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: 12,
                   padding: 18,
                   fontSize: '0.86rem',
                   lineHeight: 1.8,
-                  color: '#1e293b',
+                  color: 'var(--adm-text-secondary, #1e293b)',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: 8, marginBottom: 8 }}>
-                  <span style={{ color: '#64748b' }}>Account / Business:</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--adm-border, #e2e8f0)', paddingBottom: 8, marginBottom: 8 }}>
+                  <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Account / Business:</span>
                   <strong>{credentialModal.data.companyName || credentialModal.data.fullName}</strong>
                 </div>
 
                 {credentialModal.data.mobile && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#64748b' }}>Mobile (Login):</span>
+                    <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Mobile (Login):</span>
                     <strong>+91 {credentialModal.data.mobile}</strong>
                   </div>
                 )}
 
                 {credentialModal.data.email && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#64748b' }}>Email (Login):</span>
+                    <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Email (Login):</span>
                     <strong>{credentialModal.data.email}</strong>
                   </div>
                 )}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Username:</span>
+                  <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Username:</span>
                   <code>{credentialModal.data.username}</code>
                 </div>
 
@@ -1280,14 +1290,14 @@ Role: ${c.role || 'Business Customer'}`;
                     alignItems: 'center',
                     marginTop: 8,
                     paddingTop: 8,
-                    borderTop: '1px dashed #cbd5e1',
+                    borderTop: '1px dashed var(--adm-border-strong, #cbd5e1)',
                   }}
                 >
-                  <span style={{ color: '#4338ca', fontWeight: 700 }}>Login Password:</span>
+                  <span style={{ color: isDark ? '#a5b4fc' : '#4338ca', fontWeight: 700 }}>Login Password:</span>
                   <code
                     style={{
-                      background: '#e0e7ff',
-                      color: '#3730a3',
+                      background: isDark ? 'rgba(99, 102, 241, 0.22)' : '#e0e7ff',
+                      color: isDark ? '#c7d2fe' : '#3730a3',
                       padding: '4px 8px',
                       borderRadius: 6,
                       fontSize: '0.95rem',
@@ -1299,12 +1309,12 @@ Role: ${c.role || 'Business Customer'}`;
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-                  <span style={{ color: '#64748b' }}>Portal URL:</span>
+                  <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Portal URL:</span>
                   <a
                     href="https://admafia.marketing/portal"
                     target="_blank"
                     rel="noreferrer"
-                    style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'underline' }}
+                    style={{ color: isDark ? '#60a5fa' : '#2563eb', fontWeight: 600, textDecoration: 'underline' }}
                   >
                     admafia.marketing/portal
                   </a>
@@ -1345,7 +1355,7 @@ Role: ${c.role || 'Business Customer'}`;
           <div className="sa-modal-card" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
             <div className="sa-modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Key size={18} color="#4f46e5" />
+                <Key size={18} color={isDark ? '#818cf8' : '#4f46e5'} />
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>Reset Login Password</h3>
               </div>
               <button
@@ -1359,20 +1369,20 @@ Role: ${c.role || 'Business Customer'}`;
 
             <form onSubmit={handleSubmitResetPassword} style={{ padding: 22 }}>
               <div style={{ marginBottom: 14 }}>
-                <span style={{ fontSize: '0.82rem', color: '#64748b' }}>Account Target:</span>
-                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.94rem', marginTop: 2 }}>
+                <span style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)' }}>Account Target:</span>
+                <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.94rem', marginTop: 2 }}>
                   {resetModal.target?.full_name || resetModal.target?.company_name || resetModal.target?.username}
                 </div>
               </div>
 
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text-body, #334155)' }}>
                     New Login Password *
                   </label>
                   <button
                     type="button"
-                    style={{ background: 'transparent', border: 'none', color: '#4f46e5', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    style={{ background: 'transparent', border: 'none', color: isDark ? '#818cf8' : '#4f46e5', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     onClick={() => setResetModal((prev) => ({ ...prev, newPassword: generateRandomPassword(prev.type === 'user' ? 'User@' : 'AdMafia@') }))}
                   >
                     <Sparkles size={12} style={{ display: 'inline', marginRight: 2 }} /> Generate
@@ -1381,7 +1391,16 @@ Role: ${c.role || 'Business Customer'}`;
                 <input
                   type="text"
                   required
-                  style={{ width: '100%', padding: '10px 12px', fontSize: '0.92rem', fontWeight: 600, borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    fontSize: '0.92rem',
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                    background: 'var(--adm-bg-input, #ffffff)',
+                    color: 'var(--adm-text-primary, #0f172a)',
+                  }}
                   value={resetModal.newPassword}
                   onChange={(e) => setResetModal({ ...resetModal, newPassword: e.target.value })}
                   placeholder="Enter new password"

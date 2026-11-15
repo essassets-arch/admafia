@@ -741,7 +741,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
               width: 38,
               height: 38,
               borderRadius: 10,
-              background: '#ecfdf5',
+              background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
               color: '#059669',
               display: 'grid',
               placeItems: 'center',
@@ -764,8 +764,8 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
               target="_blank"
               rel="noreferrer"
               style={{
-                background: '#ffffff',
-                color: '#047857',
+                background: 'var(--adm-bg-card, #ffffff)',
+                color: 'var(--adm-soft-emerald-text, #047857)',
                 fontWeight: 800,
                 fontSize: '0.86rem',
                 padding: '9px 18px',
@@ -877,7 +877,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--adm-text-muted, #64748b)' }}>
                   No customer registrations match your filter. Register a new user at{' '}
                   <a href="/register" style={{ color: '#4f46e5', fontWeight: 700 }}>
                     /register
@@ -892,14 +892,14 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                     {/* 1. Username & Workspace */}
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.84rem' }}>
+                        <span style={{ fontWeight: 800, color: '#4f46e5', background: 'var(--adm-soft-indigo-bg, #eef2ff)', padding: '2px 8px', borderRadius: 6, fontSize: '0.84rem' }}>
                           @{identity.username || c.username || 'user'}
                         </span>
-                        <span className="desk-pill" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.68rem', fontWeight: 800, padding: '1px 6px' }}>
+                        <span className="desk-pill" style={{ background: 'var(--adm-soft-emerald-bg, #ecfdf5)', color: 'var(--adm-soft-emerald-text, #065f46)', border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)', fontSize: '0.68rem', fontWeight: 800, padding: '1px 6px' }}>
                           🌐 /register
                         </span>
                       </div>
-                      <div style={{ fontWeight: 700, color: '#0f172a', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>{identity.displayName}</span>
                         {((c.balance || 0) < (c.dailyPacing || 300) || (c.runwayDays || 0) <= 1) && (
                           <span className="desk-pill pill-rose" style={{ fontSize: '0.62rem', padding: '1px 6px', fontWeight: 800 }}>
@@ -907,14 +907,14 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                         {c.city ? `${c.city} • ` : ''}Registered: {formatIndianDateTime(c.registeredAt, c.registeredAtRaw || c.registered_at)}
                       </div>
                     </td>
 
                     {/* 2. Mobile Number (10 Digits) */}
                     <td>
-                      <div style={{ fontWeight: 800, color: '#0f172a', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.82rem', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>
+                      <div style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.82rem', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>
                         +91 {c.phone}
                       </div>
                       <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
@@ -941,12 +941,12 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
 
                     {/* 3. Work Email Address */}
                     <td>
-                      <div style={{ fontSize: '0.84rem', color: '#334155' }}>
-                        <a href={`mailto:${c.email}`} style={{ color: '#0f172a', textDecoration: 'none', fontWeight: 600 }}>
+                      <div style={{ fontSize: '0.84rem', color: 'var(--adm-text-body, #334155)' }}>
+                        <a href={`mailto:${c.email}`} style={{ color: 'var(--adm-text-primary, #0f172a)', textDecoration: 'none', fontWeight: 600 }}>
                           {c.email}
                         </a>
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{identity.contactPerson}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>{identity.contactPerson}</div>
                     </td>
 
                     {/* 4. Profile Status (Single Column - 100% Automatic) */}
@@ -990,7 +990,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
 
                     {/* 8. Wallet / Runway */}
                     <td>
-                      <div style={{ fontWeight: 800, color: ((c.balance || 0) >= (c.dailyPacing || 300) && (c.runwayDays || 0) > 1) ? '#0f172a' : '#e11d48' }}>
+                      <div style={{ fontWeight: 800, color: ((c.balance || 0) >= (c.dailyPacing || 300) && (c.runwayDays || 0) > 1) ? 'var(--adm-text-primary, #0f172a)' : '#e11d48' }}>
                         {formatINR(c.balance || 0)}
                       </div>
                       <div style={{ fontSize: '0.74rem', color: ((c.balance || 0) >= (c.dailyPacing || 300) && (c.runwayDays || 0) > 1) ? '#059669' : '#e11d48', fontWeight: 700 }}>
@@ -1059,7 +1059,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                     </h3>
                   );
                 })()}
-                <div style={{ fontSize: '0.82rem', color: '#64748b', overflowWrap: 'anywhere' }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)', overflowWrap: 'anywhere' }}>
                   Registered Source: <code>{selectedCust.registeredFrom || 'https://admafia.marketing/register'}</code>
                 </div>
               </div>
@@ -1069,23 +1069,23 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
             </div>
 
             {/* Registration Credentials Box */}
-            <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f0fdf4', borderColor: '#bbf7d0' }}>
-              <div className="desk-box-label" style={{ color: '#166534' }}>Registered Account Credentials</div>
+            <div className="desk-modal-box" style={{ marginBottom: 14, background: 'var(--adm-soft-emerald-bg, #f0fdf4)', borderColor: 'var(--adm-soft-emerald-border, #bbf7d0)' }}>
+              <div className="desk-box-label" style={{ color: 'var(--adm-soft-emerald-text, #166534)' }}>Registered Account Credentials</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10, marginTop: 8 }}>
                 <div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Username</div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', overflowWrap: 'anywhere' }}>@{selectedCust.username}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Username</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', overflowWrap: 'anywhere' }}>@{selectedCust.username}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Mobile Number</div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>+91 {selectedCust.phone}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Mobile Number</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'monospace' }}>+91 {selectedCust.phone}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Work Email Address</div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', overflowWrap: 'anywhere' }}>{selectedCust.email}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Work Email Address</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', overflowWrap: 'anywhere' }}>{selectedCust.email}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Password (Min 6 chars)</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Password (Min 6 chars)</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '0.95rem', fontWeight: 800, fontFamily: 'monospace' }}>
                       {showPassword ? (selectedCust.password || '••••••••') : '••••••••••••'}
@@ -1101,7 +1101,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                     </button>
                   </div>
                   {passwordError && (
-                    <div role="alert" style={{ marginTop: 4, color: '#b91c1c', fontSize: '0.72rem' }}>{passwordError}</div>
+                    <div role="alert" style={{ marginTop: 4, color: 'var(--adm-soft-rose-text, #b91c1c)', fontSize: '0.72rem' }}>{passwordError}</div>
                   )}
                 </div>
               </div>
@@ -1117,7 +1117,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                     {selectedCust.profileStatus === 'complete' || (selectedCust.kycPercent || 0) >= 100 || selectedCust.verified ? '✓ Profile Complete' : '⏳ Profile Incomplete'}
                   </span>
                 </div>
-                <div style={{ fontSize: '0.76rem', color: selectedCust.profileStatus === 'complete' || (selectedCust.kycPercent || 0) >= 100 ? '#059669' : '#64748b', fontWeight: 700, marginTop: 6 }}>
+                <div style={{ fontSize: '0.76rem', color: selectedCust.profileStatus === 'complete' || (selectedCust.kycPercent || 0) >= 100 ? '#059669' : 'var(--adm-text-muted, #64748b)', fontWeight: 700, marginTop: 6 }}>
                   KYC Audit Score: <b>{selectedCust.profileStatus === 'complete' ? 100 : (selectedCust.kycPercent || 25)}%</b> (Auto-Verified)
                 </div>
               </div>
@@ -1195,8 +1195,8 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                   <Plus size={20} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>Add Lead</h3>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>Add Lead</h3>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                     Distribute an inbound lead directly to client CRM workspace
                   </div>
                 </div>
@@ -1211,7 +1211,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
 
                 {/* 1. Select Customer Account * */}
                 <div>
-                  <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', marginBottom: 6, display: 'block' }}>
+                  <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}>
                     Target Customer Account <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -1234,11 +1234,11 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                         padding: '11px 14px',
                         fontSize: '0.94rem',
                         fontWeight: 600,
-                        color: '#0f172a',
-                        borderColor: '#cbd5e1',
+                        color: 'var(--adm-text-primary, #0f172a)',
+                        borderColor: 'var(--adm-border-strong, #cbd5e1)',
                         borderRadius: 10,
                         width: '100%',
-                        background: '#ffffff',
+                        background: 'var(--adm-bg-card, #ffffff)',
                         cursor: 'pointer'
                       }}
                     >
@@ -1269,17 +1269,17 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                 {/* 2. Phone Number * */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', margin: 0 }}>
+                    <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', margin: 0 }}>
                       Phone Number <span style={{ color: '#ef4444' }}>*</span>
                     </label>
                     <span style={{
                       fontSize: '0.78rem',
                       fontWeight: 700,
-                      color: leadPhoneDigits.length === 10 ? '#059669' : '#64748b',
-                      background: leadPhoneDigits.length === 10 ? '#ecfdf5' : '#f1f5f9',
+                      color: leadPhoneDigits.length === 10 ? '#059669' : 'var(--adm-text-muted, #64748b)',
+                      background: leadPhoneDigits.length === 10 ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-bg-muted, #f1f5f9)',
                       padding: '2px 8px',
                       borderRadius: 6,
-                      border: `1px solid ${leadPhoneDigits.length === 10 ? '#a7f3d0' : '#e2e8f0'}`
+                      border: `1px solid ${leadPhoneDigits.length === 10 ? 'var(--adm-soft-emerald-border, #a7f3d0)' : 'var(--adm-border, #e2e8f0)'}`
                     }}>
                       {leadPhoneDigits.length}/10 digits
                     </span>
@@ -1301,7 +1301,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                       padding: '11px 14px',
                       width: '100%',
                       boxSizing: 'border-box',
-                      borderColor: !isPhoneValidStart ? '#ef4444' : (leadPhoneDigits.length === 10 ? '#10b981' : '#cbd5e1')
+                      borderColor: !isPhoneValidStart ? '#ef4444' : (leadPhoneDigits.length === 10 ? '#10b981' : 'var(--adm-border-strong, #cbd5e1)')
                     }}
                   />
                 </div>
@@ -1309,7 +1309,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 14, borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
                 <button
                   type="button"
                   className="sales-btn-secondary"
@@ -1493,7 +1493,7 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
           <div className="desk-breadcrumb">SUB ADMIN &amp; SUPPORT OPERATIONS / DESK 02</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <h1 className="desk-title">Automated Verification &amp; Profile Intake</h1>
-            <span className="desk-badge-count-alert" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
+            <span className="desk-badge-count-alert" style={{ background: 'var(--adm-soft-emerald-bg, #ecfdf5)', color: '#059669', borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)' }}>
               {verifications.length} Auto-Verified
             </span>
           </div>
@@ -1560,9 +1560,9 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <ShieldCheck size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
-                    <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>No Verification Records Found</div>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--adm-text-primary, #0f172a)' }}>No Verification Records Found</div>
                     <div style={{ fontSize: '0.84rem', marginTop: 4 }}>
                       No customer accounts match the selected verification filter.
                     </div>
@@ -1576,7 +1576,7 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
                     <tr key={item.id}>
                       {/* 1. Client & Workspace */}
                       <td>
-                        <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                           {vIdentity.displayName}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
@@ -1585,7 +1585,7 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
                               style={{
                                 fontWeight: 700,
                                 color: '#4f46e5',
-                                background: '#eef2ff',
+                                background: 'var(--adm-soft-indigo-bg, #eef2ff)',
                                 padding: '1px 6px',
                                 borderRadius: 4,
                                 fontSize: '0.73rem',
@@ -1594,7 +1594,7 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
                               @{vIdentity.username}
                             </span>
                           )}
-                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                          <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                             Submitted: {formatIndianDateTime(item.submittedAt, item.submittedAtRaw || item.submitted_at)}
                           </span>
                         </div>
@@ -1602,7 +1602,7 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
 
                       {/* 2. Contact & Phone */}
                       <td>
-                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                           {vIdentity.contactPerson}
                         </div>
                         <div style={{ marginTop: 2 }}>
@@ -1630,7 +1630,7 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
                           {isPaid ? <CheckCircle2 size={13} /> : <Clock size={13} />}
                           {isPaid ? 'Settled (Online Razorpay)' : 'Awaiting Online Top-Up'}
                         </span>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 3, fontFamily: 'monospace' }}>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3, fontFamily: 'monospace' }}>
                           UTR / Ref: {item.utrNumber || '—'}
                         </div>
                       </td>
@@ -1650,7 +1650,7 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
 
                       {/* 5. Deposit & Runway */}
                       <td>
-                        <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a' }}>
+                        <div style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                           {formatINR(item.amount)}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, marginTop: 2 }}>
@@ -1709,11 +1709,11 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
                 <div style={{ minWidth: 0, flex: '1 1 220px' }}>
                   <span className="sales-dept-badge">Customer Profile &amp; Payment Audit Details</span>
-                  <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                  <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                     {cust.companyName || cust.name || selectedDetail.company}
                   </h3>
-                  <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 2 }}>
-                    Contact Person: <strong style={{ color: '#0f172a' }}>{cust.contactPerson || cust.contact || selectedDetail.contact}</strong> • Phone: <strong style={{ color: '#4f46e5' }}>+91 {selectedDetail.phone}</strong>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
+                    Contact Person: <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{cust.contactPerson || cust.contact || selectedDetail.contact}</strong> • Phone: <strong style={{ color: '#4f46e5' }}>+91 {selectedDetail.phone}</strong>
                   </div>
                 </div>
                 <button type="button" className="desk-close-btn" onClick={() => setSelectedDetail(null)}>
@@ -1722,9 +1722,9 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
               </div>
 
               {/* Section 1: Complete Profile & Onboarding Information */}
-              <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f8fafc', borderColor: '#e2e8f0' }}>
+              <div className="desk-modal-box" style={{ marginBottom: 14, background: 'var(--adm-bg-subtle, #f8fafc)', borderColor: 'var(--adm-border, #e2e8f0)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                  <div className="desk-box-label" style={{ color: '#0f172a', fontWeight: 800, margin: 0 }}>
+                  <div className="desk-box-label" style={{ color: 'var(--adm-text-primary, #0f172a)', fontWeight: 800, margin: 0 }}>
                     1. Profile &amp; KYC Verification Completion
                   </div>
                   <span className="desk-pill pill-emerald" style={{ fontSize: '0.74rem' }}>
@@ -1733,42 +1733,42 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Company / Registered Business</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.companyName || cust.name || selectedDetail.company}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Company / Registered Business</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{cust.companyName || cust.name || selectedDetail.company}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Authorized Contact Person</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.contactPerson || cust.contact || selectedDetail.contact}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Authorized Contact Person</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{cust.contactPerson || cust.contact || selectedDetail.contact}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Direct Indian Mobile Number</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>+91 {selectedDetail.phone}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Direct Indian Mobile Number</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'monospace' }}>+91 {selectedDetail.phone}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Work Email Address</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>{cust.email || 'Registered via Web Intake'}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Work Email Address</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', wordBreak: 'break-all' }}>{cust.email || 'Registered via Web Intake'}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Business Category</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.category || 'Ad Mafia Lead Generation'}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Business Category</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{cust.category || 'Ad Mafia Lead Generation'}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Target Geography / City</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>{cust.city || 'India'}{cust.state ? `, ${cust.state}` : ''}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Target Geography / City</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{cust.city || 'India'}{cust.state ? `, ${cust.state}` : ''}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Intake Submission Time</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Intake Submission Time</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {formatIndianDateTime(selectedDetail.submittedAt || cust.registeredAt, selectedDetail.submittedAtRaw || selectedDetail.submitted_at || cust.registeredAtRaw || cust.registered_at)}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>KYC Audit Progress</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>KYC Audit Progress</div>
                     <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#059669' }}>100% Verified (Gate 2 Passed)</div>
                   </div>
                   {cust.website && (
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Business Website / Landing Page</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Business Website / Landing Page</div>
                       <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#4f46e5', wordBreak: 'break-all' }}>
                         <a href={cust.website.startsWith('http') ? cust.website : `https://${cust.website}`} target="_blank" rel="noreferrer" style={{ color: '#4f46e5', textDecoration: 'none' }}>
                           {cust.website} ↗
@@ -1780,9 +1780,9 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
               </div>
 
               {/* Section 2: Payment & Ad Wallet Details */}
-              <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f8fafc', borderColor: '#e2e8f0' }}>
+              <div className="desk-modal-box" style={{ marginBottom: 14, background: 'var(--adm-bg-subtle, #f8fafc)', borderColor: 'var(--adm-border, #e2e8f0)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                  <div className="desk-box-label" style={{ color: '#0f172a', fontWeight: 800, margin: 0 }}>
+                  <div className="desk-box-label" style={{ color: 'var(--adm-text-primary, #0f172a)', fontWeight: 800, margin: 0 }}>
                     2. Payment &amp; Ad Wallet Settlement (Gate 1)
                   </div>
                   <span className={`desk-pill ${selectedDetail.paymentStatus === 'paid' ? 'pill-emerald' : 'pill-amber'}`} style={{ fontSize: '0.74rem' }}>
@@ -1791,32 +1791,32 @@ export function PendingVerificationDesk({ verifications: propsVerifications = []
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Current Available Balance</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Current Available Balance</div>
                     <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#059669' }}>
                       {formatINR(cust.balance || selectedDetail.amount || 0)}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Daily Campaign Ad Spend</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Daily Campaign Ad Spend</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {formatINR(cust.dailyPacing || selectedDetail.dailyRate || 300)} / day
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Active Funded Runway</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Active Funded Runway</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {cust.runwayDays || selectedDetail.runwayDays || 0} Days @ ₹300/day
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Payment Mode</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Payment Mode</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                       Razorpay UPI / Online Netbanking
                     </div>
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Settlement / UTR Reference</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', fontFamily: 'monospace', background: '#e2e8f0', padding: '4px 10px', borderRadius: 4, display: 'inline-block', marginTop: 3, wordBreak: 'break-all' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Settlement / UTR Reference</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'monospace', background: 'var(--adm-border, #e2e8f0)', padding: '4px 10px', borderRadius: 4, display: 'inline-block', marginTop: 3, wordBreak: 'break-all' }}>
                       {selectedDetail.utrNumber || 'Auto-Allocated Online Settlement'}
                     </div>
                   </div>
@@ -2390,7 +2390,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
               width: 38,
               height: 38,
               borderRadius: 10,
-              background: '#ecfdf5',
+              background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
               color: '#059669',
               display: 'grid',
               placeItems: 'center',
@@ -2413,8 +2413,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
               target="_blank"
               rel="noreferrer"
               style={{
-                background: '#ffffff',
-                color: '#047857',
+                background: 'var(--adm-bg-card, #ffffff)',
+                color: 'var(--adm-soft-emerald-text, #047857)',
                 fontWeight: 800,
                 fontSize: '0.86rem',
                 padding: '9px 18px',
@@ -2760,17 +2760,17 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         gap: 12,
         marginBottom: 14,
         flexWrap: 'wrap',
-        background: '#ffffff',
+        background: 'var(--adm-bg-card, #ffffff)',
         padding: '12px 16px',
         borderRadius: 12,
-        border: '1px solid #e2e8f0',
+        border: '1px solid var(--adm-border, #e2e8f0)',
         boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
       }}>
         {/* Customer-Wise Smart Search Dropdown Filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: '1 1 340px', minWidth: 'min(260px, 100%)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <Building2 size={18} style={{ color: '#4f46e5' }} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--adm-text-secondary, #1e293b)', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
               Customer Account:
             </span>
           </div>
@@ -2788,9 +2788,9 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 padding: '9px 14px',
                 fontSize: '0.88rem',
                 fontWeight: 700,
-                color: selectedCustomerId !== 'all' ? '#1e1b4b' : '#0f172a',
-                background: selectedCustomerId !== 'all' ? '#eef2ff' : '#ffffff',
-                border: selectedCustomerId !== 'all' ? '1.5px solid #6366f1' : '1px solid #cbd5e1',
+                color: selectedCustomerId !== 'all' ? 'var(--adm-text-primary, #1e1b4b)' : 'var(--adm-text-primary, #0f172a)',
+                background: selectedCustomerId !== 'all' ? 'var(--adm-soft-indigo-bg, #eef2ff)' : 'var(--adm-bg-card, #ffffff)',
+                border: selectedCustomerId !== 'all' ? '1.5px solid #6366f1' : '1px solid var(--adm-border-strong, #cbd5e1)',
                 borderRadius: 10,
                 cursor: 'pointer',
                 display: 'flex',
@@ -2838,7 +2838,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                     ✕
                   </span>
                 )}
-                <ChevronDown size={16} style={{ color: '#64748b', transform: isCustomerDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                <ChevronDown size={16} style={{ color: 'var(--adm-text-muted, #64748b)', transform: isCustomerDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
               </div>
             </button>
 
@@ -2851,9 +2851,9 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 width: '100%',
                 minWidth: 'min(320px, 100%)',
                 maxWidth: 'min(460px, calc(100vw - 32px))',
-                background: '#ffffff',
+                background: 'var(--adm-bg-card, #ffffff)',
                 borderRadius: 12,
-                border: '1px solid #cbd5e1',
+                border: '1px solid var(--adm-border-strong, #cbd5e1)',
                 boxShadow: '0 12px 30px rgba(15, 23, 42, 0.18)',
                 zIndex: 100,
                 padding: 8,
@@ -2867,9 +2867,9 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                   position: 'relative',
                   display: 'flex',
                   alignItems: 'center',
-                  background: '#f8fafc',
+                  background: 'var(--adm-bg-subtle, #f8fafc)',
                   borderRadius: 8,
-                  border: '1.5px solid #cbd5e1',
+                  border: '1.5px solid var(--adm-border-strong, #cbd5e1)',
                   padding: '2px 10px'
                 }}>
                   <Search size={15} style={{ color: '#6366f1', flexShrink: 0, marginRight: 6 }} />
@@ -2887,7 +2887,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                       fontWeight: 600,
                       width: '100%',
                       outline: 'none',
-                      color: '#0f172a'
+                      color: 'var(--adm-text-primary, #0f172a)'
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') {
@@ -2932,12 +2932,12 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      background: selectedCustomerId === 'all' ? '#eff6ff' : 'transparent',
-                      border: selectedCustomerId === 'all' ? '1px solid #bfdbfe' : '1px solid transparent',
+                      background: selectedCustomerId === 'all' ? 'var(--adm-soft-blue-bg, #eff6ff)' : 'transparent',
+                      border: selectedCustomerId === 'all' ? '1px solid var(--adm-soft-blue-border, #bfdbfe)' : '1px solid transparent',
                       transition: 'background 0.15s'
                     }}
                     onMouseEnter={(e) => {
-                      if (selectedCustomerId !== 'all') e.currentTarget.style.background = '#f8fafc';
+                      if (selectedCustomerId !== 'all') e.currentTarget.style.background = 'var(--adm-bg-hover, #f8fafc)';
                     }}
                     onMouseLeave={(e) => {
                       if (selectedCustomerId !== 'all') e.currentTarget.style.background = 'transparent';
@@ -2948,8 +2948,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                         width: 28,
                         height: 28,
                         borderRadius: 7,
-                        background: '#e0e7ff',
-                        color: '#4338ca',
+                        background: 'var(--adm-soft-indigo-bg, #e0e7ff)',
+                        color: 'var(--adm-soft-indigo-text, #4338ca)',
                         display: 'grid',
                         placeItems: 'center',
                         fontSize: '0.85rem',
@@ -2958,10 +2958,10 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                         🏢
                       </div>
                       <div>
-                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e3a8a' }}>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--adm-soft-blue-text, #1e3a8a)' }}>
                           All Registered Customers
                         </div>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                           {customerFilterOptions.length} active business accounts
                         </div>
                       </div>
@@ -2970,8 +2970,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                       <span style={{
                         fontSize: '0.76rem',
                         fontWeight: 800,
-                        color: '#4338ca',
-                        background: '#e0e7ff',
+                        color: 'var(--adm-soft-indigo-text, #4338ca)',
+                        background: 'var(--adm-soft-indigo-bg, #e0e7ff)',
                         padding: '2px 8px',
                         borderRadius: 6
                       }}>
@@ -2981,11 +2981,11 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                     </div>
                   </div>
 
-                  <div style={{ height: 1, background: '#e2e8f0', margin: '3px 0' }} />
+                  <div style={{ height: 1, background: 'var(--adm-border, #e2e8f0)', margin: '3px 0' }} />
 
                   {/* Filtered Customer Options */}
                   {filteredCustomerOptions.length === 0 ? (
-                    <div style={{ padding: '16px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.84rem' }}>
+                    <div style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.84rem' }}>
                       No customers found matching "<strong>{customerSearchQuery}</strong>"
                     </div>
                   ) : (
@@ -3010,12 +3010,12 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             gap: 10,
-                            background: isSelected ? '#eff6ff' : 'transparent',
-                            border: isSelected ? '1px solid #bfdbfe' : '1px solid transparent',
+                            background: isSelected ? 'var(--adm-soft-blue-bg, #eff6ff)' : 'transparent',
+                            border: isSelected ? '1px solid var(--adm-soft-blue-border, #bfdbfe)' : '1px solid transparent',
                             transition: 'background 0.15s'
                           }}
                           onMouseEnter={(e) => {
-                            if (!isSelected) e.currentTarget.style.background = '#f8fafc';
+                            if (!isSelected) e.currentTarget.style.background = 'var(--adm-bg-hover, #f8fafc)';
                           }}
                           onMouseLeave={(e) => {
                             if (!isSelected) e.currentTarget.style.background = 'transparent';
@@ -3027,8 +3027,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                               height: 30,
                               minWidth: 30,
                               borderRadius: 8,
-                              background: isSelected ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' : '#f1f5f9',
-                              color: isSelected ? '#ffffff' : '#334155',
+                              background: isSelected ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' : 'var(--adm-bg-muted, #f1f5f9)',
+                              color: isSelected ? '#ffffff' : 'var(--adm-text-body, #334155)',
                               display: 'grid',
                               placeItems: 'center',
                               fontSize: '0.85rem',
@@ -3040,7 +3040,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                               <div style={{
                                 fontSize: '0.86rem',
                                 fontWeight: 800,
-                                color: isSelected ? '#1e3a8a' : '#0f172a',
+                                color: isSelected ? 'var(--adm-soft-blue-text, #1e3a8a)' : 'var(--adm-text-primary, #0f172a)',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap'
@@ -3049,7 +3049,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                               </div>
                               <div style={{
                                 fontSize: '0.73rem',
-                                color: '#64748b',
+                                color: 'var(--adm-text-muted, #64748b)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 8,
@@ -3078,8 +3078,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                               fontSize: '0.75rem',
                               fontWeight: 800,
                               color: opt.leadCount > 0 ? '#059669' : '#94a3b8',
-                              background: opt.leadCount > 0 ? '#ecfdf5' : '#f1f5f9',
-                              border: opt.leadCount > 0 ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
+                              background: opt.leadCount > 0 ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-bg-muted, #f1f5f9)',
+                              border: opt.leadCount > 0 ? '1px solid var(--adm-soft-emerald-border, #a7f3d0)' : '1px solid var(--adm-border, #e2e8f0)',
                               padding: '2px 8px',
                               borderRadius: 6,
                               whiteSpace: 'nowrap'
@@ -3102,13 +3102,13 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
               type="button"
               onClick={() => setSelectedCustomerId('all')}
               style={{
-                background: '#f1f5f9',
-                border: '1px solid #cbd5e1',
+                background: 'var(--adm-bg-muted, #f1f5f9)',
+                border: '1px solid var(--adm-border-strong, #cbd5e1)',
                 borderRadius: 8,
                 padding: '8px 12px',
                 fontSize: '0.8rem',
                 fontWeight: 700,
-                color: '#475569',
+                color: 'var(--adm-text-body, #475569)',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -3148,7 +3148,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             style={
               filter === 'read'
                 ? { background: '#059669', borderColor: '#059669', color: '#ffffff', fontWeight: 800 }
-                : { color: '#059669', borderColor: '#a7f3d0', fontWeight: 700 }
+                : { color: '#059669', borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)', fontWeight: 700 }
             }
           >
             ✓ Read by Client ({readCount})
@@ -3160,7 +3160,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             style={
               filter === 'unread'
                 ? { background: '#d97706', borderColor: '#d97706', color: '#ffffff', fontWeight: 800 }
-                : { color: '#d97706', borderColor: '#fde68a', fontWeight: 700 }
+                : { color: '#d97706', borderColor: 'var(--adm-soft-amber-border, #fde68a)', fontWeight: 700 }
             }
           >
             ⏳ Unread ({unreadCount})
@@ -3194,14 +3194,14 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '48px 24px', color: '#64748b' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <div
                       style={{
                         width: 52,
                         height: 52,
                         borderRadius: '50%',
-                        background: '#f1f5f9',
-                        color: '#64748b',
+                        background: 'var(--adm-bg-muted, #f1f5f9)',
+                        color: 'var(--adm-text-muted, #64748b)',
                         display: 'grid',
                         placeItems: 'center',
                         margin: '0 auto 12px auto',
@@ -3209,10 +3209,10 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                     >
                       <Search size={22} />
                     </div>
-                    <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                    <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                       No Leads Found
                     </h3>
-                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.86rem' }}>
+                    <p style={{ margin: 0, color: 'var(--adm-text-muted, #64748b)', fontSize: '0.86rem' }}>
                       {selectedCustomerId !== 'all'
                         ? `No leads match the current filters for ${selectedCustomerObj?.companyName || selectedCustomerObj?.name || 'this customer'}.`
                         : 'No inbound leads match your selected search or filter criteria.'}
@@ -3252,13 +3252,13 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                     <tr key={lead.id}>
                       {/* 1. Inbound Buyer Phone */}
                       <td>
-                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'monospace' }}>
                           {cleanPhone}
                         </div>
                         {(lead.id || lead.category) && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
                             {lead.id && (
-                              <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontFamily: 'monospace' }}>
                                 {lead.id}
                               </span>
                             )}
@@ -3267,8 +3267,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                                 style={{
                                   fontSize: '0.70rem',
                                   fontWeight: 700,
-                                  color: '#475569',
-                                  background: '#f1f5f9',
+                                  color: 'var(--adm-text-body, #475569)',
+                                  background: 'var(--adm-bg-muted, #f1f5f9)',
                                   padding: '1px 6px',
                                   borderRadius: 4,
                                 }}
@@ -3282,7 +3282,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 
                       {/* 2. Assigned Client Account */}
                       <td>
-                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#1e3a8a' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--adm-soft-blue-text, #1e3a8a)' }}>
                           🏢 {customerName}
                         </div>
                         {customerUser && (
@@ -3292,8 +3292,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                                 fontSize: '0.73rem',
                                 fontWeight: 700,
                                 color: '#6366f1',
-                                background: '#eef2ff',
-                                border: '1px solid #c7d2fe',
+                                background: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                                border: '1px solid var(--adm-soft-indigo-border, #c7d2fe)',
                                 padding: '1px 6px',
                                 borderRadius: 4,
                               }}
@@ -3344,7 +3344,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 
                       {/* 5. Received At */}
                       <td>
-                        <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#334155' }}>
+                        <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--adm-text-body, #334155)' }}>
                           {rawTimestamp
                             ? formatIndianDateTime(rawTimestamp, lead.createdAtRaw || lead.created_at)
                             : '—'}
@@ -3382,9 +3382,9 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                               padding: '6px 12px',
                               fontSize: '0.78rem',
                               fontWeight: 700,
-                              background: '#ecfdf5',
-                              color: '#065f46',
-                              borderColor: '#a7f3d0',
+                              background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                              color: 'var(--adm-soft-emerald-text, #065f46)',
+                              borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)',
                             }}
                           >
                             <MessageSquare size={13} color="#059669" /> WhatsApp
@@ -3420,8 +3420,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                   <Plus size={20} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>Add Lead</h3>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>Add Lead</h3>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                     Distribute an inbound lead directly to client CRM workspace
                   </div>
                 </div>
@@ -3436,7 +3436,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 
                 {/* 1. Select Customer Account * */}
                 <div>
-                  <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', marginBottom: 6, display: 'block' }}>
+                  <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}>
                     Target Customer Account <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -3459,11 +3459,11 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                         padding: '11px 14px',
                         fontSize: '0.94rem',
                         fontWeight: 600,
-                        color: '#0f172a',
-                        borderColor: '#cbd5e1',
+                        color: 'var(--adm-text-primary, #0f172a)',
+                        borderColor: 'var(--adm-border-strong, #cbd5e1)',
                         borderRadius: 10,
                         width: '100%',
-                        background: '#ffffff',
+                        background: 'var(--adm-bg-card, #ffffff)',
                         cursor: 'pointer'
                       }}
                     >
@@ -3494,17 +3494,17 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                 {/* 2. Phone Number * */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', margin: 0 }}>
+                    <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', margin: 0 }}>
                       Phone Number <span style={{ color: '#ef4444' }}>*</span>
                     </label>
                     <span style={{
                       fontSize: '0.78rem',
                       fontWeight: 700,
-                      color: leadPhoneDigits.length === 10 ? '#059669' : '#64748b',
-                      background: leadPhoneDigits.length === 10 ? '#ecfdf5' : '#f1f5f9',
+                      color: leadPhoneDigits.length === 10 ? '#059669' : 'var(--adm-text-muted, #64748b)',
+                      background: leadPhoneDigits.length === 10 ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-bg-muted, #f1f5f9)',
                       padding: '2px 8px',
                       borderRadius: 6,
-                      border: `1px solid ${leadPhoneDigits.length === 10 ? '#a7f3d0' : '#e2e8f0'}`
+                      border: `1px solid ${leadPhoneDigits.length === 10 ? 'var(--adm-soft-emerald-border, #a7f3d0)' : 'var(--adm-border, #e2e8f0)'}`
                     }}>
                       {leadPhoneDigits.length}/10 digits
                     </span>
@@ -3526,7 +3526,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                       padding: '11px 14px',
                       width: '100%',
                       boxSizing: 'border-box',
-                      borderColor: !isPhoneValidStart ? '#ef4444' : (leadPhoneDigits.length === 10 ? '#10b981' : '#cbd5e1')
+                      borderColor: !isPhoneValidStart ? '#ef4444' : (leadPhoneDigits.length === 10 ? '#10b981' : 'var(--adm-border-strong, #cbd5e1)')
                     }}
                   />
                 </div>
@@ -3534,7 +3534,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 14, borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
                 <button
                   type="button"
                   className="sales-btn-secondary"
@@ -3759,13 +3759,13 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
             onClick={() => setFilterTab('all')}
             className={`desk-preset-btn ${filterTab === 'all' ? 'active' : ''}`}
             style={{
-              background: filterTab === 'all' ? '#0f172a' : '#f8fafc',
-              color: filterTab === 'all' ? '#ffffff' : '#334155',
+              background: filterTab === 'all' ? 'var(--adm-btn-primary-bg, #0f172a)' : 'var(--adm-bg-subtle, #f8fafc)',
+              color: filterTab === 'all' ? '#ffffff' : 'var(--adm-text-body, #334155)',
               padding: '7px 16px',
               borderRadius: 8,
               fontWeight: 700,
               fontSize: '0.86rem',
-              border: '1.5px solid #cbd5e1',
+              border: '1.5px solid var(--adm-border-strong, #cbd5e1)',
               cursor: 'pointer'
             }}
           >
@@ -3776,13 +3776,13 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
             onClick={() => setFilterTab('complete')}
             className={`desk-preset-btn ${filterTab === 'complete' ? 'active' : ''}`}
             style={{
-              background: filterTab === 'complete' ? '#059669' : '#ecfdf5',
-              color: filterTab === 'complete' ? '#ffffff' : '#047857',
+              background: filterTab === 'complete' ? '#059669' : 'var(--adm-soft-emerald-bg, #ecfdf5)',
+              color: filterTab === 'complete' ? '#ffffff' : 'var(--adm-soft-emerald-text, #047857)',
               padding: '7px 16px',
               borderRadius: 8,
               fontWeight: 700,
               fontSize: '0.86rem',
-              border: '1.5px solid #a7f3d0',
+              border: '1.5px solid var(--adm-soft-emerald-border, #a7f3d0)',
               cursor: 'pointer'
             }}
           >
@@ -3793,13 +3793,13 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
             onClick={() => setFilterTab('incomplete')}
             className={`desk-preset-btn ${filterTab === 'incomplete' ? 'active' : ''}`}
             style={{
-              background: filterTab === 'incomplete' ? '#d97706' : '#fffbeb',
-              color: filterTab === 'incomplete' ? '#ffffff' : '#b45309',
+              background: filterTab === 'incomplete' ? '#d97706' : 'var(--adm-soft-amber-bg, #fffbeb)',
+              color: filterTab === 'incomplete' ? '#ffffff' : 'var(--adm-soft-amber-text, #b45309)',
               padding: '7px 16px',
               borderRadius: 8,
               fontWeight: 700,
               fontSize: '0.86rem',
-              border: '1.5px solid #fde68a',
+              border: '1.5px solid var(--adm-soft-amber-border, #fde68a)',
               cursor: 'pointer'
             }}
           >
@@ -3819,10 +3819,10 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                 width: '100%',
                 padding: '8px 14px 8px 36px',
                 borderRadius: 8,
-                border: '1.5px solid #cbd5e1',
+                border: '1.5px solid var(--adm-border-strong, #cbd5e1)',
                 fontSize: '0.85rem',
                 outline: 'none',
-                background: '#ffffff'
+                background: 'var(--adm-bg-card, #ffffff)'
               }}
             />
           </div>
@@ -3848,9 +3848,9 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
             <tbody>
               {displayedList.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <Building2 size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
-                    <div style={{ fontWeight: 700, color: '#334155' }}>No Customer Profiles Found</div>
+                    <div style={{ fontWeight: 700, color: 'var(--adm-text-body, #334155)' }}>No Customer Profiles Found</div>
                     <div style={{ fontSize: '0.84rem' }}>Try clearing the search query or changing filter tab.</div>
                   </td>
                 </tr>
@@ -3866,14 +3866,14 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                     <tr key={c.id}>
                       {/* 1. Company & Workspace */}
                       <td>
-                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>
+                        <div style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.94rem' }}>
                           {companyDisplayName}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 700, color: '#4f46e5', background: '#eef2ff', padding: '1px 6px', borderRadius: 4, fontSize: '0.74rem' }}>
+                          <span style={{ fontWeight: 700, color: '#4f46e5', background: 'var(--adm-soft-indigo-bg, #eef2ff)', padding: '1px 6px', borderRadius: 4, fontSize: '0.74rem' }}>
                             @{c.username || 'user'}
                           </span>
-                          <span style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontFamily: 'monospace' }}>
                             {c.id}
                           </span>
                         </div>
@@ -3881,7 +3881,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
 
                       {/* 2. Contact Person & Mobile */}
                       <td>
-                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.90rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.90rem' }}>
                           {contactDisplayName}
                         </div>
                         <div style={{ fontWeight: 800, color: '#059669', fontFamily: 'monospace', fontSize: '0.88rem', marginTop: 2 }}>
@@ -3891,7 +3891,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
 
                       {/* 3. Work & Backup Email */}
                       <td>
-                        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', wordBreak: 'break-all' }}>
                           {c.email ? (
                             <a href={`mailto:${c.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
                               {c.email}
@@ -3901,7 +3901,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                           )}
                         </div>
                         {c.personalEmail && (
-                          <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2, wordBreak: 'break-all' }}>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2, wordBreak: 'break-all' }}>
                             Backup: {c.personalEmail}
                           </div>
                         )}
@@ -3911,8 +3911,8 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                       <td>
                         <span
                           style={{
-                            background: '#f1f5f9',
-                            color: '#334155',
+                            background: 'var(--adm-bg-muted, #f1f5f9)',
+                            color: 'var(--adm-text-body, #334155)',
                             padding: '2px 8px',
                             borderRadius: 6,
                             fontSize: '0.76rem',
@@ -3922,17 +3922,17 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                         >
                           {c.category || 'General'}
                         </span>
-                        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                           {c.industry || 'Standard Niche'}
                         </div>
                       </td>
 
                       {/* 5. Location (City, State) */}
                       <td>
-                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.88rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.88rem' }}>
                           {[c.city, c.state].filter(Boolean).join(', ') || '—'}
                         </div>
-                        <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                           {c.country || 'India'}
                         </div>
                       </td>
@@ -3957,9 +3957,9 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                       <td>
                         <span
                           style={{
-                            background: isComplete ? '#ecfdf5' : '#fffbeb',
-                            color: isComplete ? '#047857' : '#b45309',
-                            border: isComplete ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                            background: isComplete ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-soft-amber-bg, #fffbeb)',
+                            color: isComplete ? 'var(--adm-soft-emerald-text, #047857)' : 'var(--adm-soft-amber-text, #b45309)',
+                            border: isComplete ? '1px solid var(--adm-soft-emerald-border, #a7f3d0)' : '1px solid var(--adm-soft-amber-border, #fde68a)',
                             padding: '3px 10px',
                             borderRadius: 9999,
                             fontSize: '0.76rem',
@@ -4002,7 +4002,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                           <a
                             href={`tel:${cleanPhone}`}
                             className="desk-action-btn"
-                            style={{ padding: '5px 9px', fontSize: '0.76rem', textDecoration: 'none', background: '#f8fafc', color: '#0f172a', borderColor: '#cbd5e1', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            style={{ padding: '5px 9px', fontSize: '0.76rem', textDecoration: 'none', background: 'var(--adm-bg-subtle, #f8fafc)', color: 'var(--adm-text-primary, #0f172a)', borderColor: 'var(--adm-border-strong, #cbd5e1)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                             title="Call Partner"
                           >
                             <Phone size={13} color="#0284c7" /> Call
@@ -4014,7 +4014,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                             target="_blank"
                             rel="noreferrer"
                             className="desk-action-btn"
-                            style={{ padding: '5px 9px', fontSize: '0.76rem', textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            style={{ padding: '5px 9px', fontSize: '0.76rem', textDecoration: 'none', background: 'var(--adm-soft-emerald-bg, #ecfdf5)', color: 'var(--adm-soft-emerald-text, #065f46)', borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                             title="Open WhatsApp"
                           >
                             <MessageSquare size={13} color="#059669" /> WhatsApp
@@ -4063,17 +4063,17 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: 16, marginBottom: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid var(--adm-border, #e2e8f0)', paddingBottom: 16, marginBottom: 18 }}>
               <div style={{ minWidth: 0, flex: '1 1 220px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                  <span className="sales-dept-badge" style={{ background: '#e0e7ff', color: '#4338ca', fontWeight: 800 }}>
+                  <span className="sales-dept-badge" style={{ background: 'var(--adm-soft-indigo-bg, #e0e7ff)', color: 'var(--adm-soft-indigo-text, #4338ca)', fontWeight: 800 }}>
                     Customer Profile 360° Dossier
                   </span>
                   <span
                     style={{
-                      background: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#ecfdf5' : '#fffbeb',
-                      color: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#047857' : '#b45309',
-                      border: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                      background: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-soft-amber-bg, #fffbeb)',
+                      color: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? 'var(--adm-soft-emerald-text, #047857)' : 'var(--adm-soft-amber-text, #b45309)',
+                      border: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '1px solid var(--adm-soft-emerald-border, #a7f3d0)' : '1px solid var(--adm-soft-amber-border, #fde68a)',
                       padding: '3px 10px',
                       borderRadius: 9999,
                       fontSize: '0.76rem',
@@ -4084,8 +4084,8 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                   </span>
                   <span
                     style={{
-                      background: selectedProfileCust.status === 'active' ? '#ecfdf5' : '#fff1f2',
-                      color: selectedProfileCust.status === 'active' ? '#047857' : '#be123c',
+                      background: selectedProfileCust.status === 'active' ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-soft-rose-bg, #fff1f2)',
+                      color: selectedProfileCust.status === 'active' ? 'var(--adm-soft-emerald-text, #047857)' : 'var(--adm-soft-rose-text, #be123c)',
                       padding: '3px 8px',
                       borderRadius: 6,
                       fontSize: '0.74rem',
@@ -4098,12 +4098,12 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                 {(() => {
                   const pIdentity = resolveCustomerIdentity(selectedProfileCust, customers);
                   return (
-                    <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: '#0f172a' }}>
+                    <h2 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {pIdentity.displayName}
                     </h2>
                   );
                 })()}
-                <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 4 }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4 }}>
                   Workspace ID: <code>{selectedProfileCust.id}</code> • Registered: {selectedProfileCust.registeredAt || 'Active'}
                 </div>
               </div>
@@ -4120,34 +4120,34 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
             {/* Dossier Content - 5 Structured Section Panels */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Panel 1: Business Identity & Commercial Classification */}
-              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <Building2 size={16} color="#4f46e5" />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-secondary, #1e293b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     1. Business Identity &amp; Industry Classification
                   </h4>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company / Brand Name</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Company / Brand Name</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                       {resolveCustomerIdentity(selectedProfileCust, customers).displayName}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Lead Generation Category</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Lead Generation Category</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                       {selectedProfileCust.category || 'IT & Software'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Industry / Specialization</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Primary Industry / Specialization</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                       {selectedProfileCust.industry || selectedProfileCust.category || 'General'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company Website / Domain</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Company Website / Domain</div>
                     <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#2563eb', marginTop: 2, wordBreak: 'break-all' }}>
                       {selectedProfileCust.website || selectedProfileCust.domain ? (
                         <a
@@ -4167,29 +4167,29 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
               </div>
 
               {/* Panel 2: Authorized Contacts & Administrator Communications */}
-              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <User size={16} color="#059669" />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-secondary, #1e293b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     2. Authorized Administrator Contacts
                   </h4>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person / Representative</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person / Representative</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                       {resolveCustomerIdentity(selectedProfileCust, customers).contactPerson}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone / WhatsApp Number</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone / WhatsApp Number</div>
                     <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#059669', marginTop: 2 }}>
                       +91 {String(selectedProfileCust.phone || '').replace(/\D/g, '').slice(-10)}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Primary Business Email</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2, wordBreak: 'break-all' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Primary Business Email</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2, wordBreak: 'break-all' }}>
                       {selectedProfileCust.email ? (
                         <a href={`mailto:${selectedProfileCust.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
                           {selectedProfileCust.email}
@@ -4198,8 +4198,8 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Personal / Backup Email</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 600, color: '#334155', marginTop: 2, wordBreak: 'break-all' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Personal / Backup Email</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--adm-text-body, #334155)', marginTop: 2, wordBreak: 'break-all' }}>
                       {selectedProfileCust.personalEmail || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>None (Optional)</span>}
                     </div>
                   </div>
@@ -4207,29 +4207,29 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
               </div>
 
               {/* Panel 3: Geographic Headquarters & Service Jurisdiction */}
-              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <MapPin size={16} color="#d97706" />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-secondary, #1e293b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     3. Geographic Headquarters &amp; Service Location
                   </h4>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>City / Operational Base</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>City / Operational Base</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                       {selectedProfileCust.city || 'Not Specified'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>State / Province</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>State / Province</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                       {selectedProfileCust.state || 'Not Specified'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Country</div>
-                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Country</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                       {selectedProfileCust.country || 'India'}
                     </div>
                   </div>
@@ -4237,34 +4237,34 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
               </div>
 
               {/* Panel 4: Marketing Wallet, Ad Spend & Distribution Eligibility */}
-              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <Wallet size={16} color="#0891b2" />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-secondary, #1e293b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     4. Marketing Wallet, Budget &amp; Lead Dispatch
                   </h4>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Available Wallet Balance</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Available Wallet Balance</div>
                     <div style={{ fontSize: '1.15rem', fontWeight: 900, color: (selectedProfileCust.walletBalance ?? selectedProfileCust.balance ?? 0) > 0 ? '#059669' : '#e11d48', marginTop: 2 }}>
                       ₹{(selectedProfileCust.walletBalance ?? selectedProfileCust.balance ?? 0).toLocaleString('en-IN')}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Daily Ad Spend Pacing</div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
-                      ₹{(selectedProfileCust.dailyAdSpend ?? selectedProfileCust.dailyPacing ?? 300).toLocaleString('en-IN')}<span style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 600 }}>/day</span>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Daily Ad Spend Pacing</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
+                      ₹{(selectedProfileCust.dailyAdSpend ?? selectedProfileCust.dailyPacing ?? 300).toLocaleString('en-IN')}<span style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 600 }}>/day</span>
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Total Lifetime Paid</div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Total Lifetime Paid</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                       ₹{(selectedProfileCust.amountPaid || selectedProfileCust.totalLifetimePaid || 0).toLocaleString('en-IN')}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Lead Distribution Status</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Lead Distribution Status</div>
                     <div style={{ fontSize: '0.96rem', fontWeight: 800, color: (selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#059669' : '#d97706', marginTop: 2 }}>
                       {(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '● Active & Delivering Leads' : '⏸ Verification Required'}
                     </div>
@@ -4273,27 +4273,27 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
               </div>
 
               {/* Panel 5: Verification & Compliance Checkpoints */}
-              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '16px 18px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <ShieldCheck size={16} color="#059669" />
-                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-secondary, #1e293b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     5. Compliance &amp; Verification Ledger
                   </h4>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: '#1e293b', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: 'var(--adm-text-secondary, #1e293b)', fontWeight: 600 }}>
                     <CheckCircle2 size={16} color="#059669" />
                     <span>Company Name &amp; Workspace Registered</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: '#1e293b', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: 'var(--adm-text-secondary, #1e293b)', fontWeight: 600 }}>
                     <CheckCircle2 size={16} color={(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#059669' : '#d97706'} />
                     <span>Industry &amp; Campaign Category Allocated</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: '#1e293b', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: 'var(--adm-text-secondary, #1e293b)', fontWeight: 600 }}>
                     <CheckCircle2 size={16} color={(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#059669' : '#94a3b8'} />
                     <span>Administrator WhatsApp &amp; Email Contact Verified</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: '#1e293b', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: 'var(--adm-text-secondary, #1e293b)', fontWeight: 600 }}>
                     <CheckCircle2 size={16} color={(selectedProfileCust.kycPercent === 100 || selectedProfileCust.profileStatus === 'complete') ? '#059669' : '#94a3b8'} />
                     <span>Headquarters City &amp; State Geocoded</span>
                   </div>
@@ -4302,7 +4302,7 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
             </div>
 
             {/* Modal Actions Footer */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 16, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 16, borderTop: '1px solid var(--adm-border, #e2e8f0)', flexWrap: 'wrap', alignItems: 'center' }}>
               {/* Copy Profile Details to Clipboard */}
               <button
                 type="button"
@@ -4313,9 +4313,9 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                   alignItems: 'center',
                   gap: 6,
                   fontWeight: 700,
-                  background: copyFeedback ? '#ecfdf5' : '#f8fafc',
-                  color: copyFeedback ? '#065f46' : '#334155',
-                  borderColor: copyFeedback ? '#a7f3d0' : '#cbd5e1'
+                  background: copyFeedback ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-bg-subtle, #f8fafc)',
+                  color: copyFeedback ? 'var(--adm-soft-emerald-text, #065f46)' : 'var(--adm-text-body, #334155)',
+                  borderColor: copyFeedback ? 'var(--adm-soft-emerald-border, #a7f3d0)' : 'var(--adm-border-strong, #cbd5e1)'
                 }}
               >
                 <Copy size={14} />
@@ -4813,9 +4813,9 @@ export function PaymentCollectionDesk({
             <h1 className="desk-title">Payment Collection &amp; Top-Up Ledger</h1>
             <span
               style={{
-                background: '#eff6ff',
-                color: '#1d4ed8',
-                border: '1px solid #bfdbfe',
+                background: 'var(--adm-soft-blue-bg, #eff6ff)',
+                color: 'var(--adm-soft-blue-text, #1d4ed8)',
+                border: '1px solid var(--adm-soft-blue-border, #bfdbfe)',
                 fontWeight: 800,
                 fontSize: '0.78rem',
                 padding: '3px 10px',
@@ -4941,7 +4941,7 @@ export function PaymentCollectionDesk({
             <tbody>
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '36px 20px', color: '#64748b' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                     No payment or top-up records found matching your filters.
                   </td>
                 </tr>
@@ -4953,7 +4953,7 @@ export function PaymentCollectionDesk({
                     <tr key={r.id}>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontWeight: 800, fontFamily: 'monospace', color: '#0f172a', fontSize: '0.85rem' }}>
+                          <span style={{ fontWeight: 800, fontFamily: 'monospace', color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.85rem' }}>
                             {r.receiptNumber || r.receiptNo || r.receipt_number || r.invoiceNumber || r.invoice_number || (r.id ? `RCP-2026-${String(r.id).replace(/\D/g, '').slice(-4).padStart(4, '0')}` : 'RCP-2026-1001')}
                           </span>
                         </div>
@@ -4961,10 +4961,10 @@ export function PaymentCollectionDesk({
 
                       <td>
                         <div>
-                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.9rem' }}>
+                          <div style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.9rem' }}>
                             {identity.displayName}
                           </div>
-                          <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 1 }}>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 1 }}>
                             👤 {identity.contactPerson} • 📞 +91 {r.phone}
                           </div>
                         </div>
@@ -4972,11 +4972,11 @@ export function PaymentCollectionDesk({
 
                       <td>
                         <div>
-                          <span style={{ fontWeight: 900, color: '#0f172a', fontSize: '0.96rem' }}>
+                          <span style={{ fontWeight: 900, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.96rem' }}>
                             {formatINR(r.amount)}
                           </span>
                           {r.gstAmount > 0 && (
-                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>
                               + {formatINR(r.gstAmount)} GST (18%)
                             </div>
                           )}
@@ -4985,20 +4985,20 @@ export function PaymentCollectionDesk({
 
                       <td>
                         <div>
-                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text-body, #334155)' }}>
                             {r.paymentMode || 'Razorpay UPI'}
                           </div>
                           <div
                             style={{
                               fontSize: '0.73rem',
                               fontFamily: 'monospace',
-                              color: '#64748b',
-                              background: '#f8fafc',
+                              color: 'var(--adm-text-muted, #64748b)',
+                              background: 'var(--adm-bg-subtle, #f8fafc)',
                               padding: '1px 6px',
                               borderRadius: 4,
                               display: 'inline-block',
                               marginTop: 2,
-                              border: '1px solid #e2e8f0',
+                              border: '1px solid var(--adm-border, #e2e8f0)',
                               wordBreak: 'break-all',
                             }}
                           >
@@ -5008,7 +5008,7 @@ export function PaymentCollectionDesk({
                       </td>
 
                       <td>
-                        <div style={{ fontSize: '0.8rem', color: '#334155', fontWeight: 600 }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-body, #334155)', fontWeight: 600 }}>
                           {r.date}
                         </div>
                       </td>
@@ -5058,8 +5058,8 @@ export function PaymentCollectionDesk({
                               display: 'inline-flex',
                               alignItems: 'center',
                               color: '#ef4444',
-                              borderColor: '#fecaca',
-                              background: '#fef2f2',
+                              borderColor: 'var(--adm-soft-rose-border, #fecaca)',
+                              background: 'var(--adm-soft-rose-bg, #fef2f2)',
                             }}
                             onClick={() => handleDeletePayment(r)}
                             title="Delete payment entry"
@@ -5098,10 +5098,10 @@ export function PaymentCollectionDesk({
                   <DollarSign size={20} strokeWidth={2.5} />
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 800, color: '#0f172a' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                     Record Customer Payment or Top-Up
                   </h3>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                     Credit marketing wallet or record customer package payment
                   </div>
                 </div>
@@ -5183,9 +5183,9 @@ export function PaymentCollectionDesk({
                         fontSize: '0.74rem',
                         fontWeight: 700,
                         borderRadius: 6,
-                        border: '1px solid #cbd5e1',
-                        background: newPayData.amount === amt ? '#0f172a' : '#ffffff',
-                        color: newPayData.amount === amt ? '#ffffff' : '#334155',
+                        border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                        background: newPayData.amount === amt ? 'var(--adm-btn-primary-bg, #0f172a)' : 'var(--adm-bg-card, #ffffff)',
+                        color: newPayData.amount === amt ? '#ffffff' : 'var(--adm-text-body, #334155)',
                         cursor: 'pointer',
                       }}
                     >
@@ -5228,8 +5228,8 @@ export function PaymentCollectionDesk({
               {/* Checkbox to Credit Wallet */}
               <div
                 style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-subtle, #f8fafc)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: 8,
                   padding: '10px 14px',
                   marginBottom: 16,
@@ -5245,7 +5245,7 @@ export function PaymentCollectionDesk({
                   onChange={(e) => setNewPayData({ ...newPayData, creditWallet: e.target.checked })}
                   style={{ width: 16, height: 16, cursor: 'pointer', flexShrink: 0 }}
                 />
-                <label htmlFor="creditWalletCheck" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
+                <label htmlFor="creditWalletCheck" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)', cursor: 'pointer' }}>
                   Immediately credit customer ad wallet (+₹{newPayData.amount.toLocaleString('en-IN')} &amp; +{Math.floor(newPayData.amount / 300)} days ad runway)
                 </label>
               </div>
@@ -5278,15 +5278,15 @@ export function PaymentCollectionDesk({
           <div
             className="sales-modal-card"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 600, background: '#ffffff', border: '1px solid #cbd5e1', padding: '20px', maxHeight: '90vh', overflowY: 'auto' }}
+            style={{ maxWidth: 600, background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border-strong, #cbd5e1)', padding: '20px', maxHeight: '90vh', overflowY: 'auto' }}
           >
             {/* Receipt Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', borderBottom: '2px solid #0f172a', paddingBottom: 16, marginBottom: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', borderBottom: '2px solid var(--adm-text-primary, #0f172a)', paddingBottom: 16, marginBottom: 18 }}>
               <div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--adm-text-primary, #0f172a)' }}>
                   AD MAFIA MARKETING
                 </div>
-                <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                   Official Payment Acknowledgement &amp; Tax Receipt
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
@@ -5294,18 +5294,18 @@ export function PaymentCollectionDesk({
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '0.94rem', color: '#0f172a' }}>
+                <div style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                   {activeReceipt.receiptNumber || activeReceipt.receiptNo || activeReceipt.receipt_number || activeReceipt.invoiceNumber || activeReceipt.invoice_number || 'RCP-2026-1001'}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Date: {activeReceipt.date}
                 </div>
                 <span
                   style={{
                     display: 'inline-block',
-                    background: '#ecfdf5',
+                    background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
                     color: '#059669',
-                    border: '1px solid #a7f3d0',
+                    border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)',
                     fontWeight: 800,
                     fontSize: '0.7rem',
                     padding: '2px 8px',
@@ -5319,18 +5319,18 @@ export function PaymentCollectionDesk({
             </div>
 
             {/* Billed To Details */}
-            <div style={{ background: '#f8fafc', padding: 14, borderRadius: 10, marginBottom: 18, border: '1px solid #e2e8f0' }}>
-              <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: '#64748b', marginBottom: 4 }}>
+            <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: 14, borderRadius: 10, marginBottom: 18, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+              <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', marginBottom: 4 }}>
                 CUSTOMER / BILLED TO:
               </div>
               {(() => {
                 const rcptIdentity = resolveCustomerIdentity(activeReceipt, customers);
                 return (
                   <>
-                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {rcptIdentity.displayName}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>
                       Attention: <b>{rcptIdentity.contactPerson}</b> • Phone: <b>+91 {activeReceipt.phone}</b> • Location: {activeReceipt.city || 'India'}
                     </div>
                   </>
@@ -5341,26 +5341,26 @@ export function PaymentCollectionDesk({
             {/* Particulars Table */}
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
               <thead>
-                <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
-                  <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>Particulars / Service Description</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>SAC</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>Amount</th>
+                <tr style={{ background: 'var(--adm-bg-muted, #f1f5f9)', borderBottom: '1px solid var(--adm-border-strong, #cbd5e1)' }}>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.76rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)' }}>Particulars / Service Description</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.76rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)' }}>SAC</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.76rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)' }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
-                <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <tr style={{ borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
                   <td style={{ padding: '12px 10px', fontSize: '0.84rem' }}>
-                    <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {activeReceipt.typeLabel || 'Verified B2B Lead Generation & Growth Service'}
                     </div>
-                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                       {activeReceipt.notes || 'Marketing Wallet Balance & Campaign Deployment'}
                     </div>
                   </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.8rem', fontFamily: 'monospace', color: '#64748b' }}>
+                  <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--adm-text-muted, #64748b)' }}>
                     998311
                   </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
+                  <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 800, fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                     {formatINR(activeReceipt.amount)}
                   </td>
                 </tr>
@@ -5368,7 +5368,7 @@ export function PaymentCollectionDesk({
             </table>
 
             {/* Total Summary */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: '#0f172a', color: '#ffffff', borderRadius: 10, marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: 'var(--adm-receipt-total-bg, #0f172a)', border: '1px solid var(--adm-border-strong, transparent)', color: '#ffffff', borderRadius: 10, marginBottom: 20 }}>
               <div>
                 <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Payment Method &amp; Reference:</div>
                 <div style={{ fontSize: '0.84rem', fontWeight: 700 }}>
@@ -5417,8 +5417,8 @@ export function PaymentCollectionDesk({
             </div>
             <div className="desk-modal-box" style={{ marginBottom: 14 }}>
               <div style={{ fontWeight: 800 }}>{activeInv.company}</div>
-              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Invoice / Receipt: {activeInv.invoiceNumber || activeInv.receiptNumber || activeInv.receiptNo || 'RCP-2026-1001'}</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-muted, #64748b)' }}>Invoice / Receipt: {activeInv.invoiceNumber || activeInv.receiptNumber || activeInv.receiptNo || 'RCP-2026-1001'}</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', marginTop: 4 }}>
                 Total Due: {formatINR(activeInv.amount || activeInv.total)}
               </div>
             </div>
@@ -5659,9 +5659,9 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <Building2 size={32} color="#94a3b8" style={{ margin: '0 auto 8px' }} />
-                    <div style={{ fontWeight: 700, color: '#334155' }}>No client wallets matching search or filter criteria</div>
+                    <div style={{ fontWeight: 700, color: 'var(--adm-text-body, #334155)' }}>No client wallets matching search or filter criteria</div>
                   </td>
                 </tr>
               ) : (
@@ -5681,11 +5681,11 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                       {/* 1. Client Business Identity (Proper Name, Category, ID) */}
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#0f172a' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.96rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                             {companyName}
                           </span>
                           {c.category && (
-                            <span style={{ background: '#f1f5f9', color: '#475569', padding: '1px 7px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
+                            <span style={{ background: 'var(--adm-bg-muted, #f1f5f9)', color: 'var(--adm-text-body, #475569)', padding: '1px 7px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
                               {c.category}
                             </span>
                           )}
@@ -5699,20 +5699,20 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                             </span>
                           ) : null}
                         </div>
-                        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 3 }}>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3 }}>
                           Workspace ID: <code>{c.id}</code> • Registered: {c.registeredAt || 'Active'}
                         </div>
                       </td>
 
                       {/* 2. Contact & Location */}
                       <td>
-                        <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.86rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--adm-text-secondary, #1e293b)', fontSize: '0.86rem' }}>
                           {contactPerson}
                         </div>
                         <div style={{ fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>
                           +91 {c.phone}
                         </div>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b', wordBreak: 'break-all' }}>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', wordBreak: 'break-all' }}>
                           {c.email || 'No Email'} • {c.city ? `${c.city}, ` : ''}{c.state || c.country || 'India'}
                         </div>
                       </td>
@@ -5722,7 +5722,7 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                         <span style={{ fontSize: '1.05rem', fontWeight: 900, color: !isLow ? '#059669' : '#e11d48' }}>
                           {formatINR(bal)}
                         </span>
-                        <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 600, marginTop: 2 }}>
+                        <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 600, marginTop: 2 }}>
                           Total Paid: {formatINR(c.amountPaid || c.totalLifetimePaid || 0)}
                         </div>
                         {isLow && (
@@ -5735,7 +5735,7 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                       {/* 4. Daily Burn Rate */}
                       <td>
                         <span style={{ fontWeight: 800, color: '#4f46e5' }}>₹{pacing} / day</span>
-                        <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                           {Array.isArray(c.activeDays) && c.activeDays.length > 0 ? c.activeDays.join(', ') : 'Weekdays'}
                         </div>
                       </td>
@@ -5754,7 +5754,7 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                           <button
                             type="button"
                             className="desk-action-btn"
-                            style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0', fontWeight: 700 }}
+                            style={{ background: 'var(--adm-soft-emerald-bg, #ecfdf5)', color: 'var(--adm-soft-emerald-text, #047857)', borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)', fontWeight: 700 }}
                             onClick={() => setAddMoneyCust(c)}
                             title="Add Money / Credit Client Wallet"
                           >
@@ -5765,7 +5765,7 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                           <button
                             type="button"
                             className="desk-action-btn"
-                            style={{ background: '#f8fafc', color: '#334155', borderColor: '#cbd5e1', fontWeight: 700 }}
+                            style={{ background: 'var(--adm-bg-subtle, #f8fafc)', color: 'var(--adm-text-body, #334155)', borderColor: 'var(--adm-border-strong, #cbd5e1)', fontWeight: 700 }}
                             onClick={() => setSelectedWalletCust(c)}
                             title="View 360° Account Details & Ledger"
                           >
@@ -5778,7 +5778,7 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                             target="_blank"
                             rel="noreferrer"
                             className="desk-action-btn"
-                            style={{ textDecoration: 'none', background: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}
+                            style={{ textDecoration: 'none', background: 'var(--adm-soft-emerald-bg, #ecfdf5)', color: 'var(--adm-soft-emerald-text, #065f46)', borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)' }}
                             title="Open WhatsApp Chat"
                           >
                             <MessageSquare size={13} color="#059669" />
@@ -5798,16 +5798,16 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
       {selectedWalletCust && (
         <div className="sales-modal-overlay" onClick={() => setSelectedWalletCust(null)}>
           <div className="sales-modal-card" style={{ maxWidth: 740, width: '95%', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: 14, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid var(--adm-border, #e2e8f0)', paddingBottom: 14, marginBottom: 16 }}>
               <div style={{ minWidth: 0, flex: '1 1 220px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                  <span className="sales-dept-badge" style={{ background: '#e0e7ff', color: '#4338ca', fontWeight: 800 }}>
+                  <span className="sales-dept-badge" style={{ background: 'var(--adm-soft-indigo-bg, #e0e7ff)', color: 'var(--adm-soft-indigo-text, #4338ca)', fontWeight: 800 }}>
                     Client Wallet Ledger
                   </span>
                   <span
                     style={{
-                      background: (selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? '#ecfdf5' : '#fff1f2',
-                      color: (selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? '#047857' : '#be123c',
+                      background: (selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-soft-rose-bg, #fff1f2)',
+                      color: (selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? 'var(--adm-soft-emerald-text, #047857)' : 'var(--adm-soft-rose-text, #be123c)',
                       padding: '2px 8px',
                       borderRadius: 9999,
                       fontSize: '0.74rem',
@@ -5820,13 +5820,13 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                 {(() => {
                   const wIdentity = resolveCustomerIdentity(selectedWalletCust, customers);
                   return (
-                    <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {wIdentity.displayName}
                     </h3>
                   );
                 })()}
-                <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 3 }}>
-                  Workspace ID: <code>{selectedWalletCust.id}</code> • Registered Phone: <strong style={{ color: '#0f172a' }}>+91 {selectedWalletCust.phone}</strong>
+                <div style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3 }}>
+                  Workspace ID: <code>{selectedWalletCust.id}</code> • Registered Phone: <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>+91 {selectedWalletCust.phone}</strong>
                 </div>
               </div>
               <button type="button" className="desk-close-btn" onClick={() => setSelectedWalletCust(null)}>
@@ -5836,64 +5836,64 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
 
             {/* Financial Overview Metrics Quad */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 10, marginBottom: 16 }}>
-              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Available Balance</div>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Available Balance</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 900, color: (selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0) > 0 ? '#059669' : '#e11d48', marginTop: 2 }}>
                   {formatINR(selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0)}
                 </div>
               </div>
-              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Daily Ad Burn</div>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Daily Ad Burn</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#4f46e5', marginTop: 2 }}>
                   ₹{selectedWalletCust.dailyPacing || selectedWalletCust.dailyAdSpend || 300}/d
                 </div>
               </div>
-              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Runway Health</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Runway Health</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                   {selectedWalletCust.runwayDays ?? Math.floor((selectedWalletCust.balance ?? 0) / (selectedWalletCust.dailyPacing || 300))} Days
                 </div>
               </div>
-              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Total Lifetime Paid</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Total Lifetime Paid</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                   {formatINR(selectedWalletCust.amountPaid || selectedWalletCust.totalLifetimePaid || 0)}
                 </div>
               </div>
             </div>
 
             {/* Business & Authorized Contact Details */}
-            <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 10, border: '1px solid #e2e8f0', marginBottom: 16 }}>
+            <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '14px 16px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)', marginBottom: 16 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company / Brand</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{resolveCustomerIdentity(selectedWalletCust, customers).displayName}</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Company / Brand</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>{resolveCustomerIdentity(selectedWalletCust, customers).displayName}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{resolveCustomerIdentity(selectedWalletCust, customers).contactPerson}</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Contact Person</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>{resolveCustomerIdentity(selectedWalletCust, customers).contactPerson}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone</div>
                   <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#059669' }}>+91 {selectedWalletCust.phone}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Business Email</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>{selectedWalletCust.email || 'Not Provided'}</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Business Email</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', wordBreak: 'break-all' }}>{selectedWalletCust.email || 'Not Provided'}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Category &amp; Industry</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>{selectedWalletCust.category || 'General'} • {selectedWalletCust.industry || 'IT & Software'}</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Category &amp; Industry</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{selectedWalletCust.category || 'General'} • {selectedWalletCust.industry || 'IT & Software'}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Operating City &amp; State</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>{selectedWalletCust.city ? `${selectedWalletCust.city}, ` : ''}{selectedWalletCust.state || selectedWalletCust.country || 'India'}</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Operating City &amp; State</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{selectedWalletCust.city ? `${selectedWalletCust.city}, ` : ''}{selectedWalletCust.state || selectedWalletCust.country || 'India'}</div>
                 </div>
               </div>
             </div>
 
             {/* Modal Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid var(--adm-border, #e2e8f0)', flexWrap: 'wrap' }}>
               <a
                 href={`https://wa.me/91${selectedWalletCust.phone}?text=Hello%20${encodeURIComponent(selectedWalletCust.contactPerson || selectedWalletCust.contact || selectedWalletCust.name || 'Partner')},%20your%20current%20Ad%20Mafia%20wallet%20balance%20is%20${encodeURIComponent(formatINR(selectedWalletCust.balance ?? selectedWalletCust.walletBalance ?? 0))}.`}
                 target="_blank"
@@ -6393,9 +6393,9 @@ export function QuerySupportDesk({
             <tbody>
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
-                    <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                    <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                       No Customers Matching Filter
                     </h4>
                     <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>
@@ -6418,16 +6418,16 @@ export function QuerySupportDesk({
                       {/* 1. Customer & Business */}
                       <td style={{ minWidth: 'min(240px, 100%)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>
+                          <span style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.94rem' }}>
                             {compName}
                           </span>
                           {c.category && (
-                            <span style={{ background: '#f1f5f9', color: '#475569', padding: '1px 7px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
+                            <span style={{ background: 'var(--adm-bg-muted, #f1f5f9)', color: 'var(--adm-text-body, #475569)', padding: '1px 7px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
                               {c.category}
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 3 }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3 }}>
                           👤 {contactPerson} • <span style={{ fontFamily: 'monospace', color: '#059669', fontWeight: 700 }}>📞 +91 {cleanPhone}</span>
                         </div>
                         <div style={{ fontSize: '0.73rem', color: '#94a3b8', marginTop: 1 }}>
@@ -6457,7 +6457,7 @@ export function QuerySupportDesk({
                           </div>
                         ) : (
                           <div>
-                            <span className="desk-pill" style={{ background: '#f1f5f9', color: '#64748b', fontSize: '0.74rem' }}>
+                            <span className="desk-pill" style={{ background: 'var(--adm-bg-muted, #f1f5f9)', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.74rem' }}>
                               No Queries Logged
                             </span>
                           </div>
@@ -6480,18 +6480,18 @@ export function QuerySupportDesk({
                               >
                                 {latestQuery.priority}
                               </span>
-                              <span style={{ fontSize: '0.74rem', background: '#f1f5f9', color: '#334155', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                              <span style={{ fontSize: '0.74rem', background: 'var(--adm-bg-muted, #f1f5f9)', color: 'var(--adm-text-body, #334155)', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
                                 {latestQuery.category}
                               </span>
                               <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
                                 ⏱️ {latestQuery.createdAt}
                               </span>
                             </div>
-                            <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a', marginTop: 4 }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--adm-text-primary, #0f172a)', marginTop: 4 }}>
                               {latestQuery.subject}
                             </div>
                             {latestQuery.internalNotes && (
-                              <div style={{ fontSize: '0.74rem', color: '#64748b', fontStyle: 'italic', marginTop: 2 }}>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', fontStyle: 'italic', marginTop: 2 }}>
                                 &ldquo;{latestQuery.internalNotes.slice(0, 80)}{latestQuery.internalNotes.length > 80 ? '...' : ''}&rdquo;
                               </div>
                             )}
@@ -6592,8 +6592,8 @@ export function QuerySupportDesk({
                               className="desk-action-btn"
                               style={{
                                 textDecoration: 'none',
-                                background: '#f8fafc',
-                                color: '#0f172a',
+                                background: 'var(--adm-bg-subtle, #f8fafc)',
+                                color: 'var(--adm-text-primary, #0f172a)',
                                 fontWeight: 700,
                                 padding: '5px 8px',
                               }}
@@ -6634,10 +6634,10 @@ export function QuerySupportDesk({
                   <Headphones size={20} strokeWidth={2.2} />
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                     Log Support Ticket
                   </h3>
-                  <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                     Record inquiry and dispatch to customer account history
                   </div>
                 </div>
@@ -6773,15 +6773,15 @@ export function QuerySupportDesk({
         <div className="sales-modal-overlay" onClick={() => setSelectedCustDossier(null)}>
           <div className="sales-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 920, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}>
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: 14, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid var(--adm-border, #e2e8f0)', paddingBottom: 14, marginBottom: 16 }}>
               <div style={{ minWidth: 0, flex: '1 1 200px' }}>
-                <span className="sales-dept-badge" style={{ background: '#e0e7ff', color: '#4338ca', fontWeight: 800 }}>
+                <span className="sales-dept-badge" style={{ background: 'var(--adm-soft-indigo-bg, #e0e7ff)', color: 'var(--adm-soft-indigo-text, #4338ca)', fontWeight: 800 }}>
                   Customer Support Dossier
                 </span>
-                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   {selectedCustDossier.companyName || selectedCustDossier.name}
                 </h3>
-                <div style={{ fontSize: '0.80rem', color: '#64748b', marginTop: 2 }}>
+                <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                   👤 {selectedCustDossier.contactPerson || selectedCustDossier.contact} • 📞 +91 {selectedCustDossier.phone}
                 </div>
               </div>
@@ -6808,7 +6808,7 @@ export function QuerySupportDesk({
                   <tbody>
                     {getCustomerQueries(selectedCustDossier).length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--adm-text-muted, #64748b)' }}>
                           No queries logged yet for this customer.
                         </td>
                       </tr>
@@ -6819,11 +6819,11 @@ export function QuerySupportDesk({
                           <tr key={q.id}>
                             {/* 1. Subject & Notes */}
                             <td style={{ whiteSpace: 'normal', maxWidth: 280 }}>
-                              <div style={{ fontSize: '0.90rem', fontWeight: 800, color: '#0f172a' }}>
+                              <div style={{ fontSize: '0.90rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                                 {q.subject || 'General Inquiry'}
                               </div>
                               {q.internalNotes && (
-                                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 4, lineHeight: 1.35 }}>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)', marginTop: 4, lineHeight: 1.35 }}>
                                   {q.internalNotes}
                                 </div>
                               )}
@@ -6834,8 +6834,8 @@ export function QuerySupportDesk({
                               <span
                                 style={{
                                   fontSize: '0.74rem',
-                                  background: '#f1f5f9',
-                                  color: '#334155',
+                                  background: 'var(--adm-bg-muted, #f1f5f9)',
+                                  color: 'var(--adm-text-body, #334155)',
                                   padding: '2px 8px',
                                   borderRadius: 6,
                                   fontWeight: 700,
@@ -6863,7 +6863,7 @@ export function QuerySupportDesk({
 
                             {/* 4. Created At */}
                             <td>
-                              <span style={{ fontSize: '0.80rem', color: '#475569', fontWeight: 600 }}>
+                              <span style={{ fontSize: '0.80rem', color: 'var(--adm-text-body, #475569)', fontWeight: 600 }}>
                                 {q.createdAt || '—'}
                               </span>
                             </td>
@@ -6885,9 +6885,9 @@ export function QuerySupportDesk({
                                   type="button"
                                   className="desk-action-btn"
                                   style={{
-                                    background: isOpen ? '#ecfdf5' : '#eff6ff',
+                                    background: isOpen ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-soft-blue-bg, #eff6ff)',
                                     color: isOpen ? '#059669' : '#2563eb',
-                                    borderColor: isOpen ? '#a7f3d0' : '#bfdbfe',
+                                    borderColor: isOpen ? 'var(--adm-soft-emerald-border, #a7f3d0)' : 'var(--adm-soft-blue-border, #bfdbfe)',
                                     fontWeight: 700,
                                     fontSize: '0.74rem',
                                     padding: '4px 10px',
@@ -6913,9 +6913,9 @@ export function QuerySupportDesk({
                                   type="button"
                                   className="desk-action-btn"
                                   style={{
-                                    background: '#fff1f2',
+                                    background: 'var(--adm-soft-rose-bg, #fff1f2)',
                                     color: '#dc2626',
-                                    borderColor: '#fecdd3',
+                                    borderColor: 'var(--adm-soft-rose-border, #fecdd3)',
                                     fontWeight: 700,
                                     fontSize: '0.74rem',
                                     padding: '4px 8px',
@@ -6940,7 +6940,7 @@ export function QuerySupportDesk({
             </div>
 
             {/* Modal Footer Controls */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: '1px solid var(--adm-border, #e2e8f0)', flexWrap: 'wrap', gap: 8 }}>
               <button
                 type="button"
                 className="sales-btn-primary"
@@ -7067,9 +7067,9 @@ export function FollowupTasksDesk({ tasks, setTasks }) {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <Calendar size={34} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
-                    <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>No Follow-up Tasks Found</div>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--adm-text-primary, #0f172a)' }}>No Follow-up Tasks Found</div>
                     <div style={{ fontSize: '0.84rem', marginTop: 4 }}>
                       No scheduled follow-up tasks match the selected cadence filter.
                     </div>
@@ -7083,11 +7083,11 @@ export function FollowupTasksDesk({ tasks, setTasks }) {
                     <tr key={t.id}>
                       {/* 1. Task Type & Notes */}
                       <td style={{ whiteSpace: 'normal', maxWidth: 320 }}>
-                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                           {t.type || 'Client Follow-up'}
                         </div>
                         {t.notes && (
-                          <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 3, lineHeight: 1.35 }}>
+                          <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-body, #475569)', marginTop: 3, lineHeight: 1.35 }}>
                             {t.notes}
                           </div>
                         )}
@@ -7095,10 +7095,10 @@ export function FollowupTasksDesk({ tasks, setTasks }) {
 
                       {/* 2. Client & Contact */}
                       <td>
-                        <div style={{ fontWeight: 800, fontSize: '0.90rem', color: '#0f172a' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.90rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                           {t.company || 'Client Workspace'}
                         </div>
-                        <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                           {t.contact || 'Account Contact'}
                           {t.phone ? (
                             <>
@@ -7160,9 +7160,9 @@ export function FollowupTasksDesk({ tasks, setTasks }) {
                               gap: 4,
                               padding: '5px 10px',
                               fontSize: '0.78rem',
-                              background: '#ecfdf5',
-                              color: '#065f46',
-                              borderColor: '#a7f3d0',
+                              background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                              color: 'var(--adm-soft-emerald-text, #065f46)',
+                              borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)',
                             }}
                           >
                             <MessageSquare size={13} color="#059669" /> WhatsApp
@@ -7447,9 +7447,9 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '48px 24px', color: '#64748b' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <UserCheck size={36} color="#cbd5e1" style={{ marginBottom: 12 }} />
-                    <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1e293b' }}>No Approved Members Found</div>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--adm-text-secondary, #1e293b)' }}>No Approved Members Found</div>
                     <div style={{ fontSize: '0.84rem', marginTop: 4 }}>
                       Approved members require both Gate 1 Payment and Gate 2 Profile KYC completion.
                     </div>
@@ -7476,16 +7476,16 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                           <div className="appr-client-info">
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
                               {proper.username && (
-                                <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.80rem' }}>
+                                <span style={{ fontWeight: 800, color: '#4f46e5', background: 'var(--adm-soft-indigo-bg, #eef2ff)', padding: '2px 8px', borderRadius: 6, fontSize: '0.80rem' }}>
                                   @{proper.username}
                                 </span>
                               )}
-                              <span className="desk-pill" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px' }}>
+                              <span className="desk-pill" style={{ background: 'var(--adm-soft-emerald-bg, #ecfdf5)', color: 'var(--adm-soft-emerald-text, #065f46)', border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)', fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px' }}>
                                 ✓ Approved Member
                               </span>
                             </div>
                             <div className="appr-client-name-row">
-                              <span className="appr-client-name" style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a' }}>
+                              <span className="appr-client-name" style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                                 {proper.displayName}
                               </span>
                               {isLowBalance && (
@@ -7612,12 +7612,12 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                       </div>
                       {selProper.username && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <span style={{ fontWeight: 800, color: '#4f46e5', background: '#eef2ff', padding: '2px 8px', borderRadius: 6, fontSize: '0.80rem' }}>
+                          <span style={{ fontWeight: 800, color: '#4f46e5', background: 'var(--adm-soft-indigo-bg, #eef2ff)', padding: '2px 8px', borderRadius: 6, fontSize: '0.80rem' }}>
                             @{selProper.username}
                           </span>
                         </div>
                       )}
-                      <h3 className="desk-modal-title" style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+                      <h3 className="desk-modal-title" style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                         {selProper.displayName}
                       </h3>
                     </div>
@@ -7630,33 +7630,33 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 14, marginBottom: 22 }}>
-              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Authorized Contact</div>
-                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{resolveCustomerIdentity(selectedMember, customers).contactPerson}</div>
-                <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>+91 {selectedMember.phone}</div>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '14px 16px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 800 }}>Authorized Contact</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)', marginTop: 3 }}>{resolveCustomerIdentity(selectedMember, customers).contactPerson}</div>
+                <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>+91 {selectedMember.phone}</div>
               </div>
 
-              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Business Category</div>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '14px 16px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 800 }}>Business Category</div>
                 <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#4f46e5', marginTop: 3 }}>{selectedMember.category || 'Ad Mafia Lead Gen'}</div>
-                <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>{selectedMember.industry || 'Digital Lead Acquisition'}</div>
+                <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>{selectedMember.industry || 'Digital Lead Acquisition'}</div>
               </div>
 
-              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Live Wallet Reserves</div>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '14px 16px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 800 }}>Live Wallet Reserves</div>
                 <div style={{ fontWeight: 900, fontSize: '1.25rem', color: '#059669', marginTop: 3 }}>{formatINR(selectedMember.balance || selectedMember.walletBalance || 0)}</div>
-                <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 2 }}>Burn: ₹300/day • {selectedMember.runwayDays || Math.floor((selectedMember.balance || 0) / 300)} Days Left</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>Burn: ₹300/day • {selectedMember.runwayDays || Math.floor((selectedMember.balance || 0) / 300)} Days Left</div>
               </div>
 
-              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Target Geography</div>
-                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginTop: 3 }}>{selectedMember.city || 'India'}</div>
-                <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>{selectedMember.state ? `${selectedMember.state}, ` : ''}India</div>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '14px 16px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 800 }}>Target Geography</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)', marginTop: 3 }}>{selectedMember.city || 'India'}</div>
+                <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>{selectedMember.state ? `${selectedMember.state}, ` : ''}India</div>
               </div>
 
-              <div style={{ gridColumn: '1 / -1', background: '#f8fafc', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '0.70rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 800 }}>Registered Work Email &amp; Web Domain</div>
-                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a', marginTop: 3, wordBreak: 'break-all' }}>✉️ {selectedMember.email || 'Registered via Web Portal'}</div>
+              <div style={{ gridColumn: '1 / -1', background: 'var(--adm-bg-subtle, #f8fafc)', padding: '14px 16px', borderRadius: 12, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 800 }}>Registered Work Email &amp; Web Domain</div>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--adm-text-primary, #0f172a)', marginTop: 3, wordBreak: 'break-all' }}>✉️ {selectedMember.email || 'Registered via Web Portal'}</div>
                 {selectedMember.website && (
                   <div style={{ fontSize: '0.82rem', color: '#4f46e5', marginTop: 4, wordBreak: 'break-all' }}>
                     🌐 <a href={selectedMember.website.startsWith('http') ? selectedMember.website : `https://${selectedMember.website}`} target="_blank" rel="noreferrer" style={{ color: '#4f46e5', textDecoration: 'none', fontWeight: 600 }}>{selectedMember.website} ↗</a>
@@ -7665,8 +7665,8 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 14, borderTop: '1px solid #e2e8f0' }}>
-              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 14, borderTop: '1px solid var(--adm-border, #e2e8f0)' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                 Approved Member since: {formatIndianDateTime(selectedMember.completedAt || selectedMember.registeredAt)}
               </span>
               <button
@@ -8293,9 +8293,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                 padding: '4px 12px',
                 fontSize: '0.76rem',
                 fontWeight: 700,
-                color: '#4338ca',
-                borderColor: '#c7d2fe',
-                background: '#eef2ff',
+                color: 'var(--adm-soft-indigo-text, #4338ca)',
+                borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)',
+                background: 'var(--adm-soft-indigo-bg, #eef2ff)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
@@ -8313,7 +8313,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
             </button>
             {filter === 'deleted' ? (
               <>
-                <span className="desk-pill" style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 800 }}>
+                <span className="desk-pill" style={{ background: 'var(--adm-soft-rose-bg, #fee2e2)', color: 'var(--adm-soft-rose-text, #b91c1c)', fontWeight: 800 }}>
                   🗑️ {deletedHistoryList.length} Archived in Deleted History
                 </span>
                 <span className="desk-pill pill-indigo" style={{ fontWeight: 800 }}>
@@ -8328,8 +8328,8 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                       fontSize: '0.76rem',
                       fontWeight: 700,
                       color: '#dc2626',
-                      borderColor: '#fecdd3',
-                      background: '#fff1f2',
+                      borderColor: 'var(--adm-soft-rose-border, #fecdd3)',
+                      background: 'var(--adm-soft-rose-bg, #fff1f2)',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 5,
@@ -8360,8 +8360,8 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                       fontSize: '0.76rem',
                       fontWeight: 700,
                       color: '#dc2626',
-                      borderColor: '#fecdd3',
-                      background: '#fff1f2',
+                      borderColor: 'var(--adm-soft-rose-border, #fecdd3)',
+                      background: 'var(--adm-soft-rose-bg, #fff1f2)',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 5,
@@ -8445,13 +8445,13 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
             style={
               filter === 'deleted'
                 ? {
-                  background: '#fee2e2',
-                  color: '#b91c1c',
-                  borderColor: '#fca5a5',
+                  background: 'var(--adm-soft-rose-bg, #fee2e2)',
+                  color: 'var(--adm-soft-rose-text, #b91c1c)',
+                  borderColor: 'var(--adm-soft-rose-border, #fca5a5)',
                   fontWeight: 800,
                 }
                 : {
-                  color: '#64748b',
+                  color: 'var(--adm-text-muted, #64748b)',
                   fontWeight: 700,
                 }
             }
@@ -8508,7 +8508,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: 'var(--adm-text-muted, #64748b)' }}>
                   <RefreshCw size={24} className="spinner-rotate" style={{ margin: '0 auto 8px' }} />
                   <div>Loading failed transactions log...</div>
                 </td>
@@ -8516,9 +8516,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
             ) : filter === 'deleted' ? (
               filteredHistory.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
-                    <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                    <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                       Deleted History is Clean
                     </h4>
                     <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>
@@ -8530,15 +8530,15 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                 filteredHistory.map((item) => {
                   const cleanPhone = String(item.phone || '').replace(/\D/g, '').slice(-10);
                   return (
-                    <tr key={item.id || item.ref} style={{ background: '#fff9f9' }}>
+                    <tr key={item.id || item.ref} style={{ background: 'var(--adm-row-failed-bg, #fff9f9)' }}>
                       {/* 1. Customer Business & Contact */}
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#0f172a' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.96rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                             {item.companyName || item.customerName || 'Customer'}
                           </span>
                           {item.category && (
-                            <span style={{ background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
+                            <span style={{ background: 'var(--adm-bg-muted, #f1f5f9)', color: 'var(--adm-text-body, #475569)', padding: '1px 6px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
                               {item.category}
                             </span>
                           )}
@@ -8547,11 +8547,11 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                           <span style={{ fontWeight: 800, color: '#059669', fontSize: '0.92rem', fontFamily: 'monospace' }}>
                             📞 +91 {cleanPhone || 'No Phone'}
                           </span>
-                          <span style={{ fontSize: '0.80rem', fontWeight: 700, color: '#4338ca' }}>
+                          <span style={{ fontSize: '0.80rem', fontWeight: 700, color: 'var(--adm-soft-indigo-text, #4338ca)' }}>
                             ({item.contactPerson || 'Customer'})
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                           {[item.city, item.state].filter(Boolean).join(', ') || '—'}
                         </div>
                       </td>
@@ -8564,7 +8564,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                         <div style={{ marginTop: 3 }}>
                           <span
                             className="desk-pill"
-                            style={{ fontSize: '0.66rem', padding: '2px 7px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c' }}
+                            style={{ fontSize: '0.66rem', padding: '2px 7px', fontWeight: 800, background: 'var(--adm-soft-rose-bg, #fee2e2)', color: 'var(--adm-soft-rose-text, #b91c1c)' }}
                           >
                             🗑️ Archived in Trash
                           </span>
@@ -8573,21 +8573,21 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
 
                       {/* 3. Declined Date & Time */}
                       <td>
-                        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#1e293b' }}>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--adm-text-secondary, #1e293b)' }}>
                           {item.originalDate || item.date || 'Previous Session'}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                           Original Ref: <code>{item.ref || item.id}</code>
                         </div>
                       </td>
 
                       {/* 4. Deleted Date & Info */}
                       <td>
-                        <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#b91c1c' }}>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--adm-soft-rose-text, #b91c1c)' }}>
                           🗑️ {item.deletedAt || 'Recently Deleted'}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
-                          By: <span style={{ fontWeight: 700, color: '#334155' }}>{item.deletedBy || 'Sales Admin'}</span>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
+                          By: <span style={{ fontWeight: 700, color: 'var(--adm-text-body, #334155)' }}>{item.deletedBy || 'Sales Admin'}</span>
                         </div>
                       </td>
 
@@ -8595,9 +8595,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                       <td style={{ maxWidth: 280 }}>
                         <div
                           style={{
-                            background: '#fff1f2',
-                            color: '#be123c',
-                            border: '1px solid #fecdd3',
+                            background: 'var(--adm-soft-rose-bg, #fff1f2)',
+                            color: 'var(--adm-soft-rose-text, #be123c)',
+                            border: '1px solid var(--adm-soft-rose-border, #fecdd3)',
                             padding: '6px 10px',
                             borderRadius: 8,
                             fontSize: '0.78rem',
@@ -8607,7 +8607,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                         >
                           ⚠️ {item.failureReason || item.desc || 'Bank transaction declined'}
                         </div>
-                        <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 4 }}>
+                        <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4 }}>
                           Gateway: {item.method || 'Razorpay Gateway'}
                         </div>
                       </td>
@@ -8620,9 +8620,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                             type="button"
                             className="desk-action-btn"
                             style={{
-                              background: '#eff6ff',
+                              background: 'var(--adm-soft-blue-bg, #eff6ff)',
                               color: '#2563eb',
-                              borderColor: '#bfdbfe',
+                              borderColor: 'var(--adm-soft-blue-border, #bfdbfe)',
                               fontWeight: 800,
                               padding: '5px 10px',
                               fontSize: '0.78rem',
@@ -8666,9 +8666,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                             type="button"
                             className="desk-action-btn"
                             style={{
-                              background: '#fff1f2',
+                              background: 'var(--adm-soft-rose-bg, #fff1f2)',
                               color: '#dc2626',
-                              borderColor: '#fecdd3',
+                              borderColor: 'var(--adm-soft-rose-border, #fecdd3)',
                               fontWeight: 700,
                               padding: '5px 8px',
                             }}
@@ -8685,9 +8685,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
               )
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                   <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
-                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                  <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                     Zero Failed Transactions
                   </h4>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>
@@ -8714,15 +8714,15 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                 const failReason = tx.failureReason || tx.desc || 'Payment declined by bank or user cancelled';
 
                 return (
-                  <tr key={tx.id || tx.ref} style={{ background: '#fffcfc' }}>
+                  <tr key={tx.id || tx.ref} style={{ background: 'var(--adm-row-failed-bg, #fffcfc)' }}>
                     {/* 1. Customer Business & Phone Number */}
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#0f172a' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.96rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                           {companyTitle}
                         </span>
                         {(tx.category || matchedCust?.category) && (
-                          <span style={{ background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
+                          <span style={{ background: 'var(--adm-bg-muted, #f1f5f9)', color: 'var(--adm-text-body, #475569)', padding: '1px 6px', borderRadius: 6, fontSize: '0.70rem', fontWeight: 700 }}>
                             {tx.category || matchedCust?.category}
                           </span>
                         )}
@@ -8731,11 +8731,11 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                         <span style={{ fontWeight: 800, color: '#059669', fontSize: '0.92rem', fontFamily: 'monospace' }}>
                           📞 +91 {cleanPhone || 'No Phone'}
                         </span>
-                        <span style={{ fontSize: '0.80rem', fontWeight: 700, color: '#4338ca' }}>
+                        <span style={{ fontSize: '0.80rem', fontWeight: 700, color: 'var(--adm-soft-indigo-text, #4338ca)' }}>
                           ({contactTitle})
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         {(tx.email || matchedCust?.email) && <span>{tx.email || matchedCust?.email} • </span>}
                         {[tx.city || matchedCust?.city, tx.state || matchedCust?.state].filter(Boolean).join(', ') || '—'}
                       </div>
@@ -8758,10 +8758,10 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
 
                     {/* 3. Date & Time */}
                     <td>
-                      <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#1e293b' }}>
+                      <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--adm-text-secondary, #1e293b)' }}>
                         {tx.date}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         Transaction Ref: <code>{tx.ref || tx.id}</code>
                       </div>
                     </td>
@@ -8771,7 +8771,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                       <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#4f46e5' }}>
                         {tx.method || 'Razorpay Secure (Failed)'}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         Ref UTR: <code>{tx.ref}</code>
                       </div>
                     </td>
@@ -8780,9 +8780,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                     <td style={{ maxWidth: 280 }}>
                       <div
                         style={{
-                          background: '#fff1f2',
-                          color: '#be123c',
-                          border: '1px solid #fecdd3',
+                          background: 'var(--adm-soft-rose-bg, #fff1f2)',
+                          color: 'var(--adm-soft-rose-text, #be123c)',
+                          border: '1px solid var(--adm-soft-rose-border, #fecdd3)',
                           padding: '6px 10px',
                           borderRadius: 8,
                           fontSize: '0.78rem',
@@ -8827,7 +8827,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                           <a
                             href={`tel:+91${cleanPhone}`}
                             className="desk-action-btn"
-                            style={{ textDecoration: 'none', background: '#f8fafc', color: '#0f172a', fontWeight: 700, padding: '5px 8px' }}
+                            style={{ textDecoration: 'none', background: 'var(--adm-bg-subtle, #f8fafc)', color: 'var(--adm-text-primary, #0f172a)', fontWeight: 700, padding: '5px 8px' }}
                             title={`Call +91 ${cleanPhone}`}
                           >
                             <Phone size={13} color="#059669" />
@@ -8839,9 +8839,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                           type="button"
                           className="desk-action-btn"
                           style={{
-                            background: '#ecfdf5',
-                            color: '#047857',
-                            borderColor: '#a7f3d0',
+                            background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                            color: 'var(--adm-soft-emerald-text, #047857)',
+                            borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)',
                             fontWeight: 800,
                             padding: '5px 10px',
                             fontSize: '0.78rem',
@@ -8870,7 +8870,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                         <button
                           type="button"
                           className="desk-action-btn"
-                          style={{ background: '#f8fafc', color: '#334155', fontWeight: 700, padding: '5px 8px' }}
+                          style={{ background: 'var(--adm-bg-subtle, #f8fafc)', color: 'var(--adm-text-body, #334155)', fontWeight: 700, padding: '5px 8px' }}
                           onClick={() => setSelectedFailTx(tx)}
                           title="View Failed Transaction Dossier"
                         >
@@ -8882,9 +8882,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                           type="button"
                           className="desk-action-btn"
                           style={{
-                            background: '#fff1f2',
+                            background: 'var(--adm-soft-rose-bg, #fff1f2)',
                             color: '#dc2626',
-                            borderColor: '#fecdd3',
+                            borderColor: 'var(--adm-soft-rose-border, #fecdd3)',
                             fontWeight: 700,
                             padding: '5px 8px',
                           }}
@@ -8908,17 +8908,17 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
       {selectedFailTx && (
         <div className="sales-modal-overlay" onClick={() => setSelectedFailTx(null)}>
           <div className="sales-modal-card" style={{ maxWidth: 640, width: '95%', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0', paddingBottom: 14, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', borderBottom: '1px solid var(--adm-border, #e2e8f0)', paddingBottom: 14, marginBottom: 16 }}>
               <div style={{ minWidth: 0, flex: '1 1 200px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                  <span className="sales-dept-badge" style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 800 }}>
+                  <span className="sales-dept-badge" style={{ background: 'var(--adm-soft-rose-bg, #fee2e2)', color: 'var(--adm-soft-rose-text, #b91c1c)', fontWeight: 800 }}>
                     ✕ Failed Payment Dossier
                   </span>
                   <span
                     style={{
-                      background: '#fff1f2',
-                      color: '#be123c',
-                      border: '1px solid #fecdd3',
+                      background: 'var(--adm-soft-rose-bg, #fff1f2)',
+                      color: 'var(--adm-soft-rose-text, #be123c)',
+                      border: '1px solid var(--adm-soft-rose-border, #fecdd3)',
                       padding: '2px 8px',
                       borderRadius: 9999,
                       fontSize: '0.72rem',
@@ -8929,10 +8929,10 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                     Decline Ref: {selectedFailTx.ref || selectedFailTx.id}
                   </span>
                 </div>
-                <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   {selectedFailTx.companyName || selectedFailTx.customerName || 'Corporate Workspace'}
                 </h3>
-                <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 3 }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3 }}>
                   Registered Phone: <strong style={{ color: '#059669' }}>+91 {selectedFailTx.phone}</strong> • Contact: {selectedFailTx.contactPerson}
                 </div>
               </div>
@@ -8942,23 +8942,23 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
             </div>
 
             {/* Error & Financial Box */}
-            <div style={{ background: '#fff1f2', border: '1.5px solid #fecdd3', padding: '16px', borderRadius: 12, marginBottom: 16 }}>
-              <div style={{ fontSize: '0.72rem', color: '#9f1239', fontWeight: 800, textTransform: 'uppercase' }}>
+            <div style={{ background: 'var(--adm-soft-rose-bg, #fff1f2)', border: '1.5px solid var(--adm-soft-rose-border, #fecdd3)', padding: '16px', borderRadius: 12, marginBottom: 16 }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--adm-soft-rose-text, #9f1239)', fontWeight: 800, textTransform: 'uppercase' }}>
                 Bank Gateway Decline Reason
               </div>
-              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#be123c', marginTop: 3 }}>
+              <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--adm-soft-rose-text, #be123c)', marginTop: 3 }}>
                 ⚠️ {selectedFailTx.failureReason || selectedFailTx.desc || 'Transaction declined by bank'}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12, paddingTop: 10, borderTop: '1px dashed #fecdd3' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--adm-soft-rose-border, #fecdd3)' }}>
                 <div>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Attempted Amount:</span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Attempted Amount:</span>
                   <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#dc2626' }}>
                     {formatINR(selectedFailTx.amount)}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Failure Timestamp:</span>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Failure Timestamp:</span>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                     {selectedFailTx.date}
                   </div>
                 </div>
@@ -8966,29 +8966,29 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
             </div>
 
             {/* Customer Details Box */}
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px 16px', borderRadius: 12, marginBottom: 16 }}>
+            <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border, #e2e8f0)', padding: '14px 16px', borderRadius: 12, marginBottom: 16 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 10 }}>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Company / Client</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{selectedFailTx.companyName}</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Company / Client</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>{selectedFailTx.companyName}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Representative</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>{selectedFailTx.contactPerson}</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Representative</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>{selectedFailTx.contactPerson}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Direct Phone</div>
                   <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#059669' }}>+91 {selectedFailTx.phone}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Email</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>{selectedFailTx.email || 'Not Provided'}</div>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>Email</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', wordBreak: 'break-all' }}>{selectedFailTx.email || 'Not Provided'}</div>
                 </div>
               </div>
             </div>
 
             {/* Modal Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid var(--adm-border, #e2e8f0)', flexWrap: 'wrap' }}>
               <a
                 href={`https://wa.me/91${String(selectedFailTx.phone || '').replace(/\D/g, '').slice(-10)}?text=Hello%20${encodeURIComponent(selectedFailTx.contactPerson || 'Partner')},%20we%20noticed%20your%20recent%20wallet%20recharge%20attempt%20of%20${encodeURIComponent(formatINR(selectedFailTx.amount))}%20on%20Ad%20Mafia%20was%20declined%20by%20the%20bank.%20Would%20you%20like%20our%20team%20to%20assist%20you%20with%20activating%20your%20campaign?`}
                 target="_blank"
@@ -9021,8 +9021,8 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                 className="sales-btn-secondary"
                 style={{
                   color: '#dc2626',
-                  borderColor: '#fecdd3',
-                  background: '#fff1f2',
+                  borderColor: 'var(--adm-soft-rose-border, #fecdd3)',
+                  background: 'var(--adm-soft-rose-bg, #fff1f2)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 5,
@@ -9055,11 +9055,11 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
               </button>
             </div>
 
-            <div className="desk-modal-box" style={{ marginBottom: 14, background: '#f8fafc' }}>
-              <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>
+            <div className="desk-modal-box" style={{ marginBottom: 14, background: 'var(--adm-bg-subtle, #f8fafc)' }}>
+              <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                 {topupCust.companyName || topupCust.name || 'Corporate Workspace'}
               </div>
-              <div style={{ fontSize: '0.80rem', color: '#475569', marginTop: 2 }}>
+              <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>
                 Phone: <strong style={{ color: '#059669' }}>+91 {topupCust.phone}</strong> • Contact: {topupCust.contactPerson || 'Account Admin'}
               </div>
             </div>
@@ -9076,7 +9076,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                   width: '100%',
                   padding: '9px 12px',
                   borderRadius: 8,
-                  border: '1.5px solid #cbd5e1',
+                  border: '1.5px solid var(--adm-border-strong, #cbd5e1)',
                   fontSize: '0.94rem',
                   fontWeight: 700,
                   marginTop: 4,

@@ -455,9 +455,9 @@ export default function MasterTransactionLogsDesk({
             <span
               className="desk-badge-count-alert"
               style={{
-                background: '#ecfdf5',
+                background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
                 color: '#059669',
-                borderColor: '#a7f3d0',
+                borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
@@ -470,9 +470,9 @@ export default function MasterTransactionLogsDesk({
               <span
                 className="desk-badge-count-alert"
                 style={{
-                  background: '#eef2ff',
+                  background: 'var(--adm-soft-indigo-bg, #eef2ff)',
                   color: '#4f46e5',
-                  borderColor: '#c7d2fe',
+                  borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 5,
@@ -486,9 +486,9 @@ export default function MasterTransactionLogsDesk({
               <span
                 className="desk-badge-count-alert"
                 style={{
-                  background: '#fef2f2',
+                  background: 'var(--adm-soft-rose-bg, #fef2f2)',
                   color: '#dc2626',
-                  borderColor: '#fca5a5',
+                  borderColor: 'var(--adm-soft-rose-border, #fca5a5)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 5,
@@ -522,7 +522,7 @@ export default function MasterTransactionLogsDesk({
             className="desk-action-btn"
             onClick={handleExportCSV}
             title="Download CSV audit ledger of filtered transactions"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, background: '#f8fafc' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, background: 'var(--adm-bg-subtle, #f8fafc)' }}
           >
             <Download size={14} />
             <span>Export CSV</span>
@@ -722,9 +722,9 @@ export default function MasterTransactionLogsDesk({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan="8" style={{ textAlign: 'center', padding: '48px 24px', color: '#64748b' }}>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--adm-text-muted, #64748b)' }}>
                   <Receipt size={40} color="#94a3b8" style={{ margin: '0 auto 12px' }} />
-                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#334155' }}>
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--adm-text-body, #334155)' }}>
                     No Transaction Logs Found
                   </div>
                   <div style={{ fontSize: '0.84rem', marginTop: 4 }}>
@@ -747,7 +747,7 @@ export default function MasterTransactionLogsDesk({
                   <tr
                     key={tx.id || tx.ref}
                     style={{
-                      background: isFailed ? '#fffcfc' : isPending ? '#fffdf7' : isDebit ? '#fafbff' : '#ffffff',
+                      background: isFailed ? 'var(--adm-row-failed-bg, #fffcfc)' : isPending ? 'var(--adm-row-pending-bg, #fffdf7)' : isDebit ? 'var(--adm-row-debit-bg, #fafbff)' : 'var(--adm-bg-card, #ffffff)',
                     }}
                   >
                     {/* 1. Receipt / Ref Number */}
@@ -758,9 +758,9 @@ export default function MasterTransactionLogsDesk({
                             style={{
                               fontWeight: 800,
                               fontFamily: 'monospace',
-                              color: isDebit ? '#4338ca' : isVerified ? '#065f46' : isFailed ? '#991b1b' : '#92400e',
+                              color: isDebit ? 'var(--adm-soft-indigo-text, #4338ca)' : isVerified ? 'var(--adm-soft-emerald-text, #065f46)' : isFailed ? 'var(--adm-soft-rose-text, #991b1b)' : 'var(--adm-soft-amber-text, #92400e)',
                               fontSize: '0.86rem',
-                              background: isDebit ? '#eef2ff' : isVerified ? '#ecfdf5' : isFailed ? '#fee2e2' : '#fef3c7',
+                              background: isDebit ? 'var(--adm-soft-indigo-bg, #eef2ff)' : isVerified ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : isFailed ? 'var(--adm-soft-rose-bg, #fee2e2)' : 'var(--adm-soft-amber-bg, #fef3c7)',
                               padding: '2px 6px',
                               borderRadius: 4,
                             }}
@@ -774,7 +774,7 @@ export default function MasterTransactionLogsDesk({
                             <span
                               style={{
                                 fontSize: '0.72rem',
-                                color: '#64748b',
+                                color: 'var(--adm-text-muted, #64748b)',
                                 fontFamily: 'monospace',
                                 wordBreak: 'break-all',
                               }}
@@ -806,15 +806,15 @@ export default function MasterTransactionLogsDesk({
                         <div
                           className="appr-client-avatar"
                           style={{
-                            background: isDebit ? '#eef2ff' : isVerified ? '#ecfdf5' : isFailed ? '#fee2e2' : '#f1f5f9',
-                            color: isDebit ? '#4338ca' : isVerified ? '#047857' : isFailed ? '#b91c1c' : '#475569',
+                            background: isDebit ? 'var(--adm-soft-indigo-bg, #eef2ff)' : isVerified ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : isFailed ? 'var(--adm-soft-rose-bg, #fee2e2)' : 'var(--adm-bg-muted, #f1f5f9)',
+                            color: isDebit ? 'var(--adm-soft-indigo-text, #4338ca)' : isVerified ? 'var(--adm-soft-emerald-text, #047857)' : isFailed ? 'var(--adm-soft-rose-text, #b91c1c)' : 'var(--adm-text-body, #475569)',
                           }}
                         >
                           {identity.initials}
                         </div>
                         <div className="appr-client-info">
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.94rem' }}>
+                            <span style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.94rem' }}>
                               {identity.displayName}
                             </span>
                             {identity.username && (
@@ -822,7 +822,7 @@ export default function MasterTransactionLogsDesk({
                                 style={{
                                   fontWeight: 800,
                                   color: '#4f46e5',
-                                  background: '#eef2ff',
+                                  background: 'var(--adm-soft-indigo-bg, #eef2ff)',
                                   padding: '1px 6px',
                                   borderRadius: 4,
                                   fontSize: '0.74rem',
@@ -833,9 +833,9 @@ export default function MasterTransactionLogsDesk({
                             )}
                           </div>
 
-                          <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                             👤 <b>{identity.contactPerson}</b> •{' '}
-                            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                               +91 {cleanPhone}
                             </span>
                           </div>
@@ -871,13 +871,13 @@ export default function MasterTransactionLogsDesk({
                           style={{
                             fontWeight: 900,
                             fontSize: '1.02rem',
-                            color: isDebit ? '#4338ca' : isVerified ? '#047857' : isFailed ? '#dc2626' : '#0f172a',
+                            color: isDebit ? 'var(--adm-soft-indigo-text, #4338ca)' : isVerified ? 'var(--adm-soft-emerald-text, #047857)' : isFailed ? '#dc2626' : 'var(--adm-text-primary, #0f172a)',
                           }}
                         >
                           {isDebit ? `- ${formatINR(tx.amount)}` : isVerified ? `+ ${formatINR(tx.amount)}` : formatINR(tx.amount)}
                         </span>
                         {tx.balanceAfter != null && (
-                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 1 }}>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 1 }}>
                             Bal After: {formatINR(tx.balanceAfter)}
                           </div>
                         )}
@@ -891,9 +891,9 @@ export default function MasterTransactionLogsDesk({
                           <span
                             className="desk-pill"
                             style={{
-                              background: '#eef2ff',
-                              color: '#4338ca',
-                              border: '1px solid #c7d2fe',
+                              background: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                              color: 'var(--adm-soft-indigo-text, #4338ca)',
+                              border: '1px solid var(--adm-soft-indigo-border, #c7d2fe)',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 5,
@@ -954,8 +954,8 @@ export default function MasterTransactionLogsDesk({
                           <span
                             className="desk-pill"
                             style={{
-                              background: '#f3e8ff',
-                              color: '#6b21a8',
+                              background: 'var(--adm-soft-purple-bg, #f3e8ff)',
+                              color: 'var(--adm-soft-purple-text, #6b21a8)',
                               border: '1px solid #d8b4fe',
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -975,20 +975,20 @@ export default function MasterTransactionLogsDesk({
                     {/* 5. Purpose & Payment Method */}
                     <td>
                       <div>
-                        <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#0f172a' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.84rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                           {tx.typeLabel || (isDebit ? 'Daily Ad Spend Auto-Debit' : 'Marketing Wallet Top-Up')}
                         </div>
                         <div
                           style={{
                             fontSize: '0.74rem',
-                            color: '#475569',
+                            color: 'var(--adm-text-body, #475569)',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 4,
                             marginTop: 2,
                           }}
                         >
-                          <CreditCard size={12} color="#64748b" />
+                          <CreditCard size={12} color="var(--adm-text-muted, #64748b)" />
                           <span>{tx.paymentMode || (isDebit ? 'Automated Daily Wallet Burn' : 'Razorpay Gateway')}</span>
                         </div>
                       </div>
@@ -996,7 +996,7 @@ export default function MasterTransactionLogsDesk({
 
                     {/* 6. Date & Time (IST) */}
                     <td>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text-secondary, #1e293b)' }}>
                         {formatIndianDateTime(tx.date, tx.createdAt || tx.createdAtRaw)}
                       </div>
                     </td>
@@ -1006,7 +1006,7 @@ export default function MasterTransactionLogsDesk({
                       <div
                         style={{
                           fontSize: '0.76rem',
-                          color: isFailed ? '#991b1b' : '#64748b',
+                          color: isFailed ? 'var(--adm-soft-rose-text, #991b1b)' : 'var(--adm-text-muted, #64748b)',
                           maxWidth: 220,
                           lineHeight: 1.35,
                         }}
@@ -1083,16 +1083,16 @@ export default function MasterTransactionLogsDesk({
             <div
               className="sales-modal-card"
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: 640, background: '#ffffff', border: '1px solid #cbd5e1', padding: 26 }}
+              style={{ maxWidth: 640, background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border-strong, #cbd5e1)', padding: 26 }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: 16, marginBottom: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--adm-border, #e2e8f0)', paddingBottom: 16, marginBottom: 18 }}>
                 <div>
                   <span
                     className="desk-pill"
                     style={{
-                      background: isDebit ? '#eef2ff' : isVerified ? '#ecfdf5' : isFailed ? '#fee2e2' : '#fef3c7',
-                      color: isDebit ? '#4338ca' : isVerified ? '#047857' : isFailed ? '#991b1b' : '#92400e',
-                      border: `1px solid ${isDebit ? '#c7d2fe' : isVerified ? '#a7f3d0' : isFailed ? '#fca5a5' : '#fde68a'}`,
+                      background: isDebit ? 'var(--adm-soft-indigo-bg, #eef2ff)' : isVerified ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : isFailed ? 'var(--adm-soft-rose-bg, #fee2e2)' : 'var(--adm-soft-amber-bg, #fef3c7)',
+                      color: isDebit ? 'var(--adm-soft-indigo-text, #4338ca)' : isVerified ? 'var(--adm-soft-emerald-text, #047857)' : isFailed ? 'var(--adm-soft-rose-text, #991b1b)' : 'var(--adm-soft-amber-text, #92400e)',
+                      border: `1px solid ${isDebit ? 'var(--adm-soft-indigo-border, #c7d2fe)' : isVerified ? 'var(--adm-soft-emerald-border, #a7f3d0)' : isFailed ? 'var(--adm-soft-rose-border, #fca5a5)' : 'var(--adm-soft-amber-border, #fde68a)'}`,
                       fontSize: '0.72rem',
                       fontWeight: 800,
                       marginBottom: 6,
@@ -1100,10 +1100,10 @@ export default function MasterTransactionLogsDesk({
                   >
                     {isDebit ? '⚡ DAILY AD SPEND AUTO-DEBIT' : isVerified ? '✓ 100% VERIFIED & SETTLED' : isFailed ? '✗ FAILED TRANSACTION' : '⏳ PENDING CONFIRMATION'}
                   </span>
-                  <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#0f172a' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                     {identity.displayName}
                   </h3>
-                  <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 2 }}>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                     Workspace: <code>{selectedTx.customerId || `cust_${cleanPhone}`}</code> • @{identity.username}
                   </div>
                 </div>
@@ -1115,8 +1115,8 @@ export default function MasterTransactionLogsDesk({
               {/* Amount Highlight Banner */}
               <div
                 style={{
-                  background: isDebit ? '#f5f3ff' : isVerified ? '#f0fdf4' : isFailed ? '#fff5f5' : '#fffbeb',
-                  border: `1px solid ${isDebit ? '#ddd6fe' : isVerified ? '#bbf7d0' : isFailed ? '#fecaca' : '#fde68a'}`,
+                  background: isDebit ? 'var(--adm-soft-purple-bg, #f5f3ff)' : isVerified ? 'var(--adm-soft-emerald-bg, #f0fdf4)' : isFailed ? 'var(--adm-soft-rose-bg, #fff5f5)' : 'var(--adm-soft-amber-bg, #fffbeb)',
+                  border: `1px solid ${isDebit ? 'var(--adm-soft-purple-border, #ddd6fe)' : isVerified ? 'var(--adm-soft-emerald-border, #bbf7d0)' : isFailed ? 'var(--adm-soft-rose-border, #fecaca)' : 'var(--adm-soft-amber-border, #fde68a)'}`,
                   borderRadius: 12,
                   padding: '16px 20px',
                   display: 'flex',
@@ -1128,19 +1128,19 @@ export default function MasterTransactionLogsDesk({
                 }}
               >
                 <div>
-                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: '#64748b' }}>
+                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)' }}>
                     Transaction Amount
                   </div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: isDebit ? '#4338ca' : isVerified ? '#047857' : isFailed ? '#dc2626' : '#0f172a' }}>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: isDebit ? 'var(--adm-soft-indigo-text, #4338ca)' : isVerified ? 'var(--adm-soft-emerald-text, #047857)' : isFailed ? '#dc2626' : 'var(--adm-text-primary, #0f172a)' }}>
                     {isDebit ? `- ${formatINR(selectedTx.amount)}` : isVerified ? `+ ${formatINR(selectedTx.amount)}` : formatINR(selectedTx.amount)}
                   </div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: '#64748b' }}>
+                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)' }}>
                     Payment Mode
                   </div>
-                  <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
+                  <div style={{ fontSize: '0.94rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                     {selectedTx.paymentMode || (isDebit ? 'Automated Daily Wallet Burn' : 'Razorpay Gateway')}
                   </div>
                 </div>
@@ -1148,29 +1148,29 @@ export default function MasterTransactionLogsDesk({
 
               {/* Detailed Breakdown Grid */}
               <div className="tx-modal-grid">
-                <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
+                <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 800, textTransform: 'uppercase' }}>
                     Receipt / Reference Number
                   </div>
-                  <div style={{ fontWeight: 800, fontSize: '0.90rem', color: '#0f172a', fontFamily: 'monospace', marginTop: 2 }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.90rem', color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'monospace', marginTop: 2 }}>
                     {isDebit ? (selectedTx.ref && selectedTx.ref.startsWith('SYS-') ? selectedTx.ref : (selectedTx.receiptNo || 'DEB-AUTO')) : (selectedTx.receiptNo || selectedTx.receiptNumber || 'RCP-2026-1001')}
                   </div>
                 </div>
 
-                <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
+                <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 800, textTransform: 'uppercase' }}>
                     Reference / UTR / Order ID
                   </div>
-                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0f172a', fontFamily: 'monospace', marginTop: 2, wordBreak: 'break-all' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'monospace', marginTop: 2, wordBreak: 'break-all' }}>
                     {selectedTx.ref || selectedTx.id}
                   </div>
                 </div>
 
-                <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
+                <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 800, textTransform: 'uppercase' }}>
                     Authorized Contact
                   </div>
-                  <div style={{ fontWeight: 800, fontSize: '0.90rem', color: '#0f172a', marginTop: 2 }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.90rem', color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                     {identity.contactPerson}
                   </div>
                   <div style={{ fontSize: '0.80rem', color: '#059669', fontWeight: 700 }}>
@@ -1178,28 +1178,28 @@ export default function MasterTransactionLogsDesk({
                   </div>
                 </div>
 
-                <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
+                <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                  <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 800, textTransform: 'uppercase' }}>
                     Timestamp (IST)
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#0f172a', marginTop: 2 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                     {formatIndianDateTime(selectedTx.date, selectedTx.createdAt || selectedTx.createdAtRaw)}
                   </div>
                 </div>
               </div>
 
               {/* Notes / Reason Box */}
-              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 10, border: '1px solid #e2e8f0', marginBottom: 18 }}>
-                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: '#64748b', marginBottom: 4 }}>
+              <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: 14, borderRadius: 10, border: '1px solid var(--adm-border, #e2e8f0)', marginBottom: 18 }}>
+                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', marginBottom: 4 }}>
                   Audit Trail &amp; Transaction Notes
                 </div>
-                <div style={{ fontSize: '0.88rem', color: isFailed ? '#991b1b' : '#1e293b', fontWeight: 600 }}>
+                <div style={{ fontSize: '0.88rem', color: isFailed ? 'var(--adm-soft-rose-text, #991b1b)' : 'var(--adm-text-secondary, #1e293b)', fontWeight: 600 }}>
                   {selectedTx.failureReason || selectedTx.description || 'Customer advertising wallet recharge'}
                 </div>
               </div>
 
               {/* Modal Footer Actions */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, borderTop: '1px solid var(--adm-border, #e2e8f0)', flexWrap: 'wrap', gap: 10 }}>
                 <button
                   type="button"
                   className="desk-action-btn"
@@ -1266,7 +1266,7 @@ export default function MasterTransactionLogsDesk({
             <div
               className="sales-modal-card"
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: 600, background: '#ffffff', border: '1px solid #cbd5e1', padding: 28 }}
+              style={{ maxWidth: 600, background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border-strong, #cbd5e1)', padding: 28 }}
             >
               {/* Receipt Header */}
               <div
@@ -1276,16 +1276,16 @@ export default function MasterTransactionLogsDesk({
                   alignItems: 'flex-start',
                   flexWrap: 'wrap',
                   gap: 10,
-                  borderBottom: '2px solid #0f172a',
+                  borderBottom: '2px solid var(--adm-text-primary, #0f172a)',
                   paddingBottom: 16,
                   marginBottom: 18,
                 }}
               >
                 <div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--adm-text-primary, #0f172a)' }}>
                     AD MAFIA MARKETING
                   </div>
-                  <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                     Official Payment Acknowledgement &amp; Tax Receipt
                   </div>
                   <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
@@ -1293,18 +1293,18 @@ export default function MasterTransactionLogsDesk({
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '0.94rem', color: '#0f172a' }}>
+                  <div style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                     {activeReceipt.receiptNo || activeReceipt.receiptNumber || 'RCP-2026-1001'}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
                     Date: {formatIndianDateTime(activeReceipt.date, activeReceipt.createdAt)}
                   </div>
                   <span
                     style={{
                       display: 'inline-block',
-                      background: '#ecfdf5',
+                      background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
                       color: '#059669',
-                      border: '1px solid #a7f3d0',
+                      border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)',
                       fontWeight: 800,
                       fontSize: '0.7rem',
                       padding: '2px 8px',
@@ -1320,20 +1320,20 @@ export default function MasterTransactionLogsDesk({
               {/* Billed To Details */}
               <div
                 style={{
-                  background: '#f8fafc',
+                  background: 'var(--adm-bg-subtle, #f8fafc)',
                   padding: 14,
                   borderRadius: 10,
                   marginBottom: 18,
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                 }}
               >
-                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: '#64748b', marginBottom: 4 }}>
+                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', marginBottom: 4 }}>
                   CUSTOMER / BILLED TO:
                 </div>
-                <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   {rcptIdentity.displayName}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: 2 }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>
                   Attention: <b>{rcptIdentity.contactPerson}</b> • Phone: <b>+91 {cleanPhone}</b> • Location: {activeReceipt.city || 'India'}
                 </div>
               </div>
@@ -1341,32 +1341,32 @@ export default function MasterTransactionLogsDesk({
               {/* Particulars Table */}
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
                 <thead>
-                  <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
-                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>
+                  <tr style={{ background: 'var(--adm-bg-muted, #f1f5f9)', borderBottom: '1px solid var(--adm-border-strong, #cbd5e1)' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.76rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)' }}>
                       Particulars / Service Description
                     </th>
-                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.76rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)' }}>
                       SAC
                     </th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.76rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)' }}>
                       Amount
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <tr style={{ borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
                     <td style={{ padding: '12px 10px', fontSize: '0.84rem' }}>
-                      <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                         {activeReceipt.typeLabel || 'Verified B2B Lead Generation & Growth Service'}
                       </div>
-                      <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                         {activeReceipt.description || 'Marketing Wallet Balance & Campaign Deployment'}
                       </div>
                     </td>
-                    <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.8rem', fontFamily: 'monospace', color: '#64748b' }}>
+                    <td style={{ padding: '12px 10px', textAlign: 'center', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--adm-text-muted, #64748b)' }}>
                       998311
                     </td>
-                    <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
+                    <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 800, fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                       {formatINR(activeReceipt.amount)}
                     </td>
                   </tr>
@@ -1379,9 +1379,7 @@ export default function MasterTransactionLogsDesk({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '14px 16px',
-                  background: '#0f172a',
-                  color: '#ffffff',
+                  padding: '14px 16px', background: 'var(--adm-receipt-total-bg, #0f172a)', border: '1px solid var(--adm-border-strong, transparent)', color: '#ffffff',
                   borderRadius: 10,
                   marginBottom: 20,
                 }}

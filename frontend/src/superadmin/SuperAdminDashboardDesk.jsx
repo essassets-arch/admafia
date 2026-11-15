@@ -16,8 +16,10 @@ import {
 } from 'lucide-react';
 import superadminApi from '../services/superadminApi';
 import { SmartTable } from '../components/SmartTabulator';
+import { useAdminTheme } from '../utils/adminTheme';
 
 export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }) {
+  const { isDark } = useAdminTheme({ syncDocument: false });
   const nav = onNavigateToDesk || onNavigate;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,8 +77,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
       value: summary.totalBusinesses,
       sub: `${summary.activeAccounts} currently active`,
       icon: Building2,
-      iconBg: '#eff6ff',
-      iconColor: '#3b82f6',
+      iconBg: isDark ? 'rgba(59, 130, 246, 0.16)' : '#eff6ff',
+      iconColor: isDark ? '#60a5fa' : '#3b82f6',
     },
     {
       id: 'users',
@@ -85,8 +87,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
       value: summary.totalUsers,
       sub: 'Admins & staff members',
       icon: Users,
-      iconBg: '#f5f3ff',
-      iconColor: '#8b5cf6',
+      iconBg: isDark ? 'rgba(139, 92, 246, 0.16)' : '#f5f3ff',
+      iconColor: isDark ? '#a78bfa' : '#8b5cf6',
     },
     {
       id: 'active',
@@ -95,8 +97,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
       value: summary.activeAccounts,
       sub: 'Operating with good standing',
       icon: CheckCircle2,
-      iconBg: '#ecfdf5',
-      iconColor: '#10b981',
+      iconBg: isDark ? 'rgba(16, 185, 129, 0.16)' : '#ecfdf5',
+      iconColor: isDark ? '#34d399' : '#10b981',
     },
     {
       id: 'blocked',
@@ -105,8 +107,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
       value: summary.blockedAccounts,
       sub: summary.blockedAccounts > 0 ? 'Action required' : 'No compliance holds',
       icon: AlertOctagon,
-      iconBg: '#fff1f2',
-      iconColor: '#e11d48',
+      iconBg: isDark ? 'rgba(244, 63, 94, 0.16)' : '#fff1f2',
+      iconColor: isDark ? '#fb7185' : '#e11d48',
       urgent: summary.blockedAccounts > 0,
     },
     {
@@ -116,8 +118,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
       value: `₹${Number(summary.totalWalletLiability || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       sub: 'Customer prepaid balances',
       icon: Wallet,
-      iconBg: '#fef3c7',
-      iconColor: '#d97706',
+      iconBg: isDark ? 'rgba(245, 158, 11, 0.16)' : '#fef3c7',
+      iconColor: isDark ? '#fbbf24' : '#d97706',
     },
     {
       id: 'queries',
@@ -126,8 +128,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
       value: summary.pendingQueries,
       sub: 'Awaiting support reply',
       icon: HelpCircle,
-      iconBg: '#f0fdf4',
-      iconColor: '#16a34a',
+      iconBg: isDark ? 'rgba(34, 197, 94, 0.16)' : '#f0fdf4',
+      iconColor: isDark ? '#4ade80' : '#16a34a',
       urgent: summary.pendingQueries > 0,
     },
     {
@@ -137,8 +139,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
       value: summary.pendingTopups,
       sub: 'Bank UTRs awaiting review',
       icon: CreditCard,
-      iconBg: '#e0f2fe',
-      iconColor: '#0284c7',
+      iconBg: isDark ? 'rgba(14, 165, 233, 0.16)' : '#e0f2fe',
+      iconColor: isDark ? '#38bdf8' : '#0284c7',
       urgent: summary.pendingTopups > 0,
     },
     {
@@ -148,8 +150,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
       value: summary.pendingRefunds,
       sub: 'Awaiting refund decision',
       icon: RotateCcw,
-      iconBg: '#fdf2f8',
-      iconColor: '#db2777',
+      iconBg: isDark ? 'rgba(236, 72, 153, 0.16)' : '#fdf2f8',
+      iconColor: isDark ? '#f472b6' : '#db2777',
       urgent: summary.pendingRefunds > 0,
     },
   ];
@@ -197,7 +199,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
               </div>
               <div
                 className="sa-stat-val"
-                style={{ color: card.urgent ? '#e11d48' : '#0f172a' }}
+                style={{ color: card.urgent ? (isDark ? '#fb7185' : '#e11d48') : 'var(--adm-text-primary, #0f172a)' }}
               >
                 {loading ? '...' : card.value}
               </div>
@@ -230,8 +232,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
                 width: 38,
                 height: 38,
                 borderRadius: 8,
-                background: '#eef2ff',
-                color: '#4f46e5',
+                background: isDark ? 'rgba(99, 102, 241, 0.18)' : '#eef2ff',
+                color: isDark ? '#818cf8' : '#4f46e5',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -240,12 +242,12 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
               <TrendingUp size={20} />
             </div>
             <div>
-              <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>Manage Finance</strong>
-              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                Inspect balances, review transaction ledger & export reports
+              <strong style={{ fontSize: '0.92rem', color: 'var(--adm-text-primary, #0f172a)' }}>Manage Finance</strong>
+              <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
+                Inspect balances, review transaction ledger &amp; export reports
               </div>
             </div>
-            <ArrowRight size={16} color="#94a3b8" style={{ marginLeft: 'auto' }} />
+            <ArrowRight size={16} color="var(--adm-text-muted, #94a3b8)" style={{ marginLeft: 'auto' }} />
           </div>
         </div>
 
@@ -260,8 +262,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
                 width: 38,
                 height: 38,
                 borderRadius: 8,
-                background: '#ecfdf5',
-                color: '#059669',
+                background: isDark ? 'rgba(16, 185, 129, 0.16)' : '#ecfdf5',
+                color: isDark ? '#34d399' : '#059669',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -270,12 +272,12 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
               <CreditCard size={20} />
             </div>
             <div>
-              <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>Process Top-Ups</strong>
-              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+              <strong style={{ fontSize: '0.92rem', color: 'var(--adm-text-primary, #0f172a)' }}>Process Top-Ups</strong>
+              <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                 Verify incoming Bank UTRs and approve wallet credits
               </div>
             </div>
-            <ArrowRight size={16} color="#94a3b8" style={{ marginLeft: 'auto' }} />
+            <ArrowRight size={16} color="var(--adm-text-muted, #94a3b8)" style={{ marginLeft: 'auto' }} />
           </div>
         </div>
 
@@ -290,8 +292,8 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
                 width: 38,
                 height: 38,
                 borderRadius: 8,
-                background: '#fff1f2',
-                color: '#e11d48',
+                background: isDark ? 'rgba(244, 63, 94, 0.16)' : '#fff1f2',
+                color: isDark ? '#fb7185' : '#e11d48',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -300,12 +302,12 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
               <ShieldAlert size={20} />
             </div>
             <div>
-              <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>Block / Activate</strong>
-              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                Manage account governance & enforce compliance holds
+              <strong style={{ fontSize: '0.92rem', color: 'var(--adm-text-primary, #0f172a)' }}>Block / Activate</strong>
+              <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
+                Manage account governance &amp; enforce compliance holds
               </div>
             </div>
-            <ArrowRight size={16} color="#94a3b8" style={{ marginLeft: 'auto' }} />
+            <ArrowRight size={16} color="var(--adm-text-muted, #94a3b8)" style={{ marginLeft: 'auto' }} />
           </div>
         </div>
       </div>
@@ -317,15 +319,15 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
           <div
             style={{
               padding: '16px 20px',
-              borderBottom: '1px solid #e2e8f0',
+              borderBottom: '1px solid var(--adm-border, #e2e8f0)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
             }}
           >
             <div>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>Recent Financial Activity</h3>
-              <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>Recent Financial Activity</h3>
+              <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                 Live transactions processed through the MongoDB ledger
               </div>
             </div>
@@ -357,7 +359,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
               <tbody>
                 {recentTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: 28, color: '#94a3b8' }}>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: 28, color: 'var(--adm-text-muted, #94a3b8)' }}>
                       No wallet transactions recorded yet.
                     </td>
                   </tr>
@@ -365,7 +367,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
                   recentTransactions.map((tx) => (
                     <tr key={tx.id}>
                       <td>
-                        <strong style={{ color: '#0f172a' }}>{tx.company_name}</strong>
+                        <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{tx.company_name}</strong>
                       </td>
                       <td>
                         <span
@@ -374,13 +376,13 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
                           {tx.tx_type}
                         </span>
                       </td>
-                      <td style={{ fontWeight: 700, color: tx.tx_type === 'Credit' ? '#059669' : '#0f172a' }}>
+                      <td style={{ fontWeight: 700, color: tx.tx_type === 'Credit' ? (isDark ? '#34d399' : '#059669') : 'var(--adm-text-primary, #0f172a)' }}>
                         {tx.tx_type === 'Credit' ? '+' : '-'}₹{Number(tx.amount).toFixed(2)}
                       </td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#64748b' }}>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                         {tx.reference_utr}
                       </td>
-                      <td style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                      <td style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                         {new Date(tx.created_at).toLocaleDateString('en-IN', {
                           day: '2-digit',
                           month: 'short',
@@ -399,15 +401,15 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
           <div
             style={{
               padding: '16px 20px',
-              borderBottom: '1px solid #e2e8f0',
+              borderBottom: '1px solid var(--adm-border, #e2e8f0)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
             }}
           >
             <div>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>Admin Governance Audit</h3>
-              <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>Admin Governance Audit</h3>
+              <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                 Traceable administrative decisions &amp; actions
               </div>
             </div>
@@ -439,7 +441,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
               <tbody>
                 {recentAuditActions.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: 28, color: '#94a3b8' }}>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: 28, color: 'var(--adm-text-muted, #94a3b8)' }}>
                       No administrative actions logged yet.
                     </td>
                   </tr>
@@ -452,24 +454,24 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
                         </span>
                       </td>
                       <td>
-                        <strong style={{ color: '#0f172a', fontSize: '0.82rem' }}>
+                        <strong style={{ color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.82rem' }}>
                           {log.actor_name || 'Super Admin'}
                         </strong>
                       </td>
                       <td>
-                        <div style={{ fontSize: '0.80rem', fontWeight: 600, color: '#334155' }}>
+                        <div style={{ fontSize: '0.80rem', fontWeight: 600, color: 'var(--adm-text-body, #334155)' }}>
                           {log.target_type || 'Entity'}
                         </div>
                         {log.target_id && (
-                          <div style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: '#64748b' }}>
+                          <div style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>
                             {log.target_id}
                           </div>
                         )}
                       </td>
-                      <td style={{ fontSize: '0.80rem', color: '#475569' }}>
+                      <td style={{ fontSize: '0.80rem', color: 'var(--adm-text-body, #475569)' }}>
                         {log.reason || '—'}
                       </td>
-                      <td style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                      <td style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                         {log.created_at
                           ? new Date(log.created_at).toLocaleString('en-IN', {
                               timeZone: 'Asia/Kolkata',

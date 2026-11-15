@@ -4,6 +4,7 @@ import 'tabulator-tables/dist/css/tabulator_simple.min.css'
 import './index.css'
 import App from './App.jsx'
 import './components/smart-tabulator.css'
+import './admin/admin-theme.css'
 import './responsive-fixes.css'
 
 // Unregister only stale legacy service workers while preserving Firebase FCM Push SW

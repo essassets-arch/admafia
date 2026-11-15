@@ -141,12 +141,12 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           icon: 'success',
           title: 'Daily Pacing Processed ⚡',
           html: `
-            <div style="text-align: left; font-size: 0.88rem; color: #334155; line-height: 1.6;">
+            <div style="text-align: left; font-size: 0.88rem; line-height: 1.6;">
               <div>Today: <strong>${res.todayDayCode}</strong> (${res.todayDateStr})</div>
-              <div style="margin-top: 6px; color: #059669; font-weight: 700;">
+              <div style="margin-top: 6px; color: #10b981; font-weight: 700;">
                 ✓ <strong>${res.processedCount}</strong> per-day services settled from customer wallets.
               </div>
-              <div style="margin-top: 4px; color: ${res.autoPausedCount > 0 ? '#dc2626' : '#64748b'}; font-weight: 700;">
+              <div style="margin-top: 4px; color: ${res.autoPausedCount > 0 ? '#f43f5e' : '#94a3b8'}; font-weight: 700;">
                 ● <strong>${res.autoPausedCount}</strong> low-balance accounts automatically paused.
               </div>
             </div>
@@ -328,22 +328,22 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     const { value: enteredCode, isConfirmed } = await Swal.fire({
       title: `Start Marketing: ${cust.name}`,
       html: `
-        <div style="text-align: left; font-size: 0.88rem; color: #334155; line-height: 1.6;">
-          <div style="margin-bottom: 6px;">Customer: <strong style="color: #0f172a;">${cust.name}</strong></div>
+        <div style="text-align: left; font-size: 0.88rem; line-height: 1.6;">
+          <div style="margin-bottom: 6px;">Customer: <strong>${cust.name}</strong></div>
           <div style="margin-bottom: 6px;">Service Model: <strong>Per-Day Advertising Service (₹${spend}/day)</strong></div>
           ${isAlreadyDeducted ? `
-            <div style="margin-top: 6px; margin-bottom: 8px; padding: 8px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; color: #1e40af; font-size: 0.82rem;">
+            <div style="margin-top: 6px; margin-bottom: 8px; padding: 8px 12px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; color: #3b82f6; font-size: 0.82rem;">
               ✓ <strong>Today's per-day service is already settled.</strong> Resuming campaign without charging wallet again today.
             </div>
           ` : `
-            <div style="margin-bottom: 4px;">Per-Day Service to Deduct: <strong style="color: #dc2626;">-₹${spend}</strong> (Cut from wallet for today)</div>
+            <div style="margin-bottom: 4px;">Per-Day Service to Deduct: <strong style="color: #f43f5e;">-₹${spend}</strong> (Cut from wallet for today)</div>
             <div style="margin-bottom: 4px;">Current Wallet Balance: <strong>₹${balance.toLocaleString('en-IN')}</strong></div>
-            <div style="margin-bottom: 6px;">Balance After Today's Deduction: <strong style="color: #059669;">₹${(balance - spend).toLocaleString('en-IN')}</strong></div>
+            <div style="margin-bottom: 6px;">Balance After Today's Deduction: <strong style="color: #10b981;">₹${(balance - spend).toLocaleString('en-IN')}</strong></div>
           `}
-          <div style="margin-top: 8px; padding: 10px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 0.82rem; color: #065f46;">
+          <div style="margin-top: 8px; padding: 10px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; font-size: 0.82rem; color: #10b981;">
             ✓ Marketing will turn <strong>LIVE (ON)</strong> on customer portal &amp; Meta Ads pipeline.
           </div>
-          <div style="margin-top: 14px; margin-bottom: 4px; font-weight: 700; color: #0f172a; font-size: 0.86rem;">
+          <div style="margin-top: 14px; margin-bottom: 4px; font-weight: 700; font-size: 0.86rem;">
             Enter Marketing / Campaign Code (varchar):
           </div>
         </div>
@@ -399,9 +399,9 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           icon: 'success',
           title: 'Marketing Started Live! 🚀',
           html: `
-            <div style="font-size: 0.90rem; color: #334155;">
+            <div style="font-size: 0.90rem;">
               <div>${res.message || `₹${spend} per-day service active for ${cust.name}!`}</div>
-              <div style="margin-top: 10px; padding: 8px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534; font-size: 0.82rem;">
+              <div style="margin-top: 10px; padding: 8px 12px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; color: #10b981; font-size: 0.82rem;">
                 ✓ Code Configured &amp; Saved: <strong>Filled</strong>
               </div>
             </div>
@@ -421,9 +421,9 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     const { value: enteredCode, isConfirmed } = await Swal.fire({
       title: `Marketing Code: ${cust.name}`,
       html: `
-        <div style="text-align: left; font-size: 0.86rem; color: #475569; margin-bottom: 10px; line-height: 1.5;">
+        <div style="text-align: left; font-size: 0.86rem; margin-bottom: 10px; line-height: 1.5;">
           Enter or update the varchar campaign / marketing tracking code for <strong>${cust.name}</strong>:
-          <div style="font-size: 0.78rem; color: #64748b; margin-top: 4px;">
+          <div style="font-size: 0.78rem; opacity: 0.8; margin-top: 4px;">
             Note: The table column will indicate <strong>Filled</strong> or <strong>Not Filled</strong> without exposing the code text.
           </div>
         </div>
@@ -528,7 +528,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
             onClick={handleProcessDailyPacing}
             disabled={processingPacing || refreshing}
             title="Evaluate and process per-day service deductions for today"
-            style={{ borderColor: '#6366f1', color: '#4f46e5' }}
+            style={{ borderColor: '#6366f1', color: '#6366f1' }}
           >
             <Sparkles size={14} className={processingPacing ? 'spin' : ''} />
             <span>{processingPacing ? 'Processing...' : 'Run Daily Service'}</span>
@@ -613,7 +613,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
               {loading ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: '40px' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--adm-text-muted, #64748b)' }}>
                       <RefreshCw size={18} className="spin" />
                       <span>Loading marketing control dashboard...</span>
                     </div>
@@ -632,9 +632,9 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 if (displayedCustomers.length === 0) {
                   return (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
-                        <Building size={36} style={{ color: '#cbd5e1', marginBottom: '8px' }} />
-                        <h4 style={{ margin: '0 0 6px 0', color: '#0f172a' }}>No customers found</h4>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
+                        <Building size={36} style={{ color: 'var(--adm-border-strong, #cbd5e1)', marginBottom: '8px' }} />
+                        <h4 style={{ margin: '0 0 6px 0', color: 'var(--adm-text-primary, #0f172a)' }}>No customers found</h4>
                         <p style={{ fontSize: '0.84rem', margin: 0 }}>
                           No customer records match the current filter criteria.
                         </p>
@@ -709,17 +709,13 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                                   alignItems: 'center',
                                   gap: '5px',
                                   borderRadius: '9999px',
-                                  border: '1px solid #86efac',
-                                  background: '#f0fdf4',
-                                  color: '#15803d',
-                                  boxShadow: '0 1px 2px rgba(22, 163, 74, 0.08)',
                                 }}
                               >
-                                <Check size={12} strokeWidth={3} style={{ color: '#16a34a' }} />
+                                <Check size={12} strokeWidth={3} />
                                 <span>Filled</span>
                               </span>
                             </button>
-                            <span style={{ fontSize: '0.64rem', color: '#94a3b8', fontWeight: 600 }}>
+                            <span style={{ fontSize: '0.64rem', color: 'var(--adm-text-muted, #94a3b8)', fontWeight: 600 }}>
                               Protected
                             </span>
                           </div>
@@ -746,17 +742,13 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                                   alignItems: 'center',
                                   gap: '5px',
                                   borderRadius: '9999px',
-                                  border: '1px solid #fecdd3',
-                                  background: '#fff1f2',
-                                  color: '#be123c',
-                                  boxShadow: '0 1px 2px rgba(225, 29, 72, 0.06)',
                                 }}
                               >
                                 <span style={{ fontSize: '0.72rem', lineHeight: 1 }}>✕</span>
                                 <span>Not Filled</span>
                               </span>
                             </button>
-                            <span style={{ fontSize: '0.64rem', color: '#cbd5e1', fontWeight: 600 }}>
+                            <span style={{ fontSize: '0.64rem', color: 'var(--adm-text-muted, #94a3b8)', fontWeight: 600 }}>
                               Required on Start
                             </span>
                           </div>
@@ -767,10 +759,10 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
                           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
-                            <strong style={{ fontSize: '0.96rem', color: '#0f172a' }}>
+                            <strong style={{ fontSize: '0.96rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                               ₹{dailySpend}
                             </strong>
-                            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>/ active day</span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>/ active day</span>
                             <span className="mkt-pill mkt-pill-slate" style={{ fontSize: '0.64rem', fontWeight: 800, padding: '1px 5px' }}>
                               Per-Day Service
                             </span>
@@ -805,32 +797,32 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                                   borderRadius: '5px',
                                   fontSize: '0.70rem',
                                   fontWeight: 800,
-                                  background: isSelected ? '#4f46e5' : '#f1f5f9',
-                                  color: isSelected ? '#ffffff' : '#94a3b8',
+                                  background: isSelected ? '#4f46e5' : 'var(--adm-bg-muted, #f1f5f9)',
+                                  color: isSelected ? '#ffffff' : 'var(--adm-text-muted, #94a3b8)',
                                   border: isToday ? '1.5px solid #f59e0b' : '1px solid transparent',
-                                  boxShadow: isToday ? '0 0 0 1px #fef3c7' : 'none',
+                                  boxShadow: isToday ? '0 0 0 1px rgba(245, 158, 11, 0.35)' : 'none',
                                 }}
                               >
                                 {d.initial}
                               </span>
                             );
                           })}
-                          <span style={{ fontSize: '0.74rem', color: '#475569', marginLeft: '6px', fontWeight: 700 }}>
+                          <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-body, #475569)', marginLeft: '6px', fontWeight: 700 }}>
                             {activeDays.length} of 7 Days Active
                           </span>
                         </div>
 
                         {/* Weekly Pacing & Today State */}
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', lineHeight: 1.4 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '6px', lineHeight: 1.4 }}>
                           Weekly: <strong>₹{(activeDays.length * dailySpend).toLocaleString('en-IN')}</strong> • Today ({todayItem.label}):{' '}
                           {c.isDeductedToday ? (
                             <strong style={{ color: '#059669' }}>● Settled for Today (₹{dailySpend}) ✓</strong>
                           ) : isLive && isTodayActive ? (
-                            <strong style={{ color: '#0284c7' }}>● Active (₹{dailySpend}/day Service)</strong>
+                            <strong style={{ color: '#0ea5e9' }}>● Active (₹{dailySpend}/day Service)</strong>
                           ) : isLive ? (
-                            <span style={{ color: '#64748b' }}>● Scheduled Day Off</span>
+                            <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>● Scheduled Day Off</span>
                           ) : (
-                            <span style={{ color: '#94a3b8' }}>● Campaign Paused</span>
+                            <span style={{ color: 'var(--adm-text-muted, #94a3b8)' }}>● Campaign Paused</span>
                           )}
                         </div>
                       </td>
@@ -849,7 +841,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                         </div>
                         <div className="mkt-cell-sub" style={{ marginTop: '4px' }}>
                           Runway:{' '}
-                          <strong style={{ color: !isLowBalance ? '#334155' : '#dc2626' }}>
+                          <strong style={{ color: !isLowBalance ? 'var(--adm-text-body, #334155)' : '#dc2626' }}>
                             {runwayDays} days funded
                           </strong>
                         </div>
@@ -886,9 +878,6 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                               style={{
                                 fontWeight: 800,
                                 padding: '7px 14px',
-                                background: '#ffe4e6',
-                                color: '#be123c',
-                                borderColor: '#f43f5e',
                               }}
                             >
                               <Square size={13} fill="currentColor" />
@@ -904,9 +893,6 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                                 style={{
                                   fontWeight: 800,
                                   padding: '7px 14px',
-                                  background: '#d1fae5',
-                                  color: '#047857',
-                                  borderColor: '#10b981',
                                 }}
                               >
                                 <Play size={13} fill="currentColor" />
@@ -951,7 +937,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
             <div className="marketing-modal-header">
               <div>
                 <h3 style={{ margin: 0 }}>Marketing Campaign &amp; Pacing Control</h3>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Customer: <strong>{pacingCustomer.name}</strong> • Bal: ₹{pacingCustomer.availableBalance.toLocaleString('en-IN')}
                 </span>
               </div>
@@ -969,7 +955,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
               <div className="mkt-form-group">
                 <label className="mkt-form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>Daily Burn Rate (Ad Spend Budget) *</span>
-                  <span style={{ fontSize: '0.76rem', color: '#4f46e5', fontWeight: 800 }}>Min ₹300/day</span>
+                  <span style={{ fontSize: '0.76rem', color: '#6366f1', fontWeight: 800 }}>Min ₹300/day</span>
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -982,7 +968,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                     placeholder="300"
                     style={{ fontSize: '1.05rem', fontWeight: 800, paddingLeft: '32px' }}
                   />
-                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 800, color: '#64748b' }}>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)' }}>
                     ₹
                   </span>
                 </div>
@@ -1000,12 +986,12 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
                   <button
                     type="button"
-                    className="mkt-btn-table-action"
+                    className={`mkt-btn-table-action ${editPreset === 'all' ? 'active' : ''}`.trim()}
                     style={{
                       fontSize: '0.78rem',
-                      background: editPreset === 'all' ? '#4f46e5' : '#ffffff',
-                      color: editPreset === 'all' ? '#ffffff' : '#334155',
-                      borderColor: editPreset === 'all' ? '#4f46e5' : '#cbd5e1',
+                      background: editPreset === 'all' ? '#4f46e5' : 'var(--adm-bg-card, #ffffff)',
+                      color: editPreset === 'all' ? '#ffffff' : 'var(--adm-text-body, #334155)',
+                      borderColor: editPreset === 'all' ? '#4f46e5' : 'var(--adm-border-strong, #cbd5e1)',
                       fontWeight: 700,
                     }}
                     onClick={() => handleSelectPresetDays('all')}
@@ -1014,12 +1000,12 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                   </button>
                   <button
                     type="button"
-                    className="mkt-btn-table-action"
+                    className={`mkt-btn-table-action ${editPreset === 'weekdays' ? 'active' : ''}`.trim()}
                     style={{
                       fontSize: '0.78rem',
-                      background: editPreset === 'weekdays' ? '#4f46e5' : '#ffffff',
-                      color: editPreset === 'weekdays' ? '#ffffff' : '#334155',
-                      borderColor: editPreset === 'weekdays' ? '#4f46e5' : '#cbd5e1',
+                      background: editPreset === 'weekdays' ? '#4f46e5' : 'var(--adm-bg-card, #ffffff)',
+                      color: editPreset === 'weekdays' ? '#ffffff' : 'var(--adm-text-body, #334155)',
+                      borderColor: editPreset === 'weekdays' ? '#4f46e5' : 'var(--adm-border-strong, #cbd5e1)',
                       fontWeight: 700,
                     }}
                     onClick={() => handleSelectPresetDays('weekdays')}
@@ -1028,12 +1014,12 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                   </button>
                   <button
                     type="button"
-                    className="mkt-btn-table-action"
+                    className={`mkt-btn-table-action ${editPreset === 'weekends' ? 'active' : ''}`.trim()}
                     style={{
                       fontSize: '0.78rem',
-                      background: editPreset === 'weekends' ? '#4f46e5' : '#ffffff',
-                      color: editPreset === 'weekends' ? '#ffffff' : '#334155',
-                      borderColor: editPreset === 'weekends' ? '#4f46e5' : '#cbd5e1',
+                      background: editPreset === 'weekends' ? '#4f46e5' : 'var(--adm-bg-card, #ffffff)',
+                      color: editPreset === 'weekends' ? '#ffffff' : 'var(--adm-text-body, #334155)',
+                      borderColor: editPreset === 'weekends' ? '#4f46e5' : 'var(--adm-border-strong, #cbd5e1)',
                       fontWeight: 700,
                     }}
                     onClick={() => handleSelectPresetDays('weekends')}
@@ -1058,14 +1044,15 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                     return (
                       <div
                         key={day.code}
+                        className={`mkt-day-card ${isSelected ? 'selected' : ''}`.trim()}
                         onClick={() => handleToggleDay(day.code)}
                         style={{
                           cursor: 'pointer',
                           padding: '10px 4px',
                           borderRadius: '8px',
                           textAlign: 'center',
-                          border: isSelected ? '2px solid #4f46e5' : '1.5px solid #e2e8f0',
-                          background: isSelected ? '#eef2ff' : '#f8fafc',
+                          border: isSelected ? '2px solid #4f46e5' : '1.5px solid var(--adm-border, #e2e8f0)',
+                          background: isSelected ? 'var(--mkt-primary-soft, #eef2ff)' : 'var(--adm-bg-subtle, #f8fafc)',
                           position: 'relative',
                           transition: 'all 0.15s ease',
                         }}
@@ -1088,13 +1075,13 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                             TODAY
                           </div>
                         )}
-                        <div style={{ fontSize: '0.78rem', fontWeight: 800, color: isSelected ? '#4f46e5' : '#475569' }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 800, color: isSelected ? '#6366f1' : 'var(--adm-text-body, #475569)' }}>
                           {day.code}
                         </div>
-                        <div style={{ fontSize: '0.66rem', color: '#64748b', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.66rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '2px' }}>
                           {day.short}
                         </div>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: isSelected ? '#059669' : '#94a3b8', marginTop: '4px' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: isSelected ? '#10b981' : 'var(--adm-text-muted, #94a3b8)', marginTop: '4px' }}>
                           ₹{editDailySpend || 300}
                         </div>
                       </div>
@@ -1104,13 +1091,13 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
               </div>
 
               {/* Summary Stats */}
-              <div style={{ padding: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.84rem' }}>
+              <div style={{ padding: '12px', background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '8px', fontSize: '0.84rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ color: '#64748b' }}>Weekly Estimated Spend:</span>
+                  <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Weekly Estimated Spend:</span>
                   <strong>₹{((Number(editDailySpend) || 300) * editActiveDays.length).toLocaleString('en-IN')}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Wallet Runway:</span>
+                  <span style={{ color: 'var(--adm-text-muted, #64748b)' }}>Wallet Runway:</span>
                   <strong style={{ color: '#059669' }}>
                     {editDailySpend > 0 ? Math.floor(pacingCustomer.availableBalance / Number(editDailySpend)) : 0} days funded
                   </strong>
@@ -1201,7 +1188,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                     onChange={(e) => setCreateMarketingCode(e.target.value.toUpperCase())}
                     style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.5px' }}
                   />
-                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '4px' }}>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '4px' }}>
                     Tracking varchar code. The table will mark status as <strong>Filled</strong> without exposing the code string.
                   </div>
                 </div>
@@ -1260,7 +1247,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
             <div className="marketing-modal-header">
               <div>
                 <h3 style={{ margin: 0 }}>Campaign History: {historyModalCustomer.name}</h3>
-                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Customer ID: {historyModalCustomer.id} • {historyCampaigns.length} recorded campaign(s)
                 </span>
               </div>
@@ -1296,7 +1283,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                   <tbody>
                     {historyCampaigns.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: 'var(--adm-text-muted, #64748b)' }}>
                           No campaign history recorded yet.
                         </td>
                       </tr>
@@ -1304,7 +1291,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                       historyCampaigns.map((camp, idx) => (
                         <tr key={camp.id || idx}>
                           <td>
-                            <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>
+                            <strong style={{ color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.88rem' }}>
                               {camp.name || 'Untitled Campaign'}
                             </strong>
                             {camp.objective && (
@@ -1325,22 +1312,22 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                             </span>
                           </td>
                           <td>
-                            <strong style={{ color: '#0f172a' }}>
+                            <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>
                               ₹{Number(camp.dailyBudget || 0).toLocaleString('en-IN')}/day
                             </strong>
                           </td>
                           <td>
-                            <span style={{ fontSize: '0.82rem', color: '#334155' }}>
+                            <span style={{ fontSize: '0.82rem', color: 'var(--adm-text-body, #334155)' }}>
                               {camp.platform || 'Meta Ads'}
                             </span>
                           </td>
                           <td>
-                            <span style={{ fontSize: '0.82rem', color: '#475569' }}>
+                            <span style={{ fontSize: '0.82rem', color: 'var(--adm-text-body, #475569)' }}>
                               {camp.lastAction || 'Created'}
                             </span>
                           </td>
                           <td>
-                            <span style={{ fontSize: '0.80rem', color: '#64748b' }}>
+                            <span style={{ fontSize: '0.80rem', color: 'var(--adm-text-muted, #64748b)' }}>
                               {camp.lastActor || camp.actor || 'Operator'}
                             </span>
                           </td>

@@ -359,10 +359,10 @@ export default function CustomerGroupsDesk({ customers = [] }) {
       {/* 1. Header Bar with Prominent Create Lead Action */}
       <div className="desk-header" style={{ marginBottom: 20, alignItems: 'flex-start' }}>
         <div>
-          <h1 className="desk-title" style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+          <h1 className="desk-title" style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--adm-text-primary, #0f172a)' }}>
             Lead Distribution
           </h1>
-          <p className="desk-subtitle" style={{ marginTop: 4, color: '#64748b', fontSize: '0.92rem' }}>
+          <p className="desk-subtitle" style={{ marginTop: 4, color: 'var(--adm-text-muted, #64748b)', fontSize: '0.92rem' }}>
             Automatically distribute inbound leads to all matching customers in a category with one click.
           </p>
         </div>
@@ -435,8 +435,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
               paddingBottom: 10,
               fontSize: '0.9rem',
               borderRadius: 8,
-              border: '1px solid #cbd5e1',
-              backgroundColor: '#ffffff',
+              border: '1px solid var(--adm-border-strong, #cbd5e1)',
+              backgroundColor: 'var(--adm-bg-card, #ffffff)',
             }}
           />
         </div>
@@ -444,25 +444,25 @@ export default function CustomerGroupsDesk({ customers = [] }) {
 
       {/* 3. Categories & Customer Groups Table */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
           <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px', color: '#4f46e5' }} />
           <p style={{ fontWeight: 600 }}>Loading customer categories from MongoDB...</p>
         </div>
       ) : filteredRows.length === 0 ? (
         <div
           style={{
-            background: '#ffffff',
-            border: '1px dashed #cbd5e1',
+            background: 'var(--adm-bg-card, #ffffff)',
+            border: '1px dashed var(--adm-border-strong, #cbd5e1)',
             borderRadius: 12,
             padding: '50px 20px',
             textAlign: 'center',
           }}
         >
           <Users size={44} style={{ margin: '0 auto 14px', color: '#94a3b8' }} />
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b', margin: '0 0 6px' }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--adm-text-secondary, #1e293b)', margin: '0 0 6px' }}>
             No categories found matching "{search}"
           </h3>
-          <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0 0 16px' }}>
+          <p style={{ color: 'var(--adm-text-muted, #64748b)', fontSize: '0.88rem', margin: '0 0 16px' }}>
             Check your search terms or create a new customer group.
           </p>
         </div>
@@ -481,17 +481,17 @@ export default function CustomerGroupsDesk({ customers = [] }) {
           >
           <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ textAlign: 'left', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: '#475569' }}>
+              <tr style={{ background: 'var(--adm-bg-subtle, #f8fafc)', borderBottom: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <th style={{ textAlign: 'left', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: 'var(--adm-text-body, #475569)' }}>
                   Target Category / Group
                 </th>
-                <th style={{ textAlign: 'left', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: '#475569' }}>
+                <th style={{ textAlign: 'left', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: 'var(--adm-text-body, #475569)' }}>
                   Industry Scope
                 </th>
-                <th style={{ textAlign: 'right', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: '#475569' }}>
+                <th style={{ textAlign: 'right', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: 'var(--adm-text-body, #475569)' }}>
                   Eligible Customers
                 </th>
-                <th style={{ textAlign: 'right', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: '#475569' }}>
+                <th style={{ textAlign: 'right', padding: '12px 18px', fontWeight: 700, fontSize: '0.82rem', color: 'var(--adm-text-body, #475569)' }}>
                   Actions
                 </th>
               </tr>
@@ -503,7 +503,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                   <tr
                     key={row.category + '_' + idx}
                     style={{
-                      borderBottom: '1px solid #f1f5f9',
+                      borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)',
                       transition: 'background-color 0.15s ease',
                     }}
                   >
@@ -513,7 +513,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                         style={{
                           fontWeight: 700,
                           fontSize: '0.95rem',
-                          color: '#0f172a',
+                          color: 'var(--adm-text-primary, #0f172a)',
                           cursor: 'pointer',
                         }}
                         onClick={() => handleOpenViewCustomers(row)}
@@ -522,7 +522,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                         {row.name || row.category}
                       </div>
                       {row.description && (
-                        <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                           {row.description}
                         </div>
                       )}
@@ -537,8 +537,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           borderRadius: 6,
                           fontSize: '0.78rem',
                           fontWeight: 600,
-                          backgroundColor: '#eef2ff',
-                          color: '#4338ca',
+                          backgroundColor: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                          color: 'var(--adm-soft-indigo-text, #4338ca)',
                         }}
                       >
                         {row.category}
@@ -556,8 +556,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           borderRadius: 20,
                           fontSize: '0.82rem',
                           fontWeight: 700,
-                          backgroundColor: count > 0 ? '#ecfdf5' : '#f1f5f9',
-                          color: count > 0 ? '#047857' : '#64748b',
+                          backgroundColor: count > 0 ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-bg-muted, #f1f5f9)',
+                          color: count > 0 ? 'var(--adm-soft-emerald-text, #047857)' : 'var(--adm-text-muted, #64748b)',
                         }}
                       >
                         <Users size={13} />
@@ -614,14 +614,14 @@ export default function CustomerGroupsDesk({ customers = [] }) {
       <div style={{ marginTop: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
           <div>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--adm-text-primary, #0f172a)' }}>
               Lead Distribution History
             </h2>
-            <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+            <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: 'var(--adm-text-muted, #64748b)' }}>
               Record of master leads distributed to customer categories.
             </p>
           </div>
-          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text-body, #475569)' }}>
             {historyList.length} Total Distributions
           </span>
         </div>
@@ -629,12 +629,12 @@ export default function CustomerGroupsDesk({ customers = [] }) {
         {historyList.length === 0 ? (
           <div
             style={{
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
+              background: 'var(--adm-bg-subtle, #f8fafc)',
+              border: '1px solid var(--adm-border, #e2e8f0)',
               borderRadius: 10,
               padding: '24px 20px',
               textAlign: 'center',
-              color: '#64748b',
+              color: 'var(--adm-text-muted, #64748b)',
               fontSize: '0.86rem',
             }}
           >
@@ -649,30 +649,30 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             >
             <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                <tr style={{ background: 'var(--adm-bg-subtle, #f8fafc)', borderBottom: '1px solid var(--adm-border, #e2e8f0)' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)' }}>
                     Lead Title &amp; Buyer
                   </th>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)' }}>
                     Category
                   </th>
-                  <th style={{ textAlign: 'center', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                  <th style={{ textAlign: 'center', padding: '10px 16px', fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)' }}>
                     Recipients
                   </th>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)' }}>
                     Date &amp; Time
                   </th>
-                  <th style={{ textAlign: 'right', padding: '10px 16px', fontSize: '0.8rem', color: '#475569' }}>
+                  <th style={{ textAlign: 'right', padding: '10px 16px', fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)' }}>
                     Action
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {historyList.map((h) => (
-                  <tr key={h.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <tr key={h.id} style={{ borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
                     <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>{h.title}</div>
-                      <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--adm-text-primary, #0f172a)' }}>{h.title}</div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                         Buyer: {h.buyerName} • {h.displayPhone}
                       </div>
                     </td>
@@ -683,8 +683,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           borderRadius: 6,
                           fontSize: '0.76rem',
                           fontWeight: 600,
-                          backgroundColor: '#eef2ff',
-                          color: '#4338ca',
+                          backgroundColor: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                          color: 'var(--adm-soft-indigo-text, #4338ca)',
                         }}
                       >
                         {h.category}
@@ -697,14 +697,14 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           borderRadius: 14,
                           fontSize: '0.78rem',
                           fontWeight: 700,
-                          backgroundColor: '#ecfdf5',
-                          color: '#047857',
+                          backgroundColor: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                          color: 'var(--adm-soft-emerald-text, #047857)',
                         }}
                       >
                         {h.totalRecipients || 0} Accounts
                       </span>
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#64748b' }}>
+                    <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: 'var(--adm-text-muted, #64748b)' }}>
                       {h.createdAt ? new Date(h.createdAt).toLocaleString('en-IN') : 'Recently'}
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
@@ -740,10 +740,10 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   Create &amp; Distribute Lead
                 </h3>
-                <p style={{ margin: '3px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                <p style={{ margin: '3px 0 0', fontSize: '0.84rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Save one lead and automatically distribute it to all eligible customers in the target category.
                 </p>
               </div>
@@ -752,7 +752,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 className="desk-close-btn"
                 disabled={isDistributing}
                 onClick={() => setIsCreateLeadOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--adm-text-muted, #64748b)' }}
               >
                 <X size={20} />
               </button>
@@ -762,7 +762,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             <form onSubmit={handleSubmitDistributeLead} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {/* Target Category (Dynamic Dropdown from DB) */}
               <div>
-                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: 'var(--adm-text-body, #334155)' }}>
                   Target Category <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <select
@@ -773,9 +773,9 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                     width: '100%',
                     padding: '9px 12px',
                     borderRadius: 8,
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid var(--adm-border-strong, #cbd5e1)',
                     fontSize: '0.9rem',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: 'var(--adm-bg-card, #ffffff)',
                     fontWeight: 600,
                   }}
                 >
@@ -791,14 +791,14 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 {leadForm.category && (
                   <div style={{ marginTop: 8 }}>
                     {previewLoading ? (
-                      <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Checking matching accounts...</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-muted, #64748b)' }}>Checking matching accounts...</div>
                     ) : previewRecipients.length > 0 ? (
                       <div>
                         <div
                           style={{
-                            background: '#f0fdf4',
-                            border: '1px solid #bbf7d0',
-                            color: '#15803d',
+                            background: 'var(--adm-soft-emerald-bg, #f0fdf4)',
+                            border: '1px solid var(--adm-soft-emerald-border, #bbf7d0)',
+                            color: 'var(--adm-soft-emerald-text, #15803d)',
                             padding: '8px 12px',
                             borderRadius: 6,
                             fontSize: '0.84rem',
@@ -814,7 +814,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           </span>
                         </div>
                         {previewExcludedRecipients.length > 0 && (
-                          <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 4, paddingLeft: 4 }}>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4, paddingLeft: 4 }}>
                             ℹ {previewExcludedRecipients.length} customer(s) excluded due to wallet balance or marketing inactive status.
                           </div>
                         )}
@@ -822,9 +822,9 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                     ) : (
                       <div
                         style={{
-                          background: '#fef2f2',
-                          border: '1px solid #fecaca',
-                          color: '#b91c1c',
+                          background: 'var(--adm-soft-rose-bg, #fef2f2)',
+                          border: '1px solid var(--adm-soft-rose-border, #fecaca)',
+                          color: 'var(--adm-soft-rose-text, #b91c1c)',
                           padding: '10px 12px',
                           borderRadius: 6,
                           fontSize: '0.84rem',
@@ -838,11 +838,11 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           <AlertTriangle size={16} />
                           <span>No Eligible Customers</span>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: '#7f1d1d' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--adm-soft-rose-text, #7f1d1d)' }}>
                           No customers in this group currently meet the wallet balance and marketing eligibility requirements. Please review their wallet balances and campaign status.
                         </div>
                         {previewSkippedBreakdown && (
-                          <div style={{ fontSize: '0.74rem', color: '#991b1b', marginTop: 4 }}>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--adm-soft-rose-text, #991b1b)', marginTop: 4 }}>
                             Excluded: {[
                               previewSkippedBreakdown.insufficientBalance ? `${previewSkippedBreakdown.insufficientBalance} low balance (< daily spend)` : null,
                               previewSkippedBreakdown.marketingInactive ? `${previewSkippedBreakdown.marketingInactive} marketing paused/inactive` : null,
@@ -860,7 +860,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
 
               {/* Contact Number */}
               <div>
-                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: '#334155' }}>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.84rem', marginBottom: 5, color: 'var(--adm-text-body, #334155)' }}>
                   Contact Number <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
@@ -874,12 +874,12 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                     width: '100%',
                     padding: '10px 12px',
                     borderRadius: 8,
-                    border: '1px solid #cbd5e1',
+                    border: '1px solid var(--adm-border-strong, #cbd5e1)',
                     fontSize: '0.92rem',
                     letterSpacing: '0.5px',
                   }}
                 />
-                <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4, display: 'block' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4, display: 'block' }}>
                   Buyer contact number that will be visible to all recipient customers in this category.
                 </span>
               </div>
@@ -930,7 +930,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
               <div style={{ minWidth: 0, flex: '1 1 220px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                     {viewingGroup.name || viewingGroup.category}
                   </h3>
                   <span
@@ -939,14 +939,14 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                       borderRadius: 6,
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      backgroundColor: '#eef2ff',
-                      color: '#4338ca',
+                      backgroundColor: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                      color: 'var(--adm-soft-indigo-text, #4338ca)',
                     }}
                   >
                     {viewingGroup.category}
                   </span>
                 </div>
-                <p style={{ margin: '3px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                <p style={{ margin: '3px 0 0', fontSize: '0.84rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Eligible customers in this category who will receive distributed leads.
                 </p>
               </div>
@@ -954,7 +954,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 type="button"
                 className="desk-close-btn"
                 onClick={() => setViewingGroup(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--adm-text-muted, #64748b)' }}
               >
                 <X size={20} />
               </button>
@@ -971,7 +971,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                   width: '100%',
                   padding: '8px 12px',
                   borderRadius: 6,
-                  border: '1px solid #cbd5e1',
+                  border: '1px solid var(--adm-border-strong, #cbd5e1)',
                   fontSize: '0.84rem',
                 }}
               />
@@ -980,14 +980,14 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             {/* List Table */}
             <div>
               {viewLoading ? (
-                <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>
+                <div style={{ padding: 30, textAlign: 'center', color: 'var(--adm-text-muted, #64748b)' }}>
                   <RefreshCw size={20} className="animate-spin" style={{ margin: '0 auto 8px' }} />
                   Loading customers...
                 </div>
               ) : viewingMembers.length === 0 ? (
-                <div style={{ padding: 36, textAlign: 'center', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                <div style={{ padding: 36, textAlign: 'center', color: 'var(--adm-text-muted, #64748b)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: 8 }}>
                   <Users size={32} style={{ margin: '0 auto 8px', color: '#94a3b8' }} />
-                  <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#1e293b' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--adm-text-secondary, #1e293b)' }}>
                     0 eligible customers found
                   </div>
                   <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 0' }}>
@@ -1003,17 +1003,17 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 >
                   <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                      <tr style={{ background: 'var(--adm-bg-subtle, #f8fafc)', borderBottom: '1px solid var(--adm-border, #e2e8f0)' }}>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
                           Company Name
                         </th>
-                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
                           Contact Person
                         </th>
-                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
                           Balance / Daily Spend
                         </th>
-                        <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
                           Distribution Eligibility
                         </th>
                       </tr>
@@ -1038,20 +1038,20 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                           const resolvedComp = !isGen(m.companyName) ? m.companyName : fallback;
                           const resolvedCont = !isGen(m.contactPerson) ? m.contactPerson : (capU || resolvedComp);
                           return (
-                          <tr key={m.customerId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
+                          <tr key={m.customerId} style={{ borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
+                            <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-secondary, #1e293b)' }}>
                               <div>{resolvedComp}</div>
-                              <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>{m.category || 'General'}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 500 }}>{m.category || 'General'}</div>
                             </td>
-                            <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
+                            <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)' }}>
                               <div>{resolvedCont}</div>
                               <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{m.phone}</div>
                             </td>
-                            <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#334155' }}>
-                              <div style={{ fontWeight: 700, color: Number(m.balance || 0) >= Number(m.dailyAdSpend || 300) ? '#15803d' : '#b91c1c' }}>
+                            <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: 'var(--adm-text-body, #334155)' }}>
+                              <div style={{ fontWeight: 700, color: Number(m.balance || 0) >= Number(m.dailyAdSpend || 300) ? 'var(--adm-soft-emerald-text, #15803d)' : 'var(--adm-soft-rose-text, #b91c1c)' }}>
                                 ₹{Number(m.balance || 0).toLocaleString('en-IN')}
                               </div>
-                              <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                 Spend: ₹{Number(m.dailyAdSpend || 300)}/day
                               </div>
                             </td>
@@ -1063,8 +1063,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                                     borderRadius: 10,
                                     fontSize: '0.72rem',
                                     fontWeight: 700,
-                                    backgroundColor: '#ecfdf5',
-                                    color: '#047857',
+                                    backgroundColor: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                                    color: 'var(--adm-soft-emerald-text, #047857)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: 4,
@@ -1079,8 +1079,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                                     borderRadius: 10,
                                     fontSize: '0.72rem',
                                     fontWeight: 700,
-                                    backgroundColor: '#fef2f2',
-                                    color: '#b91c1c',
+                                    backgroundColor: 'var(--adm-soft-rose-bg, #fef2f2)',
+                                    color: 'var(--adm-soft-rose-text, #b91c1c)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: 4,
@@ -1127,14 +1127,14 @@ export default function CustomerGroupsDesk({ customers = [] }) {
             style={{ maxWidth: 500, width: '100%', borderRadius: 12, padding: 24 }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                 {editingGroup ? 'Edit Group' : 'Create Customer Group'}
               </h3>
               <button
                 type="button"
                 className="desk-close-btn"
                 onClick={() => setIsGroupModalOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--adm-text-muted, #64748b)' }}
               >
                 <X size={20} />
               </button>
@@ -1151,7 +1151,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                   placeholder="e.g. IT Customers"
                   value={groupForm.name}
                   onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--adm-border-strong, #cbd5e1)' }}
                 />
               </div>
 
@@ -1165,7 +1165,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                   placeholder="e.g. IT & Software"
                   value={groupForm.category}
                   onChange={(e) => setGroupForm({ ...groupForm, category: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--adm-border-strong, #cbd5e1)' }}
                 />
               </div>
 
@@ -1178,7 +1178,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                   placeholder="Brief note about the segment..."
                   value={groupForm.description}
                   onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #cbd5e1' }}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--adm-border-strong, #cbd5e1)' }}
                 />
               </div>
 
@@ -1211,10 +1211,10 @@ export default function CustomerGroupsDesk({ customers = [] }) {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
               <div style={{ minWidth: 0, flex: '1 1 220px' }}>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   Distribution Inspection
                 </h3>
-                <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b', overflowWrap: 'anywhere' }}>
+                <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: 'var(--adm-text-muted, #64748b)', overflowWrap: 'anywhere' }}>
                   {inspectItem.title} ({inspectItem.category})
                 </p>
               </div>
@@ -1222,7 +1222,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 type="button"
                 className="desk-close-btn"
                 onClick={() => setInspectItem(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--adm-text-muted, #64748b)' }}
               >
                 <X size={20} />
               </button>
@@ -1230,9 +1230,9 @@ export default function CustomerGroupsDesk({ customers = [] }) {
 
             <div>
               {inspectLoading ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>Loading recipients...</div>
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--adm-text-muted, #64748b)' }}>Loading recipients...</div>
               ) : inspectRecipients.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8 }}>No recipient records found.</div>
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--adm-text-muted, #64748b)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: 8 }}>No recipient records found.</div>
               ) : (
                 <SmartTable
                   title="Distribution Recipients"
@@ -1241,22 +1241,22 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 >
                   <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                      <tr style={{ background: 'var(--adm-bg-subtle, #f8fafc)', borderBottom: '1px solid var(--adm-border, #e2e8f0)' }}>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
                           Customer / Company
                         </th>
-                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
                           Phone
                         </th>
-                        <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: '#475569' }}>
+                        <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
                           Response Status
                         </th>
                       </tr>
                     </thead>
                     <tbody>
                       {inspectRecipients.map((r, i) => (
-                        <tr key={r.id || i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.84rem', color: '#1e293b' }}>
+                        <tr key={r.id || i} style={{ borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
+                          <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: '0.84rem', color: 'var(--adm-text-secondary, #1e293b)' }}>
                             {(() => {
                               const raw = r.companyName || r.company_name || '';
                               const isGen = !raw || raw.toLowerCase() === 'registered business' || raw.toLowerCase() === 'corporate workspace';
@@ -1264,7 +1264,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                               return !isGen ? raw : (cleanPhone ? 'Customer ' + cleanPhone.slice(-4) : 'Client Account');
                             })()}
                           </td>
-                          <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: '#475569' }}>
+                          <td style={{ padding: '10px 14px', fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)' }}>
                             {r.phone}
                           </td>
                           <td style={{ padding: '10px 14px', textAlign: 'right' }}>
@@ -1274,8 +1274,8 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                                 borderRadius: 10,
                                 fontSize: '0.72rem',
                                 fontWeight: 700,
-                                backgroundColor: r.responseInterest === 'Interested' ? '#ecfdf5' : '#f1f5f9',
-                                color: r.responseInterest === 'Interested' ? '#047857' : '#64748b',
+                                backgroundColor: r.responseInterest === 'Interested' ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-bg-muted, #f1f5f9)',
+                                color: r.responseInterest === 'Interested' ? 'var(--adm-soft-emerald-text, #047857)' : 'var(--adm-text-muted, #64748b)',
                               }}
                             >
                               {r.responseInterest || 'Pending'}

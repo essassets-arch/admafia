@@ -280,7 +280,7 @@ export default function CreatePostIdeasDesk({
       <div className="marketing-controls-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', flex: 1 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 'min(100%, 220px)', flex: 1 }}>
-            <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#475569' }}>1. ACTIVE CUSTOMER</label>
+            <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--adm-text-body, #475569)' }}>1. ACTIVE CUSTOMER</label>
             <select
               className="marketing-select"
               value={selectedCustomerId}
@@ -298,7 +298,7 @@ export default function CreatePostIdeasDesk({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 'min(100%, 220px)', flex: 1.5 }}>
-            <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#475569' }}>
+            <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--adm-text-body, #475569)' }}>
               2. LINK TO SAVED BUILD IDEA (CUSTOMER-SCOPED)
             </label>
             <select
@@ -405,24 +405,25 @@ export default function CreatePostIdeasDesk({
           <div className="mkt-form-group">
             <label className="mkt-form-label">Media Creative Attachment (Image / Video)</label>
             <div
+              className="mkt-upload-dropzone"
               style={{
-                border: '2px dashed #cbd5e1',
+                border: '2px dashed var(--adm-border-strong, #cbd5e1)',
                 borderRadius: '12px',
                 padding: '20px',
                 textAlign: 'center',
-                background: '#f8fafc',
+                background: 'var(--adm-bg-subtle, #f8fafc)',
                 position: 'relative',
               }}
             >
               {uploadingMedia ? (
-                <div style={{ color: '#4f46e5', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ color: '#6366f1', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                   <RefreshCw size={18} className="spin" /> Uploading media creative...
                 </div>
               ) : mediaUrl ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <CheckCircle2 size={20} color="#10b981" />
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)' }}>
                       Creative attached ({mediaType})
                     </span>
                   </div>
@@ -436,11 +437,11 @@ export default function CreatePostIdeasDesk({
                 </div>
               ) : (
                 <div>
-                  <Upload size={24} style={{ color: '#94a3b8', marginBottom: '6px' }} />
-                  <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>
+                  <Upload size={24} style={{ color: 'var(--adm-text-muted, #94a3b8)', marginBottom: '6px' }} />
+                  <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', marginBottom: '2px' }}>
                     Upload Creative Media
                   </div>
-                  <div style={{ fontSize: '0.76rem', color: '#64748b', marginBottom: '12px' }}>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginBottom: '12px' }}>
                     JPG, PNG, WEBP, GIF or MP4 (Max 15MB)
                   </div>
                   <label
@@ -581,7 +582,7 @@ export default function CreatePostIdeasDesk({
         <div
           style={{
             padding: '16px 20px',
-            borderBottom: '1px solid #e2e8f0',
+            borderBottom: '1px solid var(--adm-border, #e2e8f0)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -612,7 +613,7 @@ export default function CreatePostIdeasDesk({
             <tbody>
               {loadingPosts ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px', color: '#64748b' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                       <RefreshCw size={16} className="spin" />
                       <span>Loading posts...</span>
@@ -621,7 +622,7 @@ export default function CreatePostIdeasDesk({
                 </tr>
               ) : recentPosts.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px', color: '#64748b', fontSize: '0.84rem' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.84rem' }}>
                     No posts created yet for this customer.
                   </td>
                 </tr>
@@ -635,7 +636,7 @@ export default function CreatePostIdeasDesk({
                   return (
                     <tr key={p.id || idx}>
                       <td>
-                        <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>
+                        <strong style={{ fontSize: '0.86rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                           {p.title || 'Untitled Post'}
                         </strong>
                         <div className="mkt-cell-sub" style={{ fontFamily: 'monospace', fontSize: '0.74rem' }}>
@@ -648,7 +649,7 @@ export default function CreatePostIdeasDesk({
                             {p.platform || 'Meta Ads'}
                           </span>
                           {formatTag && (
-                            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                            <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                               {formatTag}
                             </span>
                           )}
@@ -656,7 +657,7 @@ export default function CreatePostIdeasDesk({
                       </td>
                       <td>
                         {validDate ? (
-                          <span style={{ fontSize: '0.78rem', color: '#475569' }}>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
                             {parsedDate.toLocaleDateString('en-IN', {
                               timeZone: 'Asia/Kolkata',
                               day: '2-digit',
@@ -665,7 +666,7 @@ export default function CreatePostIdeasDesk({
                             })}
                           </span>
                         ) : (
-                          <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>—</span>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #94a3b8)' }}>—</span>
                         )}
                       </td>
                       <td>

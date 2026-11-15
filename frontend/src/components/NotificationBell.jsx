@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, CheckCheck, ExternalLink, BellRing, Send, X } from 'lucide-react';
 import crmApi, { getActiveAuthToken } from '../services/crmApi';
 import { subscribeToRealtimeNotifications, enableBrowserPushNotifications } from '../services/firebaseClient';
+import { useAdminTheme } from '../utils/adminTheme';
 
 /**
  * Universal Real-Time Notification Bell (Google Firebase FCM + Live SSE)
  * Mounted across Super Admin, Sales, Marketing, Graphics, and Customer Portal headers.
  */
-export default function NotificationBell({ variant = 'light', onNavigateLink }) {
+export default function NotificationBell({ variant = 'light', adminThemeAware = false, onNavigateLink }) {
+  const { isDark: adminDark } = useAdminTheme({ syncDocument: false });
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -120,7 +122,17 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
     }
   };
 
-  const isDark = variant === 'dark';
+  const isInsideAdminScope =
+    adminThemeAware ||
+    (typeof document !== 'undefined' && Boolean(wrapRef.current?.closest?.('.adm-theme-scope')));
+  const isDark = variant === 'dark' || (isInsideAdminScope && adminDark);
+  const surfaceBg = isDark ? '#111827' : '#ffffff';
+  const headerBg = isDark ? '#0b1120' : '#f8fafc';
+  const borderCol = isDark ? '#1e293b' : '#e2e8f0';
+  const rowBorderCol = isDark ? 'rgba(148, 163, 184, 0.12)' : '#f1f5f9';
+  const titleCol = isDark ? '#f8fafc' : '#0f172a';
+  const bodyCol = isDark ? '#cbd5e1' : '#475569';
+  const mutedCol = isDark ? '#94a3b8' : '#64748b';
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
@@ -263,38 +275,38 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
             right: 0,
             width: 'min(370px, 92vw)',
             maxHeight: '470px',
-            background: '#ffffff',
+            background: surfaceBg,
             borderRadius: '14px',
-            boxShadow: '0 20px 50px rgba(15, 23, 42, 0.22)',
-            border: '1px solid #e2e8f0',
+            boxShadow: isDark ? '0 24px 56px rgba(0, 0, 0, 0.55)' : '0 20px 50px rgba(15, 23, 42, 0.22)',
+            border: `1px solid ${borderCol}`,
             zIndex: 99995,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            color: '#0f172a',
+            color: titleCol,
           }}
         >
           <div
             style={{
               padding: '12px 14px',
-              borderBottom: '1px solid #f1f5f9',
+              borderBottom: `1px solid ${rowBorderCol}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: '#f8fafc',
+              background: headerBg,
               gap: '8px',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>Notifications</strong>
+              <strong style={{ fontSize: '0.9rem', color: titleCol }}>Notifications</strong>
               <span
                 style={{
                   fontSize: '0.68rem',
                   fontWeight: 700,
                   padding: '2px 7px',
                   borderRadius: '999px',
-                  background: liveConnected ? '#dcfce7' : '#f1f5f9',
-                  color: liveConnected ? '#15803d' : '#64748b',
+                  background: liveConnected ? (isDark ? 'rgba(16, 185, 129, 0.16)' : '#dcfce7') : (isDark ? '#1e293b' : '#f1f5f9'),
+                  color: liveConnected ? (isDark ? '#34d399' : '#15803d') : mutedCol,
                 }}
               >
                 {liveConnected ? 'LIVE' : 'SYNC'}
@@ -420,9 +432,9 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
             </div>
           )}
 
-          <div style={{ overflowY: 'auto', maxHeight: '360px' }}>
+          <div className="am-notif-scroll-list" style={{ overflowY: 'auto', maxHeight: '360px' }}>
             {items.length === 0 ? (
-              <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b', fontSize: '0.84rem' }}>
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: mutedCol, fontSize: '0.84rem' }}>
                 No notifications yet. Real-time lead, wallet, and account events will appear here instantly.
               </div>
             ) : (
@@ -434,8 +446,8 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
                     onClick={() => handleSelectItem(item)}
                     style={{
                       padding: '12px 14px',
-                      borderBottom: '1px solid #f1f5f9',
-                      background: read ? '#ffffff' : '#f0f9ff',
+                      borderBottom: `1px solid ${rowBorderCol}`,
+                      background: read ? surfaceBg : (isDark ? 'rgba(59, 130, 246, 0.12)' : '#f0f9ff'),
                       cursor: 'pointer',
                       display: 'flex',
                       gap: '10px',
@@ -449,17 +461,17 @@ export default function NotificationBell({ variant = 'light', onNavigateLink }) 
                         borderRadius: '50%',
                         marginTop: '6px',
                         flexShrink: 0,
-                        background: read ? '#cbd5e1' : '#2563eb',
+                        background: read ? (isDark ? '#475569' : '#cbd5e1') : '#3b82f6',
                       }}
                     />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px', marginBottom: '3px' }}>
-                        <strong style={{ fontSize: '0.83rem', color: '#0f172a' }}>{item.title}</strong>
-                        {item.deepLink && <ExternalLink size={12} color="#64748b" style={{ flexShrink: 0 }} />}
+                        <strong style={{ fontSize: '0.83rem', color: titleCol }}>{item.title}</strong>
+                        {item.deepLink && <ExternalLink size={12} color={mutedCol} style={{ flexShrink: 0 }} />}
                       </div>
-                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#475569', lineHeight: 1.45 }}>{item.body}</p>
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: bodyCol, lineHeight: 1.45 }}>{item.body}</p>
                       {item.createdAt && (
-                        <span style={{ fontSize: '0.69rem', color: '#94a3b8', marginTop: '4px', display: 'inline-block' }}>
+                        <span style={{ fontSize: '0.69rem', color: mutedCol, marginTop: '4px', display: 'inline-block' }}>
                           {new Date(item.createdAt).toLocaleString('en-IN', {
                             day: '2-digit',
                             month: 'short',

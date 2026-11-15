@@ -21,9 +21,12 @@ import CustomerMarketingControlDesk from './CustomerMarketingControlDesk';
 import marketingApi from '../services/marketingApi';
 import adminAuthApi from '../services/adminAuthApi';
 import NotificationBell from '../components/NotificationBell';
+import { useAdminTheme } from '../utils/adminTheme';
+import AdminThemeToggle from '../components/AdminThemeToggle';
 import './marketing.css';
 
 export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
+  const { theme } = useAdminTheme();
   const activeUser = adminAuthApi.getCurrentUser() || {
     fullName: 'Senior Marketing Director',
     role: 'Marketing Manager',
@@ -159,7 +162,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
   ];
 
   return (
-    <div className="marketing-layout-root">
+    <div className="marketing-layout-root adm-theme-scope" data-admin-theme={theme}>
       {/* 1. Desktop & Mobile Sidebar */}
       <aside className={`marketing-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="marketing-sidebar-brand">
@@ -195,8 +198,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
                 </div>
                 {item.badge !== null && item.badge !== undefined && (
                   <span
-                    className="marketing-nav-badge"
-                    style={item.urgent ? { background: '#f59e0b', color: '#ffffff' } : undefined}
+                    className={`marketing-nav-badge ${item.urgent ? 'urgent' : ''}`.trim()}
                   >
                     {item.badge}
                   </span>
@@ -266,7 +268,8 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
           </div>
 
           <div className="marketing-top-actions">
-            <NotificationBell variant="light" />
+            <AdminThemeToggle />
+            <NotificationBell variant="light" adminThemeAware />
             <button
               type="button"
               className="mkt-topbar-logout-btn"
@@ -296,11 +299,22 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
                 hour12: true,
               })} IST
             </div>
-            <div className="mkt-user-pill" style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', padding: '5px 12px', borderRadius: 8 }}>
+            <div
+              className="mkt-user-pill"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'var(--adm-bg-subtle, #f8fafc)',
+                border: '1px solid var(--adm-border, #e2e8f0)',
+                padding: '5px 12px',
+                borderRadius: 8,
+              }}
+            >
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ec4899', flexShrink: 0 }} />
               <div style={{ textAlign: 'left', lineHeight: 1.2, minWidth: 0 }}>
-                <div className="mkt-user-name" style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{activeUser.fullName}</div>
-                <div className="mkt-user-role" style={{ fontSize: 10, fontWeight: 600, color: '#475569' }}>{activeUser.role}</div>
+                <div className="mkt-user-name" style={{ fontSize: 12, fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{activeUser.fullName}</div>
+                <div className="mkt-user-role" style={{ fontSize: 10, fontWeight: 600, color: 'var(--adm-text-muted, #475569)' }}>{activeUser.role}</div>
               </div>
             </div>
           </div>

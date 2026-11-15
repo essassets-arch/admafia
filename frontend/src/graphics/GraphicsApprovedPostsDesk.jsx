@@ -73,43 +73,19 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
           </p>
         </div>
         <div className="graphics-header-actions">
-          <div style={{ display: 'flex', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 2 }}>
+          <div className="gfx-view-switcher">
             <button
               type="button"
+              className={`gfx-view-btn ${viewMode === 'grid' ? 'active' : ''}`.trim()}
               onClick={() => setViewMode('grid')}
-              style={{
-                border: 'none',
-                background: viewMode === 'grid' ? '#eef2ff' : 'transparent',
-                color: viewMode === 'grid' ? '#4f46e5' : '#64748b',
-                padding: '6px 10px',
-                borderRadius: 6,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                fontWeight: 700,
-                fontSize: '0.78rem',
-              }}
             >
               <LayoutGrid size={13} />
               <span>Cards</span>
             </button>
             <button
               type="button"
+              className={`gfx-view-btn ${viewMode === 'table' ? 'active' : ''}`.trim()}
               onClick={() => setViewMode('table')}
-              style={{
-                border: 'none',
-                background: viewMode === 'table' ? '#eef2ff' : 'transparent',
-                color: viewMode === 'table' ? '#4f46e5' : '#64748b',
-                padding: '6px 10px',
-                borderRadius: 6,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                fontWeight: 700,
-                fontSize: '0.78rem',
-              }}
             >
               <List size={13} />
               <span>Table</span>
@@ -145,15 +121,15 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
       {/* 3. Empty & Loading States */}
       {loading ? (
         <div className="graphics-table-card" style={{ padding: 40, textAlign: 'center' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#64748b' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--adm-text-muted, #64748b)' }}>
             <RefreshCw size={18} className="spin" />
             <span>Loading approved artwork portfolio...</span>
           </div>
         </div>
       ) : approvedPosts.length === 0 ? (
-        <div className="graphics-table-card" style={{ padding: 48, textAlign: 'center', color: '#64748b' }}>
-          <CheckCircle2 size={36} color="#cbd5e1" style={{ marginBottom: 8 }} />
-          <h4 style={{ margin: '0 0 4px 0', color: '#0f172a' }}>No approved artwork yet</h4>
+        <div className="graphics-table-card" style={{ padding: 48, textAlign: 'center', color: 'var(--adm-text-muted, #64748b)' }}>
+          <CheckCircle2 size={36} style={{ color: 'var(--adm-border-strong, #cbd5e1)', marginBottom: 8 }} />
+          <h4 style={{ margin: '0 0 4px 0', color: 'var(--adm-text-primary, #0f172a)' }}>No approved artwork yet</h4>
           <p style={{ margin: 0, fontSize: '0.84rem' }}>
             When Marketing approves your submitted artwork in the verification queue, it will appear here.
           </p>
@@ -187,14 +163,14 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
               <div className="graphics-art-body">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                   <div>
-                    <strong style={{ fontSize: '0.94rem', color: '#0f172a' }}>{p.title}</strong>
-                    <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+                    <strong style={{ fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>{p.title}</strong>
+                    <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                       {p.companyName} • {p.city || 'India'}
                     </div>
                   </div>
                   <button
                     type="button"
-                    className="graphics-footer-btn"
+                    className="graphics-btn-secondary"
                     style={{ padding: '4px 8px', fontSize: '0.72rem' }}
                     onClick={() => setPreviewPost(p)}
                     title="Inspect Artwork"
@@ -206,7 +182,7 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
                 <div
                   style={{
                     fontSize: '0.78rem',
-                    color: '#475569',
+                    color: 'var(--adm-text-body, #475569)',
                     marginTop: 8,
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
@@ -244,6 +220,7 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
                   <tr key={p.id}>
                     <td>
                       <div
+                        className="gfx-artwork-preview-box"
                         style={{
                           width: 58,
                           height: 58,
@@ -251,7 +228,7 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
                           overflow: 'hidden',
                           cursor: 'pointer',
                           background: '#0f172a',
-                          border: '1px solid #e2e8f0',
+                          border: '1px solid var(--adm-border, #e2e8f0)',
                         }}
                         onClick={() => setPreviewPost(p)}
                       >
@@ -263,8 +240,8 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
                       </div>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 800, color: '#0f172a' }}>{p.title}</div>
-                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                      <div style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>{p.title}</div>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         {p.companyName}
                       </div>
                       <div style={{ marginTop: 4 }}>
@@ -277,7 +254,7 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
                       <div
                         style={{
                           fontSize: '0.78rem',
-                          color: '#475569',
+                          color: 'var(--adm-text-body, #475569)',
                           display: '-webkit-box',
                           WebkitLineClamp: 2,
                           WebkitBoxOrient: 'vertical',
@@ -290,10 +267,10 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <ShieldCheck size={14} color="#059669" />
-                        <strong style={{ fontSize: '0.80rem', color: '#065f46' }}>{p.reviewerName}</strong>
+                        <ShieldCheck size={14} color="#10b981" />
+                        <strong style={{ fontSize: '0.80rem', color: 'var(--adm-text-primary, #065f46)' }}>{p.reviewerName}</strong>
                       </div>
-                      <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: 2 }}>
+                      <div style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         {new Date(p.approvedAt).toLocaleDateString('en-IN', {
                           day: '2-digit',
                           month: 'short',
@@ -327,7 +304,7 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
               </div>
               <button
                 type="button"
-                className="graphics-footer-btn"
+                className="graphics-btn-secondary"
                 style={{ padding: 6, borderRadius: '50%' }}
                 onClick={() => setPreviewPost(null)}
               >
@@ -343,11 +320,11 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
               />
             </div>
 
-            <div style={{ padding: '16px 22px', background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="graphics-modal-footer" style={{ padding: '16px 22px', background: 'var(--adm-bg-subtle, #f8fafc)', borderTop: '1px solid var(--adm-border, #e2e8f0)', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: 12, flexWrap: 'wrap' }}>
                 <div>
-                  <strong style={{ color: '#0f172a' }}>{previewPost.companyName}</strong>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                  <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{previewPost.companyName}</strong>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                     Verified by {previewPost.reviewerName} ({previewPost.reviewerRole})
                   </div>
                 </div>

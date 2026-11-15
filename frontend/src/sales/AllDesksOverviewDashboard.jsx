@@ -170,7 +170,7 @@ export default function AllDesksOverviewDashboard({
       action: 'Manage Registrations →',
       icon: Users,
       color: '#4f46e5',
-      bg: '#eef2ff',
+      bg: 'var(--adm-soft-indigo-bg, #eef2ff)',
       target: '#customers',
     },
     {
@@ -184,7 +184,7 @@ export default function AllDesksOverviewDashboard({
       action: 'View Intake Audit →',
       icon: ShieldCheck,
       color: '#059669',
-      bg: '#ecfdf5',
+      bg: 'var(--adm-soft-emerald-bg, #ecfdf5)',
       target: '#verification',
     },
     {
@@ -197,8 +197,8 @@ export default function AllDesksOverviewDashboard({
       sub: 'Verified accounts with completed payment & profile • Live wallet balance',
       action: 'View Approved Members →',
       icon: UserCheck,
-      color: '#15803d',
-      bg: '#f0fdf4',
+      color: 'var(--adm-soft-emerald-text, #15803d)',
+      bg: 'var(--adm-soft-emerald-bg, #f0fdf4)',
       target: '#approved',
     },
     {
@@ -212,7 +212,7 @@ export default function AllDesksOverviewDashboard({
       action: 'Dispatch Leads →',
       icon: Layers,
       color: '#0284c7',
-      bg: '#f0f9ff',
+      bg: 'var(--adm-soft-sky-bg, #f0f9ff)',
       target: '#leads',
     },
     {
@@ -226,7 +226,7 @@ export default function AllDesksOverviewDashboard({
       action: 'Complete Profiles →',
       icon: FileCheck2,
       color: '#d97706',
-      bg: '#fffbeb',
+      bg: 'var(--adm-soft-amber-bg, #fffbeb)',
       target: '#profiles',
     },
     {
@@ -240,7 +240,7 @@ export default function AllDesksOverviewDashboard({
       action: 'View Billing Ledger →',
       icon: CreditCard,
       color: '#16a34a',
-      bg: '#f0fdf4',
+      bg: 'var(--adm-soft-emerald-bg, #f0fdf4)',
       target: '#payments',
     },
     {
@@ -254,7 +254,7 @@ export default function AllDesksOverviewDashboard({
       action: 'Manage Wallets →',
       icon: Wallet,
       color: '#4f46e5',
-      bg: '#eef2ff',
+      bg: 'var(--adm-soft-indigo-bg, #eef2ff)',
       target: '#wallets',
     },
     {
@@ -268,7 +268,7 @@ export default function AllDesksOverviewDashboard({
       action: 'Open Support Desk →',
       icon: Headphones,
       color: '#8b5cf6',
-      bg: '#f5f3ff',
+      bg: 'var(--adm-soft-purple-bg, #f5f3ff)',
       target: '#queries',
     },
     {
@@ -282,7 +282,7 @@ export default function AllDesksOverviewDashboard({
       action: 'Distribute Leads →',
       icon: FolderTree,
       color: '#0891b2',
-      bg: '#ecfeff',
+      bg: 'var(--adm-soft-cyan-bg, #ecfeff)',
       target: '#groups',
     },
     {
@@ -296,7 +296,7 @@ export default function AllDesksOverviewDashboard({
       action: 'Open Action Tasks →',
       icon: Calendar,
       color: '#e11d48',
-      bg: '#fff1f2',
+      bg: 'var(--adm-soft-rose-bg, #fff1f2)',
       target: '#tasks',
     },
   ];
@@ -316,8 +316,8 @@ export default function AllDesksOverviewDashboard({
                 fontSize: '0.75rem',
                 fontWeight: 800,
                 color: '#059669',
-                background: '#ecfdf5',
-                border: '1px solid #a7f3d0',
+                background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)',
                 padding: '4px 10px',
                 borderRadius: 9999,
                 letterSpacing: '0.04em',
@@ -344,13 +344,13 @@ export default function AllDesksOverviewDashboard({
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 8,
-              background: '#f8fafc',
-              border: '1px solid #cbd5e1',
+              background: 'var(--adm-bg-subtle, #f8fafc)',
+              border: '1px solid var(--adm-border-strong, #cbd5e1)',
               padding: '6px 12px',
               borderRadius: 8,
               fontSize: '0.80rem',
               fontWeight: 700,
-              color: '#0f172a',
+              color: 'var(--adm-text-primary, #0f172a)',
               boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
               fontVariantNumeric: 'tabular-nums',
               maxWidth: '100%',
@@ -381,8 +381,8 @@ export default function AllDesksOverviewDashboard({
                 fontSize: '0.66rem',
                 fontWeight: 800,
                 color: '#059669',
-                background: '#ecfdf5',
-                border: '1px solid #a7f3d0',
+                background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)',
                 padding: '2px 6px',
                 borderRadius: 4,
               }}
@@ -430,7 +430,7 @@ export default function AllDesksOverviewDashboard({
         <div className="desk-kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div className="desk-kpi-label">TOTAL MANAGED ACCOUNTS</div>
-            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#eef2ff', color: '#4f46e5', display: 'grid', placeItems: 'center' }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--adm-soft-indigo-bg, #eef2ff)', color: '#4f46e5', display: 'grid', placeItems: 'center' }}>
               <Users size={15} />
             </div>
           </div>
@@ -443,7 +443,7 @@ export default function AllDesksOverviewDashboard({
         <div className="desk-kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div className="desk-kpi-label">INBOUND LEAD FLOW</div>
-            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#f0f9ff', color: '#0284c7', display: 'grid', placeItems: 'center' }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--adm-soft-sky-bg, #f0f9ff)', color: '#0284c7', display: 'grid', placeItems: 'center' }}>
               <Layers size={15} />
             </div>
           </div>
@@ -458,7 +458,7 @@ export default function AllDesksOverviewDashboard({
         <div className="desk-kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div className="desk-kpi-label">ACTIVE WALLET RESERVES</div>
-            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#f0fdf4', color: '#16a34a', display: 'grid', placeItems: 'center' }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--adm-soft-emerald-bg, #f0fdf4)', color: '#16a34a', display: 'grid', placeItems: 'center' }}>
               <Wallet size={15} />
             </div>
           </div>
@@ -471,7 +471,7 @@ export default function AllDesksOverviewDashboard({
         <div className="desk-kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div className="desk-kpi-label">GROSS SETTLED REVENUE</div>
-            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#eff6ff', color: '#2563eb', display: 'grid', placeItems: 'center' }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--adm-soft-blue-bg, #eff6ff)', color: '#2563eb', display: 'grid', placeItems: 'center' }}>
               <CreditCard size={15} />
             </div>
           </div>
@@ -486,10 +486,10 @@ export default function AllDesksOverviewDashboard({
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
-            <h2 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+            <h2 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
               Authorized Operations Desks (01 – 09)
             </h2>
-            <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
               Click any operational desk card to open its dedicated workbench
             </div>
           </div>
@@ -503,8 +503,8 @@ export default function AllDesksOverviewDashboard({
                 key={d.id}
                 onClick={() => navigateToDesk(d.id, d.target)}
                 style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: 12,
                   padding: '16px 18px',
                   cursor: 'pointer',
@@ -520,7 +520,7 @@ export default function AllDesksOverviewDashboard({
                   e.currentTarget.style.boxShadow = `0 6px 16px rgba(0, 0, 0, 0.07)`;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#e2e8f0';
+                  e.currentTarget.style.borderColor = 'var(--adm-border, #e2e8f0)';
                   e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
                 }}
@@ -546,7 +546,7 @@ export default function AllDesksOverviewDashboard({
                         <div style={{ fontSize: '0.68rem', color: d.color, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                           DESK {d.num}
                         </div>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a', overflowWrap: 'anywhere' }}>
+                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', overflowWrap: 'anywhere' }}>
                           {d.title}
                         </div>
                       </div>
@@ -557,11 +557,11 @@ export default function AllDesksOverviewDashboard({
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                    <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0f172a' }}>
+                    <span style={{ fontSize: '1.45rem', fontWeight: 900, color: 'var(--adm-text-primary, #0f172a)' }}>
                       {d.metric}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4, lineHeight: 1.4 }}>
                     {d.sub}
                   </div>
                 </div>
@@ -570,7 +570,7 @@ export default function AllDesksOverviewDashboard({
                   style={{
                     marginTop: 14,
                     paddingTop: 10,
-                    borderTop: '1px solid #f1f5f9',
+                    borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
@@ -593,8 +593,8 @@ export default function AllDesksOverviewDashboard({
         {/* 4.1 Live Inbound Leads (Desk 03) */}
         <div
           style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--adm-bg-card, #ffffff)',
+            border: '1px solid var(--adm-border, #e2e8f0)',
             borderRadius: 16,
             padding: 20,
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
@@ -604,14 +604,14 @@ export default function AllDesksOverviewDashboard({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#f0f9ff', color: '#0284c7', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--adm-soft-sky-bg, #f0f9ff)', color: '#0284c7', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                 <Layers size={17} />
               </div>
               <div style={{ minWidth: 0 }}>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   Live Inbound Leads (Desk 03)
                 </h3>
-                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Direct contact channels with instant Call &amp; WhatsApp actions
                 </div>
               </div>
@@ -642,7 +642,7 @@ export default function AllDesksOverviewDashboard({
                 <tbody>
                   {leads.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--adm-text-muted, #64748b)' }}>
                         No inbound leads recorded yet.
                       </td>
                     </tr>
@@ -654,20 +654,20 @@ export default function AllDesksOverviewDashboard({
                       return (
                         <tr key={l.id}>
                           <td>
-                            <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                               {cleanPhone}
                             </span>
                           </td>
                           <td>
-                            <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e3a8a' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--adm-soft-blue-text, #1e3a8a)' }}>
                               🏢 {assignedClient}
                             </span>
                           </td>
                           <td>
                             <span
                               style={{
-                                background: '#f1f5f9',
-                                color: '#334155',
+                                background: 'var(--adm-bg-muted, #f1f5f9)',
+                                color: 'var(--adm-text-body, #334155)',
                                 padding: '2px 8px',
                                 borderRadius: 6,
                                 fontSize: '0.75rem',
@@ -689,7 +689,7 @@ export default function AllDesksOverviewDashboard({
                             )}
                           </td>
                           <td>
-                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#475569' }}>
+                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text-body, #475569)' }}>
                               {l.createdAt || l.time
                                 ? formatIndianDateTime(l.createdAt || l.time, l.createdAtRaw || l.created_at)
                                 : '—'}
@@ -723,9 +723,9 @@ export default function AllDesksOverviewDashboard({
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: 4,
-                                  background: '#ecfdf5',
-                                  color: '#065f46',
-                                  borderColor: '#a7f3d0',
+                                  background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                                  color: 'var(--adm-soft-emerald-text, #065f46)',
+                                  borderColor: 'var(--adm-soft-emerald-border, #a7f3d0)',
                                 }}
                               >
                                 <MessageSquare size={13} color="#059669" /> WhatsApp
@@ -745,8 +745,8 @@ export default function AllDesksOverviewDashboard({
         {/* 4.2 Auto-Verified Customer Accounts */}
         <div
           style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--adm-bg-card, #ffffff)',
+            border: '1px solid var(--adm-border, #e2e8f0)',
             borderRadius: 16,
             padding: 20,
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
@@ -756,14 +756,14 @@ export default function AllDesksOverviewDashboard({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#ecfdf5', color: '#059669', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--adm-soft-emerald-bg, #ecfdf5)', color: '#059669', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                 <ShieldCheck size={17} />
               </div>
               <div style={{ minWidth: 0 }}>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   Auto-Verified Customer Accounts
                 </h3>
-                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   100% self-serve onboarding &amp; automated KYC intake audit
                 </div>
               </div>
@@ -794,7 +794,7 @@ export default function AllDesksOverviewDashboard({
                 <tbody>
                   {customers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--adm-text-muted, #64748b)' }}>
                         No auto-verified customer accounts yet.
                       </td>
                     </tr>
@@ -805,19 +805,19 @@ export default function AllDesksOverviewDashboard({
                       return (
                         <tr key={c.id}>
                           <td>
-                            <div style={{ fontWeight: 800, fontSize: '0.90rem', color: '#0f172a' }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.90rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                               {identity.displayName}
                             </div>
                             {identity.username && (
                               <div style={{ marginTop: 2 }}>
-                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4f46e5', background: '#eef2ff', padding: '1px 6px', borderRadius: 4 }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4f46e5', background: 'var(--adm-soft-indigo-bg, #eef2ff)', padding: '1px 6px', borderRadius: 4 }}>
                                   @{identity.username}
                                 </span>
                               </div>
                             )}
                           </td>
                           <td>
-                            <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a' }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                               {identity.contactPerson}
                             </div>
                             <div style={{ fontSize: '0.80rem', fontFamily: 'monospace', fontWeight: 700, color: '#059669', marginTop: 2 }}>
@@ -825,12 +825,12 @@ export default function AllDesksOverviewDashboard({
                             </div>
                           </td>
                           <td>
-                            <span style={{ fontWeight: 600, fontSize: '0.84rem', color: '#334155' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--adm-text-body, #334155)' }}>
                               {c.city || 'India'}
                             </span>
                           </td>
                           <td>
-                            <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 600 }}>
+                            <span style={{ fontSize: '0.82rem', color: 'var(--adm-text-body, #475569)', fontWeight: 600 }}>
                               {formatIndianDateTime(
                                 c.completedAt || c.registeredAt,
                                 c.completedAt || c.registeredAtRaw || c.registered_at
@@ -838,7 +838,7 @@ export default function AllDesksOverviewDashboard({
                             </span>
                           </td>
                           <td>
-                            <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                            <span style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                               {formatINR(c.balance || c.walletBalance || 0)}
                             </span>
                           </td>
@@ -860,8 +860,8 @@ export default function AllDesksOverviewDashboard({
         {/* 4.3 Wallets & Runway Monitor (Desk 06) */}
         <div
           style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--adm-bg-card, #ffffff)',
+            border: '1px solid var(--adm-border, #e2e8f0)',
             borderRadius: 16,
             padding: 20,
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
@@ -871,14 +871,14 @@ export default function AllDesksOverviewDashboard({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#eef2ff', color: '#4f46e5', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--adm-soft-indigo-bg, #eef2ff)', color: '#4f46e5', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                 <Wallet size={17} />
               </div>
               <div style={{ minWidth: 0 }}>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   Wallets &amp; Runway Monitor (Desk 06)
                 </h3>
-                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Daily ₹300 campaign burn rate &amp; active runway health
                 </div>
               </div>
@@ -919,7 +919,7 @@ export default function AllDesksOverviewDashboard({
                 <tbody>
                   {customers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--adm-text-muted, #64748b)' }}>
                         No client wallets recorded yet.
                       </td>
                     </tr>
@@ -933,19 +933,19 @@ export default function AllDesksOverviewDashboard({
                       return (
                         <tr key={c.id}>
                           <td>
-                            <div style={{ fontWeight: 800, fontSize: '0.90rem', color: '#0f172a' }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.90rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                               {identity.displayName}
                             </div>
                             {identity.username && (
                               <div style={{ marginTop: 2 }}>
-                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4f46e5', background: '#eef2ff', padding: '1px 6px', borderRadius: 4 }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#4f46e5', background: 'var(--adm-soft-indigo-bg, #eef2ff)', padding: '1px 6px', borderRadius: 4 }}>
                                   @{identity.username}
                                 </span>
                               </div>
                             )}
                           </td>
                           <td>
-                            <span style={{ fontWeight: 600, fontSize: '0.84rem', color: '#334155' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--adm-text-body, #334155)' }}>
                               {c.city || 'India'}
                             </span>
                           </td>
@@ -955,7 +955,7 @@ export default function AllDesksOverviewDashboard({
                             </span>
                           </td>
                           <td>
-                            <span style={{ fontSize: '0.96rem', fontWeight: 900, color: !isLowBalance ? '#0f172a' : '#e11d48' }}>
+                            <span style={{ fontSize: '0.96rem', fontWeight: 900, color: !isLowBalance ? 'var(--adm-text-primary, #0f172a)' : '#e11d48' }}>
                               {formatINR(bal)}
                             </span>
                           </td>
@@ -988,8 +988,8 @@ export default function AllDesksOverviewDashboard({
         {/* 4.4 Payment Collection & Ledger (Desk 05) */}
         <div
           style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--adm-bg-card, #ffffff)',
+            border: '1px solid var(--adm-border, #e2e8f0)',
             borderRadius: 16,
             padding: 20,
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
@@ -999,14 +999,14 @@ export default function AllDesksOverviewDashboard({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#f0fdf4', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--adm-soft-emerald-bg, #f0fdf4)', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                 <CreditCard size={17} />
               </div>
               <div style={{ minWidth: 0 }}>
-                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   Payment Collection &amp; Ledger (Desk 05)
                 </h3>
-                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Official GST tax invoices, Razorpay settlements &amp; reconciled receipts
                 </div>
               </div>
@@ -1036,7 +1036,7 @@ export default function AllDesksOverviewDashboard({
                 <tbody>
                   {(paymentRecords.length > 0 ? paymentRecords : invoices).length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--adm-text-muted, #64748b)' }}>
                         No settled payment records yet.
                       </td>
                     </tr>
@@ -1044,17 +1044,17 @@ export default function AllDesksOverviewDashboard({
                     (paymentRecords.length > 0 ? paymentRecords : invoices).map((item) => (
                       <tr key={item.id || item.receiptNumber || item.invoiceNumber}>
                         <td>
-                          <span style={{ fontWeight: 800, fontSize: '0.90rem', color: '#0f172a' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.90rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                             {item.customerName || item.companyName || item.client || 'Client Account'}
                           </span>
                         </td>
                         <td>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.84rem', color: '#334155' }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.84rem', color: 'var(--adm-text-body, #334155)' }}>
                             {item.receiptNumber || item.receiptNo || item.invoiceNumber || item.utr || 'REC-SETTLED'}
                           </span>
                         </td>
                         <td>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#475569' }}>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text-body, #475569)' }}>
                             {formatIndianDateTime(item.date, item.paid_at_raw || item.paid_at)}
                           </span>
                         </td>

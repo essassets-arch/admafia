@@ -16,8 +16,10 @@ import {
 } from 'lucide-react';
 import superadminApi from '../services/superadminApi';
 import { SmartTable } from '../components/SmartTabulator';
+import { useAdminTheme } from '../utils/adminTheme';
 
 export default function SuperAdminFinanceDesk() {
+  const { isDark } = useAdminTheme({ syncDocument: false });
   const [activeTab, setActiveTab] = useState('ledger'); // 'ledger' or 'accounts'
   const [summary, setSummary] = useState({
     totalWalletLiability: 0,
@@ -167,11 +169,17 @@ export default function SuperAdminFinanceDesk() {
         <div className="sa-stat-card">
           <div className="sa-stat-top">
             <span className="sa-stat-title">Total Wallet Liability</span>
-            <div className="sa-stat-icon-wrap" style={{ background: '#fef3c7', color: '#d97706' }}>
+            <div
+              className="sa-stat-icon-wrap"
+              style={{
+                background: isDark ? 'rgba(245, 158, 11, 0.16)' : '#fef3c7',
+                color: isDark ? '#fbbf24' : '#d97706',
+              }}
+            >
               <Wallet size={18} />
             </div>
           </div>
-          <div className="sa-stat-val" style={{ color: '#d97706' }}>
+          <div className="sa-stat-val" style={{ color: isDark ? '#fbbf24' : '#d97706' }}>
             ₹{Number(summary.totalWalletLiability || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="sa-stat-sub">Authoritative available balances</div>
@@ -180,11 +188,17 @@ export default function SuperAdminFinanceDesk() {
         <div className="sa-stat-card">
           <div className="sa-stat-top">
             <span className="sa-stat-title">Total Lifetime Deposited</span>
-            <div className="sa-stat-icon-wrap" style={{ background: '#ecfdf5', color: '#059669' }}>
+            <div
+              className="sa-stat-icon-wrap"
+              style={{
+                background: isDark ? 'rgba(16, 185, 129, 0.16)' : '#ecfdf5',
+                color: isDark ? '#34d399' : '#059669',
+              }}
+            >
               <ArrowUpRight size={18} />
             </div>
           </div>
-          <div className="sa-stat-val" style={{ color: '#059669' }}>
+          <div className="sa-stat-val" style={{ color: isDark ? '#34d399' : '#059669' }}>
             ₹{Number(summary.totalLifetimePaid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="sa-stat-sub">Cumulative customer payments</div>
@@ -193,11 +207,17 @@ export default function SuperAdminFinanceDesk() {
         <div className="sa-stat-card">
           <div className="sa-stat-top">
             <span className="sa-stat-title">Campaign Ad Spend</span>
-            <div className="sa-stat-icon-wrap" style={{ background: '#eef2ff', color: '#4f46e5' }}>
+            <div
+              className="sa-stat-icon-wrap"
+              style={{
+                background: isDark ? 'rgba(99, 102, 241, 0.18)' : '#eef2ff',
+                color: isDark ? '#818cf8' : '#4f46e5',
+              }}
+            >
               <TrendingUp size={18} />
             </div>
           </div>
-          <div className="sa-stat-val" style={{ color: '#4f46e5' }}>
+          <div className="sa-stat-val" style={{ color: isDark ? '#818cf8' : '#4f46e5' }}>
             ₹{Number(summary.totalCampaignSpent || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="sa-stat-sub">Total ad budget delivered</div>
@@ -206,7 +226,13 @@ export default function SuperAdminFinanceDesk() {
         <div className="sa-stat-card">
           <div className="sa-stat-top">
             <span className="sa-stat-title">Total Transactions</span>
-            <div className="sa-stat-icon-wrap" style={{ background: '#f1f5f9', color: '#475569' }}>
+            <div
+              className="sa-stat-icon-wrap"
+              style={{
+                background: isDark ? 'rgba(148, 163, 184, 0.14)' : '#f1f5f9',
+                color: isDark ? '#cbd5e1' : '#475569',
+              }}
+            >
               <FileSpreadsheet size={18} />
             </div>
           </div>
@@ -287,14 +313,14 @@ export default function SuperAdminFinanceDesk() {
                 <tbody>
                   {txLoading ? (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--adm-text-muted, #64748b)' }}>
                         <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                         <div>Loading ledger transactions...</div>
                       </td>
                     </tr>
                   ) : transactions.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: 48, color: 'var(--adm-text-muted, #94a3b8)' }}>
                         No transactions found in this view.
                       </td>
                     </tr>
@@ -302,10 +328,10 @@ export default function SuperAdminFinanceDesk() {
                     transactions.map((tx) => (
                       <tr key={tx.id}>
                         <td>
-                          <span style={{ fontFamily: 'monospace', fontSize: '0.80rem', fontWeight: 700, color: '#4f46e5' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.80rem', fontWeight: 700, color: isDark ? '#818cf8' : '#4f46e5' }}>
                             {tx.id}
                           </span>
-                          <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                             {new Date(tx.created_at).toLocaleString('en-IN', {
                               day: '2-digit',
                               month: 'short',
@@ -318,8 +344,8 @@ export default function SuperAdminFinanceDesk() {
                         </td>
 
                         <td>
-                          <strong style={{ color: '#0f172a' }}>{tx.company_name}</strong>
-                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                          <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{tx.company_name}</strong>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                             ID: <span style={{ fontFamily: 'monospace' }}>{tx.customer_id}</span>
                           </div>
                         </td>
@@ -335,25 +361,25 @@ export default function SuperAdminFinanceDesk() {
                           </span>
                         </td>
 
-                        <td style={{ fontWeight: 800, fontSize: '0.92rem', color: tx.tx_type === 'Credit' ? '#059669' : '#0f172a' }}>
+                        <td style={{ fontWeight: 800, fontSize: '0.92rem', color: tx.tx_type === 'Credit' ? (isDark ? '#34d399' : '#059669') : 'var(--adm-text-primary, #0f172a)' }}>
                           {tx.tx_type === 'Credit' ? '+' : '-'}₹{Number(tx.amount).toFixed(2)}
                         </td>
 
-                        <td style={{ fontWeight: 700, color: '#334155' }}>
+                        <td style={{ fontWeight: 700, color: 'var(--adm-text-body, #334155)' }}>
                           ₹{Number(tx.balance_after).toFixed(2)}
                         </td>
 
                         <td>
-                          <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', background: '#f1f5f9', padding: '3px 6px', borderRadius: 4 }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', background: 'var(--adm-bg-muted, #f1f5f9)', color: 'var(--adm-text-secondary, #1e293b)', padding: '3px 6px', borderRadius: 4 }}>
                             {tx.reference_utr}
                           </span>
                         </td>
 
                         <td style={{ maxWidth: 220 }}>
-                          <div style={{ fontSize: '0.80rem', fontWeight: 600, color: '#0f172a' }}>
+                          <div style={{ fontSize: '0.80rem', fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)' }}>
                             {tx.payment_method}
                           </div>
-                          <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {tx.description}
                           </div>
                         </td>
@@ -411,14 +437,14 @@ export default function SuperAdminFinanceDesk() {
                 <tbody>
                   {accLoading ? (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--adm-text-muted, #64748b)' }}>
                         <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                         <div>Loading accounts...</div>
                       </td>
                     </tr>
                   ) : accounts.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: 48, color: 'var(--adm-text-muted, #94a3b8)' }}>
                         No business accounts found.
                       </td>
                     </tr>
@@ -426,35 +452,35 @@ export default function SuperAdminFinanceDesk() {
                     accounts.map((acc) => (
                       <tr key={acc.id}>
                         <td>
-                          <strong style={{ color: '#0f172a' }}>{acc.company_name}</strong>
-                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                          <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{acc.company_name}</strong>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                             ID: <span style={{ fontFamily: 'monospace' }}>{acc.id}</span>
                           </div>
                         </td>
 
                         <td>
-                          <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{acc.contact_person}</div>
-                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)' }}>{acc.contact_person}</div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                             📞 {acc.phone} • {acc.city || 'India'}
                           </div>
                         </td>
 
                         <td>
-                          <div style={{ fontSize: '1rem', fontWeight: 800, color: Number(acc.available_balance) > 0 ? '#059669' : '#dc2626' }}>
+                          <div style={{ fontSize: '1rem', fontWeight: 800, color: Number(acc.available_balance) > 0 ? (isDark ? '#34d399' : '#059669') : (isDark ? '#f87171' : '#dc2626') }}>
                             ₹{Number(acc.available_balance || 0).toFixed(2)}
                           </div>
                         </td>
 
-                        <td style={{ fontWeight: 700, color: '#334155' }}>
+                        <td style={{ fontWeight: 700, color: 'var(--adm-text-body, #334155)' }}>
                           ₹{Number(acc.total_lifetime_paid || 0).toFixed(2)}
                         </td>
 
-                        <td style={{ fontWeight: 700, color: '#4f46e5' }}>
+                        <td style={{ fontWeight: 700, color: isDark ? '#818cf8' : '#4f46e5' }}>
                           ₹{Number(acc.total_ad_spent || 0).toFixed(2)}
                         </td>
 
                         <td>
-                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                             ₹{Number(acc.daily_ad_spend || 300).toFixed(2)}/day
                           </div>
                           <span
@@ -508,7 +534,7 @@ export default function SuperAdminFinanceDesk() {
                 <h3 style={{ margin: '4px 0 2px 0', fontSize: '1.15rem', fontWeight: 800 }}>
                   {selectedCustomer.company_name}
                 </h3>
-                <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Contact: {selectedCustomer.contact_person} • {selectedCustomer.phone} • ID: {selectedCustomer.id}
                 </div>
               </div>
@@ -524,12 +550,12 @@ export default function SuperAdminFinanceDesk() {
 
             <div className="sa-modal-body">
               {loadingCustomerLedger ? (
-                <div style={{ textAlign: 'center', padding: 36, color: '#64748b' }}>
+                <div style={{ textAlign: 'center', padding: 36, color: 'var(--adm-text-muted, #64748b)' }}>
                   <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px' }} />
                   <div>Loading account ledger...</div>
                 </div>
               ) : customerLedger.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 36, color: '#94a3b8' }}>
+                <div style={{ textAlign: 'center', padding: 36, color: 'var(--adm-text-muted, #94a3b8)' }}>
                   No transaction history recorded for this customer yet.
                 </div>
               ) : (
@@ -552,7 +578,7 @@ export default function SuperAdminFinanceDesk() {
                     <tbody>
                       {customerLedger.map((tx) => (
                         <tr key={tx.id}>
-                          <td style={{ fontSize: '0.76rem', color: '#64748b', whiteSpace: 'nowrap' }}>
+                          <td style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', whiteSpace: 'nowrap' }}>
                             {new Date(tx.created_at).toLocaleDateString('en-IN', {
                               day: '2-digit',
                               month: 'short',
@@ -568,16 +594,16 @@ export default function SuperAdminFinanceDesk() {
                               {tx.tx_type}
                             </span>
                           </td>
-                          <td style={{ fontWeight: 800, color: tx.tx_type === 'Credit' ? '#059669' : '#0f172a' }}>
+                          <td style={{ fontWeight: 800, color: tx.tx_type === 'Credit' ? (isDark ? '#34d399' : '#059669') : 'var(--adm-text-primary, #0f172a)' }}>
                             {tx.tx_type === 'Credit' ? '+' : '-'}₹{Number(tx.amount).toFixed(2)}
                           </td>
-                          <td style={{ fontWeight: 700 }}>
+                          <td style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                             ₹{Number(tx.balance_after).toFixed(2)}
                           </td>
                           <td style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>
                             {tx.reference_utr}
                           </td>
-                          <td style={{ fontSize: '0.78rem', color: '#334155' }}>
+                          <td style={{ fontSize: '0.78rem', color: 'var(--adm-text-body, #334155)' }}>
                             {tx.description}
                           </td>
                         </tr>

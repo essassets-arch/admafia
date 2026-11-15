@@ -374,9 +374,9 @@ export default function BalanceLogsDesk({
             <h1 className="desk-title">Customer Balance Logs</h1>
             <span
               style={{
-                background: '#eff6ff',
-                color: '#1d4ed8',
-                border: '1px solid #bfdbfe',
+                background: 'var(--adm-soft-blue-bg, #eff6ff)',
+                color: 'var(--adm-soft-blue-text, #1d4ed8)',
+                border: '1px solid var(--adm-soft-blue-border, #bfdbfe)',
                 fontWeight: 800,
                 fontSize: '0.78rem',
                 padding: '3px 10px',
@@ -439,8 +439,8 @@ export default function BalanceLogsDesk({
         {/* Card 1: Total Amount Added */}
         <div
           style={{
-            background: '#ffffff',
-            border: '1px solid #e5e7eb',
+            background: 'var(--adm-bg-card, #ffffff)',
+            border: '1px solid var(--adm-border, #e5e7eb)',
             borderRadius: 12,
             padding: '20px 24px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
@@ -448,7 +448,7 @@ export default function BalanceLogsDesk({
         >
           <div
             style={{
-              color: '#374151',
+              color: 'var(--adm-text-body, #374151)',
               fontWeight: 700,
               fontSize: '0.88rem',
               marginBottom: 8,
@@ -473,8 +473,8 @@ export default function BalanceLogsDesk({
         {/* Card 2: Total Amount Removed */}
         <div
           style={{
-            background: '#ffffff',
-            border: '1px solid #e5e7eb',
+            background: 'var(--adm-bg-card, #ffffff)',
+            border: '1px solid var(--adm-border, #e5e7eb)',
             borderRadius: 12,
             padding: '20px 24px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
@@ -482,7 +482,7 @@ export default function BalanceLogsDesk({
         >
           <div
             style={{
-              color: '#374151',
+              color: 'var(--adm-text-body, #374151)',
               fontWeight: 700,
               fontSize: '0.88rem',
               marginBottom: 8,
@@ -514,10 +514,10 @@ export default function BalanceLogsDesk({
           flexWrap: 'wrap',
           gap: 12,
           marginBottom: 16,
-          background: '#ffffff',
+          background: 'var(--adm-bg-card, #ffffff)',
           padding: '10px 16px',
           borderRadius: 10,
-          border: '1px solid #e5e7eb',
+          border: '1px solid var(--adm-border, #e5e7eb)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 300px', flexWrap: 'wrap', minWidth: 0 }}>
@@ -567,14 +567,14 @@ export default function BalanceLogsDesk({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, background: '#f1f5f9', padding: 3, borderRadius: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, background: 'var(--adm-bg-muted, #f1f5f9)', padding: 3, borderRadius: 8 }}>
             <button
               type="button"
               onClick={() => setViewMode('customers')}
               style={{
                 border: 'none',
-                background: viewMode === 'customers' ? '#ffffff' : 'transparent',
-                color: viewMode === 'customers' ? '#0f172a' : '#64748b',
+                background: viewMode === 'customers' ? 'var(--adm-bg-card, #ffffff)' : 'transparent',
+                color: viewMode === 'customers' ? 'var(--adm-text-primary, #0f172a)' : 'var(--adm-text-muted, #64748b)',
                 fontWeight: viewMode === 'customers' ? 800 : 600,
                 padding: '5px 12px',
                 borderRadius: 6,
@@ -591,8 +591,8 @@ export default function BalanceLogsDesk({
               onClick={() => setViewMode('all')}
               style={{
                 border: 'none',
-                background: viewMode === 'all' ? '#ffffff' : 'transparent',
-                color: viewMode === 'all' ? '#0f172a' : '#64748b',
+                background: viewMode === 'all' ? 'var(--adm-bg-card, #ffffff)' : 'transparent',
+                color: viewMode === 'all' ? 'var(--adm-text-primary, #0f172a)' : 'var(--adm-text-muted, #64748b)',
                 fontWeight: viewMode === 'all' ? 800 : 600,
                 padding: '5px 12px',
                 borderRadius: 6,
@@ -606,14 +606,14 @@ export default function BalanceLogsDesk({
             </button>
           </div>
 
-          <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 600 }}>
             Showing <b>{filteredLogs.length}</b> {viewMode === 'customers' ? 'customer balance accounts' : 'audit records'}
           </div>
         </div>
       </div>
 
       {/* 4. Exact Table from Screenshot */}
-      <div className="desk-table-card" style={{ background: '#ffffff', borderRadius: 12 }}>
+      <div className="desk-table-card" style={{ background: 'var(--adm-bg-card, #ffffff)', borderRadius: 12 }}>
         <SmartTable
           title="Customer Balance Logs"
           exportFilename="balance-logs"
@@ -621,26 +621,26 @@ export default function BalanceLogsDesk({
         >
         <table className="desk-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #e5e7eb', background: '#fafafa' }}>
-              <th style={{ width: 50, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+            <tr style={{ borderBottom: '1px solid var(--adm-border, #e5e7eb)', background: 'var(--adm-bg-subtle, #fafafa)' }}>
+              <th style={{ width: 50, padding: '14px 16px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 #
               </th>
-              <th style={{ width: 220, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+              <th style={{ width: 220, padding: '14px 16px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 USER
               </th>
-              <th style={{ width: 170, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+              <th style={{ width: 170, padding: '14px 16px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 PREVIOUS BALANCE
               </th>
-              <th style={{ width: 170, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+              <th style={{ width: 170, padding: '14px 16px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 CHANGED AMOUNT
               </th>
-              <th style={{ width: 170, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+              <th style={{ width: 170, padding: '14px 16px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 NEW BALANCE
               </th>
-              <th style={{ minWidth: 140, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+              <th style={{ minWidth: 140, padding: '14px 16px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 REASON
               </th>
-              <th style={{ width: 160, padding: '14px 16px', color: '#64748b', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+              <th style={{ width: 160, padding: '14px 16px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.04em' }}>
                 DATE
               </th>
             </tr>
@@ -648,9 +648,9 @@ export default function BalanceLogsDesk({
           <tbody>
             {filteredLogs.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748b' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                   <Scale size={32} color="#94a3b8" style={{ margin: '0 auto 10px auto', display: 'block' }} />
-                  <div style={{ fontWeight: 700, fontSize: '0.94rem', color: '#0f172a' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                     No Balance Logs Found
                   </div>
                   <div style={{ fontSize: '0.8rem', marginTop: 4 }}>
@@ -673,7 +673,7 @@ export default function BalanceLogsDesk({
                   <tr
                     key={log.id || index}
                     style={{
-                      borderBottom: '1px solid #f1f5f9',
+                      borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)',
                       transition: 'background 0.15s ease',
                       cursor: 'pointer',
                     }}
@@ -681,7 +681,7 @@ export default function BalanceLogsDesk({
                     title="Click to view full customer statement"
                   >
                     {/* 1. # */}
-                    <td style={{ padding: '14px 16px', color: '#64748b', fontWeight: 600, fontSize: '0.86rem' }}>
+                    <td style={{ padding: '14px 16px', color: 'var(--adm-text-muted, #64748b)', fontWeight: 600, fontSize: '0.86rem' }}>
                       {index + 1}
                     </td>
 
@@ -708,11 +708,11 @@ export default function BalanceLogsDesk({
                           {initial}
                         </div>
                         <div>
-                          <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>
+                          <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', fontSize: '0.9rem' }}>
                             {userName}
                           </div>
                           {log.phone && (
-                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>
                               +91 {log.phone}
                             </div>
                           )}
@@ -763,15 +763,15 @@ export default function BalanceLogsDesk({
                     </td>
 
                     {/* 6. REASON */}
-                    <td style={{ padding: '14px 16px', color: '#334155', fontSize: '0.84rem' }}>
+                    <td style={{ padding: '14px 16px', color: 'var(--adm-text-body, #334155)', fontSize: '0.84rem' }}>
                       {log.reason || log.description || 'd'}
                     </td>
 
                     {/* 7. DATE */}
                     <td style={{ padding: '14px 16px' }}>
-                      <div style={{ fontSize: '0.78rem', color: '#0f172a', lineHeight: 1.3 }}>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-primary, #0f172a)', lineHeight: 1.3 }}>
                         <div style={{ fontWeight: 600 }}>{dt.dateStr}</div>
-                        <div style={{ color: '#64748b', fontSize: '0.72rem' }}>{dt.timeStr}</div>
+                        <div style={{ color: 'var(--adm-text-muted, #64748b)', fontSize: '0.72rem' }}>{dt.timeStr}</div>
                       </div>
                     </td>
                   </tr>
@@ -813,12 +813,12 @@ export default function BalanceLogsDesk({
                   <History size={20} />
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', overflowWrap: 'anywhere' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', overflowWrap: 'anywhere' }}>
                     {selectedCustomerForStatement.customer.companyName ||
                       selectedCustomerForStatement.customer.name ||
                       'Customer Balance Statement'}
                   </h3>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2, overflowWrap: 'anywhere' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2, overflowWrap: 'anywhere' }}>
                     👤 {selectedCustomerForStatement.customer.contactPerson || selectedCustomerForStatement.customer.name} • 📞 +91{' '}
                     {selectedCustomerForStatement.customer.phone} • Account ID:{' '}
                     <code>{selectedCustomerForStatement.customer.id}</code>
@@ -841,14 +841,14 @@ export default function BalanceLogsDesk({
                 gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))',
                 gap: 10,
                 marginBottom: 18,
-                background: '#f8fafc',
+                background: 'var(--adm-bg-subtle, #f8fafc)',
                 padding: 14,
                 borderRadius: 10,
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--adm-border, #e2e8f0)',
               }}
             >
               <div>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700 }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>
                   CURRENT WALLET BALANCE
                 </div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#10b981', fontFamily: 'monospace' }}>
@@ -860,7 +860,7 @@ export default function BalanceLogsDesk({
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700 }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>
                   TOTAL CREDITED (TOP-UPS)
                 </div>
                 <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#10b981', fontFamily: 'monospace' }}>
@@ -872,7 +872,7 @@ export default function BalanceLogsDesk({
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700 }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>
                   TOTAL DEBITED (AD BURN)
                 </div>
                 <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#dc2626', fontFamily: 'monospace' }}>
@@ -884,10 +884,10 @@ export default function BalanceLogsDesk({
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700 }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>
                   AUDITED ENTRIES
                 </div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   {selectedCustomerForStatement.logs.length} Transactions
                 </div>
               </div>
@@ -902,7 +902,7 @@ export default function BalanceLogsDesk({
               >
               <table className="desk-table" style={{ width: '100%', fontSize: '0.78rem' }}>
                 <thead>
-                  <tr style={{ background: '#fafafa' }}>
+                  <tr style={{ background: 'var(--adm-bg-subtle, #fafafa)' }}>
                     <th>#</th>
                     <th>PREVIOUS BALANCE</th>
                     <th>CHANGED AMOUNT</th>
@@ -914,7 +914,7 @@ export default function BalanceLogsDesk({
                 <tbody>
                   {selectedCustomerForStatement.logs.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--adm-text-muted, #64748b)' }}>
                         No balance transactions on record for this customer.
                       </td>
                     </tr>
@@ -923,7 +923,7 @@ export default function BalanceLogsDesk({
                       const cdt = formatScreenshotDate(clog.createdAt || clog.date);
                       return (
                         <tr key={clog.id || idx}>
-                          <td style={{ color: '#64748b' }}>{idx + 1}</td>
+                          <td style={{ color: 'var(--adm-text-muted, #64748b)' }}>{idx + 1}</td>
                           <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#dc2626' }}>
                             {formatScreenshotCurrency(clog.previousBalance ?? clog.balanceBefore ?? 0)}
                           </td>
@@ -933,10 +933,10 @@ export default function BalanceLogsDesk({
                           <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#10b981' }}>
                             {formatScreenshotCurrency(clog.newBalance ?? clog.balanceAfter ?? 0)}
                           </td>
-                          <td style={{ color: '#475569' }}>{clog.reason || clog.description || 'd'}</td>
+                          <td style={{ color: 'var(--adm-text-body, #475569)' }}>{clog.reason || clog.description || 'd'}</td>
                           <td>
                             <div>{cdt.dateStr}</div>
-                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{cdt.timeStr}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted, #64748b)' }}>{cdt.timeStr}</div>
                           </td>
                         </tr>
                       );

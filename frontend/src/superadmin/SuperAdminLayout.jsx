@@ -38,9 +38,12 @@ import SuperAdminCountryPricingDesk from './SuperAdminCountryPricingDesk';
 import superadminApi from '../services/superadminApi';
 import adminAuthApi from '../services/adminAuthApi';
 import NotificationBell from '../components/NotificationBell';
+import AdminThemeToggle from '../components/AdminThemeToggle';
+import { useAdminTheme } from '../utils/adminTheme';
 import './superadmin.css';
 
 export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
+  const { theme } = useAdminTheme();
   const activeUser = adminAuthApi.getCurrentUser() || {
     fullName: 'Ad Mafia Executive Super Admin',
     role: 'Super Admin',
@@ -221,7 +224,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
   const currentMeta = getDeskTitle();
 
   return (
-    <div className="sa-container">
+    <div className="sa-container adm-theme-scope" data-admin-theme={theme}>
       {/* SIDEBAR NAVIGATION */}
       <aside className={`sa-sidebar ${mobileMenuOpen ? 'open' : ''}`}>
         {/* Brand Header */}
@@ -372,7 +375,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
           <div className="sa-topbar-right">
             {/* Live IST Clock */}
             <div className="sa-clock-pill">
-              <Clock size={14} color="#64748b" />
+              <Clock size={14} color="var(--adm-text-muted, #64748b)" />
               <span>
                 {liveClock.toLocaleTimeString('en-IN', {
                   timeZone: 'Asia/Kolkata',
@@ -383,6 +386,9 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
                 IST
               </span>
             </div>
+
+            {/* Synchronized White / Dark Theme Switcher */}
+            <AdminThemeToggle />
 
             {/* Live Refresh Button */}
             <button
@@ -395,7 +401,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
             </button>
 
             {/* Real-Time FCM & SSE Notification Bell */}
-            <NotificationBell variant="light" />
+            <NotificationBell variant="light" adminThemeAware />
 
             {/* 1-Tap Sign Out Action */}
             <button

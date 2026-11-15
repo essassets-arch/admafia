@@ -24,6 +24,7 @@ import {
 import superadminApi from '../services/superadminApi';
 import { getActiveAuthToken } from '../services/crmApi';
 import { SmartTable, TabulatorDataGrid } from '../components/SmartTabulator';
+import { useAdminTheme } from '../utils/adminTheme';
 
 const isViteDev =
   typeof window !== 'undefined' &&
@@ -66,6 +67,7 @@ function summarizeDocTitle(doc) {
 }
 
 export default function SuperAdminDatabaseDesk() {
+  const { isDark } = useAdminTheme({ syncDocument: false });
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [creatingSnapshot, setCreatingSnapshot] = useState(false);
@@ -310,6 +312,7 @@ export default function SuperAdminDatabaseDesk() {
       <div
         style={{
           background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+          border: '1px solid rgba(99, 102, 241, 0.28)',
           borderRadius: '16px',
           padding: '20px 22px',
           color: '#ffffff',
@@ -403,9 +406,31 @@ export default function SuperAdminDatabaseDesk() {
           style={{
             padding: '12px 16px',
             borderRadius: '12px',
-            background: banner.type === 'error' ? '#fef2f2' : '#ecfdf5',
-            border: `1px solid ${banner.type === 'error' ? '#fecaca' : '#a7f3d0'}`,
-            color: banner.type === 'error' ? '#b91c1c' : '#065f46',
+            background:
+              banner.type === 'error'
+                ? isDark
+                  ? 'rgba(239, 68, 68, 0.14)'
+                  : '#fef2f2'
+                : isDark
+                ? 'rgba(16, 185, 129, 0.14)'
+                : '#ecfdf5',
+            border: `1px solid ${
+              banner.type === 'error'
+                ? isDark
+                  ? 'rgba(239, 68, 68, 0.35)'
+                  : '#fecaca'
+                : isDark
+                ? 'rgba(16, 185, 129, 0.35)'
+                : '#a7f3d0'
+            }`,
+            color:
+              banner.type === 'error'
+                ? isDark
+                  ? '#fca5a5'
+                  : '#b91c1c'
+                : isDark
+                ? '#6ee7b7'
+                : '#065f46',
             fontWeight: 600,
             fontSize: '0.88rem',
             display: 'flex',
@@ -433,62 +458,62 @@ export default function SuperAdminDatabaseDesk() {
           gap: '14px',
         }}
       >
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px' }}>
+        <div style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '14px', padding: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
               MongoDB 7.0 Engine
             </span>
             <Database size={18} color="#10b981" />
           </div>
-          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
             {replSet.myStateStr || 'PRIMARY'} ({replSet.set || 'rs0'})
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: '4px', fontWeight: 600 }}>
+          <div style={{ fontSize: '0.78rem', color: isDark ? '#34d399' : '#059669', marginTop: '4px', fontWeight: 600 }}>
             ● {mongo.collectionsCount || collections.length || 0} Collections • {mongo.objectsCount || 0} Total Docs
           </div>
         </div>
 
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px' }}>
+        <div style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '14px', padding: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
               Data + Index Footprint
             </span>
             <HardDrive size={18} color="#3b82f6" />
           </div>
-          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
             {formatBytes((mongo.dataSizeBytes || 0) + (mongo.indexSizeBytes || 0))}
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '4px' }}>
             Data: {formatBytes(mongo.dataSizeBytes)} • Indexes: {formatBytes(mongo.indexSizeBytes)}
           </div>
         </div>
 
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px' }}>
+        <div style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '14px', padding: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
               Redis Rate-Limit &amp; Cache
             </span>
             <Server size={18} color="#8b5cf6" />
           </div>
-          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
+          <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
             {status?.redis?.connected ? 'REDIS LIVE' : 'MEMORY FALLBACK'}
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '4px' }}>
             Outbox Queue Pending: <strong>{status?.outbox?.pendingOrFailedCount ?? 0}</strong>
           </div>
         </div>
 
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px' }}>
+        <div style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '14px', padding: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
               WhatsApp v26 &amp; FCM Push
             </span>
             <Activity size={18} color="#f59e0b" />
           </div>
-          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
             WA: {(status?.integrations?.whatsappCloudApi?.mode || 'sandbox').toUpperCase()}
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '4px' }}>
             Live SSE Clients: <strong>{status?.integrations?.firebaseFcm?.activeSseConnections ?? 0}</strong> • FCM:{' '}
             {status?.integrations?.firebaseFcm?.serverConfigured ? 'Active' : 'SSE Mode'}
           </div>
@@ -496,11 +521,11 @@ export default function SuperAdminDatabaseDesk() {
       </div>
 
       {/* Live Collections Table (Clickable Rows -> Inline Document Explorer) */}
-      <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '16px', overflow: 'hidden' }}>
         <div
           style={{
             padding: '18px 22px',
-            borderBottom: '1px solid #e2e8f0',
+            borderBottom: '1px solid var(--adm-border, #e2e8f0)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -509,10 +534,10 @@ export default function SuperAdminDatabaseDesk() {
           }}
         >
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.06rem', fontWeight: 800, color: '#0f172a' }}>
+            <h3 style={{ margin: 0, fontSize: '1.06rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
               Live Collections ({collections.length})
             </h3>
-            <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+            <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)' }}>
               Click any collection row to inspect live MongoDB documents, search fields, and view formatted JSON records.
             </p>
           </div>
@@ -521,9 +546,9 @@ export default function SuperAdminDatabaseDesk() {
               style={{
                 padding: '5px 12px',
                 borderRadius: '999px',
-                background: '#eef2ff',
-                border: '1px solid #c7d2fe',
-                color: '#4338ca',
+                background: isDark ? 'rgba(99, 102, 241, 0.18)' : '#eef2ff',
+                border: isDark ? '1px solid rgba(129, 140, 248, 0.35)' : '1px solid #c7d2fe',
+                color: isDark ? '#a5b4fc' : '#4338ca',
                 fontSize: '0.78rem',
                 fontWeight: 700,
               }}
@@ -540,14 +565,14 @@ export default function SuperAdminDatabaseDesk() {
         >
           <table className="sa-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
-              <tr style={{ background: '#f8fafc', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '11px 16px', color: '#475569', fontSize: '0.74rem', textTransform: 'uppercase' }}>
+              <tr style={{ background: 'var(--adm-bg-subtle, #f8fafc)', textAlign: 'left', borderBottom: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <th style={{ padding: '11px 16px', color: 'var(--adm-text-muted, #475569)', fontSize: '0.74rem', textTransform: 'uppercase' }}>
                   Collection Name
                 </th>
-                <th style={{ padding: '11px 16px', color: '#475569', fontSize: '0.74rem', textTransform: 'uppercase' }}>
+                <th style={{ padding: '11px 16px', color: 'var(--adm-text-muted, #475569)', fontSize: '0.74rem', textTransform: 'uppercase' }}>
                   Live Documents
                 </th>
-                <th style={{ padding: '11px 16px', color: '#475569', fontSize: '0.74rem', textTransform: 'uppercase', textAlign: 'right' }}>
+                <th style={{ padding: '11px 16px', color: 'var(--adm-text-muted, #475569)', fontSize: '0.74rem', textTransform: 'uppercase', textAlign: 'right' }}>
                   Explorer Action
                 </th>
               </tr>
@@ -555,7 +580,7 @@ export default function SuperAdminDatabaseDesk() {
             <tbody>
               {collections.length === 0 ? (
                 <tr>
-                  <td colSpan={3} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                  <td colSpan={3} style={{ padding: '24px', textAlign: 'center', color: 'var(--adm-text-muted, #64748b)' }}>
                     {loading ? 'Loading live MongoDB collections...' : 'No collections reported.'}
                   </td>
                 </tr>
@@ -567,8 +592,12 @@ export default function SuperAdminDatabaseDesk() {
                       key={col.name}
                       onClick={() => handleInspectCollection(col.name)}
                       style={{
-                        borderBottom: '1px solid #f1f5f9',
-                        background: isSelected ? '#eef2ff' : '#ffffff',
+                        borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)',
+                        background: isSelected
+                          ? isDark
+                            ? 'rgba(79, 70, 229, 0.18)'
+                            : '#eef2ff'
+                          : 'var(--adm-bg-card, #ffffff)',
                         cursor: 'pointer',
                         transition: 'background 0.14s ease',
                       }}
@@ -578,13 +607,21 @@ export default function SuperAdminDatabaseDesk() {
                           onClick={() => handleInspectCollection(col.name)}
                           style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
                         >
-                          <Database size={15} color={isSelected ? '#4f46e5' : '#64748b'} />
+                          <Database size={15} color={isSelected ? (isDark ? '#818cf8' : '#4f46e5') : '#64748b'} />
                           <code
                             style={{
                               fontSize: '0.83rem',
                               fontWeight: 700,
-                              color: isSelected ? '#3730a3' : '#0f172a',
-                              background: isSelected ? '#e0e7ff' : '#f1f5f9',
+                              color: isSelected
+                                ? isDark
+                                  ? '#c7d2fe'
+                                  : '#3730a3'
+                                : 'var(--adm-text-primary, #0f172a)',
+                              background: isSelected
+                                ? isDark
+                                  ? 'rgba(99, 102, 241, 0.25)'
+                                  : '#e0e7ff'
+                                : 'var(--adm-bg-muted, #f1f5f9)',
                               padding: '2px 8px',
                               borderRadius: '6px',
                             }}
@@ -596,8 +633,16 @@ export default function SuperAdminDatabaseDesk() {
                       <td style={{ padding: '12px 16px' }}>
                         <span
                           style={{
-                            background: isSelected ? '#4f46e5' : '#e0e7ff',
-                            color: isSelected ? '#ffffff' : '#3730a3',
+                            background: isSelected
+                              ? '#4f46e5'
+                              : isDark
+                              ? 'rgba(99, 102, 241, 0.18)'
+                              : '#e0e7ff',
+                            color: isSelected
+                              ? '#ffffff'
+                              : isDark
+                              ? '#a5b4fc'
+                              : '#3730a3',
                             padding: '3px 10px',
                             borderRadius: '999px',
                             fontSize: '0.75rem',
@@ -620,9 +665,9 @@ export default function SuperAdminDatabaseDesk() {
                             gap: '5px',
                             padding: '6px 12px',
                             borderRadius: '8px',
-                            border: isSelected ? '1px solid #4f46e5' : '1px solid #cbd5e1',
-                            background: isSelected ? '#4f46e5' : '#f8fafc',
-                            color: isSelected ? '#ffffff' : '#334155',
+                            border: isSelected ? '1px solid #4f46e5' : '1px solid var(--adm-border-strong, #cbd5e1)',
+                            background: isSelected ? '#4f46e5' : 'var(--adm-bg-subtle, #f8fafc)',
+                            color: isSelected ? '#ffffff' : 'var(--adm-text-body, #334155)',
                             fontSize: '0.78rem',
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -646,19 +691,19 @@ export default function SuperAdminDatabaseDesk() {
         <div
           ref={explorerRef}
           style={{
-            background: '#ffffff',
+            background: 'var(--adm-bg-card, #ffffff)',
             border: '2px solid #6366f1',
             borderRadius: '16px',
             overflow: 'hidden',
-            boxShadow: '0 10px 28px rgba(79, 70, 229, 0.1)',
+            boxShadow: isDark ? '0 10px 28px rgba(0, 0, 0, 0.4)' : '0 10px 28px rgba(79, 70, 229, 0.1)',
           }}
         >
           {/* Explorer Header */}
           <div
             style={{
               padding: '16px 20px',
-              background: '#f8fafc',
-              borderBottom: '1px solid #e2e8f0',
+              background: 'var(--adm-bg-subtle, #f8fafc)',
+              borderBottom: '1px solid var(--adm-border, #e2e8f0)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
@@ -667,13 +712,13 @@ export default function SuperAdminDatabaseDesk() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <FileJson size={20} color="#4f46e5" />
+              <FileJson size={20} color={isDark ? '#818cf8' : '#4f46e5'} />
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.04rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '1.04rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   Live Collection &amp; Document Explorer:{' '}
-                  <code style={{ color: '#4f46e5' }}>{selectedCollection}</code>
+                  <code style={{ color: isDark ? '#818cf8' : '#4f46e5' }}>{selectedCollection}</code>
                 </h3>
-                <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '2px' }}>
+                <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '2px' }}>
                   {docsPayload.total.toLocaleString('en-IN')} matching documents • Page {docsPayload.page} of{' '}
                   {docsPayload.totalPages} (20 per page)
                 </div>
@@ -687,7 +732,7 @@ export default function SuperAdminDatabaseDesk() {
                 aria-label="Document Explorer View Mode"
                 style={{
                   display: 'inline-flex',
-                  background: '#e2e8f0',
+                  background: 'var(--adm-bg-muted, #e2e8f0)',
                   padding: '3px',
                   borderRadius: '9px',
                   gap: '2px',
@@ -704,7 +749,7 @@ export default function SuperAdminDatabaseDesk() {
                     borderRadius: '7px',
                     border: 'none',
                     background: explorerView === 'tabulator' ? '#4f46e5' : 'transparent',
-                    color: explorerView === 'tabulator' ? '#ffffff' : '#334155',
+                    color: explorerView === 'tabulator' ? '#ffffff' : 'var(--adm-text-body, #334155)',
                     fontSize: '0.76rem',
                     fontWeight: 800,
                     cursor: 'pointer',
@@ -724,7 +769,7 @@ export default function SuperAdminDatabaseDesk() {
                     borderRadius: '7px',
                     border: 'none',
                     background: explorerView === 'json' ? '#4f46e5' : 'transparent',
-                    color: explorerView === 'json' ? '#ffffff' : '#334155',
+                    color: explorerView === 'json' ? '#ffffff' : 'var(--adm-text-body, #334155)',
                     fontSize: '0.76rem',
                     fontWeight: 800,
                     cursor: 'pointer',
@@ -745,9 +790,9 @@ export default function SuperAdminDatabaseDesk() {
                   gap: '6px',
                   padding: '7px 12px',
                   borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  background: '#ffffff',
-                  color: '#334155',
+                  border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  color: 'var(--adm-text-body, #334155)',
                   fontSize: '0.8rem',
                   fontWeight: 700,
                   cursor: 'pointer',
@@ -768,9 +813,9 @@ export default function SuperAdminDatabaseDesk() {
                   width: '34px',
                   height: '34px',
                   borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  background: '#ffffff',
-                  color: '#475569',
+                  border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  color: 'var(--adm-text-muted, #475569)',
                   cursor: 'pointer',
                 }}
               >
@@ -783,13 +828,13 @@ export default function SuperAdminDatabaseDesk() {
           <div
             style={{
               padding: '14px 20px',
-              borderBottom: '1px solid #e2e8f0',
+              borderBottom: '1px solid var(--adm-border, #e2e8f0)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: '12px',
-              background: '#ffffff',
+              background: 'var(--adm-bg-card, #ffffff)',
             }}
           >
             <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: '480px' }}>
@@ -807,10 +852,10 @@ export default function SuperAdminDatabaseDesk() {
                   width: '100%',
                   padding: '9px 32px 9px 36px',
                   borderRadius: '9px',
-                  border: '1px solid #cbd5e1',
+                  border: '1px solid var(--adm-border-strong, #cbd5e1)',
                   fontSize: '0.85rem',
-                  background: '#f8fafc',
-                  color: '#0f172a',
+                  background: 'var(--adm-bg-input, #f8fafc)',
+                  color: 'var(--adm-text-primary, #0f172a)',
                   outline: 'none',
                 }}
               />
@@ -826,7 +871,7 @@ export default function SuperAdminDatabaseDesk() {
                     transform: 'translateY(-50%)',
                     background: 'none',
                     border: 'none',
-                    color: '#64748b',
+                    color: 'var(--adm-text-muted, #64748b)',
                     cursor: 'pointer',
                   }}
                 >
@@ -846,9 +891,9 @@ export default function SuperAdminDatabaseDesk() {
                   gap: '4px',
                   padding: '7px 12px',
                   borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  background: docPage <= 1 ? '#f8fafc' : '#ffffff',
-                  color: docPage <= 1 ? '#94a3b8' : '#0f172a',
+                  border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                  background: docPage <= 1 ? 'var(--adm-bg-subtle, #f8fafc)' : 'var(--adm-bg-card, #ffffff)',
+                  color: docPage <= 1 ? 'var(--adm-text-muted, #94a3b8)' : 'var(--adm-text-primary, #0f172a)',
                   fontWeight: 700,
                   fontSize: '0.8rem',
                   cursor: docPage <= 1 ? 'not-allowed' : 'pointer',
@@ -856,7 +901,7 @@ export default function SuperAdminDatabaseDesk() {
               >
                 <ChevronLeft size={14} /> Prev
               </button>
-              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text-body, #334155)' }}>
                 Page {docsPayload.page} / {docsPayload.totalPages}
               </span>
               <button
@@ -869,9 +914,9 @@ export default function SuperAdminDatabaseDesk() {
                   gap: '4px',
                   padding: '7px 12px',
                   borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  background: docPage >= docsPayload.totalPages ? '#f8fafc' : '#ffffff',
-                  color: docPage >= docsPayload.totalPages ? '#94a3b8' : '#0f172a',
+                  border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                  background: docPage >= docsPayload.totalPages ? 'var(--adm-bg-subtle, #f8fafc)' : 'var(--adm-bg-card, #ffffff)',
+                  color: docPage >= docsPayload.totalPages ? 'var(--adm-text-muted, #94a3b8)' : 'var(--adm-text-primary, #0f172a)',
                   fontWeight: 700,
                   fontSize: '0.8rem',
                   cursor: docPage >= docsPayload.totalPages ? 'not-allowed' : 'pointer',
@@ -889,9 +934,9 @@ export default function SuperAdminDatabaseDesk() {
                 style={{
                   padding: '14px 16px',
                   borderRadius: '10px',
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  color: '#b91c1c',
+                  background: isDark ? 'rgba(239, 68, 68, 0.14)' : '#fef2f2',
+                  border: isDark ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid #fecaca',
+                  color: isDark ? '#fca5a5' : '#b91c1c',
                   fontSize: '0.85rem',
                   fontWeight: 600,
                 }}
@@ -899,12 +944,12 @@ export default function SuperAdminDatabaseDesk() {
                 ⚠️ {docsError}
               </div>
             ) : docsLoading ? (
-              <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '0.88rem' }}>
+              <div style={{ padding: '32px', textAlign: 'center', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.88rem' }}>
                 <RefreshCw size={18} className="sa-spin" style={{ marginBottom: '6px' }} />
                 <div>Fetching live documents from <code>{selectedCollection}</code>...</div>
               </div>
             ) : explorerDocs.length === 0 ? (
-              <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '0.88rem' }}>
+              <div style={{ padding: '32px', textAlign: 'center', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.88rem' }}>
                 No documents found in <code>{selectedCollection}</code>
                 {docSearchQuery ? ` matching "${docSearchQuery}"` : ''}.
               </div>
@@ -930,9 +975,9 @@ export default function SuperAdminDatabaseDesk() {
                   <div
                     key={docId}
                     style={{
-                      border: isExpanded ? '1.5px solid #818cf8' : '1px solid #e2e8f0',
+                      border: isExpanded ? '1.5px solid #818cf8' : '1px solid var(--adm-border, #e2e8f0)',
                       borderRadius: '12px',
-                      background: '#ffffff',
+                      background: 'var(--adm-bg-card, #ffffff)',
                       overflow: 'hidden',
                     }}
                   >
@@ -940,7 +985,11 @@ export default function SuperAdminDatabaseDesk() {
                       onClick={() => toggleDocExpand(docId)}
                       style={{
                         padding: '12px 14px',
-                        background: isExpanded ? '#eef2ff' : '#f8fafc',
+                        background: isExpanded
+                          ? isDark
+                            ? 'rgba(99, 102, 241, 0.16)'
+                            : '#eef2ff'
+                          : 'var(--adm-bg-subtle, #f8fafc)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
@@ -951,16 +1000,16 @@ export default function SuperAdminDatabaseDesk() {
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
                         {isExpanded ? (
-                          <ChevronDown size={16} color="#4f46e5" />
+                          <ChevronDown size={16} color={isDark ? '#818cf8' : '#4f46e5'} />
                         ) : (
                           <ChevronRight size={16} color="#64748b" />
                         )}
-                        <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{summaryTitle}</strong>
+                        <strong style={{ fontSize: '0.88rem', color: 'var(--adm-text-primary, #0f172a)' }}>{summaryTitle}</strong>
                         <code
                           style={{
                             fontSize: '0.74rem',
-                            background: '#e2e8f0',
-                            color: '#334155',
+                            background: 'var(--adm-bg-muted, #e2e8f0)',
+                            color: 'var(--adm-text-body, #334155)',
                             padding: '2px 7px',
                             borderRadius: '5px',
                             wordBreak: 'break-all',
@@ -968,14 +1017,14 @@ export default function SuperAdminDatabaseDesk() {
                         >
                           _id: {docId}
                         </code>
-                        <span style={{ fontSize: '0.73rem', color: '#64748b', fontWeight: 600 }}>
+                        <span style={{ fontSize: '0.73rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 600 }}>
                           {fieldCount} fields
                         </span>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         {ts && (
-                          <span style={{ fontSize: '0.73rem', color: '#64748b' }}>
+                          <span style={{ fontSize: '0.73rem', color: 'var(--adm-text-muted, #64748b)' }}>
                             {new Date(ts).toLocaleString('en-IN')}
                           </span>
                         )}
@@ -991,9 +1040,9 @@ export default function SuperAdminDatabaseDesk() {
                             gap: '4px',
                             padding: '4px 9px',
                             borderRadius: '6px',
-                            border: '1px solid #cbd5e1',
-                            background: '#ffffff',
-                            color: '#334155',
+                            border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                            background: 'var(--adm-bg-card, #ffffff)',
+                            color: 'var(--adm-text-body, #334155)',
                             fontSize: '0.74rem',
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -1010,8 +1059,9 @@ export default function SuperAdminDatabaseDesk() {
                         style={{
                           margin: 0,
                           padding: '14px 16px',
-                          background: '#0f172a',
+                          background: '#090e1a',
                           color: '#e2e8f0',
+                          borderTop: '1px solid rgba(148, 163, 184, 0.16)',
                           fontSize: '0.78rem',
                           lineHeight: 1.5,
                           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -1032,13 +1082,13 @@ export default function SuperAdminDatabaseDesk() {
       )}
 
       {/* MongoDB Compass & Cloud Atlas Connection Center */}
-      <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '22px' }}>
+      <div style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '16px', padding: '22px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800, color: '#0f172a' }}>
+            <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
               MongoDB Compass &amp; Cloud Atlas Connection Center
             </h3>
-            <p style={{ margin: '4px 0 0', fontSize: '0.83rem', color: '#64748b' }}>
+            <p style={{ margin: '4px 0 0', fontSize: '0.83rem', color: 'var(--adm-text-muted, #64748b)' }}>
               Inspect live collections visually in MongoDB Compass without exposing port 27017 to the public internet.
             </p>
           </div>
@@ -1052,12 +1102,12 @@ export default function SuperAdminDatabaseDesk() {
               gap: '6px',
               padding: '8px 14px',
               borderRadius: '9px',
-              border: '1px solid #cbd5e1',
-              background: '#f8fafc',
+              border: '1px solid var(--adm-border-strong, #cbd5e1)',
+              background: 'var(--adm-bg-subtle, #f8fafc)',
               fontWeight: 700,
               fontSize: '0.82rem',
               cursor: 'pointer',
-              color: '#0f172a',
+              color: 'var(--adm-text-primary, #0f172a)',
             }}
           >
             <RefreshCw size={14} /> Refresh Telemetry
@@ -1066,12 +1116,12 @@ export default function SuperAdminDatabaseDesk() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '14px' }}>
           {/* Local Docker Compass */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', minWidth: 0 }}>
+          <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '12px', padding: '14px', minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-              <Database size={16} color="#16a34a" />
-              <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>1. Local Docker Stack (MongoDB Compass)</strong>
+              <Database size={16} color={isDark ? '#34d399' : '#16a34a'} />
+              <strong style={{ fontSize: '0.86rem', color: 'var(--adm-text-primary, #0f172a)' }}>1. Local Docker Stack (MongoDB Compass)</strong>
             </div>
-            <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: '#475569' }}>
+            <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
               Paste directly into MongoDB Compass on your workstation to browse local Docker collections:
             </p>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1079,7 +1129,7 @@ export default function SuperAdminDatabaseDesk() {
                 style={{
                   flex: '1 1 180px',
                   minWidth: 0,
-                  background: '#0f172a',
+                  background: '#090e1a',
                   color: '#38bdf8',
                   padding: '8px 10px',
                   borderRadius: '8px',
@@ -1101,8 +1151,9 @@ export default function SuperAdminDatabaseDesk() {
                 style={{
                   padding: '8px 10px',
                   borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  background: '#ffffff',
+                  border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  color: 'var(--adm-text-primary, #0f172a)',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1118,12 +1169,12 @@ export default function SuperAdminDatabaseDesk() {
           </div>
 
           {/* VPS SSH Tunnel */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', minWidth: 0 }}>
+          <div style={{ background: 'var(--adm-bg-subtle, #f8fafc)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '12px', padding: '14px', minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-              <Terminal size={16} color="#2563eb" />
-              <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>2. Live VPS via Encrypted SSH Tunnel</strong>
+              <Terminal size={16} color={isDark ? '#60a5fa' : '#2563eb'} />
+              <strong style={{ fontSize: '0.86rem', color: 'var(--adm-text-primary, #0f172a)' }}>2. Live VPS via Encrypted SSH Tunnel</strong>
             </div>
-            <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: '#475569' }}>
+            <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
               Run tunnel in terminal, then connect Compass to <code>127.0.0.1:27019</code>:
             </p>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1131,7 +1182,7 @@ export default function SuperAdminDatabaseDesk() {
                 style={{
                   flex: '1 1 180px',
                   minWidth: 0,
-                  background: '#0f172a',
+                  background: '#090e1a',
                   color: '#a7f3d0',
                   padding: '8px 10px',
                   borderRadius: '8px',
@@ -1153,8 +1204,9 @@ export default function SuperAdminDatabaseDesk() {
                 style={{
                   padding: '8px 10px',
                   borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  background: '#ffffff',
+                  border: '1px solid var(--adm-border-strong, #cbd5e1)',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  color: 'var(--adm-text-primary, #0f172a)',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1170,12 +1222,19 @@ export default function SuperAdminDatabaseDesk() {
           </div>
 
           {/* Cloud Migration Recommendation */}
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '14px' }}>
+          <div
+            style={{
+              background: isDark ? 'rgba(16, 185, 129, 0.1)' : '#f0fdf4',
+              border: isDark ? '1px solid rgba(16, 185, 129, 0.28)' : '1px solid #bbf7d0',
+              borderRadius: '12px',
+              padding: '14px',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-              <Cloud size={16} color="#15803d" />
-              <strong style={{ fontSize: '0.86rem', color: '#14532d' }}>3. 10,000+ User Cloud Target</strong>
+              <Cloud size={16} color={isDark ? '#34d399' : '#15803d'} />
+              <strong style={{ fontSize: '0.86rem', color: isDark ? '#6ee7b7' : '#14532d' }}>3. 10,000+ User Cloud Target</strong>
             </div>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: '#166534', lineHeight: 1.5 }}>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: isDark ? '#a7f3d0' : '#166534', lineHeight: 1.5 }}>
               {compass.cloudRecommendation ||
                 'MongoDB Atlas M10 Dedicated (Mumbai ap-south-1) — 3-node auto-failover + Point-in-Time Continuous Restore + zero-code MONGO_URI swap.'}
             </p>
@@ -1184,7 +1243,7 @@ export default function SuperAdminDatabaseDesk() {
       </div>
 
       {/* 3-2-1 Point-in-Time Snapshot Engine */}
-      <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '22px' }}>
+      <div style={{ background: 'var(--adm-bg-card, #ffffff)', border: '1px solid var(--adm-border, #e2e8f0)', borderRadius: '16px', padding: '22px' }}>
         <div
           style={{
             display: 'flex',
@@ -1196,10 +1255,10 @@ export default function SuperAdminDatabaseDesk() {
           }}
         >
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800, color: '#0f172a' }}>
+            <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
               Point-in-Time Encrypted Snapshot Vault (3-2-1 Backup Strategy)
             </h3>
-            <p style={{ margin: '4px 0 0', fontSize: '0.83rem', color: '#64748b' }}>
+            <p style={{ margin: '4px 0 0', fontSize: '0.83rem', color: 'var(--adm-text-muted, #64748b)' }}>
               Uses <code>mongodump --oplog --gzip</code> + AES-256-CBC encryption + SHA-256 integrity verification.
             </p>
           </div>
@@ -1212,7 +1271,7 @@ export default function SuperAdminDatabaseDesk() {
                 gap: '6px',
                 fontSize: '0.82rem',
                 fontWeight: 700,
-                color: '#334155',
+                color: 'var(--adm-text-body, #334155)',
                 cursor: 'pointer',
               }}
             >
@@ -1221,7 +1280,7 @@ export default function SuperAdminDatabaseDesk() {
                 checked={encryptSnapshot}
                 onChange={(e) => setEncryptSnapshot(e.target.checked)}
               />
-              <Lock size={14} color="#16a34a" /> AES-256 Encrypt
+              <Lock size={14} color={isDark ? '#34d399' : '#16a34a'} /> AES-256 Encrypt
             </label>
 
             <button
@@ -1256,28 +1315,28 @@ export default function SuperAdminDatabaseDesk() {
         >
           <table className="sa-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
             <thead>
-              <tr style={{ background: '#f8fafc', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '10px 12px', color: '#475569' }}>Snapshot Archive</th>
-                <th style={{ padding: '10px 12px', color: '#475569' }}>Engine</th>
-                <th style={{ padding: '10px 12px', color: '#475569' }}>Security</th>
-                <th style={{ padding: '10px 12px', color: '#475569' }}>Size</th>
-                <th style={{ padding: '10px 12px', color: '#475569' }}>SHA-256 Checksum</th>
-                <th style={{ padding: '10px 12px', color: '#475569' }}>Created At</th>
-                <th style={{ padding: '10px 12px', color: '#475569', textAlign: 'right' }}>Action</th>
+              <tr style={{ background: 'var(--adm-bg-subtle, #f8fafc)', textAlign: 'left', borderBottom: '1px solid var(--adm-border, #e2e8f0)' }}>
+                <th style={{ padding: '10px 12px', color: 'var(--adm-text-muted, #475569)' }}>Snapshot Archive</th>
+                <th style={{ padding: '10px 12px', color: 'var(--adm-text-muted, #475569)' }}>Engine</th>
+                <th style={{ padding: '10px 12px', color: 'var(--adm-text-muted, #475569)' }}>Security</th>
+                <th style={{ padding: '10px 12px', color: 'var(--adm-text-muted, #475569)' }}>Size</th>
+                <th style={{ padding: '10px 12px', color: 'var(--adm-text-muted, #475569)' }}>SHA-256 Checksum</th>
+                <th style={{ padding: '10px 12px', color: 'var(--adm-text-muted, #475569)' }}>Created At</th>
+                <th style={{ padding: '10px 12px', color: 'var(--adm-text-muted, #475569)', textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {snapshots.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                  <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--adm-text-muted, #64748b)' }}>
                     No snapshots created yet. Click <strong>Trigger Snapshot Now</strong> to capture an instant point-in-time archive.
                   </td>
                 </tr>
               ) : (
                 snapshots.map((snap) => (
-                  <tr key={snap.filename} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0f172a' }}>{snap.filename}</td>
-                    <td style={{ padding: '10px 12px', color: '#475569' }}>
+                  <tr key={snap.filename} style={{ borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{snap.filename}</td>
+                    <td style={{ padding: '10px 12px', color: 'var(--adm-text-body, #475569)' }}>
                       <code>{snap.engine}</code>
                     </td>
                     <td style={{ padding: '10px 12px' }}>
@@ -1287,18 +1346,30 @@ export default function SuperAdminDatabaseDesk() {
                           borderRadius: '999px',
                           fontSize: '0.72rem',
                           fontWeight: 700,
-                          background: snap.encrypted ? '#dcfce7' : '#fef3c7',
-                          color: snap.encrypted ? '#15803d' : '#92400e',
+                          background: snap.encrypted
+                            ? isDark
+                              ? 'rgba(16, 185, 129, 0.16)'
+                              : '#dcfce7'
+                            : isDark
+                            ? 'rgba(245, 158, 11, 0.18)'
+                            : '#fef3c7',
+                          color: snap.encrypted
+                            ? isDark
+                              ? '#34d399'
+                              : '#15803d'
+                            : isDark
+                            ? '#fbbf24'
+                            : '#92400e',
                         }}
                       >
                         {snap.encrypted ? 'AES-256 Encrypted' : 'Gzip Plain'}
                       </span>
                     </td>
                     <td style={{ padding: '10px 12px', fontWeight: 600 }}>{formatBytes(snap.sizeBytes)}</td>
-                    <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: '0.76rem', color: '#64748b' }}>
+                    <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                       {snap.sha256 ? `${snap.sha256.slice(0, 16)}…` : '—'}
                     </td>
-                    <td style={{ padding: '10px 12px', color: '#475569' }}>
+                    <td style={{ padding: '10px 12px', color: 'var(--adm-text-body, #475569)' }}>
                       {new Date(snap.createdAt).toLocaleString('en-IN')}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>
@@ -1310,8 +1381,9 @@ export default function SuperAdminDatabaseDesk() {
                           gap: '5px',
                           padding: '5px 10px',
                           borderRadius: '7px',
-                          background: '#eff6ff',
-                          color: '#1d4ed8',
+                          background: isDark ? 'rgba(59, 130, 246, 0.16)' : '#eff6ff',
+                          border: isDark ? '1px solid rgba(96, 165, 250, 0.3)' : '1px solid #bfdbfe',
+                          color: isDark ? '#93c5fd' : '#1d4ed8',
                           textDecoration: 'none',
                           fontWeight: 700,
                           fontSize: '0.78rem',

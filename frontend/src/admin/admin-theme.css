@@ -1,0 +1,718 @@
+/* ==========================================================================
+   AD MAFIA — UNIFIED EXECUTIVE DARK + WHITE ADMIN THEME SYSTEM (END-TO-END)
+   Covers: Super Admin (/superadmin), Sales (/sales), Marketing (/marketing),
+           Graphics (/graphics), and Administrator Sign-In (/admin/login).
+   - White Mode (`[data-admin-theme="light"]`):
+       Obsidian Dark Executive Sidebar (#090d16 -> #0f172a) + Crisp Snow-White
+       Workspace (#ffffff cards on #f8fafc canvas).
+   - Dark Mode (`[data-admin-theme="dark"]`):
+       Deep Obsidian Dark Sidebar (#060911 -> #0b1120) + Midnight Slate Canvas
+       (#0b1120), Elevated Dark Surfaces (#111827 / #172033), Dark Tabulator v6
+       Grids, Dark Modals, Dark Inputs, & Dark SweetAlert2 Dialogs.
+   ========================================================================== */
+
+.adm-theme-scope,
+[data-admin-theme="light"] {
+  --adm-bg-canvas: #f8fafc;
+  --adm-bg-card: #ffffff;
+  --adm-bg-elevated: #ffffff;
+  --adm-bg-subtle: #f8fafc;
+  --adm-bg-muted: #f1f5f9;
+  --adm-bg-hover: #f1f5f9;
+  --adm-bg-input: #ffffff;
+  --adm-bg-topbar: rgba(255, 255, 255, 0.94);
+
+  --adm-text-primary: #0f172a;
+  --adm-text-secondary: #1e293b;
+  --adm-text-body: #334155;
+  --adm-text-muted: #64748b;
+  --adm-text-faint: #94a3b8;
+
+  --adm-border: #e2e8f0;
+  --adm-border-strong: #cbd5e1;
+  --adm-border-subtle: #f1f5f9;
+
+  --adm-shadow-card: 0 1px 4px rgba(15, 23, 42, 0.05);
+  --adm-shadow-modal: 0 24px 56px rgba(15, 23, 42, 0.22);
+}
+
+[data-admin-theme="dark"] {
+  --adm-bg-canvas: #0b1120;
+  --adm-bg-card: #111827;
+  --adm-bg-elevated: #172033;
+  --adm-bg-subtle: #0f172a;
+  --adm-bg-muted: #1e293b;
+  --adm-bg-hover: rgba(148, 163, 184, 0.1);
+  --adm-bg-input: #090e1a;
+  --adm-bg-topbar: rgba(15, 23, 42, 0.92);
+
+  --adm-text-primary: #f8fafc;
+  --adm-text-secondary: #e2e8f0;
+  --adm-text-body: #cbd5e1;
+  --adm-text-muted: #94a3b8;
+  --adm-text-faint: #64748b;
+
+  --adm-border: #1e293b;
+  --adm-border-strong: #334155;
+  --adm-border-subtle: rgba(148, 163, 184, 0.12);
+
+  --adm-shadow-card: 0 8px 26px rgba(0, 0, 0, 0.36);
+  --adm-shadow-modal: 0 28px 64px rgba(0, 0, 0, 0.65);
+
+  /* Remap Marketing & Graphics CSS variables automatically in Dark Mode */
+  --mkt-dark: #f8fafc;
+  --mkt-slate-700: #cbd5e1;
+  --mkt-slate-500: #94a3b8;
+  --mkt-slate-300: #334155;
+  --mkt-slate-100: #1e293b;
+  --mkt-slate-50: #0f172a;
+  --mkt-border: #1e293b;
+  --mkt-card-bg: #111827;
+  --mkt-primary-soft: rgba(99, 102, 241, 0.16);
+  --mkt-emerald-soft: rgba(16, 185, 129, 0.14);
+  --mkt-amber-soft: rgba(245, 158, 11, 0.14);
+  --mkt-rose-soft: rgba(244, 63, 94, 0.14);
+
+  --gfx-dark: #f8fafc;
+  --gfx-slate-700: #cbd5e1;
+  --gfx-slate-500: #94a3b8;
+  --gfx-slate-400: #64748b;
+  --gfx-slate-300: #334155;
+  --gfx-slate-100: #1e293b;
+  --gfx-slate-50: #0f172a;
+  --gfx-border: #1e293b;
+  --gfx-card-bg: #111827;
+  --gfx-primary-soft: rgba(99, 102, 241, 0.16);
+  --gfx-emerald-soft: rgba(16, 185, 129, 0.14);
+  --gfx-amber-soft: rgba(245, 158, 11, 0.14);
+  --gfx-rose-soft: rgba(244, 63, 94, 0.14);
+
+  color-scheme: dark;
+}
+
+/* ==========================================================================
+   1. SEGMENTED WHITE / DARK THEME SWITCHER PILL (`<AdminThemeToggle />`)
+   ========================================================================== */
+.adm-theme-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.adm-theme-segmented.is-dark,
+[data-admin-theme="dark"] .adm-theme-segmented {
+  background: #090e1a;
+  border-color: #334155;
+}
+
+.adm-theme-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+}
+
+.adm-theme-seg-btn:hover:not(.active) {
+  color: #0f172a;
+}
+
+.adm-theme-segmented.is-dark .adm-theme-seg-btn:hover:not(.active),
+[data-admin-theme="dark"] .adm-theme-seg-btn:hover:not(.active) {
+  color: #f8fafc;
+}
+
+.adm-theme-seg-btn.active {
+  background: #0f172a;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.22);
+}
+
+.adm-theme-segmented.is-dark .adm-theme-seg-btn.active,
+[data-admin-theme="dark"] .adm-theme-seg-btn.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.4);
+}
+
+.adm-theme-compact-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--adm-border-strong, #cbd5e1);
+  background: var(--adm-bg-card, #ffffff);
+  color: var(--adm-text-body, #334155);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.16s ease;
+}
+
+.adm-theme-compact-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+}
+
+@media (max-width: 768px) {
+  .adm-theme-seg-label {
+    display: none;
+  }
+  .adm-theme-seg-btn {
+    padding: 0 7px;
+  }
+}
+
+/* ==========================================================================
+   2. UNIFIED EXECUTIVE OBSIDIAN SIDEBAR ACROSS ALL 4 ADMIN PANELS
+      (Gives Sales, Marketing, & Graphics the same Dark+White executive contrast
+       as Super Admin HQ in White Mode, and Deep Obsidian in Dark Mode)
+   ========================================================================== */
+.sales-sidebar,
+.marketing-sidebar,
+.graphics-sidebar {
+  background: linear-gradient(180deg, #090d16 0%, #0f172a 100%) !important;
+  border-right: 1px solid #1e293b !important;
+  color: #f8fafc !important;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.22) !important;
+}
+
+[data-admin-theme="dark"] .sa-sidebar,
+[data-admin-theme="dark"] .sales-sidebar,
+[data-admin-theme="dark"] .marketing-sidebar,
+[data-admin-theme="dark"] .graphics-sidebar {
+  background: linear-gradient(180deg, #050811 0%, #090f1d 100%) !important;
+  border-right-color: #1e293b !important;
+}
+
+.sales-sidebar-top,
+.marketing-sidebar-brand,
+.graphics-sidebar-brand {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.marketing-sidebar-logo {
+  background: #ffffff;
+  padding: 4px 6px;
+  border-radius: 9px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.marketing-brand-title,
+.graphics-brand-title,
+.sales-sidebar-top .sales-logo-title {
+  color: #ffffff !important;
+}
+
+.marketing-brand-tag {
+  color: #818cf8 !important;
+}
+
+.graphics-brand-tag {
+  color: #f472b6 !important;
+}
+
+.graphics-sidebar-clock-card {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  color: #94a3b8 !important;
+}
+
+.graphics-sidebar-clock-card strong {
+  color: #34d399 !important;
+}
+
+.sales-nav-group-title,
+.graphics-nav-category-header {
+  color: #64748b !important;
+}
+
+.sales-nav-btn,
+.marketing-nav-item,
+.graphics-nav-item {
+  color: #94a3b8 !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+}
+
+.sales-nav-btn:hover,
+.marketing-nav-item:hover,
+.graphics-nav-item:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #ffffff !important;
+}
+
+.graphics-nav-icon {
+  color: #94a3b8 !important;
+}
+
+.graphics-nav-item:hover .graphics-nav-icon {
+  color: #ffffff !important;
+}
+
+.sales-nav-btn.active,
+.marketing-nav-item.active,
+.graphics-nav-item.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.36) !important;
+  font-weight: 700 !important;
+}
+
+.graphics-nav-item.active .graphics-nav-icon {
+  color: #ffffff !important;
+}
+
+.sales-sidebar-footer,
+.marketing-sidebar-footer,
+.graphics-sidebar-footer {
+  background: rgba(0, 0, 0, 0.22) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.sales-rep-card {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+}
+
+.sales-rep-name {
+  color: #f8fafc !important;
+}
+
+.sales-rep-role {
+  color: #94a3b8 !important;
+}
+
+.sales-logout-icon,
+.sales-drawer-website-btn,
+.marketing-btn-logout,
+.graphics-footer-btn,
+.mkt-drawer-close-btn,
+.gfx-drawer-close-btn,
+.sales-drawer-close-btn {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #cbd5e1 !important;
+}
+
+.sales-logout-icon:hover,
+.sales-drawer-website-btn:hover,
+.marketing-btn-logout:hover,
+.graphics-footer-btn:hover {
+  background: rgba(255, 255, 255, 0.11) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.sales-drawer-signout-btn,
+.graphics-footer-btn.logout {
+  background: rgba(225, 29, 72, 0.14) !important;
+  border: 1px solid rgba(225, 29, 72, 0.32) !important;
+  color: #fda4af !important;
+}
+
+.sales-drawer-signout-btn:hover,
+.graphics-footer-btn.logout:hover {
+  background: rgba(225, 29, 72, 0.24) !important;
+  color: #ffffff !important;
+}
+
+/* ==========================================================================
+   3. FULL EXECUTIVE DARK MODE OVERRIDES (`[data-admin-theme="dark"]`)
+      Across Super Admin, Sales, Marketing, Graphics, & Admin Sign-In
+   ========================================================================== */
+
+/* 3A. Root Layouts, Viewports & Topbars */
+[data-admin-theme="dark"].sa-container,
+[data-admin-theme="dark"] .sa-main-wrap,
+[data-admin-theme="dark"] .sa-content-area,
+[data-admin-theme="dark"].sales-app-shell,
+[data-admin-theme="dark"] .sales-main-viewport,
+[data-admin-theme="dark"] .sales-content-scroll,
+[data-admin-theme="dark"].marketing-layout-root,
+[data-admin-theme="dark"] .marketing-main-wrap,
+[data-admin-theme="dark"] .marketing-page-container,
+[data-admin-theme="dark"].graphics-layout-root,
+[data-admin-theme="dark"] .graphics-main-wrap,
+[data-admin-theme="dark"] .graphics-content-body {
+  background: #0b1120 !important;
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] .sa-topbar,
+[data-admin-theme="dark"] .sales-topbar,
+[data-admin-theme="dark"] .sales-mobile-header,
+[data-admin-theme="dark"] .marketing-top-bar,
+[data-admin-theme="dark"] .graphics-top-bar {
+  background: rgba(15, 23, 42, 0.92) !important;
+  backdrop-filter: blur(12px);
+  border-bottom-color: #1e293b !important;
+  color: #f8fafc !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.32) !important;
+}
+
+[data-admin-theme="dark"] .sa-topbar h1,
+[data-admin-theme="dark"] .marketing-breadcrumbs strong,
+[data-admin-theme="dark"] .graphics-bc-current,
+[data-admin-theme="dark"] .sales-mobile-brand-title {
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] .sa-topbar-breadcrumb,
+[data-admin-theme="dark"] .marketing-breadcrumbs,
+[data-admin-theme="dark"] .graphics-breadcrumbs,
+[data-admin-theme="dark"] .sales-topbar-engine-meta {
+  color: #94a3b8 !important;
+}
+
+[data-admin-theme="dark"] .sales-topbar-engine-meta b {
+  color: #e2e8f0 !important;
+}
+
+[data-admin-theme="dark"] .sa-clock-pill,
+[data-admin-theme="dark"] .sales-topbar-clock,
+[data-admin-theme="dark"] .marketing-clock-tag,
+[data-admin-theme="dark"] .graphics-clock-tag,
+[data-admin-theme="dark"] .sa-admin-pill,
+[data-admin-theme="dark"] .mkt-user-pill,
+[data-admin-theme="dark"] .graphics-user-profile,
+[data-admin-theme="dark"] .sa-icon-btn,
+[data-admin-theme="dark"] .sa-hamburger-btn,
+[data-admin-theme="dark"] .sales-mobile-menu-btn,
+[data-admin-theme="dark"] .mkt-mobile-menu-btn,
+[data-admin-theme="dark"] .gfx-mobile-toggle-btn {
+  background: #111827 !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-admin-theme="dark"] .sa-admin-name,
+[data-admin-theme="dark"] .mkt-user-name,
+[data-admin-theme="dark"] .graphics-user-title {
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] .sa-admin-role,
+[data-admin-theme="dark"] .mkt-user-role,
+[data-admin-theme="dark"] .graphics-user-dept {
+  color: #94a3b8 !important;
+}
+
+[data-admin-theme="dark"] .sa-topbar-logout-btn,
+[data-admin-theme="dark"] .mkt-topbar-logout-btn,
+[data-admin-theme="dark"] .gfx-topbar-logout-btn,
+[data-admin-theme="dark"] .sales-mobile-logout-btn {
+  background: rgba(244, 63, 94, 0.14) !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+  color: #fda4af !important;
+}
+
+[data-admin-theme="dark"] .sa-topbar-logout-btn:hover,
+[data-admin-theme="dark"] .mkt-topbar-logout-btn:hover,
+[data-admin-theme="dark"] .gfx-topbar-logout-btn:hover,
+[data-admin-theme="dark"] .sales-mobile-logout-btn:hover {
+  background: rgba(244, 63, 94, 0.25) !important;
+  color: #ffffff !important;
+}
+
+/* 3B. Cards, KPI Tiles, Filter Bars, Panels & Tables Across All 4 Admin Portals */
+[data-admin-theme="dark"] .sa-card,
+[data-admin-theme="dark"] .sa-kpi-card,
+[data-admin-theme="dark"] .sa-stat-card,
+[data-admin-theme="dark"] .sa-table-card,
+[data-admin-theme="dark"] .sa-filter-bar,
+[data-admin-theme="dark"] .sa-panel,
+[data-admin-theme="dark"] .sa-section-card,
+[data-admin-theme="dark"] .cp-card,
+[data-admin-theme="dark"] .cp-stat-card,
+[data-admin-theme="dark"] .desk-card,
+[data-admin-theme="dark"] .desk-kpi-card,
+[data-admin-theme="dark"] .desk-stat-card,
+[data-admin-theme="dark"] .desk-table-card,
+[data-admin-theme="dark"] .desk-filter-bar,
+[data-admin-theme="dark"] .desk-toolbar-card,
+[data-admin-theme="dark"] .appr-table-card,
+[data-admin-theme="dark"] .appr-kpi-card,
+[data-admin-theme="dark"] .tx-table-card,
+[data-admin-theme="dark"] .tx-kpi-card,
+[data-admin-theme="dark"] .wallet-table-card,
+[data-admin-theme="dark"] .wallet-kpi-card,
+[data-admin-theme="dark"] .ov-kpi-card,
+[data-admin-theme="dark"] .ov-desk-card,
+[data-admin-theme="dark"] .ov-section-card,
+[data-admin-theme="dark"] .sales-card,
+[data-admin-theme="dark"] .marketing-card,
+[data-admin-theme="dark"] .marketing-kpi-card,
+[data-admin-theme="dark"] .marketing-stat-card,
+[data-admin-theme="dark"] .marketing-table-card,
+[data-admin-theme="dark"] .marketing-filter-bar,
+[data-admin-theme="dark"] .graphics-card,
+[data-admin-theme="dark"] .graphics-kpi-card,
+[data-admin-theme="dark"] .graphics-stat-card,
+[data-admin-theme="dark"] .graphics-table-card,
+[data-admin-theme="dark"] .graphics-filter-bar {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+  color: #e2e8f0 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32) !important;
+}
+
+[data-admin-theme="dark"] .sa-card-header,
+[data-admin-theme="dark"] .sa-table-header,
+[data-admin-theme="dark"] .desk-card-header,
+[data-admin-theme="dark"] .marketing-card-header,
+[data-admin-theme="dark"] .graphics-card-header {
+  background: #0f172a !important;
+  border-bottom-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+/* Headings & Text inside Dark Admin Scope */
+[data-admin-theme="dark"] .sa-content-area h1,
+[data-admin-theme="dark"] .sa-content-area h2,
+[data-admin-theme="dark"] .sa-content-area h3,
+[data-admin-theme="dark"] .sa-content-area h4,
+[data-admin-theme="dark"] .sales-content-scroll h1,
+[data-admin-theme="dark"] .sales-content-scroll h2,
+[data-admin-theme="dark"] .sales-content-scroll h3,
+[data-admin-theme="dark"] .sales-content-scroll h4,
+[data-admin-theme="dark"] .marketing-page-container h1,
+[data-admin-theme="dark"] .marketing-page-container h2,
+[data-admin-theme="dark"] .marketing-page-container h3,
+[data-admin-theme="dark"] .marketing-page-container h4,
+[data-admin-theme="dark"] .graphics-content-body h1,
+[data-admin-theme="dark"] .graphics-content-body h2,
+[data-admin-theme="dark"] .graphics-content-body h3,
+[data-admin-theme="dark"] .graphics-content-body h4,
+[data-admin-theme="dark"] .sa-kpi-value,
+[data-admin-theme="dark"] .desk-kpi-value,
+[data-admin-theme="dark"] .desk-header-title,
+[data-admin-theme="dark"] .marketing-page-title,
+[data-admin-theme="dark"] .graphics-page-title {
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] .sa-kpi-label,
+[data-admin-theme="dark"] .sa-kpi-sub,
+[data-admin-theme="dark"] .desk-kpi-label,
+[data-admin-theme="dark"] .desk-header-sub,
+[data-admin-theme="dark"] .marketing-page-subtitle,
+[data-admin-theme="dark"] .graphics-page-subtitle {
+  color: #94a3b8 !important;
+}
+
+/* 3C. Form Inputs, Selects, Textareas & Search Boxes Across All 4 Admin Portals */
+[data-admin-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+[data-admin-theme="dark"] select,
+[data-admin-theme="dark"] textarea {
+  background-color: #090e1a !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] input::placeholder,
+[data-admin-theme="dark"] textarea::placeholder {
+  color: #64748b !important;
+}
+
+[data-admin-theme="dark"] input:focus,
+[data-admin-theme="dark"] select:focus,
+[data-admin-theme="dark"] textarea:focus {
+  border-color: #6366f1 !important;
+}
+
+[data-admin-theme="dark"] label {
+  color: #cbd5e1;
+}
+
+/* 3D. Classic Tables Inside Admin Portals */
+[data-admin-theme="dark"] table {
+  color: #e2e8f0;
+}
+
+[data-admin-theme="dark"] thead,
+[data-admin-theme="dark"] thead tr,
+[data-admin-theme="dark"] thead th {
+  background: #0b1120 !important;
+  color: #94a3b8 !important;
+  border-color: #1e293b !important;
+}
+
+[data-admin-theme="dark"] tbody tr {
+  background: #111827 !important;
+  border-color: rgba(148, 163, 184, 0.1) !important;
+  color: #e2e8f0 !important;
+}
+
+[data-admin-theme="dark"] tbody tr:hover {
+  background: #172033 !important;
+}
+
+[data-admin-theme="dark"] tbody td {
+  border-color: rgba(148, 163, 184, 0.1) !important;
+  color: #e2e8f0 !important;
+}
+
+/* 3E. Modals, Drawers & Secondary Buttons Across All 4 Admin Portals */
+[data-admin-theme="dark"] .sa-modal,
+[data-admin-theme="dark"] .sa-modal-card,
+[data-admin-theme="dark"] .sales-modal-card,
+[data-admin-theme="dark"] .marketing-modal,
+[data-admin-theme="dark"] .marketing-modal-box,
+[data-admin-theme="dark"] .marketing-modal-card,
+[data-admin-theme="dark"] .graphics-modal,
+[data-admin-theme="dark"] .graphics-modal-card {
+  background: #111827 !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+  box-shadow: var(--adm-shadow-modal) !important;
+}
+
+[data-admin-theme="dark"] .sa-modal-header,
+[data-admin-theme="dark"] .sa-modal-footer,
+[data-admin-theme="dark"] .sales-modal-header,
+[data-admin-theme="dark"] .sales-modal-footer,
+[data-admin-theme="dark"] .marketing-modal-header,
+[data-admin-theme="dark"] .marketing-modal-footer,
+[data-admin-theme="dark"] .graphics-modal-header,
+[data-admin-theme="dark"] .graphics-modal-footer {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] .sales-btn-secondary,
+[data-admin-theme="dark"] .sa-btn-secondary,
+[data-admin-theme="dark"] .sa-btn-outline,
+[data-admin-theme="dark"] .desk-tab-pill:not(.active),
+[data-admin-theme="dark"] .sa-tab-btn:not(.active),
+[data-admin-theme="dark"] .mkt-btn-secondary,
+[data-admin-theme="dark"] .mkt-btn-table-action,
+[data-admin-theme="dark"] .gfx-btn-secondary,
+[data-admin-theme="dark"] .desk-action-btn {
+  background: #172033 !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-admin-theme="dark"] .sales-btn-secondary:hover,
+[data-admin-theme="dark"] .sa-btn-secondary:hover,
+[data-admin-theme="dark"] .sa-btn-outline:hover,
+[data-admin-theme="dark"] .mkt-btn-secondary:hover,
+[data-admin-theme="dark"] .mkt-btn-table-action:hover,
+[data-admin-theme="dark"] .gfx-btn-secondary:hover,
+[data-admin-theme="dark"] .desk-action-btn:hover {
+  background: #1e293b !important;
+  border-color: #475569 !important;
+  color: #ffffff !important;
+}
+
+/* 3F. Inline-Style Light Surface & Dark Text Safety Nets Inside `[data-admin-theme="dark"]`
+   Catches any residual React inline `style={{ background: '#ffffff', color: '#0f172a' }}`
+   (which React serializes to `rgb(...)` in the live DOM) without touching colored status pills! */
+[data-admin-theme="dark"] [style*="background: rgb(255, 255, 255)"],
+[data-admin-theme="dark"] [style*="background-color: rgb(255, 255, 255)"] {
+  background-color: #111827 !important;
+  background: #111827 !important;
+}
+
+[data-admin-theme="dark"] [style*="background: rgb(248, 250, 252)"],
+[data-admin-theme="dark"] [style*="background-color: rgb(248, 250, 252)"] {
+  background-color: #0f172a !important;
+  background: #0f172a !important;
+}
+
+[data-admin-theme="dark"] [style*="background: rgb(241, 245, 249)"],
+[data-admin-theme="dark"] [style*="background-color: rgb(241, 245, 249)"] {
+  background-color: #1e293b !important;
+  background: #1e293b !important;
+}
+
+[data-admin-theme="dark"] [style*="border: 1px solid rgb(226, 232, 240)"],
+[data-admin-theme="dark"] [style*="border: 1.5px solid rgb(226, 232, 240)"],
+[data-admin-theme="dark"] [style*="border-color: rgb(226, 232, 240)"],
+[data-admin-theme="dark"] [style*="border: 1px solid rgb(203, 213, 225)"],
+[data-admin-theme="dark"] [style*="border-color: rgb(203, 213, 225)"] {
+  border-color: #1e293b !important;
+}
+
+[data-admin-theme="dark"] [style*="border-bottom: 1px solid rgb(226, 232, 240)"],
+[data-admin-theme="dark"] [style*="border-bottom: 1px solid rgb(241, 245, 249)"] {
+  border-bottom-color: #1e293b !important;
+}
+
+[data-admin-theme="dark"] [style*="border-top: 1px solid rgb(226, 232, 240)"],
+[data-admin-theme="dark"] [style*="border-top: 1px solid rgb(241, 245, 249)"] {
+  border-top-color: #1e293b !important;
+}
+
+[data-admin-theme="dark"] [style*="color: rgb(15, 23, 42)"],
+[data-admin-theme="dark"] [style*="color: rgb(30, 41, 59)"] {
+  color: #f8fafc !important;
+}
+
+[data-admin-theme="dark"] [style*="color: rgb(51, 65, 85)"],
+[data-admin-theme="dark"] [style*="color: rgb(71, 85, 105)"] {
+  color: #cbd5e1 !important;
+}
+
+[data-admin-theme="dark"] [style*="color: rgb(100, 116, 139)"] {
+  color: #94a3b8 !important;
+}
+
+/* ==========================================================================
+   4. GLOBAL SWEETALERT2 DARK MODE SYNC WHEN ADMIN DARK THEME IS ACTIVE
+   ========================================================================== */
+:root[data-admin-active-theme="dark"] .swal2-popup {
+  background: #111827 !important;
+  color: #f8fafc !important;
+  border: 1px solid #334155 !important;
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.7) !important;
+}
+
+:root[data-admin-active-theme="dark"] .swal2-title {
+  color: #f8fafc !important;
+}
+
+:root[data-admin-active-theme="dark"] .swal2-html-container {
+  color: #cbd5e1 !important;
+}
+
+:root[data-admin-active-theme="dark"] .swal2-html-container [style*="color: rgb(15, 23, 42)"],
+:root[data-admin-active-theme="dark"] .swal2-html-container [style*="color: rgb(71, 85, 105)"],
+:root[data-admin-active-theme="dark"] .swal2-html-container [style*="color: #475569"],
+:root[data-admin-active-theme="dark"] .swal2-html-container [style*="color: #0f172a"] {
+  color: #e2e8f0 !important;
+}
+
+:root[data-admin-active-theme="dark"] .swal2-input,
+:root[data-admin-active-theme="dark"] .swal2-textarea,
+:root[data-admin-active-theme="dark"] .swal2-select {
+  background: #090e1a !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+:root[data-admin-active-theme="dark"] .swal2-footer {
+  border-top-color: #1e293b !important;
+  color: #94a3b8 !important;
+}

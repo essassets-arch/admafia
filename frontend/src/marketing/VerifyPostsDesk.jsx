@@ -64,7 +64,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
     const { value: remarks, isConfirmed } = await Swal.fire({
       title: 'Approve Post for Marketing?',
       html: `
-        <div style="text-align: left; font-size: 0.9rem; color: #334155; margin-bottom: 12px;">
+        <div style="text-align: left; font-size: 0.9rem; margin-bottom: 12px;">
           <div>Customer: <strong>${post.companyName}</strong></div>
           <div>Post Title: <strong>${post.title}</strong></div>
           <div style="margin-top: 8px;">Approving this creative will unlock it for deployment in live advertising campaigns.</div>
@@ -110,7 +110,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
     const { value: reason, isConfirmed } = await Swal.fire({
       title: 'Reject Marketing Post',
       html: `
-        <div style="text-align: left; font-size: 0.88rem; color: #475569; margin-bottom: 8px;">
+        <div style="text-align: left; font-size: 0.88rem; margin-bottom: 8px;">
           Provide the specific non-compliance or rejection reason:
         </div>
       `,
@@ -157,7 +157,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
     const { value: instructions, isConfirmed } = await Swal.fire({
       title: 'Request Changes from Creator',
       html: `
-        <div style="text-align: left; font-size: 0.88rem; color: #475569; margin-bottom: 8px;">
+        <div style="text-align: left; font-size: 0.88rem; margin-bottom: 8px;">
           Provide clear correction instructions for the creator to address:
         </div>
       `,
@@ -255,11 +255,11 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
               type="button"
               key={tab.id}
               onClick={() => setStatusFilter(tab.id)}
-              className="mkt-btn-table-action"
+              className={`mkt-btn-table-action ${statusFilter === tab.id ? 'active' : ''}`.trim()}
               style={{
-                background: statusFilter === tab.id ? '#4f46e5' : '#ffffff',
-                color: statusFilter === tab.id ? '#ffffff' : '#334155',
-                borderColor: statusFilter === tab.id ? '#4f46e5' : '#cbd5e1',
+                background: statusFilter === tab.id ? '#4f46e5' : 'var(--adm-bg-card, #ffffff)',
+                color: statusFilter === tab.id ? '#ffffff' : 'var(--adm-text-body, #334155)',
+                borderColor: statusFilter === tab.id ? '#4f46e5' : 'var(--adm-border-strong, #cbd5e1)',
                 fontWeight: 700,
               }}
             >
@@ -301,7 +301,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
               {loading ? (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', padding: '40px' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--adm-text-muted, #64748b)' }}>
                       <RefreshCw size={18} className="spin" />
                       <span>Loading review queue...</span>
                     </div>
@@ -309,9 +309,9 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                 </tr>
               ) : posts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
-                    <FileCheck2 size={36} style={{ color: '#cbd5e1', marginBottom: '8px' }} />
-                    <h4 style={{ margin: '0 0 6px 0', color: '#0f172a' }}>No posts in this queue</h4>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
+                    <FileCheck2 size={36} style={{ color: 'var(--adm-border-strong, #cbd5e1)', marginBottom: '8px' }} />
+                    <h4 style={{ margin: '0 0 6px 0', color: 'var(--adm-text-primary, #0f172a)' }}>No posts in this queue</h4>
                     <p style={{ fontSize: '0.84rem', margin: 0 }}>
                       All items in "{statusFilter}" have been processed or no matching records found.
                     </p>
@@ -356,7 +356,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                         style={{
                           margin: '4px 0 0 0',
                           fontSize: '0.8rem',
-                          color: '#475569',
+                          color: 'var(--adm-text-body, #475569)',
                           lineHeight: 1.35,
                           maxHeight: '38px',
                           overflow: 'hidden',
@@ -369,7 +369,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
 
                     {/* Customer */}
                     <td>
-                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{post.companyName}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{post.companyName}</div>
                       <div className="mkt-cell-sub">
                         <span className="mkt-pill mkt-pill-slate">{post.customerCategory}</span>
                       </div>
@@ -411,7 +411,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                             </button>
                             <button
                               type="button"
-                              className="mkt-btn-table-action"
+                              className="mkt-btn-table-action warning"
                               style={{ borderColor: '#fde68a', color: '#d97706', background: '#fffbeb' }}
                               onClick={() => handleRequestChanges(post)}
                               title="Request Changes"
@@ -475,7 +475,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
             </div>
             <div className="marketing-modal-body">
               {loadingHistory ? (
-                <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--adm-text-muted, #64748b)' }}>
                   <RefreshCw size={18} className="spin" /> Loading audit history...
                 </div>
               ) : (
@@ -496,7 +496,7 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                     <tbody>
                       {historyData.reviews.length === 0 ? (
                         <tr>
-                          <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                          <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'var(--adm-text-muted, #64748b)' }}>
                             No prior reviews recorded for this post yet.
                           </td>
                         </tr>
@@ -517,11 +517,11 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                               </span>
                             </td>
                             <td>
-                              <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
+                              <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>
                                 {rev.reviewer_name || rev.reviewerName || 'Marketing Auditor'}
                               </div>
                               {(rev.reviewer_role || rev.reviewerRole) && (
-                                <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                   {rev.reviewer_role || rev.reviewerRole}
                                 </div>
                               )}
@@ -529,25 +529,25 @@ export default function VerifyPostsDesk({ onNavigateToDesk }) {
                             <td>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.82rem' }}>
                                 {rev.remarks && (
-                                  <div style={{ color: '#475569' }}>{rev.remarks}</div>
+                                  <div style={{ color: 'var(--adm-text-body, #475569)' }}>{rev.remarks}</div>
                                 )}
                                 {rev.rejection_reason && (
-                                  <div style={{ color: '#dc2626', fontWeight: 600 }}>
+                                  <div style={{ color: '#ef4444', fontWeight: 600 }}>
                                     Reason: {rev.rejection_reason}
                                   </div>
                                 )}
                                 {rev.correction_instructions && (
-                                  <div style={{ color: '#b45309', fontWeight: 600 }}>
+                                  <div style={{ color: '#d97706', fontWeight: 600 }}>
                                     Instructions: {rev.correction_instructions}
                                   </div>
                                 )}
                                 {!rev.remarks && !rev.rejection_reason && !rev.correction_instructions && (
-                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                  <span style={{ color: 'var(--adm-text-muted, #94a3b8)' }}>—</span>
                                 )}
                               </div>
                             </td>
                             <td>
-                              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                              <span style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
                                 {rev.created_at
                                   ? new Date(rev.created_at).toLocaleString('en-IN', {
                                       timeZone: 'Asia/Kolkata',

@@ -18,9 +18,12 @@ import GraphicsRejectedPostsDesk from './GraphicsRejectedPostsDesk';
 import graphicsApi from '../services/graphicsApi';
 import adminAuthApi from '../services/adminAuthApi';
 import NotificationBell from '../components/NotificationBell';
+import { useAdminTheme } from '../utils/adminTheme';
+import AdminThemeToggle from '../components/AdminThemeToggle';
 import './graphics.css';
 
 export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
+  const { theme } = useAdminTheme();
   const activeUser = adminAuthApi.getCurrentUser() || {
     fullName: 'Lead Creative & Graphics Designer',
     role: 'Senior Graphics Designer',
@@ -186,7 +189,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
   ];
 
   return (
-    <div className="graphics-layout-root">
+    <div className="graphics-layout-root adm-theme-scope" data-admin-theme={theme}>
       {/* 1. Sidebar */}
       <aside
         className={`graphics-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}
@@ -322,7 +325,8 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
           </div>
 
           <div className="graphics-top-actions">
-            <NotificationBell variant="light" />
+            <AdminThemeToggle />
+            <NotificationBell variant="light" adminThemeAware />
             <button
               type="button"
               className="gfx-topbar-logout-btn"

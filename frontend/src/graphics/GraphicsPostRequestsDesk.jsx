@@ -176,7 +176,7 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
               {loading ? (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', padding: '40px' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#64748b' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--adm-text-muted, #64748b)' }}>
                       <RefreshCw size={18} className="spin" />
                       <span>Loading design requests from Marketing...</span>
                     </div>
@@ -184,9 +184,9 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
                 </tr>
               ) : requests.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748b' }}>
-                    <Layers size={36} style={{ color: '#cbd5e1', marginBottom: 8 }} />
-                    <h4 style={{ margin: '0 0 4px 0', color: '#0f172a' }}>No post requests found</h4>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
+                    <Layers size={36} style={{ color: 'var(--adm-border-strong, #cbd5e1)', marginBottom: 8 }} />
+                    <h4 style={{ margin: '0 0 4px 0', color: 'var(--adm-text-primary, #0f172a)' }}>No post requests found</h4>
                     <p style={{ margin: 0, fontSize: '0.84rem' }}>
                       No design requests match your selected filters.
                     </p>
@@ -197,12 +197,12 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
                   <tr key={r.id}>
                     {/* Customer & Idea */}
                     <td>
-                      <div style={{ fontWeight: 800, color: '#0f172a' }}>{r.companyName}</div>
-                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                      <div style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>{r.companyName}</div>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         {r.customerCategory} • ID: {r.id}
                       </div>
                       {r.ideaTitle && (
-                        <div style={{ fontSize: '0.74rem', color: '#4f46e5', fontWeight: 600, marginTop: 4 }}>
+                        <div style={{ fontSize: '0.74rem', color: '#6366f1', fontWeight: 600, marginTop: 4 }}>
                           💡 {r.ideaTitle}
                         </div>
                       )}
@@ -210,11 +210,11 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
 
                     {/* Post Title & Copy */}
                     <td>
-                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.title}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)' }}>{r.title}</div>
                       <div
                         style={{
                           fontSize: '0.78rem',
-                          color: '#475569',
+                          color: 'var(--adm-text-body, #475569)',
                           marginTop: 4,
                           display: '-webkit-box',
                           WebkitLineClamp: 2,
@@ -234,10 +234,10 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
 
                     {/* Platform & Format */}
                     <td>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text-primary, #0f172a)' }}>
                         {r.platform}
                       </div>
-                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         {r.creativeFormat || 'Feed Creative'}
                       </div>
                       {r.mediaUrl && (
@@ -253,12 +253,12 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
                     <td>
                       <div>{getStatusBadge(r.status)}</div>
                       {r.latestReview && r.status === 'Rejected' && (
-                        <div style={{ fontSize: '0.72rem', color: '#e11d48', fontWeight: 700, marginTop: 4 }}>
+                        <div style={{ fontSize: '0.72rem', color: '#f43f5e', fontWeight: 700, marginTop: 4 }}>
                           ⚠️ {r.latestReview.rejectionReason}
                         </div>
                       )}
                       {r.latestReview && r.status === 'Changes Requested' && (
-                        <div style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 700, marginTop: 4 }}>
+                        <div style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 700, marginTop: 4 }}>
                           ⚠️ {r.latestReview.correctionInstructions}
                         </div>
                       )}
@@ -318,7 +318,7 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
               </div>
               <button
                 type="button"
-                className="graphics-footer-btn"
+                className="graphics-btn-secondary"
                 style={{ padding: 6, borderRadius: '50%' }}
                 onClick={() => setSelectedRequest(null)}
               >
@@ -329,9 +329,10 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
             <div className="graphics-modal-body">
               {/* Customer Box */}
               <div
+                className="gfx-spec-panel"
                 style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
+                  background: 'var(--adm-bg-subtle, #f8fafc)',
+                  border: '1px solid var(--adm-border, #e2e8f0)',
                   borderRadius: 10,
                   padding: '12px 14px',
                   marginBottom: 16,
@@ -341,8 +342,8 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
                 }}
               >
                 <div>
-                  <strong style={{ color: '#0f172a' }}>{selectedRequest.companyName}</strong>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
+                  <strong style={{ color: 'var(--adm-text-primary, #0f172a)' }}>{selectedRequest.companyName}</strong>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                     Contact: {selectedRequest.contactPerson} • {selectedRequest.phone} • {selectedRequest.city}
                   </div>
                 </div>
@@ -352,14 +353,14 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
               {/* Idea Concept */}
               {selectedRequest.ideaTitle && (
                 <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                  <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
                     Strategic Concept / Idea Reference
                   </label>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#4f46e5', marginTop: 2 }}>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#6366f1', marginTop: 2 }}>
                     💡 {selectedRequest.ideaTitle}
                   </div>
                   {selectedRequest.ideaConcept && (
-                    <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: 4, background: '#eef2ff', padding: 10, borderRadius: 8 }}>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--adm-text-body, #475569)', marginTop: 4, background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.24)', padding: 10, borderRadius: 8 }}>
                       {selectedRequest.ideaConcept}
                     </div>
                   )}
@@ -368,17 +369,17 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
 
               {/* Copy & Caption */}
               <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
                   Post Caption &amp; Content Copy
                 </label>
                 <div
                   style={{
-                    background: '#ffffff',
-                    border: '1px solid #e2e8f0',
+                    background: 'var(--adm-bg-subtle, #ffffff)',
+                    border: '1px solid var(--adm-border, #e2e8f0)',
                     borderRadius: 8,
                     padding: 12,
                     fontSize: '0.86rem',
-                    color: '#0f172a',
+                    color: 'var(--adm-text-primary, #0f172a)',
                     whiteSpace: 'pre-wrap',
                     lineHeight: 1.5,
                     marginTop: 4,
@@ -390,20 +391,20 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
 
               {/* Specs Grid */}
               <div className="gfx-specs-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 14 }}>
-                <div style={{ background: '#f8fafc', padding: 10, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+                <div className="gfx-spec-panel" style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: 10, borderRadius: 8, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                  <span style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>
                     Target Platform
                   </span>
-                  <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a', marginTop: 2 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                     {selectedRequest.platform}
                   </div>
                 </div>
 
-                <div style={{ background: '#f8fafc', padding: 10, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: '0.70rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+                <div className="gfx-spec-panel" style={{ background: 'var(--adm-bg-subtle, #f8fafc)', padding: 10, borderRadius: 8, border: '1px solid var(--adm-border, #e2e8f0)' }}>
+                  <span style={{ fontSize: '0.70rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700, textTransform: 'uppercase' }}>
                     Call To Action
                   </span>
-                  <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a', marginTop: 2 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--adm-text-primary, #0f172a)', marginTop: 2 }}>
                     {selectedRequest.callToAction}
                   </div>
                 </div>
@@ -412,10 +413,10 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
               {/* Artwork Preview if already exists */}
               {selectedRequest.mediaUrl && (
                 <div style={{ marginTop: 14 }}>
-                  <label style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                  <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
                     Current Uploaded Artwork (Revision #{selectedRequest.revisionNumber})
                   </label>
-                  <div style={{ marginTop: 6, borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0', maxHeight: 260, display: 'flex', justifyContent: 'center', background: '#0f172a' }}>
+                  <div className="gfx-artwork-preview-box" style={{ marginTop: 6, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--adm-border, #e2e8f0)', maxHeight: 260, display: 'flex', justifyContent: 'center', background: '#0f172a' }}>
                     <img
                       src={selectedRequest.mediaUrl}
                       alt={selectedRequest.title}
