@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Lock,
   User,
@@ -24,29 +24,48 @@ export default function AdminLoginPage({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(notice || '');
+  const identifierRef = useRef(null);
+  const passwordRef = useRef(null);
+  const redirectedRef = useRef(false);
+  const onLoginSuccessRef = useRef(onLoginSuccess);
+  onLoginSuccessRef.current = onLoginSuccess;
 
-  // Never show Administrator Sign In if an active admin/staff session is already valid
+  const goToWorkspace = (user, dest) => {
+    if (redirectedRef.current) return;
+    redirectedRef.current = true;
+    if (onLoginSuccessRef.current) {
+      onLoginSuccessRef.current(user, dest);
+    } else if (typeof window !== 'undefined') {
+      window.location.replace(dest);
+    }
+  };
+
+  // Never show Administrator Sign In if an active admin/staff session is already valid (checked once on mount)
   useEffect(() => {
     const existing = adminAuthApi.getCurrentUser();
     if (!existing) return;
     const deptParam =
       typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '').get('dept') || '' : '';
     const ws = adminAuthApi.resolveRequestedWorkspace(deptParam);
-    const dest = targetUrl || ws?.path || '/superadmin';
-    if (onLoginSuccess) {
-      onLoginSuccess(existing, dest);
-    } else if (typeof window !== 'undefined') {
-      window.location.replace(dest);
-    }
-  }, [targetUrl, onLoginSuccess]);
+    goToWorkspace(existing, targetUrl || ws?.path || '/superadmin');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!identifier.trim()) {
+    if (loading) return;
+    // Read live DOM values: Chrome/Edge password-manager autofill does NOT fire React onChange
+    // until the user interacts, so React state can still be '' on the very first click.
+    const idValue = String(identifierRef.current?.value ?? identifier).trim();
+    const pwdValue = String(passwordRef.current?.value ?? password).trim();
+    if (idValue !== identifier) setIdentifier(idValue);
+    if (pwdValue !== password) setPassword(pwdValue);
+
+    if (!idValue) {
       setErrorMsg('Please enter your username, email, or 10-digit mobile number.');
       return;
     }
-    if (!password.trim()) {
+    if (!pwdValue) {
       setErrorMsg('Please enter your administrator account password.');
       return;
     }
@@ -56,43 +75,30 @@ export default function AdminLoginPage({
 
     try {
       const result = await adminAuthApi.login({
-        identifier: identifier.trim(),
-        password: password.trim(),
+        identifier: idValue,
+        password: pwdValue,
       });
 
       if (result && result.ok) {
         const destination = targetUrl || result.targetUrl || '/superadmin';
-        const deptName = result.department || 'Department Workspace';
-
-        await Swal.fire({
+        // Enter the workspace immediately (no blocking welcome popup / second click needed)
+        goToWorkspace(result.user, destination);
+        Swal.fire({
           icon: 'success',
           title: `Welcome, ${result.user?.fullName || 'Administrator'}!`,
-          html: `
-            <div style="font-size: 14px; color: #475569; line-height: 1.6;">
-              <p><strong>Department:</strong> ${deptName}</p>
-              <p><strong>Role:</strong> ${result.user?.role || 'Staff'}</p>
-              <p style="margin-top: 8px; color: #0284c7; font-weight: 600;">
-                Redirecting to <code>${destination}</code>...
-              </p>
-            </div>
-          `,
-          timer: 1600,
+          toast: true,
+          position: 'top-end',
+          timer: 2200,
           timerProgressBar: true,
           showConfirmButton: false,
         });
-
-        if (onLoginSuccess) {
-          onLoginSuccess(result.user, destination);
-        } else {
-          window.location.href = destination;
-        }
+        return;
       }
     } catch (err) {
       console.error('[AdminLoginPage] login error', err);
       setErrorMsg(err.message || 'Authentication failed. Please verify your credentials.');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   return (
@@ -173,6 +179,8 @@ export default function AdminLoginPage({
               <div className="adm-input-wrap" style={{ position: 'relative', width: '100%' }}>
                 <User size={16} className="adm-input-icon" style={{ position: 'absolute', left: 14, color: '#818cf8', zIndex: 2 }} />
                 <input
+                  ref={identifierRef}
+                  name="username"
                   type="text"
                   required
                   className="adm-input"
@@ -216,6 +224,8 @@ export default function AdminLoginPage({
               <div className="adm-input-wrap" style={{ position: 'relative', width: '100%' }}>
                 <Key size={16} className="adm-input-icon" style={{ position: 'absolute', left: 14, color: '#818cf8', zIndex: 2 }} />
                 <input
+                  ref={passwordRef}
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   className="adm-input"

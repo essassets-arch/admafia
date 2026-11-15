@@ -1354,6 +1354,8 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
   const [suspensionError, setSuspensionError] = useState('');
   const [loginError, setLoginError] = useState('');
   const [resetNotice, setResetNotice] = useState('');
+  const loginUserRef = useRef(null);
+  const loginPwdRef = useRef(null);
   const [selectedCountry, setSelectedCountry] = useState(() => countryService.getCurrentCountry());
 
   // Forgot Password via WhatsApp OTP state
@@ -1412,10 +1414,18 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setLoginError('');
     setSuspensionError('');
 
-    if (!username.trim() || !password) {
+    // Read live DOM values: browser password-manager autofill does NOT fire React onChange
+    // until the user interacts, so React state can still be '' on the very first click.
+    const userValue = String(loginUserRef.current?.value ?? username).trim();
+    const pwdValue = String(loginPwdRef.current?.value ?? password);
+    if (userValue !== username) setUsername(userValue);
+    if (pwdValue !== password) setPassword(pwdValue);
+
+    if (!userValue || !pwdValue) {
       setLoginError('Please enter your username/mobile/email and password.');
       return;
     }
@@ -1423,7 +1433,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
     setIsSubmitting(true);
 
     try {
-      const authRes = await crmApi.loginCustomer(username.trim(), password);
+      const authRes = await crmApi.loginCustomer(userValue, pwdValue);
       const matchedCustomer = authRes?.customer;
 
       if (!matchedCustomer) {
@@ -1472,8 +1482,8 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
       // Seamless staff/Super Admin fallback if an administrator enters staff credentials on /login
       try {
         const staffRes = await adminAuthApi.login({
-          identifier: username.trim(),
-          password,
+          identifier: userValue,
+          password: pwdValue,
         });
         if (staffRes && staffRes.ok) {
           const dest = staffRes.targetUrl || adminAuthApi.getDefaultWorkspace(staffRes.user)?.path || '/superadmin';
@@ -1844,6 +1854,9 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
                   </div>
                   <input
                     id="logUser"
+                    ref={loginUserRef}
+                    name="username"
+                    autoComplete="username"
                     type="text"
                     required
                     placeholder="e.g. vikram_malhotra or 9724916167"
@@ -1879,6 +1892,9 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
                   </div>
                   <input
                     id="logPwd"
+                    ref={loginPwdRef}
+                    name="password"
+                    autoComplete="current-password"
                     type={showPwd ? 'text' : 'password'}
                     required
                     placeholder="••••••••••••"
