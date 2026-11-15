@@ -911,36 +911,38 @@ return (
     <main className="sales-main-viewport">
       {/* Top Operational Bar */}
       <header className="sales-topbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span className="sales-status-badge">
+        <div className="sales-topbar-meta-left" style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flexWrap: 'nowrap' }}>
+          <span className="sales-status-badge" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
             <span className="sales-pulse-dot" />
             Active Operations Desk
           </span>
-          <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+          <span className="sales-topbar-engine-meta" style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Platform Ad Engine: <b>₹300/day</b> • <b>{customers.length} Billing Accounts</b>
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="sales-topbar-meta-right" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, flexWrap: 'nowrap' }}>
           {/* Live Real-Time Date & Time Clock */}
           <div
+            className="sales-topbar-clock"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
+              gap: 7,
               background: '#ffffff',
               border: '1px solid #cbd5e1',
-              padding: '6px 14px',
+              padding: '5px 11px',
               borderRadius: '8px',
-              fontSize: '0.82rem',
+              fontSize: '0.79rem',
               fontWeight: 700,
               color: '#0f172a',
               boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
               fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
             }}
           >
-            <Clock size={15} color="#4f46e5" />
-            <span>
+            <Clock size={14} color="#4f46e5" style={{ flexShrink: 0 }} />
+            <span style={{ whiteSpace: 'nowrap' }}>
               {liveNow.toLocaleDateString('en-IN', {
                 weekday: 'short',
                 day: '2-digit',
@@ -960,14 +962,15 @@ return (
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 4,
-                fontSize: '0.68rem',
+                fontSize: '0.66rem',
                 fontWeight: 800,
                 color: '#059669',
                 background: '#ecfdf5',
                 border: '1px solid #a7f3d0',
                 padding: '2px 6px',
                 borderRadius: 4,
-                marginLeft: 4,
+                marginLeft: 2,
+                whiteSpace: 'nowrap',
               }}
             >
               <span
@@ -989,7 +992,7 @@ return (
             type="button"
             className="sales-btn-secondary"
             onClick={onBackToWebsite}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
           >
             Website <ExternalLink size={13} />
           </button>

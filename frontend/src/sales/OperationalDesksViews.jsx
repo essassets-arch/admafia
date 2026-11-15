@@ -733,7 +733,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
       verified: false,
       isSelfRegistered: true,
       registeredAt: getLiveNowFormatted(),
-      registeredFrom: 'http://localhost:5173/#register',
+      registeredFrom: 'https://admafia.marketing/register',
     };
     setCustomers((prev) => [added, ...prev.filter(c => c.phone !== added.phone)]);
     crmApi
@@ -777,7 +777,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
             </span>
           </div>
           <p className="desk-subtitle">
-            Live directory of verified client registrations from <code>http://localhost:5173/#register</code>. Displays authoritative intake details (Username, Mobile, Work Email, Password, Profile &amp; KYC Audit Progress, and Payment Status).
+            Live directory of verified client registrations from <code>/register</code>. Displays authoritative intake details (Username, Mobile, Work Email, Password, Profile &amp; KYC Audit Progress, and Payment Status).
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -961,8 +961,8 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
               <tr>
                 <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
                   No customer registrations match your filter. Register a new user at{' '}
-                  <a href="#register" style={{ color: '#4f46e5', fontWeight: 700 }}>
-                    http://localhost:5173/#register
+                  <a href="/register" style={{ color: '#4f46e5', fontWeight: 700 }}>
+                    /register
                   </a>
                 </td>
               </tr>
@@ -978,7 +978,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                           @{identity.username || c.username || 'user'}
                         </span>
                         <span className="desk-pill" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.68rem', fontWeight: 800, padding: '1px 6px' }}>
-                          🌐 #register
+                          🌐 /register
                         </span>
                       </div>
                       <div style={{ fontWeight: 700, color: '#0f172a', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -990,7 +990,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                         )}
                       </div>
                       <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                        {c.city} • Registered: {formatIndianDateTime(c.registeredAt, c.registeredAtRaw || c.registered_at)}
+                        {c.city ? `${c.city} • ` : ''}Registered: {formatIndianDateTime(c.registeredAt, c.registeredAtRaw || c.registered_at)}
                       </div>
                     </td>
 
@@ -1142,7 +1142,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                   );
                 })()}
                 <div style={{ fontSize: '0.82rem', color: '#64748b', overflowWrap: 'anywhere' }}>
-                  Registered Source: <code>{selectedCust.registeredFrom || 'http://localhost:5173/#register'}</code>
+                  Registered Source: <code>{selectedCust.registeredFrom || 'https://admafia.marketing/register'}</code>
                 </div>
               </div>
               <button type="button" className="desk-close-btn" onClick={() => setSelectedCust(null)}>

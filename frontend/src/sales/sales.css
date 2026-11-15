@@ -1497,6 +1497,38 @@
   margin-top: 10px;
 }
 
+/* Desktop already has Topbar Website button + Rep-card Logout icon; keep drawer actions mobile-only so all 9 desks fit cleanly on 1366x768 laptops */
+@media (min-width: 961px) {
+  .sales-sidebar-footer-actions {
+    display: none !important;
+  }
+
+  .sales-sidebar-footer {
+    padding: 12px 14px !important;
+  }
+}
+
+@media (min-width: 961px) and (max-width: 1440px) {
+  .sales-sidebar {
+    width: 264px !important;
+  }
+
+  .sales-topbar {
+    padding: 0 20px !important;
+    gap: 10px !important;
+  }
+
+  .desk-page-container {
+    padding: 22px 22px 56px 22px !important;
+  }
+}
+
+@media (min-width: 961px) and (max-width: 1220px) {
+  .sales-topbar-engine-meta {
+    display: none !important;
+  }
+}
+
 .sales-drawer-website-btn {
   width: 100%;
   display: inline-flex;

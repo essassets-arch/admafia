@@ -1,34 +1,38 @@
 /* ==========================================================================
-   AD MAFIA — ENTERPRISE SMART TABLE & TABULATOR v6 DESIGN SYSTEM
-   Works seamlessly across Light Portals (Sales, Customer, Marketing, Graphics)
-   and Dark Executive Portals (Super Admin `.sa-container`).
+   AD MAFIA — ENTERPRISE SMART TABLE & LIVE TABULATOR v6 DESIGN SYSTEM
+   Unified crisp executive grid styling across Sales, Customer, Super Admin,
+   Marketing, and Graphics portals.
    ========================================================================== */
 
-.am-smart-table-wrap {
+.am-smart-table-wrap,
+.am-tabulator-native-shell {
   width: 100%;
   max-width: 100%;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
   overflow: visible;
   box-sizing: border-box;
 }
 
-/* Flatten inner legacy card borders when wrapped inside SmartTable */
-.desk-table-card > .am-smart-table-wrap,
-.tx-table-card > .am-smart-table-wrap,
-.appr-table-card > .am-smart-table-wrap,
+/* Flatten inner border ONLY when parent card keeps its own visible border */
 .sa-table-wrap > .am-smart-table-wrap,
+.sa-table-card > .am-smart-table-wrap,
 .sa-card > .am-smart-table-wrap,
+.cp-card > .am-smart-table-wrap,
 .marketing-table-card > .am-smart-table-wrap,
 .graphics-table-card > .am-smart-table-wrap,
 .wallet-table-card > .am-smart-table-wrap {
   border: none;
+  box-shadow: none;
   border-radius: inherit;
   background: transparent;
 }
 
-/* 1. Toolbar */
+/* ==========================================================================
+   1. UNIFIED EXECUTIVE TOOLBAR
+   ========================================================================== */
 .am-st-toolbar {
   display: flex;
   align-items: center;
@@ -55,7 +59,7 @@
   display: flex;
   align-items: center;
   min-width: 210px;
-  max-width: 290px;
+  max-width: 280px;
   flex: 1 1 200px;
 }
 
@@ -104,7 +108,7 @@
   color: #0f172a;
 }
 
-/* Mode Segmented Switcher */
+/* Mode Segmented Switcher: [⚡ Tabulator | 📊 Classic | 📱 Cards] */
 .am-st-mode-group {
   display: inline-flex;
   align-items: center;
@@ -123,17 +127,36 @@
   color: #475569;
   font-size: 0.75rem;
   font-weight: 700;
-  padding: 5px 9px;
+  padding: 5px 10px;
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
 }
 
+.am-st-mode-btn:hover:not(.active) {
+  color: #0f172a;
+}
+
 .am-st-mode-btn.active {
   background: #ffffff;
   color: #4f46e5;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+}
+
+.am-st-count-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  color: #4338ca;
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 /* Standard Toolbar Action Buttons */
@@ -175,7 +198,7 @@
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  width: 230px;
+  width: 235px;
   max-width: calc(100vw - 32px);
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -204,7 +227,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 240px;
+  max-height: 250px;
   overflow-y: auto;
 }
 
@@ -235,7 +258,411 @@
   text-decoration: underline;
 }
 
-/* 2. Grid Scroll Viewport & Sortable Headers */
+/* ==========================================================================
+   2. LIVE REACT-PORTAL TABULATOR v6 ENGINE (`<TabulatorLiveGrid>`)
+   ========================================================================== */
+.am-tabulator-live-wrap {
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  background: #ffffff;
+}
+
+.am-tabulator-mount {
+  width: 100%;
+  max-width: 100%;
+}
+
+.am-tabulator-mount .tabulator {
+  width: 100% !important;
+  max-width: 100% !important;
+  border: none !important;
+  background: #ffffff !important;
+  font-family: inherit !important;
+  font-size: 0.84rem !important;
+  color: #0f172a !important;
+  transform: none !important;
+  -webkit-transform: none !important;
+  overflow: hidden !important;
+}
+
+/* Tabulator Header Bar */
+.am-tabulator-mount .tabulator-header {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-top: none !important;
+  color: #475569 !important;
+  font-weight: 800 !important;
+}
+
+.am-tabulator-mount .tabulator-header .tabulator-headers {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  height: auto !important;
+  min-height: 42px !important;
+}
+
+.am-tabulator-mount .tabulator-header .tabulator-col {
+  background: #f8fafc !important;
+  border-right: 1px solid #eef2f6 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  height: auto !important;
+  min-height: 42px !important;
+  flex: 0 0 auto !important;
+  overflow: hidden !important;
+  transition: background-color 0.14s ease;
+}
+
+.am-tabulator-mount .tabulator-header .tabulator-col:last-of-type {
+  border-right: none !important;
+}
+
+.am-tabulator-mount .tabulator-header .tabulator-col:hover {
+  background: #f1f5f9 !important;
+}
+
+.am-tabulator-mount .tabulator-header .tabulator-col.tabulator-moving {
+  position: absolute !important;
+  z-index: 35 !important;
+  background: #eef2ff !important;
+  border: 1.5px solid #6366f1 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 8px 22px rgba(79, 70, 229, 0.2) !important;
+  opacity: 0.96 !important;
+}
+
+.am-tabulator-mount .tabulator-header .tabulator-col .tabulator-col-content {
+  padding: 10px 12px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.am-tabulator-mount .tabulator-header .tabulator-col .tabulator-col-title-holder,
+.am-tabulator-mount .tabulator-header .tabulator-col .tabulator-col-title {
+  width: 100% !important;
+  overflow: visible !important;
+  white-space: normal !important;
+  text-overflow: clip !important;
+}
+
+/* Custom React Portal Header Elements */
+.am-tab-header-host {
+  width: 100%;
+  min-width: 0;
+}
+
+.am-tab-hdr-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+.am-tab-hdr-title-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  user-select: none;
+}
+
+.am-tab-hdr-inner.is-right .am-tab-hdr-title-row {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.am-tab-hdr-title-row.is-sortable {
+  cursor: pointer;
+}
+
+.am-tab-grip-ico {
+  color: #94a3b8;
+  flex-shrink: 0;
+  opacity: 0;
+  margin-left: -3px;
+  transition: opacity 0.14s ease, color 0.14s ease;
+  cursor: grab;
+}
+
+.am-tabulator-mount .tabulator-col:hover .am-tab-grip-ico {
+  opacity: 0.8;
+  color: #6366f1;
+}
+
+.am-tab-hdr-label {
+  font-size: 0.71rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  color: #475569;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.am-tab-hdr-inner.is-sorted .am-tab-hdr-label {
+  color: #4338ca;
+}
+
+.am-tab-sort-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  opacity: 0.55;
+  flex-shrink: 0;
+  transition: color 0.14s, opacity 0.14s;
+}
+
+.am-tab-hdr-title-row:hover .am-tab-sort-pill {
+  opacity: 0.95;
+  color: #475569;
+}
+
+.am-tab-sort-pill.active {
+  opacity: 1;
+  color: #4f46e5;
+  background: #eef2ff;
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.am-tab-hdr-filter-wrap {
+  margin-top: 7px;
+  width: 100%;
+}
+
+/* Tabulator Body, Multi-Line Rows & Live React Cell Portals */
+.am-tabulator-mount .tabulator-tableholder {
+  width: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch !important;
+  white-space: normal !important;
+  background: #ffffff !important;
+}
+
+.am-tabulator-mount.am-tab-is-empty .tabulator-tableholder {
+  display: none !important;
+}
+
+.am-tab-empty-overlay {
+  padding: 16px;
+  background: #ffffff;
+}
+
+.am-tabulator-mount .tabulator-tableholder .tabulator-table {
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 100% !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  white-space: normal !important;
+}
+
+.am-tabulator-mount .tabulator-row,
+.am-tabulator-mount .tabulator-row.tabulator-row-even {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  height: auto !important;
+  min-height: 58px !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  transition: background-color 0.12s ease;
+}
+
+.am-tabulator-mount .tabulator-row.am-tab-has-subrow {
+  flex-wrap: wrap !important;
+}
+
+.am-tabulator-mount .tabulator-row:last-child {
+  border-bottom: none !important;
+}
+
+.am-tabulator-mount .tabulator-row:hover,
+.am-tabulator-mount .tabulator-row.tabulator-selectable:hover {
+  background-color: #f8fafc !important;
+}
+
+.am-tabulator-mount .tabulator-row .tabulator-cell {
+  display: flex !important;
+  align-items: center !important;
+  height: auto !important;
+  flex: 0 0 auto !important;
+  padding: 12px 12px !important;
+  border-right: 1px solid #f8fafc !important;
+  white-space: normal !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  text-overflow: clip !important;
+  box-sizing: border-box !important;
+  vertical-align: middle !important;
+}
+
+.am-tabulator-mount .tabulator-row .tabulator-cell:last-of-type {
+  border-right: none !important;
+}
+
+/* Column Edge Resize Handles & Visual Guide */
+.am-tabulator-mount .tabulator-col-resize-handle {
+  flex: 0 0 auto !important;
+  align-self: stretch !important;
+  height: auto !important;
+  z-index: 12 !important;
+  transition: background-color 0.14s ease;
+}
+
+.am-tabulator-mount .tabulator-col-resize-handle:hover {
+  background-color: rgba(99, 102, 241, 0.35) !important;
+  cursor: col-resize !important;
+}
+
+.am-tabulator-mount .tabulator-col-resize-guide {
+  background-color: #6366f1 !important;
+  width: 2px !important;
+  opacity: 0.85 !important;
+}
+
+/* Cell Portal Host & Content Typography Safeguards */
+.am-tab-cell-host {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.am-tab-cell-host.align-right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.am-tab-cell-host.align-center {
+  justify-content: center;
+  text-align: center;
+}
+
+.am-tab-cell-inner {
+  max-width: 100%;
+  min-width: 0;
+  line-height: 1.42;
+  overflow-wrap: break-word;
+}
+
+.am-tab-cell-inner a[href^="mailto:"] {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.am-tab-cell-inner button,
+.am-tab-cell-inner .desk-pill,
+.am-tab-cell-inner .desk-action-btn,
+.am-tab-cell-inner .appr-action-btn {
+  white-space: nowrap;
+}
+
+.am-tab-cell-host.align-right .am-tab-cell-inner > div {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.am-tab-subrow-host {
+  flex: 0 0 100%;
+  width: 100%;
+  border-top: 1px dashed #e2e8f0;
+  background: #f8fafc;
+  padding: 12px 16px;
+  box-sizing: border-box;
+}
+
+/* Compact Row Density Mode (Works in both Tabulator & Classic Grid) */
+.am-st-compact .am-tabulator-mount .tabulator-row {
+  min-height: 44px !important;
+}
+
+.am-st-compact .am-tabulator-mount .tabulator-row .tabulator-cell {
+  padding: 7px 10px !important;
+  font-size: 0.8rem !important;
+}
+
+/* Standalone Dynamic Schema Grid (`<TabulatorDataGrid>` — e.g. Live MongoDB Explorer) */
+.am-tabulator-standalone-mount .tabulator-header .tabulator-col .tabulator-col-title {
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  color: #475569 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.am-tabulator-standalone-mount .tabulator-row {
+  min-height: 44px !important;
+}
+
+.am-tabulator-standalone-mount .tabulator-row .tabulator-cell {
+  padding: 10px 14px !important;
+  font-size: 0.81rem !important;
+  color: #1e293b !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.am-tabulator-standalone-mount .tabulator-header-filter input {
+  width: 100% !important;
+  height: 28px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  padding: 0 8px !important;
+  font-size: 0.75rem !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  outline: none !important;
+}
+
+.am-tabulator-standalone-mount .tabulator-header-filter input:focus {
+  border-color: #4f46e5 !important;
+}
+
+.am-tabulator-standalone-mount .tabulator-footer {
+  background: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  padding: 4px 6px !important;
+  border-radius: 0 0 14px 14px !important;
+}
+
+.am-tabulator-standalone-mount .tabulator-footer .tabulator-page {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 7px !important;
+  color: #334155 !important;
+  font-weight: 700 !important;
+  padding: 4px 9px !important;
+}
+
+.am-tabulator-standalone-mount .tabulator-footer .tabulator-page.active {
+  background: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+
+/* ==========================================================================
+   3. CLASSIC HTML TABLE MODE (`📊 Classic`)
+   ========================================================================== */
 .am-st-scroll-viewport {
   width: 100%;
   max-width: 100%;
@@ -273,12 +700,13 @@
 
 .am-st-col-filter-input {
   width: 100%;
-  min-width: 80px;
+  min-width: 72px;
   height: 28px;
   padding: 0 8px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 0.75rem;
+  font-weight: 500;
   background: #ffffff;
   color: #0f172a;
   box-sizing: border-box;
@@ -287,16 +715,18 @@
 
 .am-st-col-filter-input:focus {
   border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.12);
 }
 
-/* Compact Density */
 .am-st-compact .am-st-enhanced-table td {
   padding-top: 7px !important;
   padding-bottom: 7px !important;
   font-size: 0.8rem !important;
 }
 
-/* 3. Mobile-First Stacked Card Mode (`📱 Cards`) */
+/* ==========================================================================
+   4. MOBILE-FIRST STACKED CARD MODE (`📱 Cards`)
+   ========================================================================== */
 .am-st-cards-list {
   display: flex;
   flex-direction: column;
@@ -458,7 +888,9 @@
   color: #64748b;
 }
 
-/* 4. Pagination Footer */
+/* ==========================================================================
+   5. UNIFIED PAGINATION FOOTER
+   ========================================================================== */
 .am-st-pagination-bar {
   display: flex;
   align-items: center;
@@ -540,163 +972,8 @@
   cursor: not-allowed;
 }
 
-/* 5. Native Tabulator v6 Overrides */
-.am-tabulator-native-shell {
-  width: 100%;
-  overflow-x: auto;
-}
-
-.am-tabulator-native-subbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 14px;
-  background: #eef2ff;
-  border-bottom: 1px solid #c7d2fe;
-  flex-wrap: wrap;
-}
-
-.am-tabulator-engine-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: #4338ca;
-}
-
-.am-tabulator-mount .tabulator {
-  border: none !important;
-  background: #ffffff !important;
-  font-family: inherit !important;
-  font-size: 0.82rem !important;
-}
-
-.am-tabulator-mount .tabulator-header {
-  background: #f8fafc !important;
-  border-bottom: 1px solid #e2e8f0 !important;
-  color: #334155 !important;
-  font-weight: 800 !important;
-}
-
-.am-tabulator-mount .tabulator-col {
-  background: #f8fafc !important;
-  border-right: 1px solid #f1f5f9 !important;
-}
-
-.am-tabulator-mount .tabulator-header-filter input {
-  border: 1px solid #cbd5e1 !important;
-  border-radius: 6px !important;
-  padding: 4px 7px !important;
-  font-size: 0.74rem !important;
-  background: #ffffff !important;
-  color: #0f172a !important;
-}
-
-.am-tabulator-mount .tabulator-footer {
-  background: #f8fafc !important;
-  border-top: 1px solid #e2e8f0 !important;
-}
-
 /* ==========================================================================
-   DARK THEME ADAPTATION FOR SUPER ADMIN (`.sa-container`)
-   ========================================================================== */
-.sa-container .am-smart-table-wrap {
-  background: rgba(15, 23, 42, 0.75);
-  border-color: rgba(148, 163, 184, 0.16);
-}
-
-.sa-container .am-st-toolbar,
-.sa-container .am-st-pagination-bar {
-  background: rgba(15, 23, 42, 0.85);
-  border-color: rgba(148, 163, 184, 0.14);
-  color: #cbd5e1;
-}
-
-.sa-container .am-st-search-input,
-.sa-container .am-st-btn,
-.sa-container .am-st-pagesize-select,
-.sa-container .am-st-page-btn,
-.sa-container .am-st-col-filter-input,
-.sa-container .am-st-mobile-sort-bar select,
-.sa-container .am-st-mobile-filter-item input {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(148, 163, 184, 0.24);
-  color: #f8fafc;
-}
-
-.sa-container .am-st-page-btn.active {
-  background: #6366f1;
-  border-color: #6366f1;
-  color: #ffffff;
-}
-
-.sa-container .am-st-mode-group {
-  background: rgba(30, 41, 59, 0.95);
-}
-
-.sa-container .am-st-mode-btn {
-  color: #94a3b8;
-}
-
-.sa-container .am-st-mode-btn.active {
-  background: #4f46e5;
-  color: #ffffff;
-}
-
-.sa-container .am-st-col-dropdown {
-  background: #0f172a;
-  border-color: rgba(148, 163, 184, 0.28);
-}
-
-.sa-container .am-st-col-check-row {
-  color: #e2e8f0;
-}
-
-.sa-container .am-st-col-check-row:hover {
-  background: rgba(51, 65, 85, 0.5);
-}
-
-.sa-container .am-st-cards-list {
-  background: rgba(2, 6, 23, 0.45);
-}
-
-.sa-container .am-st-record-card {
-  background: rgba(15, 23, 42, 0.95);
-  border-color: rgba(148, 163, 184, 0.18);
-}
-
-.sa-container .am-st-record-card-head {
-  border-bottom-color: rgba(148, 163, 184, 0.14);
-}
-
-.sa-container .am-st-record-primary,
-.sa-container .am-st-record-val {
-  color: #f1f5f9;
-}
-
-.sa-container .am-st-record-actions {
-  border-top-color: rgba(148, 163, 184, 0.18);
-}
-
-.sa-container .am-st-sortable-th:hover {
-  background: rgba(51, 65, 85, 0.65) !important;
-  color: #ffffff !important;
-}
-
-.sa-container .am-st-sorted-th {
-  background: rgba(79, 70, 229, 0.28) !important;
-  color: #c7d2fe !important;
-}
-
-.sa-container .am-st-filter-row th.am-st-filter-cell {
-  background: rgba(15, 23, 42, 0.92) !important;
-  border-bottom-color: rgba(148, 163, 184, 0.18) !important;
-}
-
-/* ==========================================================================
-   RESPONSIVE BREAKPOINTS FOR SMART TABLE
+   6. RESPONSIVE BREAKPOINTS FOR SMART TABLE
    ========================================================================== */
 @media (max-width: 640px) {
   .am-st-toolbar {

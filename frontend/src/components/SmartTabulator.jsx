@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Search,
   SlidersHorizontal,
   Columns3,
   Download,
+  FileJson,
   Printer,
   ChevronLeft,
   ChevronRight,
@@ -16,28 +18,48 @@ import {
   Table2,
   Zap,
   Rows3,
+  GripVertical,
   X,
 } from 'lucide-react';
 
+const UI_ACTION_LABEL_RE =
+  /^(call|chat|whatsapp|copy|copied|✓|⧉|360°?|view|edit|delete|remove|suspend|activate|verify|approve|reject|add money|\+ add money|receipt|download|invoice|assign|manage|open|reply|resolve|reopen|audit|details)$/i;
+
 /**
- * Recursively extracts clean human-readable text from any React node tree.
+ * Extracts human-readable text from any React node tree.
+ * When `stripActionButtons` is true, pure action button/link labels (e.g. "Call", "Chat", "360°")
+ * are omitted so CSV/JSON exports and sorting stay clean.
  */
-export function extractNodeText(node) {
+export function extractNodeText(node, { stripActionButtons = false } = {}) {
   if (node === null || node === undefined || typeof node === 'boolean') return '';
   if (typeof node === 'string' || typeof node === 'number') return String(node);
   if (Array.isArray(node)) {
-    return node.map(extractNodeText).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    return node
+      .map((child) => extractNodeText(child, { stripActionButtons }))
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
   if (React.isValidElement(node)) {
     const tag = typeof node.type === 'string' ? node.type.toLowerCase() : '';
     if (tag === 'script' || tag === 'style' || tag === 'svg') return '';
-    const childText = extractNodeText(node.props?.children);
+
+    const childText = extractNodeText(node.props?.children, { stripActionButtons });
+    if (stripActionButtons && (tag === 'button' || tag === 'a')) {
+      const trimmed = childText.trim();
+      if (UI_ACTION_LABEL_RE.test(trimmed)) {
+        return '';
+      }
+    }
     if (childText) return childText;
     if (typeof node.props?.value === 'string' || typeof node.props?.value === 'number') {
       return String(node.props.value);
     }
-    if (typeof node.props?.title === 'string') return node.props.title;
-    if (typeof node.props?.['aria-label'] === 'string') return node.props['aria-label'];
+    if (!stripActionButtons) {
+      if (typeof node.props?.title === 'string') return node.props.title;
+      if (typeof node.props?.['aria-label'] === 'string') return node.props['aria-label'];
+    }
   }
   return '';
 }
@@ -69,15 +91,20 @@ function compareCellValues(rawA, rawB, direction = 'asc') {
 
   const mult = direction === 'desc' ? -1 : 1;
 
-  // 1. Numeric / Currency / Percentage check (e.g., "₹6,000", "+₹2,400", "60%", "$120.50")
-  const cleanNumA = a.replace(/[₹$€£,\s%+]/g, '').replace(/\/(day|mo|wk|month)$/i, '');
-  const cleanNumB = b.replace(/[₹$€£,\s%+]/g, '').replace(/\/(day|mo|wk|month)$/i, '');
-  if (
-    /^-?\d+(\.\d+)?$/.test(cleanNumA) &&
-    /^-?\d+(\.\d+)?$/.test(cleanNumB)
-  ) {
+  // 1. Numeric / Currency / Percentage check (e.g., "₹6,000", "+₹2,400", "60%", "$120.50", "₹6,000 20 Days...")
+  const leadCurrencyA = a.match(/^[+-]?[₹$€£]?\s*([\d,]+(?:\.\d+)?)/);
+  const leadCurrencyB = b.match(/^[+-]?[₹$€£]?\s*([\d,]+(?:\.\d+)?)/);
+  const cleanNumA = a.replace(/[₹$€£,\s%+]/g, '').replace(/\/(day|mo|wk|month|d)$/i, '');
+  const cleanNumB = b.replace(/[₹$€£,\s%+]/g, '').replace(/\/(day|mo|wk|month|d)$/i, '');
+  if (/^-?\d+(\.\d+)?$/.test(cleanNumA) && /^-?\d+(\.\d+)?$/.test(cleanNumB)) {
     const numA = Number(cleanNumA);
     const numB = Number(cleanNumB);
+    if (Number.isFinite(numA) && Number.isFinite(numB) && numA !== numB) {
+      return (numA - numB) * mult;
+    }
+  } else if (leadCurrencyA && leadCurrencyB && /[₹$€£]/.test(a) && /[₹$€£]/.test(b)) {
+    const numA = Number(leadCurrencyA[1].replace(/,/g, '')) * (a.startsWith('-') ? -1 : 1);
+    const numB = Number(leadCurrencyB[1].replace(/,/g, '')) * (b.startsWith('-') ? -1 : 1);
     if (Number.isFinite(numA) && Number.isFinite(numB) && numA !== numB) {
       return (numA - numB) * mult;
     }
@@ -122,10 +149,434 @@ function downloadCsvFile(headers, rowsTextMatrix, filename = 'ad-mafia-export') 
   URL.revokeObjectURL(url);
 }
 
+function downloadJsonFile(headers, rowsTextMatrix, filename = 'ad-mafia-export') {
+  if (typeof window === 'undefined') return;
+  const objects = rowsTextMatrix.map((row) => {
+    const item = {};
+    headers.forEach((h, idx) => {
+      item[h] = row[idx] ?? '';
+    });
+    return item;
+  });
+  const blob = new Blob([JSON.stringify(objects, null, 2)], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filename.replace(/[^a-zA-Z0-9_-]/g, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 /**
- * Native Tabulator v6 (`tabulator-tables`) Standalone Data Grid Component.
- * Ideal for dynamic schema-less datasets (e.g., Live MongoDB Document Explorer)
- * and powers the `⚡ Tabulator` interactive spreadsheet mode inside `<SmartTable />`.
+ * Computes balanced proportional widths for Tabulator columns so no single column
+ * hogs 500px+ or pushes right-hand columns (Status / Actions) off a 1366px laptop screen.
+ */
+function computeTabulatorColSpec(header, totalCols = 6) {
+  const label = String(header.label || '').trim();
+  const lower = label.toLowerCase();
+  const thStyle = header.thElement?.props?.style || {};
+  const alignRight = thStyle.textAlign === 'right' || header.isActionCol;
+  const alignCenter = thStyle.textAlign === 'center';
+  const hozAlign = alignRight ? 'right' : alignCenter ? 'center' : 'left';
+  const dense = totalCols >= 7;
+
+  if (label === '#' || lower === 's.no' || lower === 'sr') {
+    return { width: 54, minWidth: 48, widthGrow: 0, hozAlign: 'center', headerHozAlign: 'center' };
+  }
+  if (header.isActionCol) {
+    return { minWidth: dense ? 144 : 160, widthGrow: 1.2, hozAlign: 'right', headerHozAlign: 'right' };
+  }
+  if (/username|workspace|business|company|customer|client|account|entity|description|queries|ticket/.test(lower)) {
+    return { minWidth: dense ? 172 : 205, widthGrow: 1.75, hozAlign, headerHozAlign: hozAlign };
+  }
+  if (/email|location|purpose|notes|audit|details|address/.test(lower)) {
+    return { minWidth: dense ? 136 : 165, widthGrow: 1.35, hozAlign, headerHozAlign: hozAlign };
+  }
+  if (/mobile|phone|contact|whatsapp|date|time|receipt|ref|transaction|utr/.test(lower)) {
+    return { minWidth: dense ? 128 : 150, widthGrow: 1.15, hozAlign, headerHozAlign: hozAlign };
+  }
+  if (/wallet|balance|amount|runway|pacing|price|budget|spend|revenue|paid/.test(lower)) {
+    return { minWidth: dense ? 118 : 135, widthGrow: 1.1, hozAlign, headerHozAlign: hozAlign };
+  }
+  if (/^(status|state|stage|type|role|mode|tier|priority)$/.test(lower)) {
+    return { minWidth: dense ? 86 : 102, widthGrow: 0.78, hozAlign, headerHozAlign: hozAlign };
+  }
+  if (/status|profile|payment|gate|stage|type|method|category|role|compliance|verification/.test(lower)) {
+    return { minWidth: dense ? 112 : 128, widthGrow: 1.0, hozAlign, headerHozAlign: hozAlign };
+  }
+  return { minWidth: dense ? 115 : 132, widthGrow: 1.05, hozAlign, headerHozAlign: hozAlign };
+}
+
+let portalHostUidSeq = 1;
+
+/**
+ * `<TabulatorLiveGrid>` — Renders real, interactive React `<td>` JSX cells and React `<th>`
+ * headers directly inside a genuine Tabulator v6 (`TabulatorFull`) instance via `createPortal`.
+ * Preserves 100% of badges, pills, multi-line typography, links, and live action buttons while
+ * providing native Tabulator column drag-reordering (`movableColumns`) and edge-resizing (`resizable`).
+ */
+function TabulatorLiveGrid({
+  visibleHeaders,
+  pagedRecords,
+  emptyNode,
+  sortState,
+  onToggleSort,
+  showColFilters,
+  colFilters,
+  onColFilterChange,
+  onClearColFilters,
+  activeColFilterCount,
+  fallbackTableNode,
+}) {
+  const mountRef = useRef(null);
+  const tabulatorRef = useRef(null);
+  const [engineReady, setEngineReady] = useState(false);
+  const [, setPortalTick] = useState(0);
+
+  const headerHostsRef = useRef(new Map()); // colIdx -> HTMLElement
+  const cellHostsRef = useRef(new Map()); // `${rowKey}::${colIdx}` -> HTMLElement
+  const subRowHostsRef = useRef(new Map()); // `${rowKey}` -> HTMLElement
+  const recordsByKeyRef = useRef(new Map());
+  const onToggleSortRef = useRef(onToggleSort);
+  const syncRafRef = useRef(false);
+  const prevRowSigRef = useRef('');
+
+  onToggleSortRef.current = onToggleSort;
+
+  // Keep latest row records accessible to Tabulator rowClick / rowFormatter callbacks
+  const recordsMap = useMemo(() => {
+    const m = new Map();
+    pagedRecords.forEach((rec) => {
+      m.set(String(rec.key), rec);
+    });
+    return m;
+  }, [pagedRecords]);
+  recordsByKeyRef.current = recordsMap;
+
+  const schedulePortalSync = useCallback(() => {
+    if (syncRafRef.current) return;
+    syncRafRef.current = true;
+    const flush = () => {
+      syncRafRef.current = false;
+      setPortalTick((t) => t + 1);
+    };
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(flush);
+    } else {
+      Promise.resolve().then(flush);
+    }
+  }, []);
+
+  const headerSchemaSig = useMemo(
+    () => visibleHeaders.map((h) => `${h.idx}:${h.label}`).join('||'),
+    [visibleHeaders]
+  );
+
+  const rowSequenceSig = useMemo(
+    () => pagedRecords.map((r) => `${r.key}:${r.subRows.length}`).join('||'),
+    [pagedRecords]
+  );
+
+  // Build Tabulator instance whenever the visible column schema changes
+  useEffect(() => {
+    if (typeof window === 'undefined' || !mountRef.current) return undefined;
+    let cancelled = false;
+
+    import('tabulator-tables')
+      .then((mod) => {
+        if (cancelled || !mountRef.current) return;
+        const TabulatorFull = mod.TabulatorFull || mod.default;
+        if (!TabulatorFull) return;
+
+        if (tabulatorRef.current) {
+          try {
+            tabulatorRef.current.destroy();
+          } catch {}
+          tabulatorRef.current = null;
+        }
+        headerHostsRef.current.clear();
+        cellHostsRef.current.clear();
+        subRowHostsRef.current.clear();
+
+        const tabCols = visibleHeaders.map((h) => {
+          const spec = computeTabulatorColSpec(h, visibleHeaders.length);
+          let downX = 0;
+          let downY = 0;
+
+          return {
+            title: h.label,
+            field: `col_${h.idx}`,
+            headerSort: false,
+            resizable: true,
+            ...spec,
+            titleFormatter: () => {
+              const host = document.createElement('div');
+              host.className = 'am-tab-header-host';
+              host.dataset.uid = String(portalHostUidSeq++);
+              host.dataset.colIdx = String(h.idx);
+              host.addEventListener('pointerdown', (ev) => {
+                downX = ev.clientX || 0;
+                downY = ev.clientY || 0;
+              });
+              host.addEventListener('click', (ev) => {
+                if (h.isActionCol) return;
+                if (ev.target && ev.target.closest('input, button, select, textarea, a')) return;
+                const moved = Math.hypot((ev.clientX || 0) - downX, (ev.clientY || 0) - downY);
+                if (moved > 6) return; // Ignore column-drag release
+                if (typeof onToggleSortRef.current === 'function') {
+                  onToggleSortRef.current(h.idx, h.isActionCol);
+                }
+              });
+              headerHostsRef.current.set(h.idx, host);
+              schedulePortalSync();
+              return host;
+            },
+            formatter: (cell) => {
+              const rowData = cell.getData() || {};
+              const rowKey = String(rowData._rowKey ?? '');
+              const host = document.createElement('div');
+              host.className = `am-tab-cell-host ${spec.hozAlign === 'right' ? 'align-right' : spec.hozAlign === 'center' ? 'align-center' : ''}`.trim();
+              host.dataset.uid = String(portalHostUidSeq++);
+              if (rowKey) {
+                cellHostsRef.current.set(`${rowKey}::${h.idx}`, host);
+              }
+              schedulePortalSync();
+              return host;
+            },
+          };
+        });
+
+        const initialEntries = Array.from(recordsByKeyRef.current.values());
+        const initialData = initialEntries.map((rec) => ({
+          id: String(rec.key),
+          _rowKey: String(rec.key),
+        }));
+        prevRowSigRef.current = initialEntries.map((r) => `${r.key}:${r.subRows.length}`).join('||');
+
+        const table = new TabulatorFull(mountRef.current, {
+          data: initialData,
+          columns: tabCols,
+          layout: 'fitColumns',
+          responsiveLayout: false,
+          movableColumns: true,
+          renderVertical: 'basic',
+          renderHorizontal: 'basic',
+          autoResize: true,
+          placeholder: '',
+          rowFormatter: (row) => {
+            const rk = String(row.getData()?._rowKey ?? '');
+            const rec = recordsByKeyRef.current.get(rk);
+            const rowEl = row.getElement();
+            if (!rowEl || !rec) return;
+            const trStyle = rec.trElement?.props?.style;
+            if (trStyle?.background) {
+              rowEl.style.background = trStyle.background;
+            }
+            if (typeof rec.trElement?.props?.onClick === 'function') {
+              rowEl.style.cursor = 'pointer';
+            }
+            if (rec.subRows && rec.subRows.length > 0) {
+              rowEl.classList.add('am-tab-has-subrow');
+              const subHost = document.createElement('div');
+              subHost.className = 'am-tab-subrow-host';
+              subHost.dataset.uid = String(portalHostUidSeq++);
+              rowEl.appendChild(subHost);
+              subRowHostsRef.current.set(rk, subHost);
+              schedulePortalSync();
+            }
+          },
+        });
+
+        table.on('rowClick', (e, row) => {
+          if (e.target && e.target.closest('button, a, input, select, textarea, label')) return;
+          const rk = String(row.getData()?._rowKey ?? '');
+          const rec = recordsByKeyRef.current.get(rk);
+          if (rec && typeof rec.trElement?.props?.onClick === 'function') {
+            rec.trElement.props.onClick(e);
+          }
+        });
+
+        table.on('columnMoved', () => {
+          schedulePortalSync();
+        });
+
+        table.on('tableBuilt', () => {
+          if (cancelled) return;
+          setEngineReady(true);
+          schedulePortalSync();
+        });
+
+        tabulatorRef.current = table;
+      })
+      .catch((err) => {
+        console.warn('[TabulatorLiveGrid] Fallback to standard grid:', err);
+      });
+
+    return () => {
+      cancelled = true;
+      setEngineReady(false);
+      if (tabulatorRef.current) {
+        try {
+          tabulatorRef.current.destroy();
+        } catch {}
+        tabulatorRef.current = null;
+      }
+      headerHostsRef.current.clear();
+      cellHostsRef.current.clear();
+      subRowHostsRef.current.clear();
+    };
+  }, [headerSchemaSig, schedulePortalSync]);
+
+  // Update Tabulator rows ONLY when the visible row key order/membership changes
+  useEffect(() => {
+    if (!engineReady || !tabulatorRef.current) return;
+    if (prevRowSigRef.current === rowSequenceSig) return;
+    prevRowSigRef.current = rowSequenceSig;
+
+    cellHostsRef.current.clear();
+    subRowHostsRef.current.clear();
+    const nextRows = pagedRecords.map((rec) => ({
+      id: String(rec.key),
+      _rowKey: String(rec.key),
+    }));
+
+    try {
+      const maybePromise = tabulatorRef.current.replaceData(nextRows);
+      if (maybePromise && typeof maybePromise.then === 'function') {
+        maybePromise.then(() => schedulePortalSync()).catch(() => schedulePortalSync());
+      } else {
+        schedulePortalSync();
+      }
+    } catch {
+      schedulePortalSync();
+    }
+  }, [rowSequenceSig, pagedRecords, engineReady, schedulePortalSync]);
+
+  // Assemble live React portals for headers + cells
+  const headerPortals = [];
+  const cellPortals = [];
+
+  if (engineReady && typeof document !== 'undefined') {
+    visibleHeaders.forEach((h) => {
+      const hostEl = headerHostsRef.current.get(h.idx);
+      if (!hostEl || !hostEl.isConnected) return;
+      const isSorted = sortState.colIdx === h.idx;
+      const alignRight = h.thElement?.props?.style?.textAlign === 'right' || h.isActionCol;
+
+      headerPortals.push(
+        createPortal(
+          <div className={`am-tab-hdr-inner ${alignRight ? 'is-right' : ''} ${isSorted ? 'is-sorted' : ''}`}>
+            <div
+              className={`am-tab-hdr-title-row ${!h.isActionCol ? 'is-sortable' : ''}`}
+              title={!h.isActionCol ? 'Click to sort • Drag to reorder column' : h.label}
+            >
+              <GripVertical size={11} className="am-tab-grip-ico" aria-hidden="true" />
+              <span className="am-tab-hdr-label">{h.thElement?.props?.children ?? h.label}</span>
+              {!h.isActionCol && (
+                <span className={`am-tab-sort-pill ${isSorted ? 'active' : ''}`} aria-hidden="true">
+                  {isSorted ? (
+                    sortState.dir === 'asc' ? (
+                      <ArrowUp size={12} />
+                    ) : (
+                      <ArrowDown size={12} />
+                    )
+                  ) : (
+                    <ArrowUpDown size={11} />
+                  )}
+                </span>
+              )}
+            </div>
+
+            {showColFilters && (
+              <div
+                className="am-tab-hdr-filter-wrap"
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {!h.isActionCol ? (
+                  <input
+                    type="text"
+                    value={colFilters[h.idx] || ''}
+                    onChange={(e) => onColFilterChange(h.idx, e.target.value)}
+                    placeholder={`Filter ${h.label}...`}
+                    className="am-st-col-filter-input"
+                  />
+                ) : activeColFilterCount > 0 ? (
+                  <button type="button" className="am-st-reset-link" onClick={onClearColFilters}>
+                    Reset
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>,
+          hostEl,
+          `hdr_${h.idx}_${hostEl.dataset.uid}`
+        )
+      );
+    });
+
+    pagedRecords.forEach((rec) => {
+      const rk = String(rec.key);
+      visibleHeaders.forEach((h) => {
+        const hostEl = cellHostsRef.current.get(`${rk}::${h.idx}`);
+        if (!hostEl || !hostEl.isConnected) return;
+        const td = rec.tdElements[h.idx];
+        const cellChildren = td ? td.props?.children : '—';
+        cellPortals.push(
+          createPortal(
+            <div className="am-tab-cell-inner">{cellChildren}</div>,
+            hostEl,
+            `cell_${rk}_${h.idx}_${hostEl.dataset.uid}`
+          )
+        );
+      });
+      if (rec.subRows && rec.subRows.length > 0) {
+        const subHostEl = subRowHostsRef.current.get(rk);
+        if (subHostEl && subHostEl.isConnected) {
+          cellPortals.push(
+            createPortal(
+              <div className="am-tab-subrow-inner">
+                {rec.subRows.map((sr, sIdx) => {
+                  const srTds = React.Children.toArray(sr.props?.children).filter(React.isValidElement);
+                  return (
+                    <div key={sIdx} className="am-tab-subrow-block">
+                      {srTds[0]?.props?.children ?? sr.props?.children}
+                    </div>
+                  );
+                })}
+              </div>,
+              subHostEl,
+              `sub_${rk}_${subHostEl.dataset.uid}`
+            )
+          );
+        }
+      }
+    });
+  }
+
+  return (
+    <div className="am-tabulator-live-wrap">
+      {!engineReady && fallbackTableNode}
+      <div
+        ref={mountRef}
+        className={`am-tabulator-mount ${pagedRecords.length === 0 ? 'am-tab-is-empty' : ''}`}
+        style={!engineReady ? { display: 'none' } : undefined}
+      />
+      {engineReady && pagedRecords.length === 0 && (
+        <div className="am-tab-empty-overlay">{emptyNode}</div>
+      )}
+      {headerPortals}
+      {cellPortals}
+    </div>
+  );
+}
+
+/**
+ * Standalone Native Tabulator v6 (`tabulator-tables`) Data Grid Component
+ * for dynamic JSON/collection schemas (e.g., Super Admin Live MongoDB Document Explorer).
  */
 export function TabulatorDataGrid({
   columns = [],
@@ -137,8 +588,12 @@ export function TabulatorDataGrid({
   const containerRef = useRef(null);
   const instanceRef = useRef(null);
   const [ready, setReady] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
-  const serializedCols = useMemo(() => JSON.stringify(columns.map((c) => c.field + ':' + c.title)), [columns]);
+  const serializedCols = useMemo(
+    () => JSON.stringify(columns.map((c) => `${c.field}:${c.title}`)),
+    [columns]
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined' || !containerRef.current) return undefined;
@@ -160,9 +615,14 @@ export function TabulatorDataGrid({
         const tabCols = columns.map((col, idx) => ({
           title: col.title || col.field || `Column ${idx + 1}`,
           field: col.field || `col_${idx}`,
-          headerFilter: 'input',
-          headerFilterPlaceholder: 'Filter...',
-          minWidth: col.minWidth || 130,
+          ...(showFilters
+            ? {
+                headerFilter: 'input',
+                headerFilterPlaceholder: `Filter ${col.title || ''}...`,
+              }
+            : {}),
+          minWidth: col.minWidth || 150,
+          widthGrow: idx === 0 ? 1.4 : 1,
           hozAlign: col.hozAlign || 'left',
           resizable: true,
           headerSort: true,
@@ -172,14 +632,14 @@ export function TabulatorDataGrid({
         const table = new TabulatorFull(containerRef.current, {
           data: Array.isArray(data) ? data : [],
           columns: tabCols,
-          layout: tabCols.length <= 6 ? 'fitColumns' : 'fitDataStretch',
+          layout: 'fitColumns',
           responsiveLayout: false,
           movableColumns: true,
           pagination: 'local',
           paginationSize: pageSize || 15,
           paginationSizeSelector: [10, 25, 50, 100],
           paginationCounter: 'rows',
-          placeholder: 'No matching records in current view.',
+          placeholder: 'No matching documents in this collection.',
           ...(height ? { maxHeight: height } : {}),
         });
 
@@ -199,7 +659,7 @@ export function TabulatorDataGrid({
         instanceRef.current = null;
       }
     };
-  }, [serializedCols, pageSize, height]);
+  }, [serializedCols, pageSize, height, showFilters]);
 
   useEffect(() => {
     if (ready && instanceRef.current && typeof instanceRef.current.replaceData === 'function') {
@@ -211,50 +671,54 @@ export function TabulatorDataGrid({
 
   return (
     <div className="am-tabulator-native-shell">
-      <div className="am-tabulator-native-subbar">
-        <span className="am-tabulator-engine-badge">
-          <Zap size={12} /> Tabulator v6 Engine • Drag columns to reorder • Resize edges • Per-column live filters
-        </span>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div className="am-st-toolbar">
+        <div className="am-st-toolbar-left">
+          <span className="am-st-count-pill">
+            {Array.isArray(data) ? data.length : 0} {data?.length === 1 ? 'document' : 'documents'}
+          </span>
+        </div>
+        <div className="am-st-toolbar-right">
           <button
             type="button"
-            className="am-st-btn"
-            onClick={() => {
-              if (instanceRef.current) {
-                instanceRef.current.download('csv', `${exportFilename}.csv`);
-              }
-            }}
+            className={`am-st-btn ${showFilters ? 'active' : ''}`}
+            onClick={() => setShowFilters((v) => !v)}
           >
-            <Download size={13} /> Tabulator CSV
+            <SlidersHorizontal size={13} />
+            <span>Column Filters</span>
           </button>
           <button
             type="button"
             className="am-st-btn"
-            onClick={() => {
-              if (instanceRef.current) {
-                instanceRef.current.download('json', `${exportFilename}.json`);
-              }
-            }}
+            onClick={() => instanceRef.current?.download('csv', `${exportFilename}.csv`)}
           >
-            <Download size={13} /> JSON
+            <Download size={13} />
+            <span>CSV</span>
+          </button>
+          <button
+            type="button"
+            className="am-st-btn"
+            onClick={() => instanceRef.current?.download('json', `${exportFilename}.json`)}
+          >
+            <FileJson size={13} />
+            <span>JSON</span>
           </button>
         </div>
       </div>
-      <div ref={containerRef} className="am-tabulator-mount" />
+      <div ref={containerRef} className="am-tabulator-mount am-tabulator-standalone-mount" />
     </div>
   );
 }
 
 /**
- * `<SmartTable>` — Drop-In Enterprise Table & Tabulator Wrapper.
+ * `<SmartTable>` — Enterprise Tabulator v6 + Responsive Cards Data Table Suite.
  *
- * Wraps any React `<table>` (`<thead>` + `<tbody>`) while preserving 100% of live React JSX
- * buttons, modals, dropdowns, and event handlers, and automatically upgrades it with:
- *   1. Mobile-First Responsive Card Mode (`📱 Cards` default on <=768px) + `📊 Grid` + `⚡ Tabulator` v6 Mode
- *   2. Instant Quick Search + Toggleable Per-Column Header Filters (`Filters`)
- *   3. Click-Any-Column Multi-Type Sorting (`↑ Asc` / `↓ Desc` / `⇅ Reset`)
- *   4. Client Pagination (`10 / 25 / 50 / 100 / All` per page + First/Prev/Pages/Next/Last)
- *   5. Live Column Visibility Selector (`Columns ▾`), Density Toggle (`Compact`), CSV Export & Print
+ * - Desktop (`> 768px`): Defaults to `tabulator` mode — genuine Tabulator v6 (`TabulatorFull`)
+ *   mounting 100% live React JSX cells via `createPortal` (badges, avatars, Call/Chat links,
+ *   and live Action buttons all work natively!) with draggable column reordering, resizable
+ *   column edges, multi-type sorting, toggleable column filters, column visibility, CSV/JSON/Print,
+ *   and clean pagination.
+ * - Mobile (`<= 768px`): Defaults to `cards` mode — clean stacked cards with full-width action buttons.
+ * - Auto-suppresses duplicate quick-search input when the parent desk already renders a search bar.
  */
 export function SmartTable({
   children,
@@ -262,7 +726,8 @@ export function SmartTable({
   defaultPageSize = 10,
   exportFilename = 'ad-mafia-records',
   enableSearch = true,
-  defaultMobileView = 'cards', // 'cards' | 'grid'
+  forceSearch = false,
+  defaultMobileView = 'cards', // 'cards' | 'tabulator' | 'grid'
   className = '',
 }) {
   const [isMobileScreen, setIsMobileScreen] = useState(() => {
@@ -273,21 +738,49 @@ export function SmartTable({
     if (typeof window !== 'undefined' && window.innerWidth <= 768 && defaultMobileView === 'cards') {
       return 'cards';
     }
-    return 'grid';
+    return 'tabulator';
   });
   const [userPickedMode, setUserPickedMode] = useState(false);
+  const [hasParentSearch, setHasParentSearch] = useState(false);
 
   const [quickSearch, setQuickSearch] = useState('');
   const [showColFilters, setShowColFilters] = useState(false);
   const [colFilters, setColFilters] = useState({});
-  const [sortState, setSortState] = useState({ colIdx: null, dir: null }); // dir: 'asc' | 'desc' | null
+  const [sortState, setSortState] = useState({ colIdx: null, dir: null });
   const [hiddenCols, setHiddenCols] = useState({});
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const wrapRef = useRef(null);
   const colMenuRef = useRef(null);
+
+  // Detect if the parent desk section already renders its own search input right above the table
+  useEffect(() => {
+    if (typeof document === 'undefined' || !wrapRef.current || !enableSearch || forceSearch) return;
+    const hostSection = wrapRef.current.closest(
+      '.desk-page-container, .sales-body-wrap, .sa-desk, .sa-page, .sa-content-body, .sa-desk-content, .marketing-main, .marketing-page-container, .marketing-page-body, .graphics-main, .graphics-content-body, .graphics-page-body, .wallet-ledger-card, .cp-page'
+    );
+    if (!hostSection) return;
+    const candidateInputs = hostSection.querySelectorAll(
+      'input[type="text"], input[type="search"], .desk-search-input, .appr-search-input, .sa-search-input'
+    );
+    let foundOutside = false;
+    candidateInputs.forEach((inp) => {
+      if (wrapRef.current && wrapRef.current.contains(inp)) return;
+      if (inp.closest('.sales-modal-overlay, .sa-modal-overlay, [role="dialog"]')) {
+        // Only count modal inputs if this table itself is inside that same modal
+        if (!wrapRef.current.closest('.sales-modal-overlay, .sa-modal-overlay, [role="dialog"]')) return;
+      }
+      const ph = String(inp.getAttribute('placeholder') || '').toLowerCase();
+      const cls = String(inp.className || '').toLowerCase();
+      if (ph.includes('search') || ph.includes('filter') || cls.includes('search')) {
+        foundOutside = true;
+      }
+    });
+    setHasParentSearch(foundOutside);
+  }, [enableSearch, forceSearch]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -295,7 +788,7 @@ export function SmartTable({
       const mob = window.innerWidth <= 768;
       setIsMobileScreen(mob);
       if (!userPickedMode) {
-        setViewMode(mob && defaultMobileView === 'cards' ? 'cards' : 'grid');
+        setViewMode(mob && defaultMobileView === 'cards' ? 'cards' : 'tabulator');
       }
     };
     window.addEventListener('resize', onResize);
@@ -343,8 +836,8 @@ export function SmartTable({
       const label = extractNodeText(th.props?.children) || `Column ${idx + 1}`;
       const lower = label.toLowerCase();
       const isActionCol =
-        /action|manage|control|receipt|operation|quick|options/.test(lower) ||
-        (idx === thElements.length - 1 && /view|edit|audit|verify|download|assign/.test(lower));
+        /action|manage|control|receipt \/ action|direct operations|quick|options/.test(lower) ||
+        (idx === thElements.length - 1 && /action|view|edit|audit|verify|download|assign/.test(lower));
       const isStatusCol = /status|stage|state|verification|queue/.test(lower) && !isActionCol;
       return {
         idx,
@@ -357,6 +850,7 @@ export function SmartTable({
 
     const rawBodyRows = React.Children.toArray(tbodyEl.props?.children).filter(React.isValidElement);
     const dataRecords = [];
+    const seenKeys = new Set();
     let emptyPlaceholderRow = null;
 
     for (let rIdx = 0; rIdx < rawBodyRows.length; rIdx += 1) {
@@ -369,7 +863,6 @@ export function SmartTable({
         if (dataRecords.length === 0 && rawBodyRows.length === 1) {
           emptyPlaceholderRow = tr;
         } else if (dataRecords.length > 0) {
-          // Expanded detail row belonging to previous primary row
           dataRecords[dataRecords.length - 1].subRows.push(tr);
         } else {
           emptyPlaceholderRow = tr;
@@ -377,16 +870,28 @@ export function SmartTable({
         continue;
       }
 
-      const cellTexts = headers.map((_, cIdx) => extractNodeText(tdList[cIdx]?.props?.children));
+      const cellTexts = headers.map((_, cIdx) =>
+        extractNodeText(tdList[cIdx]?.props?.children, { stripActionButtons: true })
+      );
+      const fullSearchTexts = headers.map((_, cIdx) =>
+        extractNodeText(tdList[cIdx]?.props?.children, { stripActionButtons: false })
+      );
       const hasActionInLast = hasInteractiveChild(tdList[tdList.length - 1]?.props?.children);
+
+      const rawKey =
+        tr.key != null && String(tr.key) !== '' && !String(tr.key).endsWith('undefined')
+          ? String(tr.key)
+          : `row_${rIdx}`;
+      const uniqueKey = seenKeys.has(rawKey) ? `${rawKey}__${rIdx}` : rawKey;
+      seenKeys.add(uniqueKey);
 
       dataRecords.push({
         originalIdx: rIdx,
-        key: tr.key ?? `row_${rIdx}`,
+        key: uniqueKey,
         trElement: tr,
         tdElements: tdList,
         cellTexts,
-        joinedSearchText: cellTexts.join(' ').toLowerCase(),
+        joinedSearchText: fullSearchTexts.join(' ').toLowerCase(),
         hasActionInLast,
         subRows: [],
       });
@@ -405,7 +910,6 @@ export function SmartTable({
     };
   }, [children]);
 
-  // Filter & Sort pipeline
   const processedRecords = useMemo(() => {
     if (!parsed.valid) return [];
     let list = parsed.dataRecords;
@@ -447,6 +951,23 @@ export function SmartTable({
     setCurrentPage(1);
   }, [quickSearch, colFilters, pageSize, totalSourceCount]);
 
+  const handleToggleSort = useCallback((colIdx, isActionCol) => {
+    if (isActionCol) return;
+    setSortState((prev) => {
+      if (prev.colIdx !== colIdx) return { colIdx, dir: 'asc' };
+      if (prev.dir === 'asc') return { colIdx, dir: 'desc' };
+      return { colIdx: null, dir: null };
+    });
+  }, []);
+
+  const handleColFilterChange = useCallback((colIdx, value) => {
+    setColFilters((prev) => ({ ...prev, [colIdx]: value }));
+  }, []);
+
+  const handleClearColFilters = useCallback(() => {
+    setColFilters({});
+  }, []);
+
   if (!parsed.valid) {
     return <>{children}</>;
   }
@@ -459,85 +980,63 @@ export function SmartTable({
 
   const visibleHeaders = parsed.headers.filter((h) => !hiddenCols[h.idx]);
   const visibleColCount = Math.max(1, visibleHeaders.length);
-
-  const handleToggleSort = (colIdx, isActionCol) => {
-    if (isActionCol) return;
-    setSortState((prev) => {
-      if (prev.colIdx !== colIdx) return { colIdx, dir: 'asc' };
-      if (prev.dir === 'asc') return { colIdx, dir: 'desc' };
-      return { colIdx: null, dir: null };
-    });
-  };
+  const showQuickSearchInput = enableSearch && (forceSearch || !hasParentSearch);
 
   const handleSwitchMode = (mode) => {
     setUserPickedMode(true);
     setViewMode(mode);
   };
 
-  const handleExportCsv = () => {
+  const getExportPayload = () => {
     const exportCols = visibleHeaders.filter((h) => !h.isActionCol);
     const colsToUse = exportCols.length > 0 ? exportCols : visibleHeaders;
     const headerNames = colsToUse.map((h) => h.label);
     const matrix = processedRecords.map((rec) => colsToUse.map((h) => rec.cellTexts[h.idx] || ''));
+    return { headerNames, matrix };
+  };
+
+  const handleExportCsv = () => {
+    const { headerNames, matrix } = getExportPayload();
     downloadCsvFile(headerNames, matrix, exportFilename || title || 'ad-mafia-table');
+  };
+
+  const handleExportJson = () => {
+    const { headerNames, matrix } = getExportPayload();
+    downloadJsonFile(headerNames, matrix, exportFilename || title || 'ad-mafia-table');
   };
 
   const handlePrintTable = () => {
     if (typeof window === 'undefined') return;
-    const exportCols = visibleHeaders.filter((h) => !h.isActionCol);
-    const colsToUse = exportCols.length > 0 ? exportCols : visibleHeaders;
-    const win = window.open('', '_blank', 'width=1020,height=720');
+    const { headerNames, matrix } = getExportPayload();
+    const win = window.open('', '_blank', 'width=1060,height=740');
     if (!win) return;
     const esc = (s) =>
       String(s ?? '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
-    const rowsHtml = processedRecords
-      .map(
-        (rec) =>
-          `<tr>${colsToUse
-            .map((h) => `<td>${esc(rec.cellTexts[h.idx] || '—')}</td>`)
-            .join('')}</tr>`
-      )
+    const rowsHtml = matrix
+      .map((row) => `<tr>${row.map((val) => `<td>${esc(val || '—')}</td>`).join('')}</tr>`)
       .join('');
-    win.document.write(`<!doctype html><html><head><title>${esc(title || 'Ad Mafia Table Report')}</title>
+    win.document.write(`<!doctype html><html><head><title>${esc(title || 'Ad Mafia Report')}</title>
       <style>
-        body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; color: #0f172a; }
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 28px; color: #0f172a; }
         h2 { margin: 0 0 6px 0; font-size: 18px; }
-        p { margin: 0 0 16px 0; font-size: 12px; color: #64748b; }
+        p { margin: 0 0 18px 0; font-size: 12px; color: #64748b; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th { background: #f1f5f9; text-align: left; padding: 8px 10px; border: 1px solid #cbd5e1; font-weight: 700; }
-        td { padding: 7px 10px; border: 1px solid #e2e8f0; vertical-align: top; }
+        th { background: #f1f5f9; text-align: left; padding: 9px 11px; border: 1px solid #cbd5e1; font-weight: 700; text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+        td { padding: 8px 11px; border: 1px solid #e2e8f0; vertical-align: top; }
         tr:nth-child(even) td { background: #f8fafc; }
       </style></head><body>
       <h2>Ad Mafia — ${esc(title || 'Data Report')}</h2>
       <p>Generated ${esc(new Date().toLocaleString('en-IN'))} • ${processedRecords.length} record(s)</p>
-      <table><thead><tr>${colsToUse.map((h) => `<th>${esc(h.label)}</th>`).join('')}</tr></thead>
+      <table><thead><tr>${headerNames.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
       <tbody>${rowsHtml}</tbody></table>
       <script>window.onload = function(){ window.print(); };</script>
       </body></html>`);
     win.document.close();
   };
 
-  // Build Tabulator data when user selects `⚡ Tabulator` mode
-  const tabulatorColumns = visibleHeaders
-    .filter((h) => !h.isActionCol)
-    .map((h) => ({
-      title: h.label,
-      field: `col_${h.idx}`,
-    }));
-  const tabulatorRows = processedRecords.map((rec, i) => {
-    const obj = { id: rec.key || i };
-    visibleHeaders.forEach((h) => {
-      if (!h.isActionCol) {
-        obj[`col_${h.idx}`] = rec.cellTexts[h.idx] || '—';
-      }
-    });
-    return obj;
-  });
-
-  // Page numbers window
   const pageNumbers = [];
   const windowStart = Math.max(1, safePage - 2);
   const windowEnd = Math.min(totalPages, windowStart + 4);
@@ -548,19 +1047,185 @@ export function SmartTable({
 
   const activeColFilterCount = Object.values(colFilters).filter((v) => v && v.trim()).length;
 
+  const emptyBlockNode =
+    parsed.emptyPlaceholderRow && totalSourceCount === 0 ? (
+      <div className="am-st-empty-card">
+        {(() => {
+          const singleTd = React.Children.toArray(parsed.emptyPlaceholderRow.props?.children)[0];
+          return singleTd?.props?.children || 'No records found.';
+        })()}
+      </div>
+    ) : (
+      <div className="am-st-empty-card">
+        No matching records found.{' '}
+        {(quickSearch || activeColFilterCount > 0) && (
+          <button
+            type="button"
+            className="am-st-reset-link"
+            onClick={() => {
+              setQuickSearch('');
+              setColFilters({});
+            }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+    );
+
+  const classicGridNode = (
+    <div className="am-st-scroll-viewport">
+      {React.cloneElement(
+        parsed.tableEl,
+        {
+          className: `${parsed.tableEl.props?.className || ''} am-st-enhanced-table`.trim(),
+        },
+        <>
+          <thead>
+            <tr>
+              {visibleHeaders.map((h) => {
+                const isSorted = sortState.colIdx === h.idx;
+                const thProps = h.thElement.props || {};
+                return React.cloneElement(
+                  h.thElement,
+                  {
+                    key: h.idx,
+                    className: `${thProps.className || ''} ${!h.isActionCol ? 'am-st-sortable-th' : ''} ${isSorted ? 'am-st-sorted-th' : ''}`.trim(),
+                    onClick: (e) => {
+                      if (typeof thProps.onClick === 'function') thProps.onClick(e);
+                      handleToggleSort(h.idx, h.isActionCol);
+                    },
+                    style: {
+                      ...(thProps.style || {}),
+                      cursor: h.isActionCol ? 'default' : 'pointer',
+                      userSelect: 'none',
+                    },
+                  },
+                  <span className="am-st-th-inner">
+                    <span>{thProps.children}</span>
+                    {!h.isActionCol && (
+                      <span className="am-st-sort-icon" aria-hidden="true">
+                        {isSorted ? (
+                          sortState.dir === 'asc' ? (
+                            <ArrowUp size={12} />
+                          ) : (
+                            <ArrowDown size={12} />
+                          )
+                        ) : (
+                          <ArrowUpDown size={11} style={{ opacity: 0.4 }} />
+                        )}
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
+            </tr>
+
+            {showColFilters && (
+              <tr className="am-st-filter-row">
+                {visibleHeaders.map((h) => (
+                  <th key={`flt_${h.idx}`} className="am-st-filter-cell">
+                    {!h.isActionCol ? (
+                      <input
+                        type="text"
+                        value={colFilters[h.idx] || ''}
+                        onChange={(e) => handleColFilterChange(h.idx, e.target.value)}
+                        placeholder={`Filter ${h.label}...`}
+                        className="am-st-col-filter-input"
+                      />
+                    ) : activeColFilterCount > 0 ? (
+                      <button type="button" className="am-st-reset-link" onClick={handleClearColFilters}>
+                        Reset
+                      </button>
+                    ) : null}
+                  </th>
+                ))}
+              </tr>
+            )}
+          </thead>
+
+          <tbody>
+            {pagedRecords.length === 0 ? (
+              parsed.emptyPlaceholderRow && totalSourceCount === 0 ? (
+                parsed.emptyPlaceholderRow
+              ) : (
+                <tr>
+                  <td
+                    colSpan={visibleColCount}
+                    style={{
+                      padding: '32px 16px',
+                      textAlign: 'center',
+                      color: '#64748b',
+                      fontSize: '0.86rem',
+                    }}
+                  >
+                    No matching records found.{' '}
+                    {(quickSearch || activeColFilterCount > 0) && (
+                      <button
+                        type="button"
+                        className="am-st-reset-link"
+                        onClick={() => {
+                          setQuickSearch('');
+                          setColFilters({});
+                        }}
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            ) : (
+              pagedRecords.map((rec) => {
+                const visibleTds = visibleHeaders.map((h) => {
+                  const td = rec.tdElements[h.idx];
+                  return td ? React.cloneElement(td, { key: `td_${h.idx}` }) : <td key={`td_${h.idx}`}>—</td>;
+                });
+                const clonedPrimaryTr = React.cloneElement(
+                  rec.trElement,
+                  { key: rec.key },
+                  visibleTds
+                );
+                if (rec.subRows.length === 0) return clonedPrimaryTr;
+                return (
+                  <React.Fragment key={rec.key}>
+                    {clonedPrimaryTr}
+                    {rec.subRows.map((sr, sIdx) => {
+                      const srTdList = React.Children.toArray(sr.props?.children);
+                      if (srTdList.length === 1 && React.isValidElement(srTdList[0])) {
+                        return React.cloneElement(
+                          sr,
+                          { key: `${rec.key}_sub_${sIdx}` },
+                          React.cloneElement(srTdList[0], { colSpan: visibleColCount })
+                        );
+                      }
+                      return React.cloneElement(sr, { key: `${rec.key}_sub_${sIdx}` });
+                    })}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </tbody>
+
+          {parsed.tfootEl}
+        </>
+      )}
+    </div>
+  );
+
   return (
-    <div className={`am-smart-table-wrap ${compact ? 'am-st-compact' : ''} ${className}`}>
-      {/* 1. ADVANCED TABULATOR CONTROL BAR */}
+    <div ref={wrapRef} className={`am-smart-table-wrap ${compact ? 'am-st-compact' : ''} ${className}`}>
+      {/* 1. UNIFIED EXECUTIVE CONTROL BAR */}
       <div className="am-st-toolbar">
         <div className="am-st-toolbar-left">
-          {enableSearch && (
+          {showQuickSearchInput && (
             <div className="am-st-search-box">
               <Search size={14} className="am-st-search-ico" />
               <input
                 type="text"
                 value={quickSearch}
                 onChange={(e) => setQuickSearch(e.target.value)}
-                placeholder={title ? `Filter ${title}...` : 'Quick search all columns...'}
+                placeholder={title ? `Search ${title}...` : 'Search records...'}
                 className="am-st-search-input"
               />
               {quickSearch && (
@@ -576,50 +1241,52 @@ export function SmartTable({
             </div>
           )}
 
-          {/* View Mode Switcher: Mobile Cards | Interactive Grid | Native Tabulator */}
+          {/* View Mode Switcher: Tabulator (Default Desktop) | Classic Table | Mobile Cards */}
           <div className="am-st-mode-group" role="group" aria-label="Table Display Mode">
             <button
               type="button"
-              className={`am-st-mode-btn ${viewMode === 'cards' ? 'active' : ''}`}
-              onClick={() => handleSwitchMode('cards')}
-              title="Mobile-Friendly Stacked Card View (with full action buttons)"
+              className={`am-st-mode-btn ${viewMode === 'tabulator' ? 'active' : ''}`}
+              onClick={() => handleSwitchMode('tabulator')}
+              title="Tabulator Interactive Grid (Drag & Resize Columns, Live Rich Cells)"
             >
-              <LayoutGrid size={13} />
-              <span>Cards</span>
+              <Zap size={13} />
+              <span>Tabulator</span>
             </button>
             <button
               type="button"
               className={`am-st-mode-btn ${viewMode === 'grid' ? 'active' : ''}`}
               onClick={() => handleSwitchMode('grid')}
-              title="Sortable Paginated Table Grid"
+              title="Standard HTML Table View"
             >
               <Table2 size={13} />
-              <span>Table</span>
+              <span>Classic</span>
             </button>
             <button
               type="button"
-              className={`am-st-mode-btn ${viewMode === 'tabulator' ? 'active' : ''}`}
-              onClick={() => handleSwitchMode('tabulator')}
-              title="Tabulator v6 Spreadsheet View (Drag/Resize Columns & Header Filters)"
+              className={`am-st-mode-btn ${viewMode === 'cards' ? 'active' : ''}`}
+              onClick={() => handleSwitchMode('cards')}
+              title="Mobile-Friendly Stacked Card View"
             >
-              <Zap size={13} />
-              <span>Tabulator</span>
+              <LayoutGrid size={13} />
+              <span>Cards</span>
             </button>
           </div>
+
+          <span className="am-st-count-pill am-st-hide-sm">
+            {totalFilteredCount} {totalFilteredCount === 1 ? 'record' : 'records'}
+          </span>
         </div>
 
         <div className="am-st-toolbar-right">
-          {viewMode !== 'tabulator' && (
-            <button
-              type="button"
-              className={`am-st-btn ${showColFilters || activeColFilterCount > 0 ? 'active' : ''}`}
-              onClick={() => setShowColFilters((v) => !v)}
-              title="Toggle per-column filters"
-            >
-              <SlidersHorizontal size={13} />
-              <span>Filters{activeColFilterCount > 0 ? ` (${activeColFilterCount})` : ''}</span>
-            </button>
-          )}
+          <button
+            type="button"
+            className={`am-st-btn ${showColFilters || activeColFilterCount > 0 ? 'active' : ''}`}
+            onClick={() => setShowColFilters((v) => !v)}
+            title="Toggle per-column live filter inputs"
+          >
+            <SlidersHorizontal size={13} />
+            <span>Filters{activeColFilterCount > 0 ? ` (${activeColFilterCount})` : ''}</span>
+          </button>
 
           {/* Column Visibility Dropdown */}
           <div className="am-st-col-menu-anchor" ref={colMenuRef}>
@@ -671,7 +1338,7 @@ export function SmartTable({
             )}
           </div>
 
-          {viewMode === 'grid' && !isMobileScreen && (
+          {viewMode !== 'cards' && !isMobileScreen && (
             <button
               type="button"
               className={`am-st-btn ${compact ? 'active' : ''}`}
@@ -695,6 +1362,16 @@ export function SmartTable({
 
           <button
             type="button"
+            className="am-st-btn am-st-hide-sm"
+            onClick={handleExportJson}
+            title="Export filtered rows to JSON"
+          >
+            <FileJson size={13} />
+            <span>JSON</span>
+          </button>
+
+          <button
+            type="button"
             className="am-st-btn am-st-hide-xs"
             onClick={handlePrintTable}
             title="Print clean table report"
@@ -704,7 +1381,7 @@ export function SmartTable({
         </div>
       </div>
 
-      {/* Optional Mobile Per-Column Filter Drawer when in Card Mode */}
+      {/* Mobile Per-Column Filter Drawer when in Card Mode */}
       {showColFilters && viewMode === 'cards' && (
         <div className="am-st-mobile-col-filters">
           {visibleHeaders
@@ -715,9 +1392,7 @@ export function SmartTable({
                 <input
                   type="text"
                   value={colFilters[h.idx] || ''}
-                  onChange={(e) =>
-                    setColFilters((prev) => ({ ...prev, [h.idx]: e.target.value }))
-                  }
+                  onChange={(e) => handleColFilterChange(h.idx, e.target.value)}
                   placeholder={`Filter ${h.label}...`}
                 />
               </div>
@@ -726,7 +1401,7 @@ export function SmartTable({
             <button
               type="button"
               className="am-st-btn"
-              onClick={() => setColFilters({})}
+              onClick={handleClearColFilters}
               style={{ alignSelf: 'flex-end' }}
             >
               Clear Column Filters
@@ -735,20 +1410,26 @@ export function SmartTable({
         </div>
       )}
 
-      {/* 2A. NATIVE TABULATOR v6 SPREADSHEET VIEW */}
+      {/* 2A. LIVE REACT-PORTAL TABULATOR v6 ENGINE */}
       {viewMode === 'tabulator' && (
-        <TabulatorDataGrid
-          columns={tabulatorColumns}
-          data={tabulatorRows}
-          pageSize={pageSize === 'all' ? 50 : Number(pageSize) || 15}
-          exportFilename={exportFilename}
+        <TabulatorLiveGrid
+          visibleHeaders={visibleHeaders}
+          pagedRecords={pagedRecords}
+          emptyNode={emptyBlockNode}
+          sortState={sortState}
+          onToggleSort={handleToggleSort}
+          showColFilters={showColFilters}
+          colFilters={colFilters}
+          onColFilterChange={handleColFilterChange}
+          onClearColFilters={handleClearColFilters}
+          activeColFilterCount={activeColFilterCount}
+          fallbackTableNode={classicGridNode}
         />
       )}
 
-      {/* 2B. MOBILE-FIRST RESPONSIVE CARDS VIEW (WITH LIVE REACT BUTTONS!) */}
+      {/* 2B. MOBILE-FIRST RESPONSIVE CARDS VIEW */}
       {viewMode === 'cards' && (
         <div className="am-st-cards-list">
-          {/* Mobile Sort Bar */}
           {totalFilteredCount > 1 && (
             <div className="am-st-mobile-sort-bar">
               <span>Sort by:</span>
@@ -787,25 +1468,16 @@ export function SmartTable({
           )}
 
           {pagedRecords.length === 0 ? (
-            <div className="am-st-empty-card">
-              {parsed.emptyPlaceholderRow
-                ? extractNodeText(parsed.emptyPlaceholderRow) || 'No records found.'
-                : 'No matching records found for your current search/filters.'}
-            </div>
+            emptyBlockNode
           ) : (
             pagedRecords.map((rec) => {
               const primaryCol = visibleHeaders[0];
-              const statusCol = visibleHeaders.find(
-                (h, idx) => idx > 0 && h.isStatusCol
-              );
+              const statusCol = visibleHeaders.find((h, idx) => idx > 0 && h.isStatusCol);
               const actionCol = visibleHeaders.find(
                 (h) => h.isActionCol || (h.idx === parsed.headers.length - 1 && rec.hasActionInLast)
               );
               const detailCols = visibleHeaders.filter(
-                (h) =>
-                  h !== primaryCol &&
-                  h !== statusCol &&
-                  h !== actionCol
+                (h) => h !== primaryCol && h !== statusCol && h !== actionCol
               );
 
               return (
@@ -843,19 +1515,6 @@ export function SmartTable({
                       {rec.tdElements[actionCol.idx].props?.children}
                     </div>
                   )}
-
-                  {rec.subRows.length > 0 && (
-                    <div className="am-st-record-subrows">
-                      {rec.subRows.map((sr, sIdx) => {
-                        const srTd = React.Children.toArray(sr.props?.children)[0];
-                        return (
-                          <div key={sIdx} className="am-st-record-subrow-inner">
-                            {srTd?.props?.children}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
               );
             })
@@ -863,158 +1522,11 @@ export function SmartTable({
         </div>
       )}
 
-      {/* 2C. SORTABLE, FILTERABLE, PAGINATED REACT TABLE GRID */}
-      {viewMode === 'grid' && (
-        <div className="am-st-scroll-viewport">
-          {React.cloneElement(
-            parsed.tableEl,
-            {
-              className: `${parsed.tableEl.props?.className || ''} am-st-enhanced-table`.trim(),
-            },
-            <>
-              <thead>
-                <tr>
-                  {visibleHeaders.map((h) => {
-                    const isSorted = sortState.colIdx === h.idx;
-                    const thProps = h.thElement.props || {};
-                    return React.cloneElement(
-                      h.thElement,
-                      {
-                        key: h.idx,
-                        className: `${thProps.className || ''} ${!h.isActionCol ? 'am-st-sortable-th' : ''} ${isSorted ? 'am-st-sorted-th' : ''}`.trim(),
-                        onClick: (e) => {
-                          if (typeof thProps.onClick === 'function') thProps.onClick(e);
-                          handleToggleSort(h.idx, h.isActionCol);
-                        },
-                        style: {
-                          ...(thProps.style || {}),
-                          cursor: h.isActionCol ? 'default' : 'pointer',
-                          userSelect: 'none',
-                        },
-                      },
-                      <span className="am-st-th-inner">
-                        <span>{thProps.children}</span>
-                        {!h.isActionCol && (
-                          <span className="am-st-sort-icon" aria-hidden="true">
-                            {isSorted ? (
-                              sortState.dir === 'asc' ? (
-                                <ArrowUp size={12} />
-                              ) : (
-                                <ArrowDown size={12} />
-                              )
-                            ) : (
-                              <ArrowUpDown size={11} style={{ opacity: 0.4 }} />
-                            )}
-                          </span>
-                        )}
-                      </span>
-                    );
-                  })}
-                </tr>
+      {/* 2C. CLASSIC SORTABLE HTML TABLE VIEW */}
+      {viewMode === 'grid' && classicGridNode}
 
-                {showColFilters && (
-                  <tr className="am-st-filter-row">
-                    {visibleHeaders.map((h) => (
-                      <th key={`flt_${h.idx}`} className="am-st-filter-cell">
-                        {!h.isActionCol ? (
-                          <input
-                            type="text"
-                            value={colFilters[h.idx] || ''}
-                            onChange={(e) =>
-                              setColFilters((prev) => ({
-                                ...prev,
-                                [h.idx]: e.target.value,
-                              }))
-                            }
-                            placeholder={`Filter...`}
-                            className="am-st-col-filter-input"
-                          />
-                        ) : activeColFilterCount > 0 ? (
-                          <button
-                            type="button"
-                            className="am-st-reset-link"
-                            onClick={() => setColFilters({})}
-                          >
-                            Reset
-                          </button>
-                        ) : null}
-                      </th>
-                    ))}
-                  </tr>
-                )}
-              </thead>
-
-              <tbody>
-                {pagedRecords.length === 0 ? (
-                  parsed.emptyPlaceholderRow && totalSourceCount === 0 ? (
-                    parsed.emptyPlaceholderRow
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan={visibleColCount}
-                        style={{
-                          padding: '32px 16px',
-                          textAlign: 'center',
-                          color: '#64748b',
-                          fontSize: '0.86rem',
-                        }}
-                      >
-                        No matching records found.{' '}
-                        {(quickSearch || activeColFilterCount > 0) && (
-                          <button
-                            type="button"
-                            className="am-st-reset-link"
-                            onClick={() => {
-                              setQuickSearch('');
-                              setColFilters({});
-                            }}
-                          >
-                            Clear filters
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                ) : (
-                  pagedRecords.map((rec) => {
-                    const visibleTds = visibleHeaders.map((h) => {
-                      const td = rec.tdElements[h.idx];
-                      return td ? React.cloneElement(td, { key: `td_${h.idx}` }) : <td key={`td_${h.idx}`}>—</td>;
-                    });
-                    const clonedPrimaryTr = React.cloneElement(
-                      rec.trElement,
-                      { key: rec.key },
-                      visibleTds
-                    );
-                    if (rec.subRows.length === 0) return clonedPrimaryTr;
-                    return (
-                      <React.Fragment key={rec.key}>
-                        {clonedPrimaryTr}
-                        {rec.subRows.map((sr, sIdx) => {
-                          const srTdList = React.Children.toArray(sr.props?.children);
-                          if (srTdList.length === 1 && React.isValidElement(srTdList[0])) {
-                            return React.cloneElement(
-                              sr,
-                              { key: `${rec.key}_sub_${sIdx}` },
-                              React.cloneElement(srTdList[0], { colSpan: visibleColCount })
-                            );
-                          }
-                          return React.cloneElement(sr, { key: `${rec.key}_sub_${sIdx}` });
-                        })}
-                      </React.Fragment>
-                    );
-                  })
-                )}
-              </tbody>
-
-              {parsed.tfootEl}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* 3. PAGINATION & PAGE-SIZE FOOTER */}
-      {viewMode !== 'tabulator' && totalSourceCount > 0 && (
+      {/* 3. UNIFIED PAGINATION & PAGE-SIZE FOOTER (ACTIVE ACROSS TABULATOR, CLASSIC & CARDS!) */}
+      {totalSourceCount > 0 && (
         <div className="am-st-pagination-bar">
           <div className="am-st-page-info">
             <span>
