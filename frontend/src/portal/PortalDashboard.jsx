@@ -29,6 +29,8 @@ import {
 } from './PortalModals';
 import crmApi from '../services/crmApi';
 import NotificationBell from '../components/NotificationBell';
+import AdminThemeToggle from '../components/AdminThemeToggle';
+import { useAdminTheme } from '../utils/adminTheme';
 import { useIsMobileViewport } from '../utils/useIsMobileViewport';
 import Swal from 'sweetalert2';
 import {
@@ -41,6 +43,14 @@ import {
 } from '../utils/razorpayCheckout';
 
 export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab }) {
+  const { theme, isDark } = useAdminTheme();
+  const isFollowHash = () => {
+    if (typeof window === 'undefined') return false;
+    const h = window.location.hash.toLowerCase();
+    const p = window.location.pathname.toLowerCase();
+    return h.includes('follow') || p.includes('follow');
+  };
+
   const getTabFromHash = () => {
     const s = typeof window !== 'undefined' ? window.location.search.toLowerCase() : '';
     const h = typeof window !== 'undefined' ? window.location.hash.toLowerCase() : '';
@@ -53,18 +63,17 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     if (h.includes('dashboard')) return 'dashboard';
     if (h.includes('wallet')) return 'wallet';
     if (h.includes('profile')) return 'profile';
-    if (h.includes('lead') || h.includes('enquiries')) return 'leads';
-    if (h.includes('follow')) return 'followups';
+    if (h.includes('lead') || h.includes('enquiries') || h.includes('follow')) return 'leads';
     // Pathname fallback
     if (p.includes('wallet')) return 'wallet';
     if (p.includes('profile')) return 'profile';
-    if (p.includes('lead') || p.includes('enquiries')) return 'leads';
-    if (p.includes('follow')) return 'followups';
+    if (p.includes('lead') || p.includes('enquiries') || p.includes('follow')) return 'leads';
     if (p.includes('dashboard')) return 'dashboard';
-    return initialTab || 'dashboard';
+    return initialTab === 'followups' ? 'leads' : (initialTab || 'dashboard');
   };
 
   const [activeTab, setActiveTab] = useState(getTabFromHash);
+  const [leadsInitialFilter, setLeadsInitialFilter] = useState(() => (isFollowHash() || initialTab === 'followups' ? 'followup' : 'all'));
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [currentLang, setCurrentLang] = useState('en');
@@ -400,6 +409,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   useEffect(() => {
     const onHashChange = () => {
       const tab = getTabFromHash();
+      setLeadsInitialFilter(isFollowHash() ? 'followup' : 'all');
       setActiveTab(tab);
       setIsMobileDrawerOpen(false);
       if (tab === 'wallet') {
@@ -412,9 +422,11 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   }, []);
 
   const handleSwitchTab = (newTab) => {
-    setActiveTab(newTab);
+    const resolvedTab = newTab === 'followups' ? 'leads' : newTab;
+    setLeadsInitialFilter(newTab === 'followups' ? 'followup' : 'all');
+    setActiveTab(resolvedTab);
     setIsMobileDrawerOpen(false);
-    if (newTab === 'wallet') {
+    if (resolvedTab === 'wallet') {
       setIsPaymentModalOpen(false);
       setIsAddFundsOpen(false);
     }
@@ -1478,7 +1490,10 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   };
 
   return (
-    <div className={`portal-app-root ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileDrawerOpen ? 'mobile-drawer-active' : ''}`}>
+    <div
+      className={`portal-app-root portal-layout-container adm-theme-scope ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileDrawerOpen ? 'mobile-drawer-active' : ''}`}
+      data-admin-theme={theme}
+    >
       {/* Mobile Top Bar (visible on screens <= 860px) */}
       <header className="portal-mobile-top-bar">
         <div className="portal-mobile-top-left">
@@ -1523,9 +1538,11 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             <span>{currencySymbol}{walletBalance.toFixed(0)}</span>
           </button>
 
+          <AdminThemeToggle compact />
+
           {isMobileViewport && (
             <NotificationBell
-              variant="light"
+              variant={isDark ? 'dark' : 'light'}
               onNavigateLink={handleNotificationNavigate}
             />
           )}
@@ -1608,16 +1625,16 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           </button>
         </div>
 
-        {/* Navigation Items */}
+        {/* Navigation Items (Consolidated 7 ➔ 4 Focused Workspaces) */}
         <nav className="portal-nav-menu">
-          <div className="nav-group-label">{showSidebarLabels && 'LEAD HUB OVERVIEW'}</div>
+          <div className="nav-group-label">{showSidebarLabels && 'WORKSPACE'}</div>
 
-          {/* 1. Lead Hub Overview */}
+          {/* 1. Overview */}
           <button
             type="button"
             className={`nav-item-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => handleSwitchTab('dashboard')}
-            title="Lead Hub Overview (/app/dashboard)"
+            title="Overview (/app/dashboard)"
           >
             <span className="nav-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1627,15 +1644,15 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 <rect x="3" y="16" width="7" height="5" rx="1.5" />
               </svg>
             </span>
-            {showSidebarLabels && <span className="nav-title">Dashboard</span>}
+            {showSidebarLabels && <span className="nav-title">Overview</span>}
           </button>
 
-          {/* 2. Lead Pipeline (33) */}
+          {/* 2. My Leads (Unified Pipeline + Follow-ups + IST Date Filters) */}
           <button
             type="button"
             className={`nav-item-btn ${activeTab === 'leads' ? 'active' : ''}`}
             onClick={() => handleSwitchTab('leads')}
-            title="Lead Pipeline (/app/lead)"
+            title="My Leads & Follow-ups (/app/lead)"
           >
             <span className="nav-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1645,38 +1662,18 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             </span>
             {showSidebarLabels && (
               <>
-                <span className="nav-title">Lead Pipeline</span>
-                <span className="nav-badge-count">{leads.filter((l) => l.status !== 'In Follow-up' && l.status !== 'Callback' && l.status !== 'Dropped').length}</span>
+                <span className="nav-title">My Leads</span>
+                <span className="nav-badge-count">{leads.filter((l) => l.status !== 'Dropped').length}</span>
               </>
             )}
           </button>
 
-          {/* 3. Follow-ups (5) */}
-          <button
-            type="button"
-            className={`nav-item-btn ${activeTab === 'followups' ? 'active' : ''}`}
-            onClick={() => handleSwitchTab('followups')}
-            title="Follow-ups Queue (/app/follow-ups)"
-          >
-            <span className="nav-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-              </svg>
-            </span>
-            {showSidebarLabels && (
-              <>
-                <span className="nav-title">Follow-ups</span>
-                <span className="nav-badge-count coral">{pendingFollowupsCount}</span>
-              </>
-            )}
-          </button>
-
-          {/* 4. Growth Wallet */}
+          {/* 3. Wallet & Invoices */}
           <button
             type="button"
             className={`nav-item-btn ${activeTab === 'wallet' ? 'active' : ''}`}
             onClick={() => handleSwitchTab('wallet')}
-            title="Growth Wallet (/app/wallet)"
+            title="Wallet & Invoices (/app/wallet)"
           >
             <span className="nav-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1686,23 +1683,20 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             </span>
             {showSidebarLabels && (
               <>
-                <span className="nav-title">Wallet</span>
+                <span className="nav-title">Wallet &amp; Invoices</span>
                 <span className={`nav-badge-wallet ${walletBalance <= 0 ? 'zero' : ''}`}>
                   {currencySymbol}{walletBalance.toFixed(0)}
                 </span>
               </>
             )}
           </button>
-          <div className="nav-group-label" style={{ marginTop: '16px' }}>
-            {showSidebarLabels && 'ACCOUNT MANAGEMENT'}
-          </div>
 
-          {/* 5. Account / My Profile */}
+          {/* 4. Business Profile (Live Completion % Encouragement Badge) */}
           <button
             type="button"
             className={`nav-item-btn ${activeTab === 'profile' ? 'active' : ''}`}
             onClick={() => handleSwitchTab('profile')}
-            title="My Profile (/app/profile)"
+            title="Business Profile (/app/profile)"
           >
             <span className="nav-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1710,53 +1704,45 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </span>
-            {showSidebarLabels && <span className="nav-title">My Profile</span>}
-          </button>
-
-          {/* 6. Language Selector Modal */}
-          <button
-            type="button"
-            className="nav-item-btn"
-            onClick={() => {
-              setIsLangOpen(true);
-              setIsMobileDrawerOpen(false);
-            }}
-            title="Language: English (EN / HI / GU / MR / TA / TE / KN / BN)"
-          >
-            <span className="nav-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-              </svg>
-            </span>
             {showSidebarLabels && (
-              <span className="nav-title">Language ({currentLang.toUpperCase()})</span>
+              <>
+                <span className="nav-title">Business Profile</span>
+                {evaluateCustomerProfileCompletion(customer).isComplete ? (
+                  <span className="nav-badge-wallet" title="Profile 100% Verified">✓</span>
+                ) : (
+                  <span
+                    className="nav-badge-count coral"
+                    style={{ background: '#f59e0b', color: '#ffffff' }}
+                    title="Complete profile to reach 100%"
+                  >
+                    {evaluateCustomerProfileCompletion(customer).kycPercent}%
+                  </span>
+                )}
+              </>
             )}
-          </button>
-
-          {/* 7. Help & Support */}
-          <button
-            type="button"
-            className="nav-item-btn"
-            onClick={() => {
-              setIsHelpOpen(true);
-              setIsMobileDrawerOpen(false);
-            }}
-            title="Help & Support Desk"
-          >
-            <span className="nav-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-              </svg>
-            </span>
-            {showSidebarLabels && <span className="nav-title">Help &amp; Support</span>}
           </button>
         </nav>
 
         {/* Sidebar Footer Actions */}
         <div className="sidebar-footer-actions">
+          <button
+            type="button"
+            onClick={() => {
+              setIsHelpOpen(true);
+              setIsMobileDrawerOpen(false);
+            }}
+            className="sidebar-bottom-btn"
+            title="Help & Support Desk"
+          >
+            <span className="nav-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+              </svg>
+            </span>
+            {showSidebarLabels && <span>Help &amp; Support</span>}
+          </button>
+
           {onBackToWebsite && (
             <button
               type="button"
@@ -1863,14 +1849,16 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               >
                 Growth Wallet: {currencySymbol}{walletBalance.toFixed(0)}
               </button>
+              <AdminThemeToggle />
               <NotificationBell
-                variant="light"
+                variant={isDark ? 'dark' : 'light'}
                 onNavigateLink={handleNotificationNavigate}
               />
             </div>
           )}
         </div>
         <div className="portal-content-body">
+          <div key={activeTab} className="am-fade-up">
           {activeTab === 'dashboard' && (
             <LeadHubOverview
               customer={customer}
@@ -1886,9 +1874,8 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               onOpenAddFunds={() => setIsAddFundsOpen(true)}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
               onOpenSetDailyLimit={() => setIsSetDailyLimitOpen(true)}
-              onOpenLanguageModal={() => setIsLangOpen(true)}
               onOpenConfigureDomain={() => setIsConfigureDomainOpen(true)}
-                            onToggleCampaign={handleToggleCampaign}
+              onToggleCampaign={handleToggleCampaign}
               onUpdateCustomer={handleUpdateCustomer}
               onUpdateLead={handleUpdateLead}
               t={t}
@@ -1901,23 +1888,13 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               customer={customer}
               walletBalance={walletBalance}
               dailyAdSpend={customer.dailyAdSpend}
+              initialFilter={leadsInitialFilter}
               onUpdateLead={handleUpdateLead}
               onOpenAddLead={() => setIsAddLeadOpen(true)}
               onOpenScheduleFollowUp={(lead) => {
                 setSelectedLeadForFollowUp(lead || null);
                 setIsScheduleOpen(true);
               }}
-              onOpenAddFunds={() => setIsAddFundsOpen(true)}
-              onOpenCompleteRegistration={handleOpenRegistrationFlow}
-            />
-          )}
-
-          {activeTab === 'followups' && (
-            <FollowUpsQueue
-              leads={leads}
-              customer={customer}
-              walletBalance={walletBalance}
-              onUpdateLead={handleUpdateLead}
               onOpenAddFunds={() => setIsAddFundsOpen(true)}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
             />
@@ -1947,6 +1924,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
             />
           )}
+          </div>
         </div>
       </div>
 
@@ -2036,13 +2014,6 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         }}
         followUp={selectedFollowUpForReschedule}
         onSaveReschedule={handleSaveReschedule}
-      />
-
-      <LanguageSelectorModal
-        isOpen={isLangOpen}
-        onClose={() => setIsLangOpen(false)}
-        currentLang={currentLang}
-        onChangeLang={(code) => setCurrentLang(code)}
       />
 
       <HelpSupportModal

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CreditCard } from 'lucide-react';
+import { X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
@@ -10,15 +10,17 @@ const formatINR = (val) => {
   return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 };
 
-export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
+export default function SalesAddMoneyModal({ customer, initialAmount, initialNotes, onClose, onSuccess }) {
   const currentUser = adminAuthApi.getCurrentUser();
   const defaultSalesName = currentUser?.fullName || currentUser?.username || 'Sales Executive';
 
-  const [amount, setAmount] = useState('1500');
+  const [amount, setAmount] = useState(() =>
+    initialAmount && Number(initialAmount) >= 300 ? String(Math.round(Number(initialAmount))) : '1500'
+  );
   const [paymentMethod, setPaymentMethod] = useState('Instant UPI / GPay Transfer');
   const [referenceUtr, setReferenceUtr] = useState('');
   const [salesPersonName, setSalesPersonName] = useState(defaultSalesName);
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(() => initialNotes || '');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -296,7 +298,7 @@ export default function SalesAddMoneyModal({ customer, onClose, onSuccess }) {
             </label>
             <input
               type="text"
-              placeholder="e.g. Client confirmed on WhatsApp; 5 days Meta Ads"
+              placeholder="e.g. Client confirmed on WhatsApp; 5 days Ad Mafia campaign"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--adm-border-strong, #cbd5e1)', borderRadius: 8, fontSize: '0.86rem' }}

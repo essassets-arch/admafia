@@ -110,7 +110,7 @@ export const OPERATIONAL_DESKS_DATA = [
     kpis: ['Total Unspent Float', 'Healthy Accounts (>15d)', 'Low Balance (<=7d)', 'Depleted (0d)'],
     filters: ['All Wallets', 'Healthy Runway (Green)', 'Low Balance Warning (Amber)', 'Depleted (Red)'],
     workflows: [
-      'Automated ₹300/Day Ad Spend Pacing: Daily deduction engine powering active Meta campaigns.',
+      'Automated ₹300/Day Ad Spend Pacing: Daily deduction engine powering active Ad Mafia campaigns.',
       'Runway Health Calculation: Healthy (>15 days), Low Balance (<=7 days, ₹2,100), Depleted (0 days).',
       'Client Balance Ledger Audit: Detailed chronological history of deposits and daily burns.',
       'Manual Wallet Top-Up Modal: Instant credit injection with bank settlement UTR documentation.',

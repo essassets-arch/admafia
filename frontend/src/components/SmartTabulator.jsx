@@ -19,8 +19,89 @@ import {
   Zap,
   Rows3,
   GripVertical,
+  Calendar,
   X,
 } from 'lucide-react';
+
+const MONTH_MAP = {
+  jan: '01',
+  feb: '02',
+  mar: '03',
+  apr: '04',
+  may: '05',
+  jun: '06',
+  jul: '07',
+  aug: '08',
+  sep: '09',
+  oct: '10',
+  nov: '11',
+  dec: '12',
+};
+
+export function getIstOffsetIsoDate(daysOffset = 0) {
+  const nowStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  const d = new Date(nowStr);
+  d.setDate(d.getDate() + daysOffset);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function extractIstIsoDateFromText(rawText) {
+  if (!rawText) return null;
+  const s = String(rawText).trim();
+  if (!s) return null;
+
+  const lower = s.toLowerCase();
+  if (/\btoday\b|\bjust now\b|\bmoments ago\b/.test(lower)) {
+    return getIstOffsetIsoDate(0);
+  }
+  if (/\byesterday\b/.test(lower)) {
+    return getIstOffsetIsoDate(-1);
+  }
+
+  // ISO YYYY-MM-DD
+  const isoMatch = s.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  // DD MMM YYYY or DD MMM (e.g. "16 Nov 2026, 12:17 pm" or "16 Nov, 12:17 pm")
+  const dmyText = s.match(/\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s,.-]*(20\d{2})?\b/i);
+  if (dmyText) {
+    const dd = String(Number(dmyText[1])).padStart(2, '0');
+    const mm = MONTH_MAP[dmyText[2].slice(0, 3).toLowerCase()];
+    const yyyy = dmyText[3] || getIstOffsetIsoDate(0).slice(0, 4);
+    if (mm) return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // MMM DD, YYYY (e.g. "Nov 16, 2026")
+  const mdyText = s.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})[\s,.-]*(20\d{2})?\b/i);
+  if (mdyText) {
+    const mm = MONTH_MAP[mdyText[1].slice(0, 3).toLowerCase()];
+    const dd = String(Number(mdyText[2])).padStart(2, '0');
+    const yyyy = mdyText[3] || getIstOffsetIsoDate(0).slice(0, 4);
+    if (mm) return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Numeric slash dates (DD/MM/YYYY or M/D/YYYY)
+  const slashMatch = s.match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);
+  if (slashMatch) {
+    const a = Number(slashMatch[1]);
+    const b = Number(slashMatch[2]);
+    const yyyy = slashMatch[3];
+    if (a > 12 && b <= 12) {
+      return `${yyyy}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}`;
+    }
+    if (b > 12 && a <= 12) {
+      return `${yyyy}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`;
+    }
+    return `${yyyy}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}`;
+  }
+
+  return null;
+}
 
 const UI_ACTION_LABEL_RE =
   /^(call|call buyer|chat|whatsapp|copy|copied|✓|⧉|360°?|view|view leads.*|assigned leads.*|add lead|\+ add lead|edit|delete|remove|suspend|activate|verify|approve|reject|add money|\+ add money|receipt|download|invoice|assign|manage|open|reply|resolve|reopen|audit|details)$/i;
@@ -787,6 +868,8 @@ export function SmartTable({
   exportFilename = 'ad-mafia-records',
   enableSearch = true,
   forceSearch = false,
+  enableDateFilter = true,
+  minimal = false,
   defaultMobileView = 'cards', // 'cards' | 'tabulator' | 'grid'
   className = '',
 }) {
@@ -802,8 +885,12 @@ export function SmartTable({
   });
   const [userPickedMode, setUserPickedMode] = useState(false);
   const [hasParentSearch, setHasParentSearch] = useState(false);
+  const [isInsideModal, setIsInsideModal] = useState(false);
 
   const [quickSearch, setQuickSearch] = useState('');
+  const [datePreset, setDatePreset] = useState('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [showColFilters, setShowColFilters] = useState(false);
   const [colFilters, setColFilters] = useState({});
   const [sortState, setSortState] = useState({ colIdx: null, dir: null });
@@ -816,10 +903,17 @@ export function SmartTable({
   const wrapRef = useRef(null);
   const colMenuRef = useRef(null);
 
-  // Detect if the parent desk section already renders its own search input right above a single primary table
+  // Detect modal hosting & parent search inputs
   useEffect(() => {
-    if (typeof document === 'undefined' || !wrapRef.current || !enableSearch || forceSearch) return;
-    if (wrapRef.current.closest('.sales-modal-overlay, .sa-modal-overlay, .marketing-modal-overlay, .graphics-modal-overlay, [role="dialog"]')) {
+    if (typeof document === 'undefined' || !wrapRef.current) return;
+    const modalHost = Boolean(
+      wrapRef.current.closest(
+        '.sales-modal-overlay, .sa-modal-overlay, .marketing-modal-overlay, .graphics-modal-overlay, .portal-modal-backdrop, [role="dialog"]'
+      )
+    );
+    setIsInsideModal(modalHost);
+    if (!enableSearch || forceSearch) return;
+    if (modalHost) {
       setHasParentSearch(false);
       return;
     }
@@ -906,14 +1000,19 @@ export function SmartTable({
         /action|manage|control|receipt \/ action|direct operations|quick|options/.test(lower) ||
         (idx === thElements.length - 1 && /action|view|edit|audit|verify|download|assign/.test(lower));
       const isStatusCol = /status|stage|state|verification|queue/.test(lower) && !isActionCol;
+      const isDateCol =
+        !isActionCol &&
+        /\b(date|time|received|registered|created|deleted|scheduled|updated|timestamp|when)\b/i.test(lower);
       return {
         idx,
         label,
         thElement: th,
         isActionCol,
         isStatusCol,
+        isDateCol,
       };
     });
+    const dateColIndices = headers.filter((h) => h.isDateCol).map((h) => h.idx);
 
     const rawBodyRows = React.Children.toArray(tbodyEl.props?.children).filter(React.isValidElement);
     const dataRecords = [];
@@ -952,12 +1051,22 @@ export function SmartTable({
       const uniqueKey = seenKeys.has(rawKey) ? `${rawKey}__${rIdx}` : rawKey;
       seenKeys.add(uniqueKey);
 
+      let rowIsoDate = null;
+      for (const dIdx of dateColIndices) {
+        const parsedDate = extractIstIsoDateFromText(cellTexts[dIdx]);
+        if (parsedDate) {
+          rowIsoDate = parsedDate;
+          break;
+        }
+      }
+
       dataRecords.push({
         originalIdx: rIdx,
         key: uniqueKey,
         trElement: tr,
         tdElements: tdList,
         cellTexts,
+        rowIsoDate,
         joinedSearchText: fullSearchTexts.join(' ').toLowerCase(),
         hasActionInLast,
         subRows: [],
@@ -972,6 +1081,7 @@ export function SmartTable({
       tfootEl,
       primaryHeadRow,
       headers,
+      dateColIndices,
       dataRecords,
       emptyPlaceholderRow,
     };
@@ -980,6 +1090,38 @@ export function SmartTable({
   const processedRecords = useMemo(() => {
     if (!parsed.valid) return [];
     let list = parsed.dataRecords;
+
+    if (datePreset !== 'all' && parsed.dateColIndices?.length > 0) {
+      const todayIso = getIstOffsetIsoDate(0);
+      let minIso = '';
+      let maxIso = '';
+      if (datePreset === 'today') {
+        minIso = todayIso;
+        maxIso = todayIso;
+      } else if (datePreset === 'yesterday') {
+        const yIso = getIstOffsetIsoDate(-1);
+        minIso = yIso;
+        maxIso = yIso;
+      } else if (datePreset === '7d') {
+        minIso = getIstOffsetIsoDate(-6);
+        maxIso = todayIso;
+      } else if (datePreset === '30d') {
+        minIso = getIstOffsetIsoDate(-29);
+        maxIso = todayIso;
+      } else if (datePreset === 'custom') {
+        minIso = customFrom || '';
+        maxIso = customTo || '';
+      }
+
+      if (minIso || maxIso) {
+        list = list.filter((rec) => {
+          if (!rec.rowIsoDate) return false;
+          if (minIso && rec.rowIsoDate < minIso) return false;
+          if (maxIso && rec.rowIsoDate > maxIso) return false;
+          return true;
+        });
+      }
+    }
 
     const q = quickSearch.trim().toLowerCase();
     if (q) {
@@ -1006,7 +1148,7 @@ export function SmartTable({
     }
 
     return list;
-  }, [parsed, quickSearch, colFilters, sortState]);
+  }, [parsed, datePreset, customFrom, customTo, quickSearch, colFilters, sortState]);
 
   const totalSourceCount = parsed.valid ? parsed.dataRecords.length : 0;
   const totalFilteredCount = processedRecords.length;
@@ -1016,7 +1158,7 @@ export function SmartTable({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [quickSearch, colFilters, pageSize, totalSourceCount]);
+  }, [quickSearch, datePreset, customFrom, customTo, colFilters, pageSize, totalSourceCount]);
 
   const handleToggleSort = useCallback((colIdx, isActionCol) => {
     if (isActionCol) return;
@@ -1125,13 +1267,16 @@ export function SmartTable({
     ) : (
       <div className="am-st-empty-card">
         No matching records found.{' '}
-        {(quickSearch || activeColFilterCount > 0) && (
+        {(quickSearch || activeColFilterCount > 0 || datePreset !== 'all') && (
           <button
             type="button"
             className="am-st-reset-link"
             onClick={() => {
               setQuickSearch('');
               setColFilters({});
+              setDatePreset('all');
+              setCustomFrom('');
+              setCustomTo('');
             }}
           >
             Clear filters
@@ -1280,173 +1425,216 @@ export function SmartTable({
     </div>
   );
 
+  const isMinimalMode = Boolean(minimal || isInsideModal);
+  const showDateBar = Boolean(
+    enableDateFilter && !isMinimalMode && parsed.dateColIndices?.length > 0 && totalSourceCount > 0
+  );
+  const hasViewCustomization =
+    showColFilters ||
+    activeColFilterCount > 0 ||
+    compact ||
+    Object.keys(hiddenCols).some((k) => hiddenCols[k]);
+
   return (
     <div ref={wrapRef} className={`am-smart-table-wrap ${compact ? 'am-st-compact' : ''} ${className}`}>
-      {/* 1. UNIFIED EXECUTIVE CONTROL BAR */}
-      <div className="am-st-toolbar">
-        <div className="am-st-toolbar-left">
-          {showQuickSearchInput && (
-            <div className="am-st-search-box">
-              <Search size={14} className="am-st-search-ico" />
-              <input
-                type="text"
-                value={quickSearch}
-                onChange={(e) => setQuickSearch(e.target.value)}
-                placeholder={title ? `Search ${title}...` : 'Search records...'}
-                className="am-st-search-input"
-              />
-              {quickSearch && (
-                <button
-                  type="button"
-                  className="am-st-clear-btn"
-                  onClick={() => setQuickSearch('')}
-                  aria-label="Clear search"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* View Mode Switcher: Tabulator (Default Desktop) | Classic Table | Mobile Cards */}
-          <div className="am-st-mode-group" role="group" aria-label="Table Display Mode">
-            <button
-              type="button"
-              className={`am-st-mode-btn ${viewMode === 'tabulator' ? 'active' : ''}`}
-              onClick={() => handleSwitchMode('tabulator')}
-              title="Tabulator Interactive Grid (Drag & Resize Columns, Live Rich Cells)"
-            >
-              <Zap size={13} />
-              <span>Tabulator</span>
-            </button>
-            <button
-              type="button"
-              className={`am-st-mode-btn ${viewMode === 'grid' ? 'active' : ''}`}
-              onClick={() => handleSwitchMode('grid')}
-              title="Standard HTML Table View"
-            >
-              <Table2 size={13} />
-              <span>Classic</span>
-            </button>
-            <button
-              type="button"
-              className={`am-st-mode-btn ${viewMode === 'cards' ? 'active' : ''}`}
-              onClick={() => handleSwitchMode('cards')}
-              title="Mobile-Friendly Stacked Card View"
-            >
-              <LayoutGrid size={13} />
-              <span>Cards</span>
-            </button>
-          </div>
-
-          <span className="am-st-count-pill am-st-hide-sm">
-            {totalFilteredCount} {totalFilteredCount === 1 ? 'record' : 'records'}
-          </span>
-        </div>
-
-        <div className="am-st-toolbar-right">
-          <button
-            type="button"
-            className={`am-st-btn ${showColFilters || activeColFilterCount > 0 ? 'active' : ''}`}
-            onClick={() => setShowColFilters((v) => !v)}
-            title="Toggle per-column live filter inputs"
-          >
-            <SlidersHorizontal size={13} />
-            <span>Filters{activeColFilterCount > 0 ? ` (${activeColFilterCount})` : ''}</span>
-          </button>
-
-          {/* Column Visibility Dropdown */}
-          <div className="am-st-col-menu-anchor" ref={colMenuRef}>
-            <button
-              type="button"
-              className={`am-st-btn ${Object.keys(hiddenCols).some((k) => hiddenCols[k]) ? 'active' : ''}`}
-              onClick={() => setColMenuOpen((v) => !v)}
-              title="Show or hide columns"
-            >
-              <Columns3 size={13} />
-              <span className="am-st-hide-xs">
-                Columns ({visibleHeaders.length}/{parsed.headers.length})
-              </span>
-            </button>
-            {colMenuOpen && (
-              <div className="am-st-col-dropdown">
-                <div className="am-st-col-dropdown-head">
-                  <span>Visible Columns</span>
+      {/* 1. CLEAN MINIMAL CONTROL BAR (Hidden on tiny modal tables) */}
+      {(!isMinimalMode || totalSourceCount > 6) && (
+        <div className="am-st-toolbar">
+          <div className="am-st-toolbar-left">
+            {showQuickSearchInput && (
+              <div className="am-st-search-box">
+                <Search size={14} className="am-st-search-ico" />
+                <input
+                  type="text"
+                  value={quickSearch}
+                  onChange={(e) => setQuickSearch(e.target.value)}
+                  placeholder={title ? `Search ${title}...` : 'Search records...'}
+                  className="am-st-search-input"
+                />
+                {quickSearch && (
                   <button
                     type="button"
-                    onClick={() => setHiddenCols({})}
-                    className="am-st-reset-link"
+                    className="am-st-clear-btn"
+                    onClick={() => setQuickSearch('')}
+                    aria-label="Clear search"
                   >
-                    Show All
+                    <X size={13} />
                   </button>
-                </div>
-                <div className="am-st-col-dropdown-list">
-                  {parsed.headers.map((h) => {
-                    const checked = !hiddenCols[h.idx];
-                    return (
-                      <label key={h.idx} className="am-st-col-check-row">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={checked && visibleHeaders.length <= 1}
-                          onChange={() =>
-                            setHiddenCols((prev) => ({
-                              ...prev,
-                              [h.idx]: !prev[h.idx],
-                            }))
-                          }
-                        />
-                        <span>{h.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
+                )}
               </div>
             )}
+
+            {showDateBar && (
+              <div className="am-st-date-strip" role="group" aria-label="Date range filter">
+                {[
+                  { id: 'all', label: 'All Dates' },
+                  { id: 'today', label: 'Today' },
+                  { id: 'yesterday', label: 'Yesterday' },
+                  { id: '7d', label: '7D' },
+                  { id: '30d', label: '30D' },
+                  { id: 'custom', label: 'Custom' },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={`am-st-date-pill ${datePreset === opt.id ? 'active' : ''}`}
+                    onClick={() => setDatePreset(opt.id)}
+                  >
+                    {opt.id === 'custom' && <Calendar size={12} />}
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+                {datePreset === 'custom' && (
+                  <div className="am-st-custom-dates">
+                    <input
+                      type="date"
+                      value={customFrom}
+                      onChange={(e) => setCustomFrom(e.target.value)}
+                      className="am-st-date-input"
+                      aria-label="From date"
+                    />
+                    <span className="am-st-date-sep">–</span>
+                    <input
+                      type="date"
+                      value={customTo}
+                      onChange={(e) => setCustomTo(e.target.value)}
+                      className="am-st-date-input"
+                      aria-label="To date"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <span className="am-st-count-pill am-st-hide-sm">
+              {totalFilteredCount} {totalFilteredCount === 1 ? 'record' : 'records'}
+            </span>
           </div>
 
-          {viewMode !== 'cards' && !isMobileScreen && (
-            <button
-              type="button"
-              className={`am-st-btn ${compact ? 'active' : ''}`}
-              onClick={() => setCompact((v) => !v)}
-              title="Toggle compact row density"
-            >
-              <Rows3 size={13} />
-              <span className="am-st-hide-sm">Compact</span>
-            </button>
+          {!isMinimalMode && (
+            <div className="am-st-toolbar-right">
+              <button
+                type="button"
+                className="am-st-btn"
+                onClick={handleExportCsv}
+                title="Export filtered rows to CSV"
+              >
+                <Download size={13} />
+                <span>CSV</span>
+              </button>
+
+              {/* Unified View & Column Options Menu */}
+              <div className="am-st-col-menu-anchor" ref={colMenuRef}>
+                <button
+                  type="button"
+                  className={`am-st-btn ${hasViewCustomization ? 'active' : ''}`}
+                  onClick={() => setColMenuOpen((v) => !v)}
+                  title="Display mode, column filters & visible columns"
+                >
+                  <SlidersHorizontal size={13} />
+                  <span>View{activeColFilterCount > 0 ? ` (${activeColFilterCount})` : ''}</span>
+                </button>
+                {colMenuOpen && (
+                  <div className="am-st-col-dropdown" style={{ minWidth: '235px' }}>
+                    <div className="am-st-col-dropdown-head">
+                      <span>Display &amp; Tools</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHiddenCols({});
+                          setColFilters({});
+                          setShowColFilters(false);
+                          setCompact(false);
+                        }}
+                        className="am-st-reset-link"
+                      >
+                        Reset
+                      </button>
+                    </div>
+
+                    <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--am-border, #e2e8f0)', display: 'grid', gap: '6px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className={`am-st-btn ${viewMode === 'tabulator' ? 'active' : ''}`}
+                          style={{ justifyContent: 'center' }}
+                          onClick={() => handleSwitchMode('tabulator')}
+                        >
+                          <Table2 size={13} /> <span>Table</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`am-st-btn ${viewMode === 'cards' ? 'active' : ''}`}
+                          style={{ justifyContent: 'center' }}
+                          onClick={() => handleSwitchMode('cards')}
+                        >
+                          <LayoutGrid size={13} /> <span>Cards</span>
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className={`am-st-btn ${showColFilters ? 'active' : ''}`}
+                          style={{ justifyContent: 'center' }}
+                          onClick={() => setShowColFilters((v) => !v)}
+                        >
+                          <SlidersHorizontal size={12} /> <span>Col Filters</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`am-st-btn ${compact ? 'active' : ''}`}
+                          style={{ justifyContent: 'center' }}
+                          onClick={() => setCompact((v) => !v)}
+                        >
+                          <Rows3 size={12} /> <span>Compact</span>
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="am-st-btn"
+                        style={{ justifyContent: 'center', width: '100%' }}
+                        onClick={() => {
+                          setColMenuOpen(false);
+                          handlePrintTable();
+                        }}
+                      >
+                        <Printer size={12} /> <span>Print Report</span>
+                      </button>
+                    </div>
+
+                    <div className="am-st-col-dropdown-head" style={{ borderTop: 'none' }}>
+                      <span>Columns ({visibleHeaders.length}/{parsed.headers.length})</span>
+                    </div>
+                    <div className="am-st-col-dropdown-list">
+                      {parsed.headers.map((h) => {
+                        const checked = !hiddenCols[h.idx];
+                        return (
+                          <label key={h.idx} className="am-st-col-check-row">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={checked && visibleHeaders.length <= 1}
+                              onChange={() =>
+                                setHiddenCols((prev) => ({
+                                  ...prev,
+                                  [h.idx]: !prev[h.idx],
+                                }))
+                              }
+                            />
+                            <span>{h.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
-
-          <button
-            type="button"
-            className="am-st-btn"
-            onClick={handleExportCsv}
-            title="Export filtered rows to CSV"
-          >
-            <Download size={13} />
-            <span>CSV</span>
-          </button>
-
-          <button
-            type="button"
-            className="am-st-btn am-st-hide-sm"
-            onClick={handleExportJson}
-            title="Export filtered rows to JSON"
-          >
-            <FileJson size={13} />
-            <span>JSON</span>
-          </button>
-
-          <button
-            type="button"
-            className="am-st-btn am-st-hide-xs"
-            onClick={handlePrintTable}
-            title="Print clean table report"
-          >
-            <Printer size={13} />
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Mobile Per-Column Filter Drawer when in Card Mode */}
       {showColFilters && viewMode === 'cards' && (

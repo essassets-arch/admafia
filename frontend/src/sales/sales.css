@@ -3928,3 +3928,114 @@
   color: var(--adm-text-primary) !important;
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.68), 0 0 0 1px rgba(148, 163, 184, 0.12) !important;
 }
+
+/* Consolidated 5-Workspace Sub-Navigation Switcher Bar */
+.sales-workspace-subnav-wrap {
+  padding: 14px 24px 0 24px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.sales-workspace-subnav {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: var(--adm-bg-card, #ffffff);
+  border: 1px solid var(--adm-border-strong, #cbd5e1);
+  border-radius: 12px;
+  padding: 5px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  max-width: 100%;
+}
+
+.sales-workspace-subtab {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--adm-text-body, #475569);
+  font-size: 0.83rem;
+  font-weight: 700;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.sales-workspace-subtab:hover {
+  background: var(--adm-bg-subtle, #f8fafc);
+  color: var(--adm-text-primary, #0f172a);
+}
+
+.sales-workspace-subtab.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.25);
+}
+
+.sales-workspace-subtab.active.subtab-danger {
+  background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%);
+  box-shadow: 0 3px 10px rgba(225, 29, 72, 0.28);
+}
+
+.sales-workspace-subtab.active.subtab-emerald {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.26);
+}
+
+.sales-workspace-subtab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: var(--adm-bg-muted, #f1f5f9);
+  color: var(--adm-text-body, #334155);
+}
+
+.sales-workspace-subtab.active .sales-workspace-subtab-badge {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+.sales-workspace-subtab-badge.badge-alert {
+  background: var(--adm-soft-rose-bg, #fff1f2);
+  color: var(--adm-soft-rose-text, #e11d48);
+  border: 1px solid var(--adm-soft-rose-border, #fecdd3);
+}
+
+.sales-workspace-subtab.active .sales-workspace-subtab-badge.badge-alert {
+  background: rgba(255, 255, 255, 0.26);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+[data-admin-theme="dark"] .sales-workspace-subnav {
+  background: var(--adm-bg-card, #0f172a);
+  border-color: var(--adm-border-strong, #334155);
+}
+
+[data-admin-theme="dark"] .sales-workspace-subtab {
+  color: #cbd5e1;
+}
+
+[data-admin-theme="dark"] .sales-workspace-subtab:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: #ffffff;
+}
+
+[data-admin-theme="dark"] .sales-workspace-subtab.active {
+  color: #ffffff;
+}
+
+@media (max-width: 768px) {
+  .sales-workspace-subnav-wrap {
+    padding: 12px 12px 0 12px;
+  }
+}

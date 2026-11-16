@@ -17,6 +17,34 @@ import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
 import { SmartTable } from '../components/SmartTabulator';
 
+const PLATFORMS = [
+  'Meta Ads (Facebook & Instagram)',
+  'Instagram',
+  'Facebook',
+  'Google Ads',
+  'LinkedIn Ads',
+];
+
+const LANGUAGES = [
+  'English / Hinglish',
+  'Hindi',
+  'English',
+  'Gujarati',
+  'Marathi',
+];
+
+function normalizePlatformValue(raw) {
+  if (!raw) return 'Meta Ads (Facebook & Instagram)';
+  if (raw === 'Instagram & Facebook (Meta Ads)') return 'Meta Ads (Facebook & Instagram)';
+  return PLATFORMS.includes(raw) ? raw : 'Meta Ads (Facebook & Instagram)';
+}
+
+function normalizeLanguageValue(raw) {
+  if (!raw) return 'English / Hinglish';
+  if (raw === 'English Only') return 'English';
+  return LANGUAGES.includes(raw) ? raw : 'English / Hinglish';
+}
+
 export default function CreatePostIdeasDesk({
   initialCustomerId = null,
   initialIdeaId = null,
@@ -85,10 +113,17 @@ export default function CreatePostIdeasDesk({
       if (ideasData && ideasData.ok) {
         const ideas = ideasData.ideas || [];
         setCustomerIdeas(ideas);
-        if (initialIdeaId && ideas.some((i) => i.id === initialIdeaId)) {
-          setSelectedIdeaId(initialIdeaId);
-        } else if (ideas.length > 0 && !selectedIdeaId) {
-          // Keep blank or default to first
+        if (initialIdeaId) {
+          const matched = ideas.find((i) => i.id === initialIdeaId);
+          if (matched) {
+            setSelectedIdeaId(initialIdeaId);
+            setTitle((prev) => prev || matched.title || '');
+            setCaption((prev) => prev || matched.captionSuggestions || matched.concept || '');
+            setHashtags((prev) => prev || matched.hashtags || '');
+            if (matched.callToAction) setCallToAction(matched.callToAction);
+            if (matched.platform) setPlatform(normalizePlatformValue(matched.platform));
+            if (matched.language) setLanguage(normalizeLanguageValue(matched.language));
+          }
         }
       }
 
@@ -116,11 +151,13 @@ export default function CreatePostIdeasDesk({
     const matched = customerIdeas.find((i) => i.id === ideaId);
     if (matched) {
       if (!title) setTitle(matched.title || '');
-      if (!caption && matched.captionSuggestions) setCaption(matched.captionSuggestions);
+      if (!caption && (matched.captionSuggestions || matched.concept)) {
+        setCaption(matched.captionSuggestions || matched.concept);
+      }
       if (!hashtags && matched.hashtags) setHashtags(matched.hashtags);
       if (matched.callToAction) setCallToAction(matched.callToAction);
-      if (matched.platform) setPlatform(matched.platform);
-      if (matched.language) setLanguage(matched.language);
+      if (matched.platform) setPlatform(normalizePlatformValue(matched.platform));
+      if (matched.language) setLanguage(normalizeLanguageValue(matched.language));
     }
   };
 
@@ -346,9 +383,9 @@ export default function CreatePostIdeasDesk({
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value)}
               >
-                <option value="Meta Ads (Facebook & Instagram)">Meta Ads (Facebook &amp; Instagram)</option>
-                <option value="Google Ads">Google Ads</option>
-                <option value="LinkedIn Ads">LinkedIn Ads</option>
+                {PLATFORMS.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
               </select>
             </div>
             <div className="mkt-form-group">
@@ -358,9 +395,9 @@ export default function CreatePostIdeasDesk({
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
               >
-                <option value="English / Hinglish">English / Hinglish</option>
-                <option value="English Only">English Only</option>
-                <option value="Hindi">Hindi</option>
+                {LANGUAGES.map((l) => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
               </select>
             </div>
           </div>

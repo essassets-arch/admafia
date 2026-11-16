@@ -89,7 +89,7 @@ export default function SuperAdminRefundsDesk() {
       const res = await superadminApi.getPaidCustomersForRefund({
         search: paidSearch,
         page: paidPagination.page,
-        limit: 25,
+        limit: 100,
       });
       if (res && res.ok) {
         setPaidCustomers(res.paidCustomers || []);
@@ -111,7 +111,7 @@ export default function SuperAdminRefundsDesk() {
         status: statusFilter,
         search: refundSearch,
         page: refundPagination.page,
-        limit: 20,
+        limit: 100,
       });
       if (res && res.ok) {
         setRefunds(res.refunds || []);
@@ -133,7 +133,7 @@ export default function SuperAdminRefundsDesk() {
         search: reconSearch,
         status: reconStatusFilter,
         page: reconPagination.page,
-        limit: 25,
+        limit: 100,
       });
       if (res && res.ok) {
         setReconRecords(res.records || []);
@@ -589,7 +589,7 @@ export default function SuperAdminRefundsDesk() {
             <SmartTable
               title="Paid Customers & Refund Eligibility"
               exportFilename="sa-paid-customers-refund-eligibility"
-              defaultPageSize="all"
+              defaultPageSize={15}
             >
               <table className="sa-table">
                 <thead>
@@ -739,33 +739,6 @@ export default function SuperAdminRefundsDesk() {
                 </tbody>
               </table>
             </SmartTable>
-
-            {/* Pagination */}
-            {paidPagination.totalPages > 1 && (
-              <div className="sa-pagination">
-                <span>
-                  Showing page {paidPagination.page} of {paidPagination.totalPages} ({paidPagination.total} paid accounts)
-                </span>
-                <div className="sa-page-controls">
-                  <button
-                    type="button"
-                    className="sa-page-btn"
-                    disabled={paidPagination.page <= 1}
-                    onClick={() => setPaidPagination((p) => ({ ...p, page: p.page - 1 }))}
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    className="sa-page-btn"
-                    disabled={paidPagination.page >= paidPagination.totalPages}
-                    onClick={() => setPaidPagination((p) => ({ ...p, page: p.page + 1 }))}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -806,7 +779,7 @@ export default function SuperAdminRefundsDesk() {
             <SmartTable
               title="Refund Requests Queue"
               exportFilename="sa-refund-requests"
-              defaultPageSize="all"
+              defaultPageSize={15}
             >
               <table className="sa-table">
                 <thead>
@@ -971,33 +944,6 @@ export default function SuperAdminRefundsDesk() {
                 </tbody>
               </table>
             </SmartTable>
-
-            {/* Pagination */}
-            {refundPagination.totalPages > 1 && (
-              <div className="sa-pagination">
-                <span>
-                  Showing page {refundPagination.page} of {refundPagination.totalPages} ({refundPagination.total} records)
-                </span>
-                <div className="sa-page-controls">
-                  <button
-                    type="button"
-                    className="sa-page-btn"
-                    disabled={refundPagination.page <= 1}
-                    onClick={() => setRefundPagination((p) => ({ ...p, page: p.page - 1 }))}
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    className="sa-page-btn"
-                    disabled={refundPagination.page >= refundPagination.totalPages}
-                    onClick={() => setRefundPagination((p) => ({ ...p, page: p.page + 1 }))}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1039,7 +985,7 @@ export default function SuperAdminRefundsDesk() {
             <SmartTable
               title="Refund Reconciliation & Audit History"
               exportFilename="sa-refund-reconciliation"
-              defaultPageSize="all"
+              defaultPageSize={15}
             >
               <table className="sa-table">
                 <thead>
@@ -1164,33 +1110,6 @@ export default function SuperAdminRefundsDesk() {
                 </tbody>
               </table>
             </SmartTable>
-
-            {/* Pagination */}
-            {reconPagination.totalPages > 1 && (
-              <div className="sa-pagination">
-                <span>
-                  Showing page {reconPagination.page} of {reconPagination.totalPages} ({reconPagination.total} audit records)
-                </span>
-                <div className="sa-page-controls">
-                  <button
-                    type="button"
-                    className="sa-page-btn"
-                    disabled={reconPagination.page <= 1}
-                    onClick={() => setReconPagination((p) => ({ ...p, page: p.page - 1 }))}
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    className="sa-page-btn"
-                    disabled={reconPagination.page >= reconPagination.totalPages}
-                    onClick={() => setReconPagination((p) => ({ ...p, page: p.page + 1 }))}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

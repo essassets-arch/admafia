@@ -244,16 +244,16 @@ export default function MarketingWallet({
     debitsList.some((d) => String(d.date || '').includes('Today') || String(d.desc || '').includes(todayDayCode))
   );
 
+  const settledTransactions = transactions.filter((tx) => !isFailedTx(tx));
+
   // Filtered transactions for the selected ledger tab
   let filteredTxList = [];
   if (activeLedgerTab === 'all') {
-    filteredTxList = transactions;
+    filteredTxList = settledTransactions;
   } else if (activeLedgerTab === 'recharges') {
     filteredTxList = creditsList;
   } else if (activeLedgerTab === 'deductions') {
     filteredTxList = debitsList;
-  } else if (activeLedgerTab === 'failed') {
-    filteredTxList = failedList;
   }
 
   // Handle preset click
@@ -855,18 +855,6 @@ export default function MarketingWallet({
         <div className="engine-action-bar-row">
           <button
             type="button"
-            onClick={handleDeductTodaySpend}
-            className="btn-deduct-spend-exact"
-            title="Manually trigger today's daily pacing debit"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            <span>{isDeductedToday ? `Deduct ${formatMoney(dailyAdSpend)} Daily Pacing (Manual)` : `Deduct Today's ${formatMoney(dailyAdSpend)} Pacing`}</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => onToggleCampaign && onToggleCampaign()}
             className={`btn-resume-campaign-exact ${customer.adCampaignActive ? 'is-active' : ''}`}
           >
@@ -874,7 +862,7 @@ export default function MarketingWallet({
           </button>
 
           <span className="engine-realtime-note">
-            Real-time balance deduction • Runway automatically updates
+            Automatic midnight IST pacing • Zero manual debit required
           </span>
         </div>
       </div>
@@ -889,21 +877,21 @@ export default function MarketingWallet({
               <line x1="16" y1="13" x2="8" y2="13" />
               <line x1="16" y1="17" x2="8" y2="17" />
             </svg>
-            <h2>Wallet Ledger &amp; Transaction History</h2>
+            <h2>Wallet &amp; GST Invoices</h2>
           </div>
           <p className="ledger-history-desc">
-            Complete transparent log of all recharge deposits, daily lead delivery deductions, and tax invoices.
+            Complete date-filterable log of recharge deposits, daily lead delivery deductions, and downloadable GST tax invoices.
           </p>
         </div>
 
-        {/* 5 Filter Tabs Including Failed Transactions */}
+        {/* 4 Clean Customer Ledger Tabs */}
         <div className="ledger-tabs-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
             className={`ledger-tab-btn ${activeLedgerTab === 'all' ? 'active' : ''}`}
             onClick={() => setActiveLedgerTab('all')}
           >
-            All ({transactions.length})
+            All ({settledTransactions.length})
           </button>
           <button
             type="button"
@@ -917,28 +905,14 @@ export default function MarketingWallet({
             className={`ledger-tab-btn ${activeLedgerTab === 'deductions' ? 'active' : ''}`}
             onClick={() => setActiveLedgerTab('deductions')}
           >
-            Daily Pacing Cuts (-{formatMoney(dailyAdSpend)}/d) ({debitsList.length})
-          </button>
-          <button
-            type="button"
-            className={`ledger-tab-btn ${activeLedgerTab === 'failed' ? 'active' : ''}`}
-            onClick={() => setActiveLedgerTab('failed')}
-            style={
-              activeLedgerTab === 'failed'
-                ? { background: '#ef4444', borderColor: '#dc2626', color: '#ffffff', fontWeight: 800 }
-                : failedList.length > 0
-                ? { borderColor: '#fca5a5', color: '#dc2626', fontWeight: 800 }
-                : {}
-            }
-          >
-            Failed Transactions (✕) ({failedList.length})
+            Daily Pacing (-{formatMoney(dailyAdSpend)}/d) ({debitsList.length})
           </button>
           <button
             type="button"
             className={`ledger-tab-btn ${activeLedgerTab === 'invoices' ? 'active' : ''}`}
             onClick={() => setActiveLedgerTab('invoices')}
           >
-            Invoices ({invoices.length})
+            GST Invoices ({invoices.length})
           </button>
         </div>
 

@@ -14,8 +14,6 @@ import {
   Filter,
   AlertCircle,
   ExternalLink,
-  ChevronLeft,
-  ChevronRight,
   Phone,
   Mail,
   MapPin,
@@ -121,7 +119,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
         sortBy,
         sortOrder,
         page,
-        limit: 15,
+        limit: 100,
       });
 
       if (data && data.ok) {
@@ -331,7 +329,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
         <SmartTable
           title="Verified Customers"
           exportFilename="marketing-customers"
-          defaultPageSize="all"
+          defaultPageSize={15}
         >
           <table className="marketing-table">
             <thead>
@@ -483,34 +481,6 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
           </tbody>
           </table>
         </SmartTable>
-
-        {/* Pagination Footer */}
-        <div className="marketing-pagination">
-          <div>
-            Showing <strong>{customers.length}</strong> of <strong>{pagination.total}</strong> customers
-          </div>
-          <div className="marketing-page-btn-group">
-            <button
-              type="button"
-              className="marketing-page-btn"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              <ChevronLeft size={14} style={{ verticalAlign: 'middle' }} /> Prev
-            </button>
-            <span style={{ padding: '0 8px', fontWeight: 600 }}>
-              Page {pagination.page} / {Math.max(1, pagination.totalPages)}
-            </span>
-            <button
-              type="button"
-              className="marketing-page-btn"
-              disabled={page >= pagination.totalPages}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next <ChevronRight size={14} style={{ verticalAlign: 'middle' }} />
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* 5. Customer Details Modal (Comprehensive 360° Profile & All Intake Fields) */}

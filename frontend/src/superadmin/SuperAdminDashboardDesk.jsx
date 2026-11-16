@@ -82,7 +82,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
     },
     {
       id: 'users',
-      deskKey: 'accounts_users',
+      deskKey: 'accounts',
       title: 'Platform Users',
       value: summary.totalUsers,
       sub: 'Admins & staff members',
@@ -417,7 +417,7 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
               type="button"
               className="sa-btn-secondary"
               style={{ padding: '4px 10px', fontSize: '0.76rem' }}
-              onClick={() => (onNavigateToDesk ? onNavigateToDesk('audit_logs') : nav && nav('audit_logs'))}
+              onClick={() => nav && nav('accounts')}
             >
               All Logs
             </button>

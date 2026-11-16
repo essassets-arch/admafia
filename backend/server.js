@@ -121,6 +121,7 @@ import {
 import {
   listLeadRows,
   createDirectLeadRow,
+  createBulkDirectLeadsRows,
   updateLeadAndSyncAssignment,
   listPaymentRecordRows,
   deletePaymentOrTestEntries,
@@ -4174,7 +4175,39 @@ app.get('/api/leads', requireAuth, async (req, res) => {
 
 app.post('/api/leads', requireAuth, async (req, res) => {
   try {
-    const { phone, name } = req.body || {};
+    const scopedBody =
+      req.auth.actorType === 'customer'
+        ? { ...req.body, customerId: req.auth.customerId || req.auth.sub, customerPhone: req.auth.phone }
+        : req.body || {};
+
+    // Support Bulk Phone Dispatch (`phones` array or newline/comma-delimited mobile list)
+    if (scopedBody.phones !== undefined) {
+      const bulkOut = await createBulkDirectLeadsRows(scopedBody);
+      if (bulkOut.notFound) {
+        return res.status(404).json({
+          ok: false,
+          error: `No registered customer account found matching "${bulkOut.targetCompany}".`,
+        });
+      }
+      if (bulkOut.empty) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Enter at least one valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.',
+          invalidNumbers: bulkOut.invalidNumbers || [],
+        });
+      }
+      const mapped = (bulkOut.rows || []).map(mapLeadRow);
+      return res.status(201).json({
+        ok: true,
+        leads: mapped,
+        lead: mapped[0] || null,
+        addedCount: mapped.length,
+        skippedDuplicates: bulkOut.skippedDuplicates || [],
+        invalidNumbers: bulkOut.invalidNumbers || [],
+      });
+    }
+
+    const { phone, name } = scopedBody;
     const buyerDigits = String(phone || name || '').replace(/\D/g, '').slice(-10);
     if (buyerDigits.length !== 10 || !['6', '7', '8', '9'].includes(buyerDigits[0])) {
       return res.status(400).json({
@@ -4182,11 +4215,6 @@ app.post('/api/leads', requireAuth, async (req, res) => {
         error: 'Buyer phone number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.',
       });
     }
-
-    const scopedBody =
-      req.auth.actorType === 'customer'
-        ? { ...req.body, customerId: req.auth.customerId || req.auth.sub, customerPhone: req.auth.phone }
-        : req.body || {};
 
     const out = await createDirectLeadRow(scopedBody);
     if (out.notFound) {
@@ -4552,7 +4580,7 @@ app.post('/api/leads/distribute', requireStaff(['sales', 'marketing', 'super adm
       title,
       description = '',
       requirement,
-      budget = '₹1.5L – ₹3.5L',
+      budget = '',
       location = '',
       priority = 'Normal',
       source = 'Category Lead Distribution',
@@ -4574,7 +4602,7 @@ app.post('/api/leads/distribute', requireStaff(['sales', 'marketing', 'super adm
     }
 
     const rawPhone = buyerPhone || phone || contactNumber || '';
-    const cleanBuyerDigits = String(rawPhone || '9876543210').replace(/\D/g, '').slice(-10);
+    const cleanBuyerDigits = String(rawPhone).replace(/\D/g, '').slice(-10);
     if (cleanBuyerDigits.length !== 10 || !['6', '7', '8', '9'].includes(cleanBuyerDigits[0])) {
       return res.status(400).json({
         ok: false,
@@ -4589,11 +4617,11 @@ app.post('/api/leads/distribute', requireStaff(['sales', 'marketing', 'super adm
     const finalGroupId = matchedGroup ? matchedGroup.id : (targetGroupId || null);
     const finalGroupName = matchedGroup ? matchedGroup.name : finalCategory;
 
-    const leadTitle = String(title || '').trim() || `${finalCategory} Buyer Requirement`;
-    const reqText = String(requirement || description || '').trim() || `Inbound customer requirement for ${finalCategory} products and commercial services.`;
-    const bName = String(buyerName || '').trim() || 'Verified Buyer';
-    const masterLeadId = id || `mlead_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const displayPhone = `+91 ${cleanBuyerDigits}`;
+    const leadTitle = String(title || '').trim() || `${displayPhone} • ${finalCategory}`;
+    const reqText = String(requirement || description || '').trim();
+    const bName = String(buyerName || '').trim() || displayPhone;
+    const masterLeadId = id || `mlead_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
     // Preliminary authoritative evaluation before opening transaction
     const initialEval = await getEvaluatedRecipients({

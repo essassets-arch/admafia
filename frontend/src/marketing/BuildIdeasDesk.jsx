@@ -12,9 +12,11 @@ import marketingApi from '../services/marketingApi';
 import { SmartTable } from '../components/SmartTabulator';
 
 const PLATFORMS = [
-  'Instagram & Facebook (Meta Ads)',
+  'Meta Ads (Facebook & Instagram)',
   'Instagram',
   'Facebook',
+  'Google Ads',
+  'LinkedIn Ads',
 ];
 
 const LANGUAGES = [
@@ -34,9 +36,9 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // 6 Core Requested Fields
+  // Core Campaign Idea Fields
   const [title, setTitle] = useState('');
-  const [platform, setPlatform] = useState('Instagram & Facebook (Meta Ads)');
+  const [platform, setPlatform] = useState('Meta Ads (Facebook & Instagram)');
   const [language, setLanguage] = useState('English / Hinglish');
   const [callToAction, setCallToAction] = useState('Enquire Now');
   const [concept, setConcept] = useState('');
@@ -107,7 +109,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
 
     setTimeout(() => {
       setTitle(`${comp} - ${cat} Inbound Campaign`);
-      setPlatform('Instagram & Facebook (Meta Ads)');
+      setPlatform('Meta Ads (Facebook & Instagram)');
       setLanguage('English / Hinglish');
       setCallToAction('Enquire Now');
       setConcept(`Connect with prospective customers seeking verified ${cat} solutions in ${city}. Highlighting ${comp}'s industry expertise, verified quality, and tailored commercial offerings.`);
@@ -239,21 +241,7 @@ export default function BuildIdeasDesk({ initialCustomerId = null, onNavigateToD
             </button>
           </div>
 
-          {/* 1. Customer Name */}
-          <div className="mkt-form-group">
-            <label className="mkt-form-label">
-              Customer Name <span className="req">*</span>
-            </label>
-            <input
-              type="text"
-              className="mkt-form-input"
-              value={selectedCustomer ? selectedCustomer.name : 'No customer selected'}
-              disabled
-              style={{ background: 'var(--adm-bg-subtle, #f8fafc)', color: 'var(--adm-text-primary, #0f172a)', fontWeight: 700 }}
-            />
-          </div>
-
-          {/* 2. Campaign Name */}
+          {/* 1. Campaign Name */}
           <div className="mkt-form-group">
             <label className="mkt-form-label">
               Campaign Name <span className="req">*</span>

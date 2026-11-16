@@ -534,6 +534,13 @@ export const crmApi = {
     return res.lead;
   },
 
+  async createBulkLeads(bulkPayload) {
+    return apiRequest('/leads', {
+      method: 'POST',
+      body: JSON.stringify(bulkPayload),
+    });
+  },
+
   async updateLead(leadId, updates) {
     const res = await apiRequest(`/leads/${encodeURIComponent(leadId)}`, {
       method: 'PATCH',

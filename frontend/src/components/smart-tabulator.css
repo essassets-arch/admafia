@@ -1410,3 +1410,92 @@
   border-color: #6366f1;
   color: #ffffff;
 }
+
+/* Built-In IST Date Range Filter Strip */
+.am-st-date-strip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 3px;
+  border-radius: 9px;
+}
+
+.am-st-date-pill {
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.am-st-date-pill:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.am-st-date-pill.active {
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.28);
+}
+
+.am-st-custom-dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 4px;
+}
+
+.am-st-date-input {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 6px;
+  outline: none;
+  height: 26px;
+}
+
+.am-st-date-sep {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+[data-admin-theme="dark"] .am-st-date-strip {
+  background: #090e1a;
+  border-color: #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-date-pill {
+  color: #94a3b8;
+}
+
+[data-admin-theme="dark"] .am-st-date-pill:hover {
+  color: #f8fafc;
+  background: #1e293b;
+}
+
+[data-admin-theme="dark"] .am-st-date-pill.active {
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+[data-admin-theme="dark"] .am-st-date-input {
+  background: #111827;
+  border-color: #334155;
+  color: #f8fafc;
+  color-scheme: dark;
+}

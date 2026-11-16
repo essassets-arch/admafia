@@ -227,6 +227,65 @@ export default function LeadHubOverview({
   const isProfileDone = profEval.isComplete;
   const isFullyComplete = isPaymentDone && isProfileDone;
 
+  // Interactive Inline Quick-Complete Profile State (renders ONLY missing fields)
+  const [quickProfile, setQuickProfile] = useState(() => ({
+    companyName: customer?.companyName || customer?.name || '',
+    contactPerson: customer?.contactPerson || customer?.contact || '',
+    email: customer?.email || '',
+    category: sanitizedProfile.category || '',
+    city: sanitizedProfile.city || '',
+    state: sanitizedProfile.state || '',
+  }));
+  const [isSavingQuickProfile, setIsSavingQuickProfile] = useState(false);
+
+  React.useEffect(() => {
+    const clean = sanitizeCustomerProfileFields(customer);
+    setQuickProfile((prev) => ({
+      companyName: prev.companyName || customer?.companyName || customer?.name || '',
+      contactPerson: prev.contactPerson || customer?.contactPerson || customer?.contact || '',
+      email: prev.email || customer?.email || '',
+      category: prev.category || clean.category || '',
+      city: prev.city || clean.city || '',
+      state: prev.state || clean.state || '',
+    }));
+  }, [customer?.companyName, customer?.contactPerson, customer?.email, customer?.category, customer?.city, customer?.state]);
+
+  const liveQuickEval = evaluateCustomerProfileCompletion({
+    ...customer,
+    ...quickProfile,
+    completedAt: new Date(Date.now() + 60000).toISOString(),
+  });
+
+  const handleSaveQuickProfile = async (e) => {
+    e.preventDefault();
+    if (!onUpdateCustomer) return;
+    setIsSavingQuickProfile(true);
+    const completedIso = new Date().toISOString();
+    const updates = {
+      companyName: (quickProfile.companyName || customer?.companyName || '').trim(),
+      name: (quickProfile.companyName || customer?.companyName || '').trim(),
+      contactPerson: (quickProfile.contactPerson || customer?.contactPerson || '').trim(),
+      contact: (quickProfile.contactPerson || customer?.contactPerson || '').trim(),
+      email: (quickProfile.email || customer?.email || '').trim(),
+      category: (quickProfile.category || sanitizedProfile.category || '').trim(),
+      industry: (customer?.industry || quickProfile.category || sanitizedProfile.category || '').trim(),
+      city: (quickProfile.city || sanitizedProfile.city || '').trim(),
+      state: (quickProfile.state || sanitizedProfile.state || '').trim(),
+      completedAt: completedIso,
+      verified: true,
+    };
+    onUpdateCustomer(updates);
+    setIsSavingQuickProfile(false);
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: 'Profile saved! Priority territory matching updated.',
+      showConfirmButton: false,
+      timer: 2600,
+    });
+  };
+
   const toggleDay = (dayTarget) => {
     const code = typeof dayTarget === 'string' ? dayTarget : dayTarget?.code;
     const dayObj = typeof dayTarget === 'object' ? dayTarget : daysList.find((d) => d.code === code);
@@ -299,7 +358,9 @@ export default function LeadHubOverview({
 
   // Active High-Priority Enquiries (excluding dropped leads)
   const activePipelineLeads = (leads || []).filter((l) => l.status !== 'Dropped');
+  const recentPreviewLeads = activePipelineLeads.slice(0, 5);
   const totalLeadsCount = activePipelineLeads.length;
+  const unreadEnquiriesCount = activePipelineLeads.filter((l) => !l.read).length;
   const todayLeadsCount = activePipelineLeads.filter(
     (l) => l.dateGroup === 'today' || (l.createdAt && l.createdAt.includes('Today'))
   ).length;
@@ -332,63 +393,50 @@ export default function LeadHubOverview({
 
   return (
     <div className="portal-overview-view">
-      {/* 0. HIGHLIGHTED FIRST: Profile Completion Required Executive Action Card */}
+      {/* 0. INTERACTIVE INLINE QUICK-COMPLETE PROFILE CARD (encourages 100% completion in 10 seconds) */}
       {!profEval.isComplete && (
-        <div
-          className="am-profile-urgent-banner"
+        <form
+          onSubmit={handleSaveQuickProfile}
+          className="am-quick-profile-card"
           role="region"
-          aria-label="Profile completion required"
-          style={{
-            background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 55%, #fff7ed 100%)',
-            border: '1.5px solid #f59e0b',
-            borderLeft: '5px solid #d97706',
-            borderRadius: '16px',
-            padding: '18px 20px',
-            marginBottom: '20px',
-            boxShadow: '0 10px 26px -10px rgba(217, 119, 6, 0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '16px',
-          }}
+          aria-label="Quick business profile completion"
         >
-          <div className="am-profile-urgent-body" style={{ flex: '1 1 280px', minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: '#d97706',
-                  color: '#ffffff',
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  letterSpacing: '0.03em',
-                  textTransform: 'uppercase',
-                  padding: '4px 11px',
-                  borderRadius: '999px',
-                }}
-              >
-                ⚠️ Action Required • Profile {profEval.kycPercent}% Complete
-              </span>
-              {sanitizedProfile.city && (
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#92400e' }}>
-                  📍 {sanitizedProfile.city}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: liveQuickEval.isComplete ? '#059669' : '#d97706',
+                    color: '#ffffff',
+                    fontSize: '0.73rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.03em',
+                    textTransform: 'uppercase',
+                    padding: '4px 11px',
+                    borderRadius: '999px',
+                    transition: 'background 0.25s ease',
+                  }}
+                >
+                  {liveQuickEval.isComplete ? '✓ Ready to Unlock 100%' : `⚡ Unlock Priority Leads • ${liveQuickEval.kycPercent}% Ready`}
                 </span>
-              )}
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#92400e' }}>
+                  {profEval.missingFields.length} quick {profEval.missingFields.length === 1 ? 'detail' : 'details'} left
+                </span>
+              </div>
+              <h3 style={{ margin: '0 0 4px', fontSize: '1.04rem', fontWeight: 800, color: '#78350f', lineHeight: 1.3 }}>
+                Finish Your Business Profile Inline to Match Exact Buyer Leads in Your City
+              </h3>
             </div>
 
-            <h3 style={{ margin: '0 0 6px', fontSize: '1.04rem', fontWeight: 800, color: '#78350f', lineHeight: 1.3 }}>
-              Complete Your Business Profile to Activate Territory &amp; Category Lead Matching
-            </h3>
-
-            {/* Progress Bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', maxWidth: '460px' }}>
+            {/* Live Animated Readiness Bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '200px', flex: '0 1 260px' }}>
               <div
                 style={{
                   flex: 1,
-                  height: '8px',
+                  height: '9px',
                   background: 'rgba(217, 119, 6, 0.18)',
                   borderRadius: '999px',
                   overflow: 'hidden',
@@ -396,67 +444,147 @@ export default function LeadHubOverview({
               >
                 <div
                   style={{
-                    width: `${profEval.kycPercent}%`,
+                    width: `${liveQuickEval.kycPercent}%`,
                     height: '100%',
-                    background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
+                    background: liveQuickEval.isComplete
+                      ? 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
+                      : 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
                     borderRadius: '999px',
-                    transition: 'width 0.3s ease',
+                    transition: 'width 0.28s ease, background 0.28s ease',
                   }}
                 />
               </div>
-              <strong style={{ fontSize: '0.8rem', fontWeight: 800, color: '#92400e', flexShrink: 0 }}>
-                {profEval.kycPercent}%
+              <strong style={{ fontSize: '0.84rem', fontWeight: 800, color: liveQuickEval.isComplete ? '#059669' : '#92400e' }}>
+                {liveQuickEval.kycPercent}%
               </strong>
             </div>
+          </div>
 
-            {/* Missing Items Pills */}
-            {profEval.missingFields.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#92400e', marginRight: '2px' }}>
-                  Missing:
-                </span>
-                {profEval.missingFields.map((fieldLabel) => (
-                  <span
-                    key={fieldLabel}
-                    style={{
-                      background: '#ffffff',
-                      color: '#b45309',
-                      border: '1px solid #fcd34d',
-                      padding: '3px 9px',
-                      borderRadius: '999px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {fieldLabel}
-                  </span>
-                ))}
+          <div className="am-quick-profile-grid">
+            {profEval.missingKeys.includes('companyName') && (
+              <div className="am-quick-profile-field">
+                <label>Business / Company Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Apex Builders Pvt Ltd"
+                  value={quickProfile.companyName}
+                  onChange={(e) => setQuickProfile((p) => ({ ...p, companyName: e.target.value }))}
+                />
+              </div>
+            )}
+            {profEval.missingKeys.includes('category') && (
+              <div className="am-quick-profile-field">
+                <label>Business Category *</label>
+                <select
+                  required
+                  value={quickProfile.category}
+                  onChange={(e) => setQuickProfile((p) => ({ ...p, category: e.target.value }))}
+                >
+                  <option value="">Select Category...</option>
+                  <option value="Real Estate & Infrastructure">Real Estate &amp; Infrastructure</option>
+                  <option value="IT & Software">IT &amp; Software</option>
+                  <option value="Manufacturing">Manufacturing</option>
+                  <option value="Healthcare & Wellness">Healthcare &amp; Wellness</option>
+                  <option value="Construction & Building Materials">Construction &amp; Building Materials</option>
+                  <option value="Education & Coaching">Education &amp; Coaching</option>
+                  <option value="Financial & Consulting">Financial &amp; Consulting</option>
+                  <option value="Retail & E-commerce">Retail &amp; E-commerce</option>
+                  <option value="Organic Food & FMCG">Organic Food &amp; FMCG</option>
+                  <option value="Hardware & Computer Accessories">Hardware &amp; Computer Accessories</option>
+                  <option value="Electrical Products">Electrical Products</option>
+                  <option value="Digital Marketing">Digital Marketing</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            )}
+            {profEval.missingKeys.includes('city') && (
+              <div className="am-quick-profile-field">
+                <label>Operating City *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Surat, Mumbai, Bengaluru"
+                  value={quickProfile.city}
+                  onChange={(e) => setQuickProfile((p) => ({ ...p, city: e.target.value }))}
+                />
+              </div>
+            )}
+            {profEval.missingKeys.includes('state') && (
+              <div className="am-quick-profile-field">
+                <label>State / Province *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Gujarat, Maharashtra"
+                  value={quickProfile.state}
+                  onChange={(e) => setQuickProfile((p) => ({ ...p, state: e.target.value }))}
+                />
+              </div>
+            )}
+            {profEval.missingKeys.includes('contactPerson') && (
+              <div className="am-quick-profile-field">
+                <label>Contact Person *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Your full name"
+                  value={quickProfile.contactPerson}
+                  onChange={(e) => setQuickProfile((p) => ({ ...p, contactPerson: e.target.value }))}
+                />
+              </div>
+            )}
+            {profEval.missingKeys.includes('email') && (
+              <div className="am-quick-profile-field">
+                <label>Business Email *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="you@company.com"
+                  value={quickProfile.email}
+                  onChange={(e) => setQuickProfile((p) => ({ ...p, email: e.target.value }))}
+                />
               </div>
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }} className="am-profile-urgent-cta-wrap">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginTop: '14px' }}>
             <button
               type="button"
               onClick={() => onNavigate && onNavigate('profile')}
-              className="am-profile-urgent-cta-btn"
               style={{
-                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                background: 'transparent',
+                border: 'none',
+                color: '#92400e',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: 0,
+              }}
+            >
+              Open Full Business Profile →
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingQuickProfile}
+              style={{
+                background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
                 color: '#ffffff',
                 border: 'none',
-                borderRadius: '11px',
-                padding: '12px 20px',
-                fontSize: '0.88rem',
+                borderRadius: '10px',
+                padding: '10px 20px',
+                fontSize: '0.86rem',
                 fontWeight: 800,
                 cursor: 'pointer',
-                boxShadow: '0 6px 16px rgba(15, 23, 42, 0.22)',
+                boxShadow: '0 6px 16px rgba(79, 70, 229, 0.28)',
                 whiteSpace: 'nowrap',
               }}
             >
-              Complete Business Profile Now →
+              {isSavingQuickProfile ? 'Saving...' : 'Save & Unlock Priority Leads →'}
             </button>
           </div>
-        </div>
+        </form>
       )}
 
       {/* 1. Breadcrumbs & Title */}
@@ -464,7 +592,7 @@ export default function LeadHubOverview({
         <div className="breadcrumb-line">
           <span className="crumb-root">Lead Hub</span>
           <span className="crumb-slash">/</span>
-          <span className="crumb-current">Dashboard</span>
+          <span className="crumb-current">Overview</span>
         </div>
         <div className="live-pipeline-active-badge">
           <span className="pulse-emerald-dot"></span> Live Pipeline Active
@@ -473,13 +601,13 @@ export default function LeadHubOverview({
 
       <div className="overview-title-block" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1>Dashboard Overview</h1>
+          <h1>Workspace Overview</h1>
           <p className="overview-desc-lead">
-            Real-time performance metrics, lead conversion benchmarks, and incoming inquiries.
+            Schedule delivery days, track verified buyer enquiries, and manage your daily pacing budget.
           </p>
         </div>
 
-        {/* Right side top: Growth Wallet Card & Complete Registration Button */}
+        {/* Right side top: Growth Wallet Card & First-Payment CTA (if unpaid) */}
         <div className="overview-header-actions-cluster" style={{ display: 'inline-flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginLeft: 'auto', maxWidth: '100%' }}>
           {/* 1. GROWTH WALLET Card */}
           <div
@@ -509,22 +637,18 @@ export default function LeadHubOverview({
             </button>
           </div>
 
-          {/* 2. Complete Registration Button (Only shown when incomplete; removed once payment & profile details are submitted) */}
-          {!isFullyComplete && onOpenCompleteRegistration && (
+          {/* 2. Activate Wallet CTA (Only shown when initial payment is still pending) */}
+          {!isPaymentDone && onOpenCompleteRegistration && (
             <button
               type="button"
               onClick={onOpenCompleteRegistration}
               className="header-complete-reg-exact"
-              title="Click to complete registration"
+              title="Fund wallet to activate lead delivery"
             >
               <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.28)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffffff', boxShadow: '0 0 6px #ffffff' }} />
               </span>
-              <svg className="header-sparkle-svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" />
-              </svg>
-              <span className="header-reg-text">{isPaymentDone ? 'Complete Profile' : 'Complete Registration'}</span>
-              <span className="header-action-badge">ACTION REQUIRED</span>
+              <span className="header-reg-text">Fund &amp; Activate Delivery</span>
             </button>
           )}
         </div>
@@ -1064,16 +1188,9 @@ export default function LeadHubOverview({
           <div>
             <h2>Overall Performance</h2>
             <p className="perf-master-sub">
-              Lifetime inbound conversion, engagement metrics &amp; directory discovery
+              Real-time inbound buyer enquiries, response rate &amp; unread queue
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onOpenLanguageModal}
-            className="btn-language-change-link"
-          >
-            Click here to change language
-          </button>
         </div>
 
         <div className="perf-three-stat-grid">
@@ -1087,23 +1204,20 @@ export default function LeadHubOverview({
 
           {/* Responded */}
           <div className="perf-box-card" onClick={() => onNavigate('followups')}>
-            <span className="perf-box-label">Responded</span>
+            <span className="perf-box-label">Responded / Follow-up</span>
             <div className="perf-box-number">{respondedLeadsCount.toLocaleString('en-IN')}</div>
-            <div className="perf-box-today text-emerald">{responseRatePct}% {totalLeadsCount > 0 ? 'Good' : 'Active'}</div>
-            <div className="perf-box-records">✓ {respondedLeadsCount} of {totalLeadsCount} answered</div>
+            <div className="perf-box-today text-emerald">{responseRatePct}% {totalLeadsCount > 0 ? 'Addressed' : 'Active'}</div>
+            <div className="perf-box-records">✓ {respondedLeadsCount} of {totalLeadsCount} contacted</div>
           </div>
 
-          {/* Response Time */}
-          <div className="perf-box-card">
-            <span className="perf-box-label">Response Time</span>
-            <div className="perf-box-number">{totalLeadsCount > 0 ? '02m : 15s' : '0m : 00s'}</div>
+          {/* Unread Enquiries (100% Real Metric — replaces hardcoded 02m:15s) */}
+          <div className="perf-box-card" onClick={() => onNavigate('leads')}>
+            <span className="perf-box-label">Unread Enquiries</span>
+            <div className="perf-box-number">{unreadEnquiriesCount.toLocaleString('en-IN')}</div>
             <div className="perf-box-today text-gold" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-              </svg>
-              <span>Lightning Response</span>
+              <span>{unreadEnquiriesCount === 0 ? '✓ All Caught Up' : '⚡ Needs Call / WhatsApp'}</span>
             </div>
-            <div className="perf-box-records">Dynamic latency from Call &amp; WA</div>
+            <div className="perf-box-records">Click to view &amp; filter by date</div>
           </div>
         </div>
       </div>
@@ -1150,14 +1264,14 @@ export default function LeadHubOverview({
         />
       </a>
 
-      {/* 6. Recent High-Priority Enquiries */}
+      {/* 6. Recent Enquiries Preview (Latest 5 — Full Date-Filtered Pipeline lives in My Leads) */}
       <div className="recent-priority-enquiries-panel">
         <div className="priority-panel-header">
           <div>
-            <h2>Recent High-Priority Enquiries</h2>
-            <div className="realtime-inbound-tag">Real-Time Inbound</div>
+            <h2>Latest 5 Buyer Enquiries</h2>
+            <div className="realtime-inbound-tag">Real-Time Preview</div>
             <p className="priority-panel-desc">
-              Showing your latest verified high-intent buyer enquiries.
+              Quick preview of your 5 most recent numbers. Open My Leads for date-range filters &amp; follow-ups.
             </p>
           </div>
           <button
@@ -1165,16 +1279,17 @@ export default function LeadHubOverview({
             onClick={() => onNavigate('leads')}
             className="btn-all-leads-arrow"
           >
-            All {totalLeadsCount} Leads &rarr;
+            View All My Leads ({totalLeadsCount}) &amp; Date Filters &rarr;
           </button>
         </div>
 
-        {/* Tabulator Data Grid for Inbound Enquiries */}
+        {/* Minimal Preview Table */}
         <div style={{ marginBottom: 20 }}>
           <SmartTable
-            title="Inbound Enquiries"
-            defaultPageSize={10}
-            exportFilename="priority-enquiries"
+            title="Latest Enquiries"
+            defaultPageSize={5}
+            minimal
+            exportFilename="latest-enquiries"
           >
             <table className="cp-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -1186,7 +1301,7 @@ export default function LeadHubOverview({
                 </tr>
               </thead>
               <tbody>
-                {activePipelineLeads.length === 0 ? (
+                {recentPreviewLeads.length === 0 ? (
                   <tr>
                     <td colSpan={4}>
                       <div className="proper-list-empty-state" style={{ padding: '32px 20px' }}>
@@ -1196,13 +1311,13 @@ export default function LeadHubOverview({
                             <line x1="21" y1="21" x2="16.65" y2="16.65" />
                           </svg>
                         </div>
-                        <h3>No active priority enquiries found</h3>
-                        <p>All current inquiries have been addressed or moved into follow-ups.</p>
+                        <h3>No active enquiries yet</h3>
+                        <p>Verified buyer mobile numbers will appear here as soon as they are dispatched.</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  activePipelineLeads.map((item, idx) => {
+                  recentPreviewLeads.map((item, idx) => {
                     const hasDialablePhone = Boolean(item.phone && !/[*•X]/i.test(String(item.phone)));
                     const isUnmasked =
                       unmaskedLeads[item.id] !== undefined

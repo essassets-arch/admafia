@@ -1,26 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users,
   ShieldCheck,
   Layers,
-  FileCheck2,
   CreditCard,
   Wallet,
-  Headphones,
-  Calendar,
-  FolderTree,
-  CheckCircle2,
-  Clock,
   Phone,
   MessageSquare,
-  ArrowRight,
-  Sparkles,
   RefreshCw,
   Send,
-  Eye,
-  TrendingUp,
-  UserCheck,
 } from 'lucide-react';
+import crmApi from '../services/crmApi';
 import { DEFAULT_DESK_LEADS, formatIndianDateTime, resolveCustomerIdentity } from './OperationalDesksViews';
 import { SmartTable } from '../components/SmartTabulator';
 
@@ -40,12 +30,9 @@ export default function AllDesksOverviewDashboard({
   setInvoices,
   queries = [],
   setQueries,
-  tasks = [],
-  setTasks,
-  groups = [],
   navigateToDesk,
+  onRefresh,
 }) {
-  // Real-time leads state
   const [leads, setLeads] = useState(() => {
     try {
       const raw = localStorage.getItem('growthline_all_leads');
@@ -53,7 +40,7 @@ export default function AllDesksOverviewDashboard({
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch (e) { }
+    } catch (e) {}
     return DEFAULT_DESK_LEADS || [];
   });
 
@@ -61,17 +48,42 @@ export default function AllDesksOverviewDashboard({
     try {
       const raw = localStorage.getItem('growthline_payment_records');
       if (raw) return JSON.parse(raw);
-    } catch (e) { }
+    } catch (e) {}
     return [];
   });
 
-  const [liveClock, setLiveClock] = useState(() => new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // 1-second interval clock for real-time timestamp display
-  useEffect(() => {
-    const timer = setInterval(() => setLiveClock(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const handleRefreshData = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const fresh = await crmApi.syncStateFromPostgres();
+      if (fresh) {
+        if (Array.isArray(fresh.customers) && typeof setCustomers === 'function') {
+          setCustomers(fresh.customers);
+        }
+        if (Array.isArray(fresh.verifications) && typeof setVerifications === 'function') {
+          setVerifications(fresh.verifications);
+        }
+        if (Array.isArray(fresh.payments)) {
+          setPaymentRecords(fresh.payments);
+          if (typeof setInvoices === 'function') setInvoices(fresh.payments);
+        }
+        if (Array.isArray(fresh.leads)) {
+          setLeads(fresh.leads);
+        }
+        if (Array.isArray(fresh.queries) && typeof setQueries === 'function') {
+          setQueries(fresh.queries);
+        }
+      }
+      if (typeof onRefresh === 'function') {
+        await onRefresh();
+      }
+    } catch (_) {
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [onRefresh, setCustomers, setInvoices, setQueries, setVerifications]);
 
   useEffect(() => {
     const handleLeadAdded = (e) => {
@@ -83,7 +95,7 @@ export default function AllDesksOverviewDashboard({
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setLeads(parsed);
-        } catch (err) { }
+        } catch (err) {}
       }
     };
     const handlePaymentAdded = (e) => {
@@ -103,13 +115,14 @@ export default function AllDesksOverviewDashboard({
         if (rawPay) setPaymentRecords(JSON.parse(rawPay));
         const rawLeads = localStorage.getItem('growthline_all_leads');
         if (rawLeads) setLeads(JSON.parse(rawLeads));
-      } catch (e) { }
+      } catch (e) {}
     };
     window.addEventListener('growthline_lead_added', handleLeadAdded);
     window.addEventListener('growthline_payment_recorded', handlePaymentAdded);
     window.addEventListener('growthline_payment_deleted', handlePaymentDeleted);
     window.addEventListener('growthline_customer_registered', handleCustomerSync);
     window.addEventListener('growthline_active_user_changed', handleCustomerSync);
+    window.addEventListener('growthline_postgres_synced', handleCustomerSync);
     window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('growthline_lead_added', handleLeadAdded);
@@ -117,14 +130,15 @@ export default function AllDesksOverviewDashboard({
       window.removeEventListener('growthline_payment_deleted', handlePaymentDeleted);
       window.removeEventListener('growthline_customer_registered', handleCustomerSync);
       window.removeEventListener('growthline_active_user_changed', handleCustomerSync);
+      window.removeEventListener('growthline_postgres_synced', handleCustomerSync);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
-  // Metrics Calculations across all 9 Desks
+  // Metrics Calculations
   const totalRegistered = customers.length;
   const totalLeadsCount = leads.length;
-  const urgentLeadsCount = leads.filter((l) => l.priority === 'Urgent').length;
+  const unreadLeadsCount = leads.filter((l) => !Boolean(l.read || l.is_read || l.status === 'read')).length;
 
   const completedProfiles = customers.filter(
     (c) => c.profileStatus === 'complete' || c.profile_status === 'complete' || (c.kycPercent || 0) >= 90
@@ -138,168 +152,7 @@ export default function AllDesksOverviewDashboard({
 
   const totalWalletReserves = customers.reduce((sum, c) => sum + (c.balance || c.walletBalance || 0), 0);
   const activeFundedCount = customers.filter((c) => (c.balance || 0) > 0).length;
-
-  const openQueries = queries.filter((q) => q.status === 'open' || q.status === 'pending');
-  const todayTasks = tasks.filter((t) => t.dueStatus === 'today' && t.status !== 'completed');
-  const todayTasksBadge = todayTasks.length;
-
-  const approvedMembersList = customers.filter((c) => {
-    const isPaymentDone =
-      c.paymentStatus === 'paid' ||
-      c.payment_status === 'paid' ||
-      Number(c.amountPaid || 0) > 0 ||
-      Number(c.balance || c.walletBalance || 0) > 0;
-    const isProfileDone =
-      c.profileStatus === 'complete' ||
-      c.profile_status === 'complete' ||
-      Number(c.kycPercent || c.kyc_percent || 0) >= 100;
-    return (isPaymentDone && isProfileDone) || c.verified === true;
-  });
-  const approvedMembersCount = approvedMembersList.length;
-
-  // 9 Desks Master Definition for the Clean Navigation Hub
-  const DESKS = [
-    {
-      id: 'customers',
-      num: '01',
-      title: 'Customer Registrations',
-      badge: `${totalRegistered} Enrolled`,
-      pillClass: 'pill-indigo',
-      metric: `${totalRegistered}`,
-      sub: 'Authoritative client database & onboarding profiles',
-      action: 'Manage Registrations →',
-      icon: Users,
-      color: '#4f46e5',
-      bg: 'var(--adm-soft-indigo-bg, #eef2ff)',
-      target: '#customers',
-    },
-    {
-      id: 'pending_verification',
-      num: '02',
-      title: 'Verification & Intake',
-      badge: 'Auto-Verified ✓',
-      pillClass: 'pill-emerald',
-      metric: `${verifications.length}`,
-      sub: '100% self-serve intake • Zero manual admin approval needed',
-      action: 'View Intake Audit →',
-      icon: ShieldCheck,
-      color: '#059669',
-      bg: 'var(--adm-soft-emerald-bg, #ecfdf5)',
-      target: '#verification',
-    },
-    {
-      id: 'approved',
-      num: '02B',
-      title: 'Approved Members',
-      badge: '100% KYC & Paid',
-      pillClass: 'pill-emerald',
-      metric: `${approvedMembersCount} Members`,
-      sub: 'Verified accounts with completed payment & profile • Live wallet balance',
-      action: 'View Approved Members →',
-      icon: UserCheck,
-      color: 'var(--adm-soft-emerald-text, #15803d)',
-      bg: 'var(--adm-soft-emerald-bg, #f0fdf4)',
-      target: '#approved',
-    },
-    {
-      id: 'leads',
-      num: '03',
-      title: 'Lead Management',
-      badge: urgentLeadsCount > 0 ? `${urgentLeadsCount} Urgent SLA` : `${totalLeadsCount} Total`,
-      pillClass: urgentLeadsCount > 0 ? 'pill-rose' : 'pill-indigo',
-      metric: `${totalLeadsCount}`,
-      sub: 'Speed-to-lead queue with direct Call & WhatsApp channels',
-      action: 'Dispatch Leads →',
-      icon: Layers,
-      color: '#0284c7',
-      bg: 'var(--adm-soft-sky-bg, #f0f9ff)',
-      target: '#leads',
-    },
-    {
-      id: 'profiles',
-      num: '04',
-      title: 'Profile Completion',
-      badge: `${profileCompletionRate}% KYC`,
-      pillClass: 'pill-emerald',
-      metric: `${profileCompletionRate}%`,
-      sub: 'KYC compliance, GST verification & corporate entity details',
-      action: 'Complete Profiles →',
-      icon: FileCheck2,
-      color: '#d97706',
-      bg: 'var(--adm-soft-amber-bg, #fffbeb)',
-      target: '#profiles',
-    },
-    {
-      id: 'payments',
-      num: '05',
-      title: 'Payment Collection',
-      badge: '100% Reconciled',
-      pillClass: 'pill-emerald',
-      metric: formatINR(totalCollectedRevenue),
-      sub: 'Official GST tax invoices, Razorpay receipts & ledger',
-      action: 'View Billing Ledger →',
-      icon: CreditCard,
-      color: '#16a34a',
-      bg: 'var(--adm-soft-emerald-bg, #f0fdf4)',
-      target: '#payments',
-    },
-    {
-      id: 'wallets',
-      num: '06',
-      title: 'Wallets & Balances',
-      badge: '₹300/day pacing',
-      pillClass: 'pill-indigo',
-      metric: formatINR(totalWalletReserves),
-      sub: 'Client ad wallet balances, auto-cut tracking & runway health',
-      action: 'Manage Wallets →',
-      icon: Wallet,
-      color: '#4f46e5',
-      bg: 'var(--adm-soft-indigo-bg, #eef2ff)',
-      target: '#wallets',
-    },
-    {
-      id: 'queries',
-      num: '07',
-      title: 'Query & Support',
-      badge: `${openQueries.length} Open`,
-      pillClass: openQueries.length > 0 ? 'pill-amber' : 'pill-emerald',
-      metric: `${openQueries.length}`,
-      sub: 'Client helpdesk, technical inquiries & WhatsApp routing',
-      action: 'Open Support Desk →',
-      icon: Headphones,
-      color: '#8b5cf6',
-      bg: 'var(--adm-soft-purple-bg, #f5f3ff)',
-      target: '#queries',
-    },
-    {
-      id: 'groups',
-      num: '08',
-      title: 'Lead Distribution',
-      badge: 'Category Routing',
-      pillClass: 'pill-indigo',
-      metric: `${groups.length || 6} Categories`,
-      sub: 'Instant 1-click lead distribution to matching industry categories',
-      action: 'Distribute Leads →',
-      icon: FolderTree,
-      color: '#0891b2',
-      bg: 'var(--adm-soft-cyan-bg, #ecfeff)',
-      target: '#groups',
-    },
-    {
-      id: 'tasks',
-      num: '09',
-      title: 'Tasks & Follow-ups',
-      badge: `${todayTasksBadge} Due Today`,
-      pillClass: todayTasksBadge > 0 ? 'pill-rose' : 'pill-indigo',
-      metric: `${tasks.length}`,
-      sub: 'Executive follow-up reminders, lead callbacks & action items',
-      action: 'Open Action Tasks →',
-      icon: Calendar,
-      color: '#e11d48',
-      bg: 'var(--adm-soft-rose-bg, #fff1f2)',
-      target: '#tasks',
-    },
-  ];
+  const openQueriesCount = queries.filter((q) => q.status === 'open' || q.status === 'pending').length;
 
   return (
     <div className="desk-page-container" style={{ paddingBottom: 60 }}>
@@ -307,10 +160,10 @@ export default function AllDesksOverviewDashboard({
       <div className="desk-header" style={{ marginBottom: 20 }}>
         <div>
           <div className="desk-breadcrumb">
-            SUB ADMIN &amp; SUPPORT OPERATIONS / ALL-IN-ONE COMMAND CENTER
+            AD MAFIA SALES OPERATIONS / EXECUTIVE OVERVIEW
           </div>
           <h1 className="desk-title" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span>Operations Executive Dashboard</span>
+            <span>Sales Operations Overview</span>
             <span
               style={{
                 fontSize: '0.75rem',
@@ -327,90 +180,30 @@ export default function AllDesksOverviewDashboard({
                 gap: 5,
               }}
             >
-              <span className="sales-pulse-dot" style={{ width: 7, height: 7 }} /> Live 9 Desks Unified
+              <span className="sales-pulse-dot" style={{ width: 7, height: 7 }} /> Live Operations Feed
             </span>
           </h1>
           <p className="desk-subtitle">
-            Central real-time monitoring across client intake, automated verification, category lead distribution,
-            ad wallet runway, and financial reconciliation.
+            Real-time operational command across client registrations, verified +91 buyer lead delivery,
+            ad wallet runway pacing, and settled revenue.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: '100%' }}>
-          {/* Live Indian Standard Time Real-Time Clock Badge */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 8,
-              background: 'var(--adm-bg-subtle, #f8fafc)',
-              border: '1px solid var(--adm-border-strong, #cbd5e1)',
-              padding: '6px 12px',
-              borderRadius: 8,
-              fontSize: '0.80rem',
-              fontWeight: 700,
-              color: 'var(--adm-text-primary, #0f172a)',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-              fontVariantNumeric: 'tabular-nums',
-              maxWidth: '100%',
-              boxSizing: 'border-box',
-            }}
-          >
-            <Clock size={15} color="#4f46e5" />
-            <span>
-              {liveClock.toLocaleDateString('en-IN', {
-                weekday: 'short',
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              })}{' '}
-              •{' '}
-              {liveClock.toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true,
-              })}
-            </span>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: '0.66rem',
-                fontWeight: 800,
-                color: '#059669',
-                background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
-                border: '1px solid var(--adm-soft-emerald-border, #a7f3d0)',
-                padding: '2px 6px',
-                borderRadius: 4,
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: '#10b981',
-                }}
-              />
-              REAL-TIME
-            </span>
-          </div>
-
           <button
             type="button"
             className="sales-btn-secondary"
-            onClick={() => window.location.reload()}
+            onClick={handleRefreshData}
+            disabled={isRefreshing}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}
           >
-            <RefreshCw size={14} /> Refresh Data
+            <RefreshCw size={14} className={isRefreshing ? 'spin' : ''} />{' '}
+            {isRefreshing ? 'Syncing...' : 'Refresh Data'}
           </button>
           <button
             type="button"
             className="sales-btn-primary"
-            onClick={() => navigateToDesk('groups', '#groups')}
+            onClick={() => navigateToDesk('leads', '#groups')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -420,13 +213,13 @@ export default function AllDesksOverviewDashboard({
               background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
             }}
           >
-            <Send size={14} strokeWidth={2.5} /> Create &amp; Distribute Lead
+            <Send size={14} strokeWidth={2.5} /> Broadcast Category Lead
           </button>
         </div>
       </div>
 
       {/* 2. EXECUTIVE KPI RIBBON */}
-      <div className="desk-kpi-grid" style={{ marginBottom: 28 }}>
+      <div className="desk-kpi-grid" style={{ marginBottom: 26 }}>
         <div className="desk-kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div className="desk-kpi-label">TOTAL MANAGED ACCOUNTS</div>
@@ -436,22 +229,23 @@ export default function AllDesksOverviewDashboard({
           </div>
           <div className="desk-kpi-val text-indigo">{totalRegistered}</div>
           <div className="desk-kpi-sub">
-            <span style={{ color: '#059669', fontWeight: 700 }}>{profileCompletionRate}% Verified</span> • {activeFundedCount} active ad campaigns
+            <span style={{ color: '#059669', fontWeight: 700 }}>{profileCompletionRate}% Verified</span> • {activeFundedCount} funded campaigns
           </div>
         </div>
 
         <div className="desk-kpi-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div className="desk-kpi-label">INBOUND LEAD FLOW</div>
+            <div className="desk-kpi-label">VERIFIED BUYER LEADS</div>
             <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--adm-soft-sky-bg, #f0f9ff)', color: '#0284c7', display: 'grid', placeItems: 'center' }}>
               <Layers size={15} />
             </div>
           </div>
           <div className="desk-kpi-val text-emerald">{totalLeadsCount} Leads</div>
           <div className="desk-kpi-sub">
-            <span style={{ color: urgentLeadsCount > 0 ? '#dc2626' : '#059669', fontWeight: 700 }}>
-              {urgentLeadsCount} Urgent SLA (&lt;5m)
-            </span> • Real-time distribution
+            <span style={{ color: unreadLeadsCount > 0 ? '#d97706' : '#059669', fontWeight: 700 }}>
+              {unreadLeadsCount} Unread by Client
+            </span>{' '}
+            • +91 direct mobile delivery
           </div>
         </div>
 
@@ -477,120 +271,15 @@ export default function AllDesksOverviewDashboard({
           </div>
           <div className="desk-kpi-val text-indigo">{formatINR(totalCollectedRevenue)}</div>
           <div className="desk-kpi-sub">
-            <span style={{ color: '#059669', fontWeight: 700 }}>{paymentRecords.length || invoices.length} settled receipts</span> • 100% online reconciliation
+            <span style={{ color: '#059669', fontWeight: 700 }}>{paymentRecords.length || invoices.length} settled receipts</span>
+            {openQueriesCount > 0 ? ` • ${openQueriesCount} open tickets` : ' • 100% reconciled'}
           </div>
         </div>
       </div>
 
-      {/* 3. AUTHORIZED OPERATIONS DESKS HUB (Sleek High-Density 9-Desk Control Grid) */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div>
-            <h2 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
-              Authorized Operations Desks (01 – 09)
-            </h2>
-            <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
-              Click any operational desk card to open its dedicated workbench
-            </div>
-          </div>
-        </div>
-
-        <div className="sales-desks-hub-grid">
-          {DESKS.map((d) => {
-            const Icon = d.icon;
-            return (
-              <div
-                key={d.id}
-                onClick={() => navigateToDesk(d.id, d.target)}
-                style={{
-                  background: 'var(--adm-bg-card, #ffffff)',
-                  border: '1px solid var(--adm-border, #e2e8f0)',
-                  borderRadius: 12,
-                  padding: '16px 18px',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = d.color;
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = `0 6px 16px rgba(0, 0, 0, 0.07)`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--adm-border, #e2e8f0)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                      <div
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 9,
-                          background: d.bg,
-                          color: d.color,
-                          display: 'grid',
-                          placeItems: 'center',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Icon size={18} strokeWidth={2.2} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: '0.68rem', color: d.color, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          DESK {d.num}
-                        </div>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', overflowWrap: 'anywhere' }}>
-                          {d.title}
-                        </div>
-                      </div>
-                    </div>
-                    <span className={`desk-pill ${d.pillClass}`} style={{ fontSize: '0.72rem' }}>
-                      {d.badge}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                    <span style={{ fontSize: '1.45rem', fontWeight: 900, color: 'var(--adm-text-primary, #0f172a)' }}>
-                      {d.metric}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4, lineHeight: 1.4 }}>
-                    {d.sub}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 14,
-                    paddingTop: 10,
-                    borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    color: d.color,
-                  }}
-                >
-                  <span>{d.action}</span>
-                  <ArrowRight size={14} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 4. MAIN OPERATIONAL INTELLIGENCE TABLES (100% Full-Width Vertical Stack) */}
+      {/* 3. MAIN OPERATIONAL INTELLIGENCE TABLES (100% Full-Width Vertical Stack) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', width: '100%' }}>
-        {/* 4.1 Live Inbound Leads (Desk 03) */}
+        {/* 3.1 Live Inbound Leads */}
         <div
           style={{
             background: 'var(--adm-bg-card, #ffffff)',
@@ -609,10 +298,10 @@ export default function AllDesksOverviewDashboard({
               </div>
               <div style={{ minWidth: 0 }}>
                 <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
-                  Live Inbound Leads (Desk 03)
+                  Live Buyer Mobile Leads
                 </h3>
                 <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
-                  Direct contact channels with instant Call &amp; WhatsApp actions
+                  Verified +91 buyer mobile numbers with instant Call &amp; WhatsApp actions
                 </div>
               </div>
             </div>
@@ -622,20 +311,20 @@ export default function AllDesksOverviewDashboard({
               className="sales-btn-secondary"
               style={{ fontSize: '0.76rem', padding: '5px 12px' }}
             >
-              All Leads ({totalLeadsCount}) →
+              Open Leads &amp; Distribution ({totalLeadsCount}) →
             </button>
           </div>
 
           <div className="desk-table-card">
-            <SmartTable title="Live Inbound Leads" defaultPageSize={6} exportFilename="overview-inbound-leads">
+            <SmartTable title="Live Buyer Mobile Leads" defaultPageSize={6} exportFilename="overview-inbound-leads">
               <table className="desk-table">
                 <thead>
                   <tr>
-                    <th>Buyer Phone</th>
+                    <th>Buyer Mobile (+91)</th>
                     <th>Assigned Client</th>
                     <th>Category</th>
-                    <th>SLA / Priority</th>
-                    <th>Received (IST)</th>
+                    <th>Read Status</th>
+                    <th>Assigned (IST)</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
@@ -643,14 +332,15 @@ export default function AllDesksOverviewDashboard({
                   {leads.length === 0 ? (
                     <tr>
                       <td colSpan={6} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--adm-text-muted, #64748b)' }}>
-                        No inbound leads recorded yet.
+                        No buyer mobile leads dispatched yet.
                       </td>
                     </tr>
                   ) : (
                     leads.map((l) => {
                       const rawDigits = String(l.phone || l.name || '').replace(/\D/g, '').slice(-10);
-                      const cleanPhone = rawDigits.length === 10 ? `+91 ${rawDigits}` : (l.phone || l.name || '—');
+                      const cleanPhone = rawDigits.length === 10 ? `+91 ${rawDigits}` : l.phone || l.name || '—';
                       const assignedClient = l.company || l.assignedCompany || l.customerCompanyName || 'Client Workspace';
+                      const isRead = Boolean(l.read || l.is_read || l.status === 'read');
                       return (
                         <tr key={l.id}>
                           <td>
@@ -674,17 +364,17 @@ export default function AllDesksOverviewDashboard({
                                 fontWeight: 700,
                               }}
                             >
-                              {l.category || 'General Inbound'}
+                              {l.category || 'General'}
                             </span>
                           </td>
                           <td>
-                            {l.priority === 'Urgent' ? (
-                              <span className="desk-pill pill-rose" style={{ fontSize: '0.72rem', fontWeight: 800 }}>
-                                Urgent SLA
+                            {isRead ? (
+                              <span className="desk-pill pill-emerald" style={{ fontSize: '0.72rem', fontWeight: 800 }}>
+                                ✓ Read
                               </span>
                             ) : (
-                              <span className="desk-pill pill-emerald" style={{ fontSize: '0.72rem', fontWeight: 800 }}>
-                                New Inbound
+                              <span className="desk-pill pill-amber" style={{ fontSize: '0.72rem', fontWeight: 800 }}>
+                                ⏳ Unread
                               </span>
                             )}
                           </td>
@@ -698,7 +388,7 @@ export default function AllDesksOverviewDashboard({
                           <td style={{ textAlign: 'right' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
                               <a
-                                href={`tel:${rawDigits}`}
+                                href={`tel:+91${rawDigits}`}
                                 className="desk-action-btn"
                                 style={{
                                   padding: '5px 10px',
@@ -742,7 +432,7 @@ export default function AllDesksOverviewDashboard({
           </div>
         </div>
 
-        {/* 4.2 Auto-Verified Customer Accounts */}
+        {/* 3.2 Auto-Verified Customer Accounts */}
         <div
           style={{
             background: 'var(--adm-bg-card, #ffffff)',
@@ -764,17 +454,17 @@ export default function AllDesksOverviewDashboard({
                   Auto-Verified Customer Accounts
                 </h3>
                 <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
-                  100% self-serve onboarding &amp; automated KYC intake audit
+                  Self-serve WhatsApp OTP onboarding &amp; verified business accounts
                 </div>
               </div>
             </div>
             <button
               type="button"
-              onClick={() => navigateToDesk('pending_verification', '#verification')}
+              onClick={() => navigateToDesk('customers', '#customers')}
               className="sales-btn-secondary"
               style={{ fontSize: '0.76rem', padding: '5px 12px' }}
             >
-              Intake Audit ({verifications.length}) →
+              All Customers ({customers.length}) →
             </button>
           </div>
 
@@ -857,7 +547,7 @@ export default function AllDesksOverviewDashboard({
           </div>
         </div>
 
-        {/* 4.3 Wallets & Runway Monitor (Desk 06) */}
+        {/* 3.3 Wallets & Runway Monitor */}
         <div
           style={{
             background: 'var(--adm-bg-card, #ffffff)',
@@ -876,7 +566,7 @@ export default function AllDesksOverviewDashboard({
               </div>
               <div style={{ minWidth: 0 }}>
                 <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
-                  Wallets &amp; Runway Monitor (Desk 06)
+                  Wallets &amp; Runway Monitor
                 </h3>
                 <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Daily ₹300 campaign burn rate &amp; active runway health
@@ -886,15 +576,15 @@ export default function AllDesksOverviewDashboard({
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <button
                 type="button"
-                onClick={() => navigateToDesk('balance_logs', '#balance-logs')}
+                onClick={() => navigateToDesk('transactions', '#balance-logs')}
                 className="sales-btn-secondary"
                 style={{ fontSize: '0.76rem', padding: '5px 12px' }}
               >
-                Balance Logs →
+                Balance Audit →
               </button>
               <button
                 type="button"
-                onClick={() => navigateToDesk('wallets', '#wallets')}
+                onClick={() => navigateToDesk('customers', '#wallets')}
                 className="sales-btn-secondary"
                 style={{ fontSize: '0.76rem', padding: '5px 12px' }}
               >
@@ -985,7 +675,7 @@ export default function AllDesksOverviewDashboard({
           </div>
         </div>
 
-        {/* 4.4 Payment Collection & Ledger (Desk 05) */}
+        {/* 3.4 Payment Collection & Ledger */}
         <div
           style={{
             background: 'var(--adm-bg-card, #ffffff)',
@@ -1004,7 +694,7 @@ export default function AllDesksOverviewDashboard({
               </div>
               <div style={{ minWidth: 0 }}>
                 <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
-                  Payment Collection &amp; Ledger (Desk 05)
+                  Settled Receipts &amp; Billing Ledger
                 </h3>
                 <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)' }}>
                   Official GST tax invoices, Razorpay settlements &amp; reconciled receipts
@@ -1013,11 +703,11 @@ export default function AllDesksOverviewDashboard({
             </div>
             <button
               type="button"
-              onClick={() => navigateToDesk('payments', '#payments')}
+              onClick={() => navigateToDesk('transactions', '#payments')}
               className="sales-btn-secondary"
               style={{ fontSize: '0.76rem', padding: '5px 12px' }}
             >
-              Billing Ledger →
+              Settled Receipts →
             </button>
           </div>
 

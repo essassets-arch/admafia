@@ -3,7 +3,6 @@ import {
   Users,
   ShieldCheck,
   Layers,
-  FileCheck2,
   CreditCard,
   Wallet,
   Headphones,
@@ -16,26 +15,18 @@ import {
   MessageSquare,
   Plus,
   Search,
-  ArrowUpRight,
   Check,
   X,
   ExternalLink,
   RefreshCw,
   Send,
   Eye,
-  AlertCircle,
-  Building,
   Building2,
   ChevronDown,
-  ChevronRight,
-  Filter,
   FileText,
   Printer,
-  Receipt,
   DollarSign,
   UserCheck,
-  Sparkles,
-  BadgeCheck,
   MapPin,
   Mail,
   Globe,
@@ -261,12 +252,611 @@ export const isTestUser = (c) => {
   return false;
 };
 
+function parseModalBulkPhones(rawInput, existingPhonesSet = new Set()) {
+  const text = String(rawInput || '');
+  if (!text.trim()) {
+    return { validNumbers: [], invalidTokens: [], clientDuplicates: [] };
+  }
+  const segments = text.split(/[\r\n,;]+/);
+  const tokens = [];
+  for (const seg of segments) {
+    const normalizedSeg = seg
+      .replace(/(?:\+91|0091)[\s-]*([6-9]\d{4})[\s-]*(\d{5})/g, ' $1$2 ')
+      .replace(/(?:\+91|0091)[\s-]*([6-9]\d{9})/g, ' $1 ')
+      .replace(/\b([6-9]\d{4})[\s-](\d{5})\b/g, '$1$2');
+    const parts = normalizedSeg.split(/[\t ]+/).map((s) => s.trim()).filter(Boolean);
+    tokens.push(...parts);
+  }
+  const validNumbers = [];
+  const invalidTokens = [];
+  const clientDuplicates = [];
+  const seen = new Set();
+
+  for (const tok of tokens) {
+    const digitsOnly = tok.replace(/\D/g, '');
+    if (!digitsOnly && tok === '+91') continue;
+    let clean = digitsOnly;
+    if (clean.length === 12 && clean.startsWith('91')) clean = clean.slice(2);
+    else if (clean.length === 11 && clean.startsWith('0')) clean = clean.slice(1);
+
+    if (clean.length === 10 && ['6', '7', '8', '9'].includes(clean[0])) {
+      if (seen.has(clean)) continue;
+      seen.add(clean);
+      validNumbers.push(clean);
+      if (existingPhonesSet.has(clean)) {
+        clientDuplicates.push(clean);
+      }
+    } else {
+      invalidTokens.push(tok);
+    }
+  }
+  return { validNumbers, invalidTokens, clientDuplicates };
+}
+
+function QuickBulkLeadDispatchModal({
+  isOpen,
+  onClose,
+  customers = [],
+  initialCustomerKey = '',
+  existingLeads = [],
+  onDispatched,
+}) {
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedCustomerKey, setSelectedCustomerKey] = useState('');
+  const [phonesInput, setPhonesInput] = useState('');
+  const [multiLineMode, setMultiLineMode] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const phoneInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCustomerSearch('');
+    setPhonesInput('');
+    setMultiLineMode(false);
+    setSubmitError('');
+    setIsSubmitting(false);
+
+    let defaultKey = initialCustomerKey;
+    if (!defaultKey && customers.length > 0) {
+      const first = customers[0];
+      defaultKey = String(first.id || first.phone || first.username || '');
+    }
+    setSelectedCustomerKey(defaultKey);
+
+    const t = setTimeout(() => {
+      if (phoneInputRef.current) phoneInputRef.current.focus();
+    }, 60);
+    return () => clearTimeout(t);
+  }, [isOpen, initialCustomerKey, customers]);
+
+  const filteredCustomers = useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter((c) => {
+      const hay = [
+        c.companyName,
+        c.name,
+        c.contactPerson,
+        c.contact,
+        c.username,
+        c.phone,
+        c.city,
+        c.category,
+        c.email,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [customers, customerSearch]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (filteredCustomers.length === 0) return;
+    const stillVisible = filteredCustomers.some(
+      (c) => String(c.id || c.phone || c.username) === String(selectedCustomerKey)
+    );
+    if (!stillVisible) {
+      const first = filteredCustomers[0];
+      setSelectedCustomerKey(String(first.id || first.phone || first.username || ''));
+    }
+  }, [filteredCustomers, isOpen, selectedCustomerKey]);
+
+  const selectedCustomer = useMemo(() => {
+    return (
+      customers.find(
+        (c) =>
+          String(c.id) === String(selectedCustomerKey) ||
+          String(c.phone) === String(selectedCustomerKey) ||
+          String(c.username) === String(selectedCustomerKey) ||
+          String(c.id || c.phone || c.username) === String(selectedCustomerKey)
+      ) || null
+    );
+  }, [customers, selectedCustomerKey]);
+
+  const existingPhonesForSelected = useMemo(() => {
+    const s = new Set();
+    if (!selectedCustomer) return s;
+    const sourceLeads =
+      Array.isArray(existingLeads) && existingLeads.length > 0
+        ? existingLeads
+        : (() => {
+            try {
+              const raw = localStorage.getItem('growthline_all_leads');
+              return raw ? JSON.parse(raw) : [];
+            } catch (_) {
+              return [];
+            }
+          })();
+
+    const cId = String(selectedCustomer.id || '').trim();
+    const cPhone = String(selectedCustomer.phone || '').replace(/\D/g, '').slice(-10);
+    const cUser = String(selectedCustomer.username || '').toLowerCase().replace(/^@/, '').trim();
+
+    for (const l of Array.isArray(sourceLeads) ? sourceLeads : []) {
+      const lId = String(l.customerId || l.customer_id || '').trim();
+      const lPhone = String(l.customerPhone || l.customer_phone || '').replace(/\D/g, '').slice(-10);
+      const lUser = String(l.customerUsername || l.customer_username || '').toLowerCase().replace(/^@/, '').trim();
+      if ((cId && lId === cId) || (cPhone && lPhone === cPhone) || (cUser && lUser === cUser)) {
+        const d = String(l.phone || '').replace(/\D/g, '').slice(-10);
+        if (d.length === 10) s.add(d);
+      }
+    }
+    return s;
+  }, [selectedCustomer, existingLeads]);
+
+  const parsed = useMemo(
+    () => parseModalBulkPhones(phonesInput, existingPhonesForSelected),
+    [phonesInput, existingPhonesForSelected]
+  );
+
+  if (!isOpen) return null;
+
+  const isSingleLine = !multiLineMode && !phonesInput.includes('\n');
+  const canSubmit = Boolean(selectedCustomer) && parsed.validNumbers.length > 0 && !isSubmitting;
+
+  const handleDispatch = async (e) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    setSubmitError('');
+
+    if (!selectedCustomer) {
+      setSubmitError('Please select a target customer account.');
+      return;
+    }
+    if (parsed.validNumbers.length === 0) {
+      setSubmitError('Enter at least one valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+      return;
+    }
+
+    const finalCompany =
+      selectedCustomer.companyName || selectedCustomer.name || `@${selectedCustomer.username || 'client'}`;
+
+    setIsSubmitting(true);
+    try {
+      const res = await crmApi.createBulkLeads({
+        customerId: selectedCustomer.id,
+        customerPhone: selectedCustomer.phone || '',
+        customerUsername: selectedCustomer.username || '',
+        company: finalCompany,
+        phones: parsed.validNumbers,
+      });
+
+      const createdList = (Array.isArray(res?.leads) ? res.leads : []).map((item) => {
+        const rawDigits = String(item.phone || item.name || '').replace(/\D/g, '').slice(-10);
+        return {
+          ...item,
+          phone: rawDigits || item.phone || '',
+          displayPhone: rawDigits ? `+91 ${rawDigits}` : item.displayPhone || item.phone || '',
+          name: rawDigits ? `+91 ${rawDigits}` : item.name || '—',
+          read: Boolean(item.read || item.is_read || item.status === 'read'),
+          is_read: Boolean(item.read || item.is_read || item.status === 'read'),
+          unmasked: true,
+        };
+      });
+
+      const addedCount = Number(res?.addedCount ?? createdList.length);
+      const skippedDuplicates = Array.isArray(res?.skippedDuplicates) ? res.skippedDuplicates : [];
+
+      if (addedCount === 0 && skippedDuplicates.length > 0) {
+        setSubmitError(
+          `Already assigned: ${skippedDuplicates.map((d) => `+91 ${d}`).join(', ')} ${
+            skippedDuplicates.length === 1 ? 'was' : 'were'
+          } already delivered to ${finalCompany}.`
+        );
+        return;
+      }
+
+      if (createdList.length > 0) {
+        const createdIds = new Set(createdList.map((l) => l.id));
+        try {
+          const rawLeads = localStorage.getItem('growthline_all_leads');
+          const prevLeads = rawLeads ? JSON.parse(rawLeads) : [];
+          const updatedLeads = [
+            ...createdList,
+            ...(Array.isArray(prevLeads) ? prevLeads.filter((l) => !createdIds.has(l.id)) : []),
+          ];
+          localStorage.setItem('growthline_all_leads', JSON.stringify(updatedLeads));
+          localStorage.setItem('growthline_latest_added_lead', JSON.stringify(createdList[0]));
+          createdList.forEach((leadItem) => {
+            window.dispatchEvent(new CustomEvent('growthline_lead_added', { detail: leadItem }));
+          });
+          window.dispatchEvent(new Event('storage'));
+        } catch (_) {}
+      }
+
+      if (typeof onDispatched === 'function') {
+        onDispatched({
+          leads: createdList,
+          addedCount,
+          skippedDuplicates,
+          company: finalCompany,
+          phone: createdList[0]?.phone || parsed.validNumbers[0] || '',
+          leadId: createdList[0]?.id || '',
+        });
+      }
+      onClose();
+    } catch (err) {
+      setSubmitError(err?.message || 'Failed to dispatch lead(s). Please check connection and retry.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="sales-modal-overlay" onClick={() => !isSubmitting && onClose()}>
+      <div className="sales-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560, width: '95%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                display: 'grid',
+                placeItems: 'center',
+                color: '#fff',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                flexShrink: 0,
+              }}
+            >
+              <Plus size={20} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
+                Send Buyer Mobile Lead(s)
+              </h3>
+              <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
+                Instant +91 phone-only or bulk multi-number dispatch to client CRM
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="desk-close-btn"
+            disabled={isSubmitting}
+            onClick={onClose}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {submitError && (
+          <div
+            style={{
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              color: '#ef4444',
+              padding: '10px 14px',
+              borderRadius: 10,
+              fontSize: '0.83rem',
+              fontWeight: 700,
+              marginBottom: 14,
+            }}
+          >
+            {submitError}
+          </div>
+        )}
+
+        <form onSubmit={handleDispatch}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+            {/* 1. Searchable Target Customer Selector */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8, flexWrap: 'wrap' }}>
+                <label className="desk-form-label" style={{ fontWeight: 800, fontSize: '0.84rem', color: 'var(--adm-text-primary, #0f172a)', margin: 0 }}>
+                  Target Customer Account <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <span style={{ fontSize: '0.73rem', fontWeight: 700, color: 'var(--adm-text-muted, #64748b)' }}>
+                  {customerSearch.trim()
+                    ? `${filteredCustomers.length} of ${customers.length} matching`
+                    : `${customers.length} registered clients`}
+                </span>
+              </div>
+
+              {/* Live Search Filter Input right above selector */}
+              <div style={{ position: 'relative', marginBottom: 8 }}>
+                <Search
+                  size={14}
+                  style={{
+                    position: 'absolute',
+                    left: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--adm-text-muted, #64748b)',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <input
+                  type="text"
+                  className="desk-form-input"
+                  placeholder="Quick filter client by company, @username, +91 phone, or city..."
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  style={{
+                    padding: '8px 32px 8px 34px',
+                    fontSize: '0.84rem',
+                    borderRadius: 8,
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    background: 'var(--adm-bg-subtle, #f8fafc)',
+                    borderColor: 'var(--adm-border-strong, #cbd5e1)',
+                  }}
+                />
+                {customerSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomerSearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: 8,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--adm-text-muted, #64748b)',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                      fontSize: '0.8rem',
+                    }}
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <select
+                className="desk-form-input"
+                required
+                value={selectedCustomerKey}
+                onChange={(e) => setSelectedCustomerKey(e.target.value)}
+                style={{
+                  padding: '10px 12px',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  color: 'var(--adm-text-primary, #0f172a)',
+                  borderColor: 'var(--adm-border-strong, #cbd5e1)',
+                  borderRadius: 10,
+                  width: '100%',
+                  background: 'var(--adm-bg-card, #ffffff)',
+                  cursor: 'pointer',
+                }}
+              >
+                {filteredCustomers.length === 0 ? (
+                  <option value="">
+                    {customers.length === 0
+                      ? '-- No registered customer accounts yet --'
+                      : `-- No clients match "${customerSearch}" --`}
+                  </option>
+                ) : (
+                  filteredCustomers.map((c) => {
+                    const key = String(c.id || c.phone || c.username);
+                    const compDisplay = c.companyName || c.name || `@${c.username}`;
+                    const phoneDisplay = c.phone ? `+91 ${c.phone}` : '';
+                    const paidStatus =
+                      c.paymentStatus === 'paid' || Number(c.balance || c.walletBalance || 0) > 0
+                        ? 'ACTIVE ✓'
+                        : 'PENDING';
+                    return (
+                      <option key={key} value={key}>
+                        🏢 {compDisplay} {phoneDisplay ? `(${phoneDisplay})` : ''} {c.username ? `• @${c.username}` : ''} [{paidStatus}]
+                      </option>
+                    );
+                  })
+                )}
+              </select>
+            </div>
+
+            {/* 2. Phone-Only (+ Bulk Multi-Number Paste) Input */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8, flexWrap: 'wrap' }}>
+                <label className="desk-form-label" style={{ fontWeight: 800, fontSize: '0.84rem', color: 'var(--adm-text-primary, #0f172a)', margin: 0 }}>
+                  Buyer 10-Digit Mobile Number(s) <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setMultiLineMode((v) => !v)}
+                    style={{
+                      border: '1px solid var(--adm-border, #e2e8f0)',
+                      background: 'var(--adm-bg-subtle, #f8fafc)',
+                      color: 'var(--adm-text-body, #475569)',
+                      borderRadius: 6,
+                      padding: '2px 8px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {multiLineMode ? '📋 Multi-Line' : '⚡ Enter = Send'}
+                  </button>
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      color:
+                        parsed.validNumbers.length > 0
+                          ? 'var(--adm-soft-emerald-text, #059669)'
+                          : phonesInput.trim()
+                            ? 'var(--adm-soft-rose-text, #e11d48)'
+                            : 'var(--adm-text-muted, #64748b)',
+                      background:
+                        parsed.validNumbers.length > 0
+                          ? 'var(--adm-soft-emerald-bg, #ecfdf5)'
+                          : phonesInput.trim()
+                            ? 'var(--adm-soft-rose-bg, #fff1f2)'
+                            : 'var(--adm-bg-muted, #f1f5f9)',
+                      padding: '2px 9px',
+                      borderRadius: 9999,
+                      border: `1px solid ${
+                        parsed.validNumbers.length > 0
+                          ? 'var(--adm-soft-emerald-border, #a7f3d0)'
+                          : phonesInput.trim()
+                            ? 'var(--adm-soft-rose-border, #fecdd3)'
+                            : 'var(--adm-border, #e2e8f0)'
+                      }`,
+                    }}
+                  >
+                    {parsed.validNumbers.length > 0
+                      ? `✓ ${parsed.validNumbers.length} valid ${parsed.validNumbers.length === 1 ? 'number' : 'numbers'} ready`
+                      : phonesInput.trim()
+                        ? '0 valid numbers'
+                        : '1 or bulk paste'}
+                  </span>
+                </div>
+              </div>
+
+              <textarea
+                ref={phoneInputRef}
+                rows={isSingleLine ? 2 : Math.min(6, Math.max(4, phonesInput.split('\n').length + 1))}
+                className="desk-form-input"
+                placeholder="Type 10-digit mobile (e.g. 9876543210) or paste multiple numbers separated by comma, space, or newline..."
+                value={phonesInput}
+                onChange={(e) => setPhonesInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if ((e.ctrlKey || e.metaKey) && canSubmit) {
+                      e.preventDefault();
+                      handleDispatch(e);
+                      return;
+                    }
+                    if (isSingleLine && !e.shiftKey) {
+                      e.preventDefault();
+                      if (canSubmit) handleDispatch(e);
+                    }
+                  }
+                }}
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: '1rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.03em',
+                  padding: '10px 12px',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                  borderColor:
+                    parsed.validNumbers.length > 0
+                      ? '#10b981'
+                      : phonesInput.trim() && parsed.invalidTokens.length > 0
+                        ? '#ef4444'
+                        : 'var(--adm-border-strong, #cbd5e1)',
+                }}
+              />
+
+              {parsed.clientDuplicates.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    background: 'var(--adm-soft-amber-bg, #fffbeb)',
+                    border: '1px solid var(--adm-soft-amber-border, #fde68a)',
+                    color: 'var(--adm-soft-amber-text, #b45309)',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+                  <span>
+                    Already assigned ({parsed.clientDuplicates.length}):{' '}
+                    <strong style={{ fontFamily: 'monospace' }}>
+                      {parsed.clientDuplicates.slice(0, 4).map((d) => `+91 ${d}`).join(', ')}
+                    </strong>{' '}
+                    (will be skipped automatically)
+                  </span>
+                </div>
+              )}
+
+              {parsed.invalidTokens.length > 0 && (
+                <div style={{ marginTop: 5, fontSize: '0.74rem', color: '#ef4444', fontWeight: 700 }}>
+                  Invalid format ignored ({parsed.invalidTokens.slice(0, 3).join(', ')}) — must be 10 digits starting with 6, 7, 8, or 9.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 10,
+              marginTop: 18,
+              paddingTop: 14,
+              borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)',
+            }}
+          >
+            <button
+              type="button"
+              className="sales-btn-secondary"
+              disabled={isSubmitting}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="sales-btn-primary"
+              disabled={!canSubmit}
+              style={{
+                background: canSubmit
+                  ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+                  : '#94a3b8',
+                borderColor: canSubmit ? '#059669' : '#94a3b8',
+                cursor: canSubmit ? 'pointer' : 'not-allowed',
+                padding: '10px 22px',
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <Send size={15} />
+              {isSubmitting
+                ? 'Sending...'
+                : parsed.validNumbers.length > 1
+                  ? `+ Send ${parsed.validNumbers.length} Leads Now`
+                  : '+ Send Lead(s) Now'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /* ==========================================================================
    DESK 1: CUSTOMER REGISTRATIONS (Real Intake from http://localhost:5173/#register)
    ========================================================================== */
-export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setCustomers }) {
+export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setCustomers, initialSubView = 'all' }) {
   const customers = useMemo(() => (propsCustomers || []).filter((c) => !isTestUser(c)), [propsCustomers]);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(initialSubView || 'all');
   const [search, setSearch] = useState('');
   const [selectedCust, setSelectedCust] = useState(null);
   const [addMoneyCust, setAddMoneyCust] = useState(null);
@@ -274,18 +864,15 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  // Add Lead Modal State for http://localhost:5173/sales#register
   const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
-  const [leadPhoneDigits, setLeadPhoneDigits] = useState('');
-  const [leadFormData, setLeadFormData] = useState({
-    company: '',
-    customCompany: '',
-    name: '',
-    city: '',
-    requirement: 'Inbound Ad Mafia Campaign Enquiry',
-    budget: '₹1.5L – ₹3.5L',
-  });
+  const [addLeadTargetKey, setAddLeadTargetKey] = useState('');
   const [leadSuccessToast, setLeadSuccessToast] = useState(null);
+
+  useEffect(() => {
+    if (initialSubView) {
+      setFilter(initialSubView);
+    }
+  }, [initialSubView]);
 
   const handleToggleCustomerPassword = async () => {
     if (showPassword) {
@@ -326,21 +913,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
     }
   };
 
-  // Phone sanitization & validation (0/10 digits, starts with 6, 7, 8, or 9)
-  const handlePhoneChange = (e) => {
-    const raw = e.target.value.replace(/\D/g, '').slice(0, 10);
-    setLeadPhoneDigits(raw);
-  };
-  const isPhoneValidStart = leadPhoneDigits.length === 0 || ['6', '7', '8', '9'].includes(leadPhoneDigits[0]);
-  const isPhoneComplete = leadPhoneDigits.length === 10 && isPhoneValidStart;
-
-  // Available Companies list (Strictly real registered customers only)
-  const availableCompanies = Array.from(
-    new Set(customers.map((c) => c.companyName || c.name || c.username).filter(Boolean))
-  );
-
   const handleOpenAddLead = (compOrCust) => {
-    setLeadPhoneDigits('');
     let matched = null;
     if (typeof compOrCust === 'object' && compOrCust !== null) {
       matched = compOrCust;
@@ -357,113 +930,8 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
     if (!matched && customers.length > 0) {
       matched = customers[0];
     }
-
-    const defaultComp = matched ? (matched.companyName || matched.name || `@${matched.username}`) : (availableCompanies[0] || '');
-    const defaultKey = matched ? (matched.id || matched.phone || matched.username) : '';
-
-    setLeadFormData({
-      selectedCustomerKey: defaultKey,
-      company: defaultComp,
-      customCompany: '',
-      name: '',
-      city: matched?.city || '',
-      requirement: 'Inbound Ad Mafia Campaign Enquiry',
-      budget: '₹1.5L – ₹3.5L',
-    });
+    setAddLeadTargetKey(matched ? String(matched.id || matched.phone || matched.username || '') : '');
     setIsAddLeadModalOpen(true);
-  };
-
-  const handleSubmitLead = (e) => {
-    e.preventDefault();
-    if (!isPhoneComplete) return;
-
-    const targetKey = leadFormData.selectedCustomerKey;
-    const targetCompany = leadFormData.company;
-
-    const matchedCust = customers.find(
-      (c) =>
-        (targetKey && (String(c.id) === String(targetKey) || String(c.phone) === String(targetKey) || c.username === targetKey)) ||
-        (targetCompany && (
-          (c.companyName && c.companyName.toLowerCase() === targetCompany.toLowerCase()) ||
-          (c.name && c.name.toLowerCase() === targetCompany.toLowerCase()) ||
-          c.username === targetCompany
-        ))
-    );
-
-    const finalCompany = matchedCust
-      ? (matchedCust.companyName || matchedCust.name || `@${matchedCust.username}`)
-      : (targetCompany || 'Client Account');
-
-    const cleanDigits = leadPhoneDigits.replace(/\D/g, '').slice(-10);
-    const formattedPhone = `+91 ${cleanDigits}`;
-
-    const newLead = {
-      id: `lead_${Date.now()}`,
-      name: formattedPhone,
-      company: finalCompany,
-      assignedCompany: finalCompany,
-      customerCompanyName: finalCompany,
-      customerId: matchedCust?.id || '',
-      customerPhone: matchedCust?.phone || '',
-      customerUsername: matchedCust?.username || '',
-      phone: cleanDigits,
-      displayPhone: formattedPhone,
-      maskedPhone: formattedPhone,
-      email: `lead_${cleanDigits.slice(-4)}@example.com`,
-      city: matchedCust?.city || '',
-      requirement: `Inbound Lead for ${finalCompany}`,
-      budget: '₹1.5L – ₹3.5L',
-      source: 'Direct Intake',
-      status: 'new',
-      stepRequired: 'Step 1 Required',
-      read: false,
-      isHot: true,
-      isBeFirst: true,
-      unmasked: true,
-      dateGroup: 'today',
-      createdAt: getLiveNowFormatted(),
-      notes: `Direct intake via Sales Desk 01 for ${finalCompany}`,
-    };
-
-    try {
-      // 1. Save to growthline_all_leads in localStorage
-      const rawLeads = localStorage.getItem('growthline_all_leads');
-      let existingLeads = [];
-      if (rawLeads) {
-        try { existingLeads = JSON.parse(rawLeads); } catch (err) { }
-      }
-      const updatedLeads = [newLead, ...existingLeads.filter((l) => l.id !== newLead.id)];
-      localStorage.setItem('growthline_all_leads', JSON.stringify(updatedLeads));
-      localStorage.setItem('growthline_latest_added_lead', JSON.stringify(newLead));
-
-      // 2. Persist lead in PostgreSQL Backend API
-      crmApi
-        .createLead({
-          id: newLead.id,
-          customerId: newLead.customerId,
-          customerPhone: newLead.customerPhone,
-          customerUsername: newLead.customerUsername,
-          company: finalCompany,
-          phone: cleanDigits,
-          name: formattedPhone,
-          city: newLead.city,
-          requirement: newLead.requirement,
-        })
-        .catch(() => { });
-
-      // 3. Dispatch custom events for real-time CRM updates without overwriting active user session
-      window.dispatchEvent(new CustomEvent('growthline_lead_added', { detail: newLead }));
-      window.dispatchEvent(new Event('storage'));
-    } catch (e) {
-      console.error('Lead storage error', e);
-    }
-
-    setIsAddLeadModalOpen(false);
-    setLeadSuccessToast({
-      company: targetCompany,
-      phone: leadPhoneDigits,
-      leadId: newLead.id,
-    });
   };
 
   const [newCust, setNewCust] = useState({
@@ -755,10 +1223,26 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: '0.98rem' }}>
-                Lead Dispatched Successfully!
+                {leadSuccessToast.addedCount > 1
+                  ? `${leadSuccessToast.addedCount} Buyer Mobile Leads Dispatched!`
+                  : 'Lead Dispatched Successfully!'}
               </div>
               <div style={{ fontSize: '0.84rem', color: '#d1fae5', marginTop: 2 }}>
-                Phone <strong style={{ color: '#fff' }}>+91 {leadSuccessToast.phone}</strong> has been assigned to <strong style={{ color: '#fff' }}>{leadSuccessToast.company}</strong> and is live in their Customer CRM.
+                {leadSuccessToast.addedCount > 1 ? (
+                  <>
+                    <strong style={{ color: '#fff' }}>{leadSuccessToast.addedCount} verified +91 numbers</strong> have been assigned to{' '}
+                    <strong style={{ color: '#fff' }}>{leadSuccessToast.company}</strong>
+                    {leadSuccessToast.skippedDuplicates?.length > 0
+                      ? ` (${leadSuccessToast.skippedDuplicates.length} duplicate skipped)`
+                      : ''}{' '}
+                    and are live in their Customer CRM.
+                  </>
+                ) : (
+                  <>
+                    Phone <strong style={{ color: '#fff' }}>+91 {leadSuccessToast.phone}</strong> has been assigned to{' '}
+                    <strong style={{ color: '#fff' }}>{leadSuccessToast.company}</strong> and is live in their Customer CRM.
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1215,168 +1699,14 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
         </div>
       )}
 
-      {/* ADD LEAD MODAL (http://localhost:5173/sales#register) */}
-      {isAddLeadModalOpen && (
-        <div className="sales-modal-overlay" onClick={() => setIsAddLeadModalOpen(false)}>
-          <div className="sales-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
-            {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: '#fff',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
-                }}>
-                  <Plus size={20} strokeWidth={2.5} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>Add Lead</h3>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
-                    Distribute an inbound lead directly to client CRM workspace
-                  </div>
-                </div>
-              </div>
-              <button type="button" className="desk-close-btn" onClick={() => setIsAddLeadModalOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitLead}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-                {/* 1. Select Customer Account * */}
-                <div>
-                  <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}>
-                    Target Customer Account <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <select
-                      className="desk-form-input"
-                      required
-                      value={leadFormData.selectedCustomerKey || ''}
-                      onChange={(e) => {
-                        const selKey = e.target.value;
-                        const matched = customers.find(
-                          (c) => String(c.id) === selKey || String(c.phone) === selKey || c.username === selKey
-                        );
-                        setLeadFormData({
-                          ...leadFormData,
-                          selectedCustomerKey: selKey,
-                          company: matched ? (matched.companyName || matched.name || `@${matched.username}`) : '',
-                        });
-                      }}
-                      style={{
-                        padding: '11px 14px',
-                        fontSize: '0.94rem',
-                        fontWeight: 600,
-                        color: 'var(--adm-text-primary, #0f172a)',
-                        borderColor: 'var(--adm-border-strong, #cbd5e1)',
-                        borderRadius: 10,
-                        width: '100%',
-                        background: 'var(--adm-bg-card, #ffffff)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {customers.length === 0 ? (
-                        <option value="">-- No registered customer accounts yet --</option>
-                      ) : (
-                        customers.map((c) => {
-                          const key = c.id || c.phone || c.username;
-                          const compDisplay = c.companyName || c.name || `@${c.username}`;
-                          const phoneDisplay = c.phone ? `+91 ${c.phone}` : '';
-                          const paidStatus = c.paymentStatus === 'paid' ? 'PAID ✓' : 'PENDING';
-                          return (
-                            <option key={key} value={key}>
-                              🏢 {compDisplay} {phoneDisplay ? `(${phoneDisplay})` : ''} - @{c.username} [{paidStatus}]
-                            </option>
-                          );
-                        })
-                      )}
-                    </select>
-                  </div>
-                  {leadFormData.selectedCustomerKey && (
-                    <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: 5, fontWeight: 600 }}>
-                      ✓ Strictly isolated to selected account. Only this customer will see this lead in their Lead Hub.
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. Phone Number * */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', margin: 0 }}>
-                      Phone Number <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
-                    <span style={{
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
-                      color: leadPhoneDigits.length === 10 ? '#059669' : 'var(--adm-text-muted, #64748b)',
-                      background: leadPhoneDigits.length === 10 ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-bg-muted, #f1f5f9)',
-                      padding: '2px 8px',
-                      borderRadius: 6,
-                      border: `1px solid ${leadPhoneDigits.length === 10 ? 'var(--adm-soft-emerald-border, #a7f3d0)' : 'var(--adm-border, #e2e8f0)'}`
-                    }}>
-                      {leadPhoneDigits.length}/10 digits
-                    </span>
-                  </div>
-
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    className="desk-form-input"
-                    placeholder="8989898989"
-                    value={leadPhoneDigits}
-                    onChange={handlePhoneChange}
-                    style={{
-                      fontFamily: 'monospace',
-                      fontSize: '1rem',
-                      fontWeight: 700,
-                      letterSpacing: '0.04em',
-                      padding: '11px 14px',
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      borderColor: !isPhoneValidStart ? '#ef4444' : (leadPhoneDigits.length === 10 ? '#10b981' : 'var(--adm-border-strong, #cbd5e1)')
-                    }}
-                  />
-                </div>
-
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 14, borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
-                <button
-                  type="button"
-                  className="sales-btn-secondary"
-                  onClick={() => setIsAddLeadModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="sales-btn-primary"
-                  disabled={!isPhoneComplete}
-                  style={{
-                    background: isPhoneComplete
-                      ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
-                      : '#94a3b8',
-                    borderColor: isPhoneComplete ? '#059669' : '#94a3b8',
-                    cursor: isPhoneComplete ? 'pointer' : 'not-allowed',
-                    padding: '10px 22px'
-                  }}
-                >
-                  <Send size={15} /> Add Lead
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* ADD LEAD MODAL (Searchable Customer + Bulk Phone Dispatch) */}
+      <QuickBulkLeadDispatchModal
+        isOpen={isAddLeadModalOpen}
+        onClose={() => setIsAddLeadModalOpen(false)}
+        customers={customers}
+        initialCustomerKey={addLeadTargetKey}
+        onDispatched={(summary) => setLeadSuccessToast(summary)}
+      />
 
       {/* Add Client Modal */}
       {isAddModalOpen && (
@@ -1890,12 +2220,7 @@ export const DEFAULT_DESK_LEADS = [];
 export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
   // Add Lead Modal State
   const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
-  const [leadPhoneDigits, setLeadPhoneDigits] = useState('');
-  const [leadFormData, setLeadFormData] = useState({
-    selectedCustomerKey: '',
-    company: '',
-    customCompany: '',
-  });
+  const [addLeadInitialKey, setAddLeadInitialKey] = useState('');
   const [leadSuccessToast, setLeadSuccessToast] = useState(null);
 
   const [deskCustomers, setDeskCustomers] = useState(() => {
@@ -1950,120 +2275,11 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
     return () => clearInterval(pollTimer);
   }, []);
 
-  const handlePhoneChange = (e) => {
-    const raw = e.target.value.replace(/\D/g, '').slice(0, 10);
-    setLeadPhoneDigits(raw);
-  };
-  const isPhoneValidStart = leadPhoneDigits.length === 0 || ['6', '7', '8', '9'].includes(leadPhoneDigits[0]);
-  const isPhoneComplete = leadPhoneDigits.length === 10 && isPhoneValidStart;
-
   const handleOpenAddLead = () => {
-    setLeadPhoneDigits('');
     const firstCust = deskCustomers[0] || null;
-    const firstKey = firstCust ? (firstCust.id || firstCust.phone || firstCust.username) : '';
-    setLeadFormData({
-      selectedCustomerKey: firstKey,
-      company: firstCust ? (firstCust.companyName || firstCust.name || `@${firstCust.username}`) : '',
-      customCompany: '',
-    });
+    const firstKey = firstCust ? String(firstCust.id || firstCust.phone || firstCust.username || '') : '';
+    setAddLeadInitialKey(firstKey);
     setIsAddLeadModalOpen(true);
-  };
-
-  const handleSubmitLead = (e) => {
-    e.preventDefault();
-    if (!isPhoneComplete) return;
-
-    const targetKey = leadFormData.selectedCustomerKey;
-    const targetCompany = leadFormData.company;
-
-    const matchedCust = deskCustomers.find(
-      (c) =>
-        (targetKey && (String(c.id) === String(targetKey) || String(c.phone) === String(targetKey) || c.username === targetKey)) ||
-        (targetCompany && (
-          (c.companyName && c.companyName.toLowerCase() === targetCompany.toLowerCase()) ||
-          (c.name && c.name.toLowerCase() === targetCompany.toLowerCase()) ||
-          c.username === targetCompany
-        ))
-    );
-
-    const finalCompany = matchedCust
-      ? (matchedCust.companyName || matchedCust.name || `@${matchedCust.username}`)
-      : (targetCompany || 'Client Account');
-
-    const cleanDigits = leadPhoneDigits.replace(/\D/g, '').slice(-10);
-    const formattedPhone = `+91 ${cleanDigits}`;
-
-    const newLead = {
-      id: `lead_${Date.now()}`,
-      name: formattedPhone,
-      company: finalCompany,
-      assignedCompany: finalCompany,
-      customerCompanyName: finalCompany,
-      customerId: matchedCust?.id || '',
-      customerPhone: matchedCust?.phone || '',
-      customerUsername: matchedCust?.username || '',
-      phone: cleanDigits,
-      displayPhone: formattedPhone,
-      maskedPhone: formattedPhone,
-      email: `lead_${cleanDigits.slice(-4)}@example.com`,
-      city: matchedCust?.city || '',
-      requirement: `Inbound Lead for ${finalCompany}`,
-      budget: '₹1.5L – ₹3.5L',
-      source: 'Direct Intake',
-      priority: 'Urgent',
-      status: 'new',
-      stepRequired: 'Step 1 Required',
-      read: false,
-      isHot: true,
-      isBeFirst: true,
-      unmasked: true,
-      dateGroup: 'today',
-      createdAt: getLiveNowFormatted(),
-      notes: `Direct intake via Lead Management Desk for ${finalCompany}`,
-      speedSlaMinutes: 1,
-    };
-
-    try {
-      const rawLeads = localStorage.getItem('growthline_all_leads');
-      let existingLeads = [];
-      if (rawLeads) {
-        try { existingLeads = JSON.parse(rawLeads); } catch (err) { }
-      }
-      const updatedLeads = [newLead, ...existingLeads.filter((l) => l.id !== newLead.id)];
-      localStorage.setItem('growthline_all_leads', JSON.stringify(updatedLeads));
-      localStorage.setItem('growthline_latest_added_lead', JSON.stringify(newLead));
-
-      // Update local leads
-      setLeads((prev) => [newLead, ...prev.filter((l) => l.id !== newLead.id)]);
-
-      // Persist lead in PostgreSQL Backend API
-      crmApi
-        .createLead({
-          id: newLead.id,
-          customerId: newLead.customerId,
-          customerPhone: newLead.customerPhone,
-          customerUsername: newLead.customerUsername,
-          company: finalCompany,
-          phone: cleanDigits,
-          name: formattedPhone,
-          city: newLead.city,
-          requirement: newLead.requirement,
-        })
-        .catch(() => { });
-
-      // Dispatch custom events without overwriting active customer session
-      window.dispatchEvent(new CustomEvent('growthline_lead_added', { detail: newLead }));
-      window.dispatchEvent(new Event('storage'));
-    } catch (err) {
-      console.error(err);
-    }
-
-    setIsAddLeadModalOpen(false);
-    setLeadSuccessToast({
-      company: finalCompany,
-      phone: leadPhoneDigits,
-      leadId: newLead.id,
-    });
   };
 
   const [leads, setLeads] = useState(() => {
@@ -2464,10 +2680,26 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: '0.98rem' }}>
-                Lead Dispatched Successfully!
+                {leadSuccessToast.addedCount > 1
+                  ? `${leadSuccessToast.addedCount} Buyer Mobile Leads Dispatched!`
+                  : 'Lead Dispatched Successfully!'}
               </div>
               <div style={{ fontSize: '0.84rem', color: '#d1fae5', marginTop: 2 }}>
-                Phone <strong style={{ color: '#fff' }}>+91 {leadSuccessToast.phone}</strong> has been assigned to <strong style={{ color: '#fff' }}>{leadSuccessToast.company}</strong> and is live in their Customer CRM.
+                {leadSuccessToast.addedCount > 1 ? (
+                  <>
+                    <strong style={{ color: '#fff' }}>{leadSuccessToast.addedCount} verified +91 numbers</strong> have been assigned to{' '}
+                    <strong style={{ color: '#fff' }}>{leadSuccessToast.company}</strong>
+                    {leadSuccessToast.skippedDuplicates?.length > 0
+                      ? ` (${leadSuccessToast.skippedDuplicates.length} duplicate skipped)`
+                      : ''}{' '}
+                    and are live in their Customer CRM.
+                  </>
+                ) : (
+                  <>
+                    Phone <strong style={{ color: '#fff' }}>+91 {leadSuccessToast.phone}</strong> has been assigned to{' '}
+                    <strong style={{ color: '#fff' }}>{leadSuccessToast.company}</strong> and is live in their Customer CRM.
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -3741,167 +3973,20 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
       )}
 
       {/* ADD LEAD MODAL IN LEAD MANAGEMENT DESK */}
-      {isAddLeadModalOpen && (
-        <div className="sales-modal-overlay" onClick={() => setIsAddLeadModalOpen(false)}>
-          <div className="sales-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
-            {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: '#fff',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
-                }}>
-                  <Plus size={20} strokeWidth={2.5} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>Add Lead</h3>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #64748b)' }}>
-                    Distribute an inbound lead directly to client CRM workspace
-                  </div>
-                </div>
-              </div>
-              <button type="button" className="desk-close-btn" onClick={() => setIsAddLeadModalOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitLead}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-                {/* 1. Select Customer Account * */}
-                <div>
-                  <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}>
-                    Target Customer Account <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <select
-                      className="desk-form-input"
-                      required
-                      value={leadFormData.selectedCustomerKey || ''}
-                      onChange={(e) => {
-                        const selKey = e.target.value;
-                        const matched = deskCustomers.find(
-                          (c) => String(c.id) === selKey || String(c.phone) === selKey || c.username === selKey
-                        );
-                        setLeadFormData({
-                          ...leadFormData,
-                          selectedCustomerKey: selKey,
-                          company: matched ? (matched.companyName || matched.name || `@${matched.username}`) : '',
-                        });
-                      }}
-                      style={{
-                        padding: '11px 14px',
-                        fontSize: '0.94rem',
-                        fontWeight: 600,
-                        color: 'var(--adm-text-primary, #0f172a)',
-                        borderColor: 'var(--adm-border-strong, #cbd5e1)',
-                        borderRadius: 10,
-                        width: '100%',
-                        background: 'var(--adm-bg-card, #ffffff)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {deskCustomers.length === 0 ? (
-                        <option value="">-- No registered customer accounts yet --</option>
-                      ) : (
-                        deskCustomers.map((c) => {
-                          const key = c.id || c.phone || c.username;
-                          const compDisplay = c.companyName || c.name || `@${c.username}`;
-                          const phoneDisplay = c.phone ? `+91 ${c.phone}` : '';
-                          const paidStatus = c.paymentStatus === 'paid' ? 'PAID ✓' : 'PENDING';
-                          return (
-                            <option key={key} value={key}>
-                              🏢 {compDisplay} {phoneDisplay ? `(${phoneDisplay})` : ''} - @{c.username} [{paidStatus}]
-                            </option>
-                          );
-                        })
-                      )}
-                    </select>
-                  </div>
-                  {leadFormData.selectedCustomerKey && (
-                    <div style={{ fontSize: '0.78rem', color: '#059669', marginTop: 5, fontWeight: 600 }}>
-                      ✓ Strictly isolated to selected account. Only this customer will see this lead in their Lead Hub.
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. Phone Number * */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label className="desk-form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', margin: 0 }}>
-                      Phone Number <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
-                    <span style={{
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
-                      color: leadPhoneDigits.length === 10 ? '#059669' : 'var(--adm-text-muted, #64748b)',
-                      background: leadPhoneDigits.length === 10 ? 'var(--adm-soft-emerald-bg, #ecfdf5)' : 'var(--adm-bg-muted, #f1f5f9)',
-                      padding: '2px 8px',
-                      borderRadius: 6,
-                      border: `1px solid ${leadPhoneDigits.length === 10 ? 'var(--adm-soft-emerald-border, #a7f3d0)' : 'var(--adm-border, #e2e8f0)'}`
-                    }}>
-                      {leadPhoneDigits.length}/10 digits
-                    </span>
-                  </div>
-
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    className="desk-form-input"
-                    placeholder="8989898989"
-                    value={leadPhoneDigits}
-                    onChange={handlePhoneChange}
-                    style={{
-                      fontFamily: 'monospace',
-                      fontSize: '1rem',
-                      fontWeight: 700,
-                      letterSpacing: '0.04em',
-                      padding: '11px 14px',
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      borderColor: !isPhoneValidStart ? '#ef4444' : (leadPhoneDigits.length === 10 ? '#10b981' : 'var(--adm-border-strong, #cbd5e1)')
-                    }}
-                  />
-                </div>
-
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22, paddingTop: 14, borderTop: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
-                <button
-                  type="button"
-                  className="sales-btn-secondary"
-                  onClick={() => setIsAddLeadModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="sales-btn-primary"
-                  disabled={!isPhoneComplete}
-                  style={{
-                    background: isPhoneComplete
-                      ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
-                      : '#94a3b8',
-                    borderColor: isPhoneComplete ? '#059669' : '#94a3b8',
-                    cursor: isPhoneComplete ? 'pointer' : 'not-allowed',
-                    padding: '10px 22px'
-                  }}
-                >
-                  <Send size={15} /> Add Lead
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <QuickBulkLeadDispatchModal
+        isOpen={isAddLeadModalOpen}
+        onClose={() => setIsAddLeadModalOpen(false)}
+        customers={deskCustomers}
+        initialCustomerKey={addLeadInitialKey}
+        existingLeads={leads}
+        onDispatched={(summary) => {
+          if (Array.isArray(summary.leads) && summary.leads.length > 0) {
+            const addedIds = new Set(summary.leads.map((l) => l.id));
+            setLeads((prev) => [...summary.leads, ...prev.filter((l) => !addedIds.has(l.id))]);
+          }
+          setLeadSuccessToast(summary);
+        }}
+      />
     </div>
   );
 }
@@ -3946,24 +4031,6 @@ export function ProfileCompletionDesk({ customers = [], setCustomers }) {
       window.removeEventListener('growthline_active_user_changed', handleSyncLatest);
     };
   }, [handleSyncLatest, setCustomers]);
-
-  const handleToggleCheck = (custId) => {
-    setCustomers((prev) =>
-      prev.map((c) => {
-        if (c.id !== custId) return c;
-        const newPercent = Math.min(100, (c.kycPercent || 0) + 25);
-        const newProfileStatus = newPercent === 100 ? 'complete' : c.profileStatus;
-        try {
-          crmApi.patchCustomer(c.id, { profileStatus: newProfileStatus, kycPercent: newPercent });
-        } catch (e) { }
-        const updated = { ...c, kycPercent: newPercent, profileStatus: newProfileStatus, verified: newPercent === 100 };
-        if (selectedProfileCust?.id === custId) {
-          setSelectedProfileCust(updated);
-        }
-        return updated;
-      })
-    );
-  };
 
   const handleMarkComplete = (custId) => {
     setCustomers((prev) =>
@@ -4359,30 +4426,6 @@ Profile Completed At: ${cust.completedAt || 'Recently Active'}
                           >
                             <MessageSquare size={13} color="#059669" /> WhatsApp
                           </a>
-
-                          {/* 4. Send Certificate */}
-                          <button
-                            type="button"
-                            className="desk-action-btn"
-                            style={{ padding: '5px 9px', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                            title="Send Compliance Certificate"
-                            onClick={() => alert(`Compliance dossier dispatched for ${companyDisplayName} to ${c.email || 'customer'}!`)}
-                          >
-                            <Send size={13} /> Certificate
-                          </button>
-
-                          {/* 5. Conditional +25% Verify */}
-                          {!isComplete && (
-                            <button
-                              type="button"
-                              className="sales-btn-primary"
-                              style={{ padding: '5px 10px', fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                              title="Mark Step Verified (+25%)"
-                              onClick={() => handleToggleCheck(c.id)}
-                            >
-                              <Check size={13} /> +25% Verify
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -6285,7 +6328,7 @@ export function QuerySupportDesk({
   queries: initialQueries = [],
   setQueries,
 }) {
-  const [filter, setFilter] = useState('all'); // 'all' | 'open' | 'resolved' | 'none'
+  const [filter, setFilter] = useState('open'); // 'open' | 'resolved' | 'all' | 'none'
   const [search, setSearch] = useState('');
 
   // Real-time queries list
@@ -6584,35 +6627,46 @@ export function QuerySupportDesk({
   const clientsWithOpenCount = customersList.filter(c => getCustomerQueries(c).some(q => q.status === 'open')).length;
   const clientsWithAnyQueryCount = customersList.filter(c => getCustomerQueries(c).length > 0).length;
 
-  // Filter Customers
-  const filteredCustomers = customersList.filter((c) => {
-    const custQueries = getCustomerQueries(c);
-    const hasOpen = custQueries.some(q => q.status === 'open');
-    const hasResolved = custQueries.some(q => q.status === 'resolved');
-    const hasNone = custQueries.length === 0;
+  // Filter & Sort Customers (Active / Open Tickets Always First!)
+  const filteredCustomers = customersList
+    .filter((c) => {
+      const custQueries = getCustomerQueries(c);
+      const hasOpen = custQueries.some((q) => q.status === 'open');
+      const hasResolved = custQueries.some((q) => q.status === 'resolved');
+      const hasNone = custQueries.length === 0;
 
-    if (filter === 'open' && !hasOpen) return false;
-    if (filter === 'resolved' && (hasOpen || !hasResolved)) return false;
-    if (filter === 'none' && !hasNone) return false;
+      if (filter === 'open' && !hasOpen) return false;
+      if (filter === 'resolved' && (hasOpen || !hasResolved)) return false;
+      if (filter === 'none' && !hasNone) return false;
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      const comp = (c.companyName || c.name || '').toLowerCase();
-      const contact = (c.contactPerson || c.contact || '').toLowerCase();
-      const phone = String(c.phone || '');
-      const city = (c.city || '').toLowerCase();
-      const cat = (c.category || '').toLowerCase();
-      const matchCust = comp.includes(q) || contact.includes(q) || phone.includes(q) || city.includes(q) || cat.includes(q);
-      const matchQuery = custQueries.some(
-        item => (item.subject || '').toLowerCase().includes(q) ||
-          (item.category || '').toLowerCase().includes(q) ||
-          (item.internalNotes || '').toLowerCase().includes(q)
-      );
-      return matchCust || matchQuery;
-    }
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const comp = (c.companyName || c.name || '').toLowerCase();
+        const contact = (c.contactPerson || c.contact || '').toLowerCase();
+        const phone = String(c.phone || '');
+        const city = (c.city || '').toLowerCase();
+        const cat = (c.category || '').toLowerCase();
+        const matchCust =
+          comp.includes(q) || contact.includes(q) || phone.includes(q) || city.includes(q) || cat.includes(q);
+        const matchQuery = custQueries.some(
+          (item) =>
+            (item.subject || '').toLowerCase().includes(q) ||
+            (item.category || '').toLowerCase().includes(q) ||
+            (item.internalNotes || '').toLowerCase().includes(q)
+        );
+        return matchCust || matchQuery;
+      }
 
-    return true;
-  });
+      return true;
+    })
+    .sort((a, b) => {
+      const qa = getCustomerQueries(a);
+      const qb = getCustomerQueries(b);
+      const openA = qa.filter((q) => q.status === 'open').length;
+      const openB = qb.filter((q) => q.status === 'open').length;
+      if (openA !== openB) return openB - openA;
+      return qb.length - qa.length;
+    });
 
   return (
     <div className="desk-page-container">
@@ -6675,6 +6729,23 @@ export function QuerySupportDesk({
         <div className="desk-tabs">
           <button
             type="button"
+            className={`desk-tab ${filter === 'open' ? 'active' : ''}`}
+            onClick={() => setFilter('open')}
+          >
+            ⚠️ Open Tickets ({clientsWithOpenCount})
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'resolved' ? 'active' : ''}`}
+            onClick={() => setFilter('resolved')}
+          >
+            ✓ Resolved ({customersList.filter((c) => {
+              const q = getCustomerQueries(c);
+              return q.length > 0 && q.every((item) => item.status === 'resolved');
+            }).length})
+          </button>
+          <button
+            type="button"
             className={`desk-tab ${filter === 'all' ? 'active' : ''}`}
             onClick={() => setFilter('all')}
           >
@@ -6682,27 +6753,10 @@ export function QuerySupportDesk({
           </button>
           <button
             type="button"
-            className={`desk-tab ${filter === 'open' ? 'active' : ''}`}
-            onClick={() => setFilter('open')}
-          >
-            ⚠️ With Open Queries ({clientsWithOpenCount})
-          </button>
-          <button
-            type="button"
-            className={`desk-tab ${filter === 'resolved' ? 'active' : ''}`}
-            onClick={() => setFilter('resolved')}
-          >
-            ✓ All Resolved ({customersList.filter(c => {
-              const q = getCustomerQueries(c);
-              return q.length > 0 && q.every(item => item.status === 'resolved');
-            }).length})
-          </button>
-          <button
-            type="button"
             className={`desk-tab ${filter === 'none' ? 'active' : ''}`}
             onClick={() => setFilter('none')}
           >
-            Zero Queries ({customersList.filter(c => getCustomerQueries(c).length === 0).length})
+            Zero Queries ({customersList.filter((c) => getCustomerQueries(c).length === 0).length})
           </button>
         </div>
 
@@ -6736,11 +6790,23 @@ export function QuerySupportDesk({
                   <td colSpan={4} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
                     <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
-                      No Customers Matching Filter
+                      {filter === 'open' ? 'All Clear — 0 Open Support Tickets!' : 'No Customers Matching Filter'}
                     </h4>
                     <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem' }}>
-                      Try selecting a different filter tab or search query.
+                      {filter === 'open'
+                        ? 'Every active customer ticket has been resolved, or click below to view all client accounts.'
+                        : 'Try selecting a different filter tab or search query.'}
                     </p>
+                    {filter === 'open' && totalCustomersCount > 0 && (
+                      <button
+                        type="button"
+                        className="desk-action-btn"
+                        onClick={() => setFilter('all')}
+                        style={{ marginTop: 12, fontWeight: 700 }}
+                      >
+                        View All Customers ({totalCustomersCount})
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -7540,11 +7606,28 @@ export { default as MasterTransactionLogsDesk } from './MasterTransactionLogsDes
 /* ==========================================================================
    APPROVED MEMBERS DESK: Customers who completed Payment & Profile KYC
    ========================================================================== */
-export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDesk }) {
+export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDesk, onRefresh }) {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [balanceFilter, setBalanceFilter] = useState('all'); // 'all' | 'healthy' | 'low' | 'zero'
   const [selectedMember, setSelectedMember] = useState(null);
+  const [isRefreshingMembers, setIsRefreshingMembers] = useState(false);
+
+  const handleRefreshMembers = async () => {
+    setIsRefreshingMembers(true);
+    try {
+      const fresh = await crmApi.syncStateFromPostgres();
+      if (fresh && Array.isArray(fresh.customers) && typeof setCustomers === 'function') {
+        setCustomers(fresh.customers);
+      }
+      if (typeof onRefresh === 'function') {
+        await onRefresh();
+      }
+    } catch (_) {
+    } finally {
+      setIsRefreshingMembers(false);
+    }
+  };
 
   // Criteria: Member who has completed both Gate 1 Payment and Gate 2 Profile Submission
   const isApproved = (c) => {
@@ -7630,10 +7713,12 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
           <button
             type="button"
             className="sales-btn-secondary"
-            onClick={() => window.location.reload()}
+            onClick={handleRefreshMembers}
+            disabled={isRefreshingMembers}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}
           >
-            <RefreshCw size={14} /> Refresh Members
+            <RefreshCw size={14} className={isRefreshingMembers ? 'spin' : ''} />{' '}
+            {isRefreshingMembers ? 'Syncing...' : 'Refresh Members'}
           </button>
           {navigateToDesk && (
             <button
@@ -8070,7 +8155,6 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
   const [loading, setLoading] = useState(true);
   const [selectedFailTx, setSelectedFailTx] = useState(null);
   const [topupCust, setTopupCust] = useState(null);
-  const [topupAmount, setTopupAmount] = useState(1000);
   const [sendingLinkId, setSendingLinkId] = useState(null);
 
   // Deleted history archive state (dynamically fetched from PostgreSQL & synced)
@@ -8280,83 +8364,44 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
     }
   };
 
-  const handleApplyTopup = async () => {
-    if (!topupCust) return;
-    const rechargeNum = Number(topupAmount) || 0;
-    if (rechargeNum <= 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Invalid Amount',
-        text: 'Please enter a valid recharge amount.',
-        confirmButtonColor: '#4f46e5',
-      });
-      return;
-    }
-    const targetCust = customers.find((c) => c.id === topupCust.id || c.phone === topupCust.phone) || topupCust;
-    const curBal = targetCust.balance ?? targetCust.walletBalance ?? 0;
-    const newBal = curBal + rechargeNum;
-    const pacing = targetCust.dailyPacing || targetCust.dailyAdSpend || 300;
-    const addedDays = Math.floor(rechargeNum / pacing);
-    const newRunway = (targetCust.runwayDays || 0) + addedDays;
+  const handleOpenRecoveryTopup = (tx, fallbackCompany, fallbackContact, fallbackPhone) => {
+    const cleanPhone = String(fallbackPhone || tx?.phone || '').replace(/\D/g, '').slice(-10);
+    const matchedCust =
+      customers.find(
+        (c) =>
+          (tx?.customerId && String(c.id) === String(tx.customerId)) ||
+          (cleanPhone && String(c.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone)
+      ) || null;
 
-    if (setCustomers) {
-      setCustomers((prev) =>
-        prev.map((c) => {
-          if (c.id === targetCust.id || c.phone === targetCust.phone) {
-            return {
-              ...c,
-              balance: newBal,
-              walletBalance: newBal,
-              amountPaid: (c.amountPaid || 0) + rechargeNum,
-              runwayDays: newRunway,
-              paymentStatus: 'paid',
-              payment_status: 'paid',
-              status: 'active',
-            };
-          }
-          return c;
-        })
-      );
-    }
+    const resolvedCompany =
+      fallbackCompany ||
+      tx?.companyName ||
+      tx?.customerName ||
+      matchedCust?.companyName ||
+      matchedCust?.name ||
+      'Client Account';
+    const resolvedContact =
+      fallbackContact ||
+      tx?.contactPerson ||
+      matchedCust?.contactPerson ||
+      matchedCust?.contact ||
+      resolvedCompany;
+    const attemptedAmt = Math.max(300, Math.round(Number(tx?.amount || 1500)));
+    const refStr = tx?.ref || tx?.id || '';
 
-    try {
-      await crmApi.salesTopUpWallet({
-        customerId: targetCust.id || targetCust.phone,
-        phone: targetCust.phone,
-        amount: rechargeNum,
-        paymentMode: 'Sales Deposit (Recovery Top-Up)',
-        notes: `Recovered failed payment of ₹${topupCust.amount || rechargeNum}. Sales-assisted wallet activation.`,
-      });
-
-      const targetId = topupCust.id || topupCust.ref;
-      if (targetId) {
-        await crmApi.deleteFailedTransaction(targetId, {
-          ...topupCust,
-          status: 'Recovered & Settled ✓',
-          failureReason: `Recovered via Sales Assisted Top-Up of ₹${rechargeNum}`,
-        }).catch(() => { });
-      }
-    } catch (e) {
-      console.warn('[Sales top-up recovery non-fatal]', e);
-    }
-
-    // Remove from local failedList
-    setFailedList((prev) => prev.filter((t) => t.id !== topupCust.id && t.ref !== topupCust.ref && t.customerId !== topupCust.id));
-
-    try {
-      crmApi.syncStateFromPostgres();
-      window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
-      window.dispatchEvent(new CustomEvent('growthline_wallet_transactions_updated'));
-      window.dispatchEvent(new CustomEvent('growthline_payment_recorded'));
-    } catch (e) { }
-
-    Swal.fire({
-      icon: 'success',
-      title: 'Wallet Credited & Recovered!',
-      html: `Successfully credited <strong>₹${rechargeNum.toLocaleString('en-IN')}</strong> to <strong>${targetCust.companyName || targetCust.name}</strong>.<br/><small style="color: #64748b;">Authoritative ledger entry and official tax receipt recorded in MongoDB.</small>`,
-      confirmButtonColor: '#059669',
+    setTopupCust({
+      ...(matchedCust || {}),
+      id: matchedCust?.id || tx?.customerId || cleanPhone,
+      phone: cleanPhone || matchedCust?.phone || tx?.phone || '',
+      companyName: resolvedCompany,
+      name: resolvedCompany,
+      contactPerson: resolvedContact,
+      balance: matchedCust?.balance ?? matchedCust?.walletBalance ?? 0,
+      dailyPacing: matchedCust?.dailyPacing || matchedCust?.dailyAdSpend || 300,
+      recoveryTx: tx,
+      recoveryAmount: attemptedAmt,
+      recoveryNotes: `Recovered failed payment${refStr ? ` (${refStr})` : ''} of ₹${attemptedAmt}`,
     });
-    setTopupCust(null);
   };
 
   const handleDeleteFailedTx = async (tx) => {
@@ -9331,18 +9376,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                             alignItems: 'center',
                             gap: 5,
                           }}
-                          onClick={() => {
-                            setTopupCust({
-                              id: tx.customerId,
-                              name: tx.customerName || companyTitle,
-                              companyName: companyTitle,
-                              phone: cleanPhone || tx.phone,
-                              contactPerson: contactTitle,
-                              amount: tx.amount,
-                              ref: tx.ref || tx.id,
-                            });
-                            setTopupAmount(tx.amount || 1000);
-                          }}
+                          onClick={() => handleOpenRecoveryTopup(tx, companyTitle, contactTitle, cleanPhone || tx.phone)}
                           title="Credit client wallet & recover transaction"
                         >
                           <Plus size={13} /> Credit Wallet
@@ -9484,15 +9518,14 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                 type="button"
                 className="sales-btn-primary"
                 onClick={() => {
-                  setTopupCust({
-                    id: selectedFailTx.customerId,
-                    name: selectedFailTx.customerName,
-                    companyName: selectedFailTx.companyName,
-                    phone: selectedFailTx.phone,
-                    contactPerson: selectedFailTx.contactPerson,
-                  });
-                  setTopupAmount(selectedFailTx.amount || 1000);
+                  const txSnapshot = selectedFailTx;
                   setSelectedFailTx(null);
+                  handleOpenRecoveryTopup(
+                    txSnapshot,
+                    txSnapshot.companyName || txSnapshot.customerName,
+                    txSnapshot.contactPerson,
+                    txSnapshot.phone
+                  );
                 }}
                 style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
@@ -9523,60 +9556,61 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
         </div>
       )}
 
-      {/* Top-Up Recovery Modal */}
+      {/* Top-Up Recovery Modal (Authoritative SalesAddMoneyModal with Mandatory UTR & Error Handling) */}
       {topupCust && (
-        <div className="sales-modal-overlay" onClick={() => setTopupCust(null)}>
-          <div className="sales-modal-card" style={{ maxWidth: 500, width: '95%' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <div>
-                <span className="sales-dept-badge">Sales Assisted Top-Up</span>
-                <h3 style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 800 }}>Recharge Client Wallet</h3>
-              </div>
-              <button type="button" className="desk-close-btn" onClick={() => setTopupCust(null)}>
-                <X size={18} />
-              </button>
-            </div>
+        <SalesAddMoneyModal
+          customer={topupCust}
+          initialAmount={topupCust.recoveryAmount}
+          initialNotes={topupCust.recoveryNotes}
+          onClose={() => setTopupCust(null)}
+          onSuccess={async (updatedCust) => {
+            if (setCustomers && updatedCust) {
+              setCustomers((prev) =>
+                prev.map((c) =>
+                  c.id === updatedCust.id || c.phone === updatedCust.phone
+                    ? {
+                        ...c,
+                        ...updatedCust,
+                        status: 'active',
+                        paymentStatus: 'paid',
+                        payment_status: 'paid',
+                      }
+                    : c
+                )
+              );
+            }
 
-            <div className="desk-modal-box" style={{ marginBottom: 14, background: 'var(--adm-bg-subtle, #f8fafc)' }}>
-              <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--adm-text-primary, #0f172a)' }}>
-                {topupCust.companyName || topupCust.name || 'Corporate Workspace'}
-              </div>
-              <div style={{ fontSize: '0.80rem', color: 'var(--adm-text-body, #475569)', marginTop: 2 }}>
-                Phone: <strong style={{ color: '#059669' }}>+91 {topupCust.phone}</strong> • Contact: {topupCust.contactPerson || 'Account Admin'}
-              </div>
-            </div>
+            const recTx = topupCust.recoveryTx;
+            const targetId = recTx?.id || recTx?.ref || topupCust.ref;
+            if (targetId) {
+              await crmApi
+                .deleteFailedTransaction(targetId, {
+                  ...(recTx || topupCust),
+                  status: 'Recovered & Settled ✓',
+                  failureReason: 'Recovered via Sales Assisted Wallet Credit',
+                })
+                .catch(() => {});
+            }
 
-            <div style={{ marginBottom: 14 }}>
-              <label className="desk-form-label" style={{ fontWeight: 800, fontSize: '0.84rem' }}>Recharge Amount (₹)</label>
-              <input
-                type="number"
-                min="100"
-                step="100"
-                value={topupAmount}
-                onChange={(e) => setTopupAmount(Math.max(0, Number(e.target.value) || 0))}
-                style={{
-                  width: '100%',
-                  padding: '9px 12px',
-                  borderRadius: 8,
-                  border: '1.5px solid var(--adm-border-strong, #cbd5e1)',
-                  fontSize: '0.94rem',
-                  fontWeight: 700,
-                  marginTop: 4,
-                  outline: 'none'
-                }}
-              />
-            </div>
+            setFailedList((prev) =>
+              prev.filter(
+                (t) =>
+                  (targetId ? t.id !== targetId && t.ref !== targetId : true) &&
+                  !(recTx?.isRegistrationDrop && t.customerId && t.customerId === updatedCust?.id)
+              )
+            );
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button type="button" className="sales-btn-secondary" onClick={() => setTopupCust(null)}>
-                Cancel
-              </button>
-              <button type="button" className="sales-btn-primary" onClick={handleApplyTopup} style={{ fontWeight: 800 }}>
-                Credit Wallet Instantly
-              </button>
-            </div>
-          </div>
-        </div>
+            try {
+              await crmApi.syncStateFromPostgres();
+              window.dispatchEvent(new CustomEvent('growthline_failed_tx_updated'));
+              window.dispatchEvent(new CustomEvent('growthline_wallet_transactions_updated'));
+              window.dispatchEvent(new CustomEvent('growthline_payment_recorded'));
+              if (typeof onRefresh === 'function') onRefresh();
+            } catch (_) {}
+
+            setTopupCust(null);
+          }}
+        />
       )}
     </div>
   );

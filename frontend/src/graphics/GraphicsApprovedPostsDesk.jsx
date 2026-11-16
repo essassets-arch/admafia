@@ -3,17 +3,9 @@ import {
   CheckCircle2,
   Search,
   RefreshCw,
-  Eye,
-  Building,
-  Image,
-  Calendar,
-  Sparkles,
   ExternalLink,
   ShieldCheck,
   X,
-  Layers,
-  LayoutGrid,
-  List,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import graphicsApi from '../services/graphicsApi';
@@ -24,8 +16,7 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [viewMode, setViewMode] = useState('table'); // 'grid' | 'table'
-  const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 30, totalPages: 1 });
+  const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 50, totalPages: 1 });
 
   // Fullscreen Preview Modal
   const [previewPost, setPreviewPost] = useState(null);
@@ -38,12 +29,12 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
       const res = await graphicsApi.getApprovedPosts({
         search,
         page: pagination.page,
-        limit: 30,
+        limit: 50,
       });
 
       if (res && res.ok) {
         setApprovedPosts(res.approvedPosts || []);
-        setPagination(res.pagination || { total: 0, page: 1, limit: 30, totalPages: 1 });
+        setPagination(res.pagination || { total: 0, page: 1, limit: 50, totalPages: 1 });
       }
     } catch (err) {
       console.error('[GraphicsApprovedPostsDesk] Error:', err);
@@ -62,36 +53,20 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
     fetchApproved();
   }, [fetchApproved]);
 
+  const isVideoAsset = (post) =>
+    post?.mediaType === 'video' || /\.mp4(\?|$)/i.test(post?.mediaUrl || '');
+
   return (
     <div>
       {/* 1. Page Header */}
       <div className="graphics-page-header">
         <div>
-          <h1>Approved Creatives Registry</h1>
+          <h1>Approved Portfolio</h1>
           <p>
             Portfolio of artwork verified and approved by Marketing quality auditors. Approved creative versions are immediately available for deployment into live Meta Ads campaigns.
           </p>
         </div>
         <div className="graphics-header-actions">
-          <div className="gfx-view-switcher">
-            <button
-              type="button"
-              className={`gfx-view-btn ${viewMode === 'grid' ? 'active' : ''}`.trim()}
-              onClick={() => setViewMode('grid')}
-            >
-              <LayoutGrid size={13} />
-              <span>Cards</span>
-            </button>
-            <button
-              type="button"
-              className={`gfx-view-btn ${viewMode === 'table' ? 'active' : ''}`.trim()}
-              onClick={() => setViewMode('table')}
-            >
-              <List size={13} />
-              <span>Table</span>
-            </button>
-          </div>
-
           <button
             type="button"
             className="graphics-btn-refresh"
@@ -118,7 +93,7 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
         </div>
       </div>
 
-      {/* 3. Empty & Loading States */}
+      {/* 3. Empty, Loading & SmartTable Portfolio */}
       {loading ? (
         <div className="graphics-table-card" style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--adm-text-muted, #64748b)' }}>
@@ -134,74 +109,10 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
             When Marketing approves your submitted artwork in the verification queue, it will appear here.
           </p>
         </div>
-      ) : viewMode === 'grid' ? (
-        /* Visual Card Grid */
-        <div className="graphics-art-grid">
-          {approvedPosts.map((p) => (
-            <div key={p.id} className="graphics-art-card">
-              <div
-                className="graphics-art-preview-wrap"
-                style={{ cursor: 'pointer' }}
-                onClick={() => setPreviewPost(p)}
-                title="Click to zoom creative"
-              >
-                <img
-                  src={p.mediaUrl}
-                  alt={p.title}
-                  className="graphics-art-img"
-                />
-                <div className="graphics-art-badge-overlay">
-                  <span className="gfx-pill gfx-pill-emerald">
-                    <CheckCircle2 size={11} /> Approved (Rev #{p.revisionNumber})
-                  </span>
-                </div>
-                <div className="graphics-art-format-tag">
-                  {p.creativeFormat}
-                </div>
-              </div>
-
-              <div className="graphics-art-body">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div>
-                    <strong style={{ fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>{p.title}</strong>
-                    <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
-                      {p.companyName} • {p.city || 'India'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="graphics-btn-secondary"
-                    style={{ padding: '4px 8px', fontSize: '0.72rem' }}
-                    onClick={() => setPreviewPost(p)}
-                    title="Inspect Artwork"
-                  >
-                    <Eye size={12} />
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    fontSize: '0.78rem',
-                    color: 'var(--adm-text-body, #475569)',
-                    marginTop: 8,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {p.caption}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
       ) : (
-        /* Table View */
         <div className="graphics-table-card">
           <SmartTable
-            title="Approved Creatives Registry"
+            title="Approved Portfolio"
             exportFilename="graphics-approved-posts"
             defaultPageSize={10}
           >
@@ -231,12 +142,22 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
                           border: '1px solid var(--adm-border, #e2e8f0)',
                         }}
                         onClick={() => setPreviewPost(p)}
+                        title="Click to inspect full creative"
                       >
-                        <img
-                          src={p.mediaUrl}
-                          alt={p.title}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
+                        {isVideoAsset(p) ? (
+                          <video
+                            src={p.mediaUrl}
+                            muted
+                            playsInline
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <img
+                            src={p.mediaUrl}
+                            alt={p.title}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        )}
                       </div>
                     </td>
                     <td>
@@ -313,11 +234,20 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
             </div>
 
             <div className="graphics-modal-body" style={{ textAlign: 'center', background: '#0f172a', padding: 24 }}>
-              <img
-                src={previewPost.mediaUrl}
-                alt={previewPost.title}
-                style={{ maxHeight: 440, maxWidth: '100%', objectFit: 'contain', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}
-              />
+              {isVideoAsset(previewPost) ? (
+                <video
+                  src={previewPost.mediaUrl}
+                  controls
+                  playsInline
+                  style={{ maxHeight: 440, maxWidth: '100%', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}
+                />
+              ) : (
+                <img
+                  src={previewPost.mediaUrl}
+                  alt={previewPost.title}
+                  style={{ maxHeight: 440, maxWidth: '100%', objectFit: 'contain', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}
+                />
+              )}
             </div>
 
             <div className="graphics-modal-footer" style={{ padding: '16px 22px', background: 'var(--adm-bg-subtle, #f8fafc)', borderTop: '1px solid var(--adm-border, #e2e8f0)', justifyContent: 'space-between' }}>
@@ -346,4 +276,3 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
     </div>
   );
 }
-

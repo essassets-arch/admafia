@@ -2,37 +2,54 @@ import React, { useState, useEffect } from 'react';
 import {
   UploadCloud,
   FileText,
-  Image,
-  Sparkles,
-  CheckCircle2,
-  AlertCircle,
-  Eye,
   RefreshCw,
   Layers,
   Send,
-  Building,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import graphicsApi from '../services/graphicsApi';
+import adminAuthApi from '../services/adminAuthApi';
 
 const CREATIVE_FORMATS = [
-  { id: 'Instagram / Facebook Post', label: 'Instagram / Facebook Post', ratio: '1:1 Square (1080x1080)' },
-  { id: 'Story / Status', label: 'Story / Status', ratio: '9:16 Vertical (1080x1920)' },
-  { id: 'Carousel', label: 'Carousel Multi-Card', ratio: '1:1 Multi-Slide' },
-  { id: 'Reel Cover', label: 'Reel Cover', ratio: '9:16 (1080x1920)' },
-  { id: 'Custom Design', label: 'Custom Dimension', ratio: 'Custom' },
+  '1080x1080 Square',
+  '1080x1350 Portrait',
+  '1080x1920 Story/Reel',
+  '1200x628 Landscape',
 ];
 
-export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavigateToDesk }) {
+function normalizeCreativeFormat(raw) {
+  if (!raw) return '1080x1080 Square';
+  if (CREATIVE_FORMATS.includes(raw)) return raw;
+  const s = String(raw).toLowerCase();
+  if (s.includes('1350') || s.includes('portrait')) return '1080x1350 Portrait';
+  if (s.includes('1920') || s.includes('story') || s.includes('reel')) return '1080x1920 Story/Reel';
+  if (s.includes('1200') || s.includes('landscape')) return '1200x628 Landscape';
+  return '1080x1080 Square';
+}
+
+export default function GraphicsUploadPostDesk({
+  initialRequestId = null,
+  initialRequest = null,
+  onNavigateToDesk,
+  onSummaryRefresh,
+}) {
+  const currentUser = adminAuthApi.getCurrentUser();
+  const defaultDesignerName =
+    currentUser?.name || currentUser?.fullName || 'Graphics Studio';
+
   const [requests, setRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
-  const [selectedRequestId, setSelectedRequestId] = useState(initialRequestId || '');
-  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [selectedRequestId, setSelectedRequestId] = useState(
+    initialRequest?.id || initialRequestId || ''
+  );
+  const [selectedRequest, setSelectedRequest] = useState(initialRequest || null);
 
   // Form Fields
-  const [creativeFormat, setCreativeFormat] = useState('Instagram / Facebook Post');
+  const [creativeFormat, setCreativeFormat] = useState(() =>
+    normalizeCreativeFormat(initialRequest?.creativeFormat)
+  );
   const [designerNotes, setDesignerNotes] = useState('');
-  const [designerName, setDesignerName] = useState('Senior Graphics Designer');
+  const [designerName, setDesignerName] = useState(defaultDesignerName);
   const [mediaUrl, setMediaUrl] = useState('');
   const [localPreview, setLocalPreview] = useState('');
   const [mediaType, setMediaType] = useState('image');
@@ -49,19 +66,19 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
           const list = res.requests || [];
           setRequests(list);
 
-          if (initialRequestId) {
-            setSelectedRequestId(initialRequestId);
-            const match = list.find((r) => String(r.id).trim() === String(initialRequestId).trim());
+          const targetId = initialRequest?.id || initialRequestId;
+          if (targetId) {
+            setSelectedRequestId(targetId);
+            const match = list.find((r) => String(r.id).trim() === String(targetId).trim());
             if (match) {
               setSelectedRequest(match);
-              if (match.creativeFormat) setCreativeFormat(match.creativeFormat);
+              setCreativeFormat(normalizeCreativeFormat(match.creativeFormat));
             }
           } else if (list.length > 0 && !selectedRequestId) {
-            // Pick first pending request if available
             const firstPending = list.find((r) => r.isEligibleForUpload) || list[0];
             setSelectedRequestId(firstPending.id);
             setSelectedRequest(firstPending);
-            if (firstPending.creativeFormat) setCreativeFormat(firstPending.creativeFormat);
+            setCreativeFormat(normalizeCreativeFormat(firstPending.creativeFormat));
           }
         }
       } catch (err) {
@@ -71,61 +88,67 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
       }
     }
     loadRequests();
-  }, [initialRequestId]);
+  }, [initialRequestId, initialRequest]);
 
-  // 1b. React to dynamic initialRequestId updates
+  // 1b. React to dynamic initialRequest / initialRequestId updates
   useEffect(() => {
-    if (initialRequestId && requests.length > 0) {
-      setSelectedRequestId(initialRequestId);
-      const match = requests.find((r) => String(r.id).trim() === String(initialRequestId).trim());
+    const targetId = initialRequest?.id || initialRequestId;
+    if (initialRequest) {
+      setSelectedRequest(initialRequest);
+      setSelectedRequestId(initialRequest.id);
+      setCreativeFormat(normalizeCreativeFormat(initialRequest.creativeFormat));
+    }
+    if (targetId && requests.length > 0) {
+      setSelectedRequestId(targetId);
+      const match = requests.find((r) => String(r.id).trim() === String(targetId).trim());
       if (match) {
         setSelectedRequest(match);
-        if (match.creativeFormat) setCreativeFormat(match.creativeFormat);
+        setCreativeFormat(normalizeCreativeFormat(match.creativeFormat));
       }
     }
-  }, [initialRequestId, requests]);
+  }, [initialRequestId, initialRequest, requests]);
 
   // 2. Handle request selection change
   const handleSelectRequest = (id) => {
     setSelectedRequestId(id);
     const found = requests.find((r) => String(r.id).trim() === String(id).trim());
     setSelectedRequest(found || null);
-    if (found?.creativeFormat) {
-      setCreativeFormat(found.creativeFormat);
+    if (found) {
+      setCreativeFormat(normalizeCreativeFormat(found.creativeFormat));
     }
   };
 
-  // 3. File Selection & Upload
+  // 3. File Selection & Silent Instant Upload (no intermediate modal popup)
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate size (max 15MB)
     if (file.size > 15 * 1024 * 1024) {
       Swal.fire({
         icon: 'error',
         title: 'File Too Large',
-        text: 'The selected artwork exceeds the 15MB file size limit.',
+        text: 'The selected creative exceeds the 15MB file size limit.',
       });
       return;
     }
 
-    // Validate MIME
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'];
     if (!allowed.includes(file.type)) {
       Swal.fire({
         icon: 'error',
         title: 'Unsupported File Format',
-        text: 'Please upload a PNG, JPG, or WEBP image format.',
+        text: 'Please upload a PNG, JPG, WEBP image or MP4 video.',
       });
       return;
     }
 
-    // Instant local preview
+    const isVideo = file.type.startsWith('video/');
+    setMediaType(isVideo ? 'video' : 'image');
+
     try {
       const objUrl = URL.createObjectURL(file);
       setLocalPreview(objUrl);
-    } catch (e) {}
+    } catch (err) {}
 
     setUploadingFile(true);
     const reader = new FileReader();
@@ -136,14 +159,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
         const uploadRes = await graphicsApi.uploadMedia(base64Data, file.name, file.type);
         if (uploadRes && uploadRes.ok) {
           setMediaUrl(uploadRes.url);
-          setMediaType('image');
-          Swal.fire({
-            icon: 'success',
-            title: 'Artwork Uploaded!',
-            text: 'Image saved securely to server repository.',
-            timer: 1400,
-            showConfirmButton: false,
-          });
+          setMediaType(isVideo ? 'video' : 'image');
         }
       } catch (err) {
         Swal.fire({
@@ -158,7 +174,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
     reader.readAsDataURL(file);
   };
 
-  // 4. Submit Creative to Marketing for Verification
+  // 4. Submit Creative to Marketing for Verification (1 single clean confirmation toast)
   const handleSubmitArtwork = async (e) => {
     e.preventDefault();
 
@@ -168,29 +184,9 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
     }
 
     if (!mediaUrl || !mediaUrl.trim()) {
-      Swal.fire({ icon: 'warning', title: 'Please upload the finished artwork image first.' });
+      Swal.fire({ icon: 'warning', title: 'Please upload the finished creative first.' });
       return;
     }
-
-    const confirm = await Swal.fire({
-      title: 'Submit Artwork to Marketing?',
-      html: `
-        <div style="text-align: left; font-size: 0.88rem; line-height: 1.5;">
-          <div>Customer: <strong>${selectedRequest?.companyName || 'Client'}</strong></div>
-          <div>Post Title: <strong>${selectedRequest?.title}</strong></div>
-          <div>Format: <strong>${creativeFormat}</strong></div>
-          <div style="margin-top: 8px; padding: 10px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.28); border-radius: 8px; color: #6366f1;">
-            ✓ Artwork will enter Marketing's <strong>Verify Posts</strong> queue for compliance review.
-          </div>
-        </div>
-      `,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#6366f1',
-      confirmButtonText: 'Yes, Submit for Verification',
-    });
-
-    if (!confirm.isConfirmed) return;
 
     setSubmitting(true);
     try {
@@ -200,20 +196,26 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
         mediaType,
         creativeFormat,
         designerNotes: designerNotes.trim(),
-        designerName: designerName.trim() || 'Senior Graphics Designer',
+        designerName: designerName.trim() || defaultDesignerName,
       });
 
       if (res && res.ok) {
-        await Swal.fire({
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
           icon: 'success',
-          title: 'Submitted for Verification! 🚀',
-          text: 'Artwork is now pending quality and compliance approval in Marketing.',
-          confirmButtonColor: '#4f46e5',
+          title: 'Artwork submitted to Marketing for verification',
+          showConfirmButton: false,
+          timer: 2600,
+          timerProgressBar: true,
         });
 
-        // Reset media or navigate to requests
+        setMediaUrl('');
+        setLocalPreview('');
+        setDesignerNotes('');
+        if (onSummaryRefresh) onSummaryRefresh();
         if (onNavigateToDesk) {
-          onNavigateToDesk('post-requests');
+          onNavigateToDesk('post_requests');
         }
       }
     } catch (err) {
@@ -227,6 +229,11 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
     }
   };
 
+  const previewSrc = localPreview || mediaUrl;
+  const isVideoPreview =
+    mediaType === 'video' ||
+    (previewSrc && (previewSrc.startsWith('data:video/') || /\.mp4(\?|$)/i.test(previewSrc)));
+
   return (
     <div>
       {/* 1. Page Header */}
@@ -234,7 +241,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
         <div>
           <h1>Upload Finished Artwork</h1>
           <p>
-            Select a live Marketing request, upload high-resolution finished creatives, specify format and designer specifications, and submit directly for Marketing verification.
+            Select a live Marketing request, upload high-resolution finished creatives or MP4 video reels, specify format, and submit directly for Marketing verification.
           </p>
         </div>
       </div>
@@ -268,19 +275,54 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
               )}
             </div>
 
-            {/* Step 2: File Upload Area */}
+            {/* Step 2: Creative Format & Studio Designer */}
+            <div className="gfx-specs-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 18 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
+                  2. Creative Format *
+                </label>
+                <select
+                  className="graphics-select"
+                  style={{ width: '100%', padding: '10px 12px', fontSize: '0.88rem', fontWeight: 600 }}
+                  value={creativeFormat}
+                  onChange={(e) => setCreativeFormat(e.target.value)}
+                >
+                  {CREATIVE_FORMATS.map((fmt) => (
+                    <option key={fmt} value={fmt}>
+                      {fmt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
+                  Studio Designer
+                </label>
+                <input
+                  type="text"
+                  className="graphics-search-input"
+                  style={{ width: '100%', padding: '10px 12px', fontSize: '0.88rem', fontWeight: 600 }}
+                  value={designerName}
+                  onChange={(e) => setDesignerName(e.target.value)}
+                  placeholder="Graphics Studio"
+                />
+              </div>
+            </div>
+
+            {/* Step 3: File Upload Area */}
             <div style={{ marginBottom: 18 }}>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
-                2. Upload Finished Artwork (PNG, JPG, WEBP) *
+                3. Upload Finished Creative (PNG, JPG, WEBP, MP4) *
               </label>
               <div
-                className={`gfx-upload-dropzone ${(localPreview || mediaUrl) ? 'has-preview' : ''}`.trim()}
+                className={`gfx-upload-dropzone ${previewSrc ? 'has-preview' : ''}`.trim()}
                 style={{
                   border: '2px dashed var(--adm-border-strong, #cbd5e1)',
                   borderRadius: 12,
                   padding: 24,
                   textAlign: 'center',
-                  background: (localPreview || mediaUrl) ? 'var(--adm-bg-subtle, #f8fafc)' : 'var(--adm-bg-card, #ffffff)',
+                  background: previewSrc ? 'var(--adm-bg-subtle, #f8fafc)' : 'var(--adm-bg-card, #ffffff)',
                   cursor: 'pointer',
                   position: 'relative',
                   transition: 'border-color 0.15s',
@@ -288,7 +330,7 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
               >
                 <input
                   type="file"
-                  accept="image/png, image/jpeg, image/webp"
+                  accept="image/png,image/jpeg,image/webp,video/mp4"
                   onChange={handleFileChange}
                   disabled={uploadingFile}
                   style={{
@@ -304,42 +346,52 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
                 {uploadingFile ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                     <RefreshCw size={28} className="spin" color="#6366f1" />
-                    <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#6366f1' }}>Uploading artwork to repository...</span>
+                    <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#6366f1' }}>Uploading creative to repository...</span>
                   </div>
-                ) : (localPreview || mediaUrl) ? (
+                ) : previewSrc ? (
                   <div>
-                    <img
-                      src={localPreview || mediaUrl}
-                      alt="Artwork Preview"
-                      style={{ maxHeight: 180, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', objectFit: 'contain' }}
-                      onError={(e) => {
-                        if (localPreview && e.currentTarget.src !== localPreview) {
-                          e.currentTarget.src = localPreview;
-                        }
-                      }}
-                    />
+                    {isVideoPreview ? (
+                      <video
+                        src={previewSrc}
+                        controls
+                        muted
+                        playsInline
+                        style={{ maxHeight: 180, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+                      />
+                    ) : (
+                      <img
+                        src={previewSrc}
+                        alt="Artwork Preview"
+                        style={{ maxHeight: 180, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', objectFit: 'contain' }}
+                        onError={(e) => {
+                          if (localPreview && e.currentTarget.src !== localPreview) {
+                            e.currentTarget.src = localPreview;
+                          }
+                        }}
+                      />
+                    )}
                     <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#10b981', fontWeight: 700 }}>
-                      ✓ Artwork Uploaded Successfully (Click or drag to replace)
+                      ✓ Creative Ready for Submission (Click or drag to replace)
                     </div>
                   </div>
                 ) : (
                   <div>
                     <UploadCloud size={32} color="#94a3b8" style={{ marginBottom: 8 }} />
                     <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--adm-text-secondary, #1e293b)' }}>
-                      Drag &amp; drop artwork or click to browse
+                      Drag &amp; drop artwork or video, or click to browse
                     </div>
                     <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4 }}>
-                      PNG, JPG, or WEBP up to 15MB • Minimum recommended: 1080x1080
+                      PNG, JPG, WEBP, or MP4 up to 15MB • Selected format: {creativeFormat}
                     </div>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Step 3: Designer Notes & Specifications */}
+            {/* Step 4: Designer Notes & Specifications */}
             <div style={{ marginBottom: 22 }}>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
-                3. Designer Notes &amp; Specifications
+                4. Designer Notes &amp; Specifications
               </label>
               <textarea
                 rows={3}
@@ -455,4 +507,3 @@ export default function GraphicsUploadPostDesk({ initialRequestId = null, onNavi
     </div>
   );
 }
-

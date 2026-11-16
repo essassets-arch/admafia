@@ -107,7 +107,7 @@ function ensureAnalyticsPixel() {
   }
 }
 
-export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWebsite }) {
+export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWebsite, embedded = false }) {
   const [selectedCountry, setSelectedCountry] = useState(() => countryService.getCurrentCountry());
 
   useEffect(() => {
@@ -149,6 +149,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
 
   // Step 1: Verify WhatsApp | Step 2: Email & Business Details | Step 3: Password & Confirm
   const [step, setStep] = useState(1);
+  const [stepDir, setStepDir] = useState('right');
   const [pendingWhatsApp, setPendingWhatsApp] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -304,6 +305,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         countryCode: selectedCountry.country_code,
         purpose: 'register',
       });
+      setStepDir('right');
       setOtpSent(true);
       setOtpDigits(['', '', '', '', '', '']);
       setMaskedPhone(otpRes.maskedPhone || `${phoneCode} ${cleanMobile}`);
@@ -370,6 +372,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
       });
       setOtpVerificationToken(verRes.otpVerificationToken);
       setVerifiedMobile(cleanMobile);
+      setStepDir('right');
       setStep(2);
     } catch (verErr) {
       setError(verErr.message || 'Invalid verification code. Please check WhatsApp and try again.');
@@ -379,10 +382,17 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
   };
 
   const handleResetPhoneStep = () => {
+    setStepDir('left');
     setOtpSent(false);
     setOtpDigits(['', '', '', '', '', '']);
     setOtpVerificationToken('');
     setVerifiedMobile('');
+    setError('');
+    setStep(1);
+  };
+
+  const handleBackToStep1PreservingVerified = () => {
+    setStepDir('left');
     setError('');
     setStep(1);
   };
@@ -441,8 +451,10 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
         setError(check.reason || `The username "@${cleanUser}" is already taken.`);
         return;
       }
+      setStepDir('right');
       setStep(3);
     } catch {
+      setStepDir('right');
       setStep(3);
     } finally {
       setIsSubmitting(false);
@@ -597,7 +609,10 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
     }
   };
 
-  return (
+  const stepAnimClass = stepDir === 'left' ? 'am-slide-in-left' : 'am-slide-in-right';
+  const stepStageKey = `${step}-${otpSent ? 'otp' : 'phone'}-${verifiedMobile ? 'ver' : 'raw'}`;
+
+  const renderOuterRegisterShell = (innerNode) => (
     <div className="auth-fullpage-shell">
       <header className="auth-fullpage-topbar">
         <div className="auth-fullpage-topbar-inner">
@@ -760,102 +775,145 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
 
         <section className="auth-fullpage-form-pane">
           <div className="auth-fullpage-form-container">
-            <div className="auth-fullpage-tabs">
-              <button type="button" className="auth-fullpage-tab active">
-                Create Business Account
-              </button>
-              <button type="button" className="auth-fullpage-tab" onClick={onSwitchToLogin}>
-                Sign In to Workspace
-              </button>
+            {innerNode}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+
+  const registerFormContent = (
+    <>
+      {!embedded && (
+        <div className="am-auth-glider-tabs" role="tablist">
+          <div className="am-auth-glider-pill" />
+          <button type="button" className="am-auth-glider-btn active">
+            Create Business Account
+          </button>
+          <button type="button" className="am-auth-glider-btn" onClick={onSwitchToLogin}>
+            Sign In to Workspace
+          </button>
+        </div>
+      )}
+
+      {pendingWhatsApp && (
+        <div className="am-wa-gate-banner" role="status">
+          <span className="am-wa-gate-dot" />
+          <div>
+            <strong>Register first to connect on WhatsApp</strong>
+            <span>
+              Complete quick workspace verification — WhatsApp chat with Ad Mafia Growth Support opens automatically right after registration.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Clean 3-Step Progress Bar */}
+      <div className="am-wizard-stepper" aria-label="Account creation progress">
+        <div className={`am-wizard-step ${step === 1 ? 'active' : step > 1 ? 'done' : ''}`}>
+          <span className="am-wizard-step-num">{step > 1 ? <Check size={14} strokeWidth={3} /> : '1'}</span>
+          <span className="am-wizard-step-label">WhatsApp OTP</span>
+        </div>
+        <div className={`am-wizard-divider ${step > 1 ? 'done' : ''}`} />
+        <div className={`am-wizard-step ${step === 2 ? 'active' : step > 2 ? 'done' : ''}`}>
+          <span className="am-wizard-step-num">{step > 2 ? <Check size={14} strokeWidth={3} /> : '2'}</span>
+          <span className="am-wizard-step-label">Business Info</span>
+        </div>
+        <div className={`am-wizard-divider ${step > 2 ? 'done' : ''}`} />
+        <div className={`am-wizard-step ${step === 3 ? 'active' : ''}`}>
+          <span className="am-wizard-step-num">3</span>
+          <span className="am-wizard-step-label">Set Password</span>
+        </div>
+      </div>
+
+      <div key={stepStageKey} className={stepAnimClass}>
+        <div className="auth-card-top" style={{ marginBottom: '18px' }}>
+          <h2>
+            {step === 1 && (verifiedMobile ? 'WhatsApp Verified' : otpSent ? 'Enter WhatsApp Code' : 'Verify Your WhatsApp')}
+            {step === 2 && 'Your Business Details'}
+            {step === 3 && 'Secure Your Workspace'}
+          </h2>
+          <p>
+            {step === 1 &&
+              (verifiedMobile
+                ? `Your WhatsApp number (${phoneCode} ${verifiedMobile}) is verified and ready.`
+                : otpSent
+                  ? `We sent a 6-digit verification code on WhatsApp to ${maskedPhone}.`
+                  : 'Step 1 of 3 — Enter your active WhatsApp mobile number to receive an instant verification code.')}
+            {step === 2 &&
+              'Step 2 of 3 — Tell us your business name, optional work email, and workspace handle.'}
+            {step === 3 &&
+              'Step 3 of 3 — Choose and confirm a strong password for your Ad Mafia account.'}
+          </p>
+        </div>
+
+        {error && (
+          <div
+            className="auth-error-banner"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+              <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0 }} />
+              <span>{error}</span>
             </div>
-
-            {pendingWhatsApp && (
-              <div className="am-wa-gate-banner" role="status">
-                <span className="am-wa-gate-dot" />
-                <div>
-                  <strong>Register first to connect on WhatsApp</strong>
-                  <span>
-                    Complete quick workspace verification — WhatsApp chat with Ad Mafia Growth Support opens automatically right after registration.
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Clean 3-Step Progress Bar */}
-            <div className="am-wizard-stepper" aria-label="Account creation progress">
-              <div className={`am-wizard-step ${step === 1 ? 'active' : step > 1 ? 'done' : ''}`}>
-                <span className="am-wizard-step-num">{step > 1 ? <Check size={14} strokeWidth={3} /> : '1'}</span>
-                <span className="am-wizard-step-label">WhatsApp OTP</span>
-              </div>
-              <div className={`am-wizard-divider ${step > 1 ? 'done' : ''}`} />
-              <div className={`am-wizard-step ${step === 2 ? 'active' : step > 2 ? 'done' : ''}`}>
-                <span className="am-wizard-step-num">{step > 2 ? <Check size={14} strokeWidth={3} /> : '2'}</span>
-                <span className="am-wizard-step-label">Business Info</span>
-              </div>
-              <div className={`am-wizard-divider ${step > 2 ? 'done' : ''}`} />
-              <div className={`am-wizard-step ${step === 3 ? 'active' : ''}`}>
-                <span className="am-wizard-step-num">3</span>
-                <span className="am-wizard-step-label">Set Password</span>
-              </div>
-            </div>
-
-            <div className="auth-card-top" style={{ marginBottom: '18px' }}>
-              <h2>
-                {step === 1 && (otpSent ? 'Enter WhatsApp Code' : 'Verify Your WhatsApp')}
-                {step === 2 && 'Your Business Details'}
-                {step === 3 && 'Secure Your Workspace'}
-              </h2>
-              <p>
-                {step === 1 &&
-                  (otpSent
-                    ? `We sent a 6-digit verification code on WhatsApp to ${maskedPhone}.`
-                    : 'Step 1 of 3 — Enter your active WhatsApp mobile number to receive an instant verification code.')}
-                {step === 2 &&
-                  'Step 2 of 3 — Tell us your business name, optional work email, and workspace handle.'}
-                {step === 3 &&
-                  'Step 3 of 3 — Choose and confirm a strong password for your Ad Mafia account.'}
-              </p>
-            </div>
-
-            {error && (
-              <div
-                className="auth-error-banner"
+            {error.toLowerCase().includes('sign in') && (
+              <button
+                type="button"
+                onClick={onSwitchToLogin}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '8px',
+                  background: '#1e293b',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                  <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0 }} />
-                  <span>{error}</span>
-                </div>
-                {error.toLowerCase().includes('sign in') && (
-                  <button
-                    type="button"
-                    onClick={onSwitchToLogin}
-                    style={{
-                      background: '#1e293b',
-                      color: '#ffffff',
-                      border: 'none',
-                      padding: '5px 12px',
-                      borderRadius: '6px',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Sign In →
-                  </button>
-                )}
-              </div>
+                Sign In →
+              </button>
             )}
+          </div>
+        )}
 
-            {/* ==================== STEP 1: WHATSAPP MOBILE & INLINE OTP ==================== */}
-            {step === 1 && !otpSent && (
+        {/* Step 1 Verified State (when user clicks Back from Step 2 without losing OTP token) */}
+        {step === 1 && verifiedMobile && otpVerificationToken && (
+          <div className="auth-fullpage-form">
+            <div className="am-verified-chip" style={{ marginBottom: '16px' }}>
+              <div className="am-verified-chip-left">
+                <CheckCircle2 size={16} color="#059669" />
+                <span>
+                  WhatsApp Verified: <strong>{phoneCode} {verifiedMobile}</strong>
+                </span>
+              </div>
+              <button type="button" className="am-verified-chip-btn" onClick={handleResetPhoneStep}>
+                Use Different Number
+              </button>
+            </div>
+            <button
+              type="button"
+              className="btn-portal-primary"
+              onClick={() => {
+                setStepDir('right');
+                setStep(2);
+              }}
+            >
+              <span>Continue to Business Info</span>
+              <ArrowRight size={18} className="btn-arrow-icon" />
+            </button>
+          </div>
+        )}
+
+        {/* ==================== STEP 1: WHATSAPP MOBILE & INLINE OTP ==================== */}
+        {step === 1 && !verifiedMobile && !otpSent && (
               <form onSubmit={handleSendOtp} noValidate className="auth-fullpage-form">
                 <div className="auth-input-group">
                   <label htmlFor="regMobile">
@@ -936,7 +994,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
               </form>
             )}
 
-            {step === 1 && otpSent && (
+            {step === 1 && !verifiedMobile && otpSent && (
               <form onSubmit={handleVerifyOtpStep} noValidate className="auth-fullpage-form">
                 <div className="am-verified-chip" style={{ background: '#f8fafc', borderColor: '#e2e8f0', color: '#334155' }}>
                   <div className="am-verified-chip-left">
@@ -1182,7 +1240,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                   <button
                     type="button"
                     className="am-btn-back"
-                    onClick={handleResetPhoneStep}
+                    onClick={handleBackToStep1PreservingVerified}
                     disabled={isSubmitting}
                   >
                     <ArrowLeft size={16} />
@@ -1219,7 +1277,7 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                       {phoneCode} {verifiedMobile} • <strong>@{formData.username.trim()}</strong>
                     </span>
                   </div>
-                  <button type="button" className="am-verified-chip-btn" onClick={() => setStep(2)}>
+                  <button type="button" className="am-verified-chip-btn" onClick={() => { setStepDir('left'); setStep(2); }}>
                     Edit details
                   </button>
                 </div>
@@ -1355,7 +1413,10 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                   <button
                     type="button"
                     className="am-btn-back"
-                    onClick={() => setStep(2)}
+                    onClick={() => {
+                      setStepDir('left');
+                      setStep(2);
+                    }}
                     disabled={isSubmitting}
                   >
                     <ArrowLeft size={16} />
@@ -1373,26 +1434,29 @@ export function CustomerRegisterPage({ onRegistered, onSwitchToLogin, onBackToWe
                 </div>
               </form>
             )}
+      </div>
 
-            <div className="auth-switch-link">
-              Already registered?{' '}
-              <button type="button" onClick={onSwitchToLogin} className="link-button-bold">
-                Sign In to Workspace
-              </button>
-            </div>
+      <div className="auth-switch-link">
+        Already registered?{' '}
+        <button type="button" onClick={onSwitchToLogin} className="link-button-bold">
+          Sign In to Workspace
+        </button>
+      </div>
 
-            <div className="auth-mobile-trust-bar">
-              <ShieldCheck size={14} color="#10b981" />
-              <span>Official WhatsApp Verified Ad Mafia Client Portal</span>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
+      <div className="auth-mobile-trust-bar">
+        <ShieldCheck size={14} color="#10b981" />
+        <span>Official WhatsApp Verified Ad Mafia Client Portal</span>
+      </div>
+    </>
   );
+
+  if (embedded) {
+    return registerFormContent;
+  }
+  return renderOuterRegisterShell(registerFormContent);
 }
 
-export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebsite }) {
+export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebsite, embedded = false }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -1626,7 +1690,7 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
     }
   };
 
-  return (
+  const renderOuterLoginShell = (innerNode) => (
     <div className="auth-fullpage-shell">
       <header className="auth-fullpage-topbar">
         <div className="auth-fullpage-topbar-inner">
@@ -1783,14 +1847,26 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
 
         <section className="auth-fullpage-form-pane">
           <div className="auth-fullpage-form-container">
-            <div className="auth-fullpage-tabs">
-              <button type="button" className="auth-fullpage-tab" onClick={onSwitchToRegister}>
-                Create Business Account
-              </button>
-              <button type="button" className="auth-fullpage-tab active">
-                Sign In to Workspace
-              </button>
-            </div>
+            {innerNode}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+
+  const loginFormContent = (
+    <>
+      {!embedded && (
+        <div className="am-auth-glider-tabs" role="tablist">
+          <div className="am-auth-glider-pill is-login" />
+          <button type="button" className="am-auth-glider-btn" onClick={onSwitchToRegister}>
+            Create Business Account
+          </button>
+          <button type="button" className="am-auth-glider-btn active">
+            Sign In to Workspace
+          </button>
+        </div>
+      )}
 
             {pendingWhatsApp && (
               <div className="am-wa-gate-banner" role="status">
@@ -2000,13 +2076,10 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
               </button>
             </div>
 
-            <div className="auth-mobile-trust-bar">
-              <ShieldCheck size={14} color="#10b981" />
-              <span>Official 256-bit Encrypted Ad Mafia Client Portal</span>
-            </div>
-          </div>
-        </section>
-      </main>
+      <div className="auth-mobile-trust-bar">
+        <ShieldCheck size={14} color="#10b981" />
+        <span>Official 256-bit Encrypted Ad Mafia Client Portal</span>
+      </div>
 
       <WhatsAppOtpModal
         isOpen={otpFlow.open}
@@ -2029,6 +2102,220 @@ export function CustomerLoginPage({ onLoggedIn, onSwitchToRegister, onBackToWebs
         sandboxHint={otpFlow.sandboxHint}
         onVerified={handleOtpModalVerified}
       />
+    </>
+  );
+
+  if (embedded) {
+    return loginFormContent;
+  }
+  return renderOuterLoginShell(loginFormContent);
+}
+
+/**
+ * Persistent Unified Auth Shell (<CustomerAuthShell />)
+ * Keeps topbar, brand logo, and dark showcase mounted continuously while
+ * smoothly sliding between Create Account and Sign In (zero DOM flash / jump).
+ */
+export function CustomerAuthShell({
+  mode = 'register',
+  onLoggedIn,
+  onRegistered,
+  onSwitchMode,
+  onBackToWebsite,
+}) {
+  const [selectedCountry, setSelectedCountry] = useState(() => countryService.getCurrentCountry());
+  useEffect(() => {
+    return countryService.subscribe((country) => {
+      if (country) setSelectedCountry(country);
+    });
+  }, []);
+
+  const isLogin = mode === 'login';
+  const isIndia = selectedCountry?.country_code === 'IN';
+  const phoneCode = isIndia ? '+91' : '';
+  const dailyRateText = selectedCountry ? formatDailyRate(selectedCountry) : '₹300/day';
+  const dailyBudgetText = selectedCountry ? formatDailyBudget(selectedCountry) : '₹300';
+
+  return (
+    <div className="auth-fullpage-shell am-fade-up">
+      <header className="auth-fullpage-topbar">
+        <div className="auth-fullpage-topbar-inner">
+          <div
+            className="auth-fullpage-brand"
+            onClick={onBackToWebsite}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            title="Ad Mafia Marketing"
+          >
+            <img src="/AdMafia-Logo.png" alt="Ad Mafia Marketing" className="auth-topbar-logo" />
+          </div>
+          <div className="auth-fullpage-topbar-actions">
+            <span className="auth-topbar-Question">
+              {isLogin ? 'Need a business workspace?' : 'Already have an account?'}
+            </span>
+            <button
+              type="button"
+              className="auth-topbar-switch-btn"
+              onClick={() => onSwitchMode && onSwitchMode(isLogin ? 'register' : 'login')}
+            >
+              {isLogin ? 'Create Business Account' : 'Sign In to Workspace'}
+            </button>
+            <button type="button" className="auth-topbar-back-btn" onClick={onBackToWebsite}>
+              ← Back to Website
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="auth-fullpage-grid">
+        <section className="auth-fullpage-showcase">
+          <div className="auth-showcase-inner">
+            <div className="auth-showcase-topbar">
+              <img src="/AdMafia-Logo.png" alt="Ad Mafia Marketing" className="auth-brand-logo" />
+              <div className="auth-top-badge">
+                <span className="auth-pulse-dot" />
+                <span>{isLogin ? 'CUSTOMER COMMAND CENTER' : 'WHATSAPP VERIFIED ONBOARDING'}</span>
+              </div>
+            </div>
+
+            <div key={mode} className="auth-hero-block am-fade-up">
+              <h1 className="auth-showcase-heading">
+                {isLogin ? (
+                  <>
+                    Welcome back to your{' '}
+                    <span className="auth-showcase-highlight">Buyer Lead Hub.</span>
+                  </>
+                ) : (
+                  <>
+                    Start receiving verified buyer enquiries{' '}
+                    <span className="auth-showcase-highlight">from {dailyRateText}.</span>
+                  </>
+                )}
+              </h1>
+              <p className="auth-showcase-subtext">
+                {isLogin
+                  ? 'Sign in to view real-time verified buyer phone numbers dispatched to your inbox, manage your Growth Wallet balance, and connect via Call & WhatsApp.'
+                  : 'Create your dedicated Ad Mafia Business Workspace in 3 quick steps with WhatsApp OTP verification. Fund your Growth Wallet and receive direct buyer mobile numbers matched to your city & industry.'}
+              </p>
+            </div>
+
+            <div className="auth-showcase-live-card">
+              <div className="auth-live-card-header">
+                <div className="auth-live-status-group">
+                  <span className="auth-pulse-dot" />
+                  <span className="auth-live-header-tag">LIVE BUYER LEAD DISPATCH PREVIEW</span>
+                </div>
+                <div className="auth-live-delivery-pill">
+                  <Zap size={12} color="#10b981" />
+                  <span>Instant CRM Delivery</span>
+                </div>
+              </div>
+
+              <div className="auth-live-card-lead-row">
+                <div className="auth-live-lead-avatar">91</div>
+                <div className="auth-live-lead-details">
+                  <div className="auth-live-lead-name-row">
+                    <span className="auth-lead-name">{phoneCode} 97•••• 6167</span>
+                    <span className="auth-lead-tag-verified">Verified Buyer ✓</span>
+                  </div>
+                  <div className="auth-lead-intent-sub">
+                    Direct Unmasked Buyer Phone • Routed Exclusively to Your Inbox
+                  </div>
+                </div>
+                <div className="auth-live-lead-actions">
+                  <span className="auth-action-chip call">
+                    <Phone size={12} /> Call
+                  </span>
+                  <span className="auth-action-chip wa">
+                    <MessageSquare size={12} /> WhatsApp
+                  </span>
+                </div>
+              </div>
+
+              <div className="auth-live-card-metrics">
+                <div className="auth-metric-item">
+                  <small>Minimum Daily Budget</small>
+                  <strong>{dailyBudgetText} / Day</strong>
+                  <span className="auth-metric-sub">100% Towards Leads</span>
+                </div>
+                <div className="auth-metric-item highlight">
+                  <small>Setup &amp; Platform Fee</small>
+                  <strong>Free</strong>
+                  <span className="auth-metric-sub">Zero Hidden Cut</span>
+                </div>
+                <div className="auth-metric-item">
+                  <small>Lead Exclusivity</small>
+                  <strong>100% Direct</strong>
+                  <span className="auth-metric-sub">Never Resold</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="auth-showcase-footer">
+              <div className="auth-trust-pill">
+                <ShieldCheck size={14} color="#10b981" />
+                <span>256-Bit SSL Encrypted</span>
+              </div>
+              <span className="auth-trust-dot">•</span>
+              <div className="auth-trust-pill">
+                <Zap size={14} color="#38bdf8" />
+                <span>Real-Time Push Alerts</span>
+              </div>
+              <span className="auth-trust-dot">•</span>
+              <div className="auth-trust-pill">
+                <Lock size={14} color="#a855f7" />
+                <span>Zero Lock-In</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="auth-fullpage-form-pane">
+          <div className="auth-fullpage-form-container">
+            <div className="am-auth-glider-tabs" role="tablist" aria-label="Workspace Access">
+              <div className={`am-auth-glider-pill ${isLogin ? 'is-login' : ''}`} />
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!isLogin}
+                className={`am-auth-glider-btn ${!isLogin ? 'active' : ''}`}
+                onClick={() => onSwitchMode && onSwitchMode('register')}
+              >
+                Create Business Account
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={isLogin}
+                className={`am-auth-glider-btn ${isLogin ? 'active' : ''}`}
+                onClick={() => onSwitchMode && onSwitchMode('login')}
+              >
+                Sign In to Workspace
+              </button>
+            </div>
+
+            <div
+              key={mode}
+              className={isLogin ? 'am-slide-in-right' : 'am-slide-in-left'}
+            >
+              {isLogin ? (
+                <CustomerLoginPage
+                  embedded
+                  onLoggedIn={onLoggedIn}
+                  onSwitchToRegister={() => onSwitchMode && onSwitchMode('register')}
+                  onBackToWebsite={onBackToWebsite}
+                />
+              ) : (
+                <CustomerRegisterPage
+                  embedded
+                  onRegistered={onRegistered}
+                  onSwitchToLogin={() => onSwitchMode && onSwitchMode('login')}
+                  onBackToWebsite={onBackToWebsite}
+                />
+              )}
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

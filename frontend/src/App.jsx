@@ -19,7 +19,7 @@ import GraphicsLayout from './graphics/GraphicsLayout';
 import SuperAdminLayout from './superadmin/SuperAdminLayout';
 import AdminLoginPage from './admin/AdminLoginPage';
 import adminAuthApi from './services/adminAuthApi';
-import { CustomerLoginPage, CustomerRegisterPage } from './portal/AuthPages';
+import { CustomerLoginPage, CustomerRegisterPage, CustomerAuthShell } from './portal/AuthPages';
 import crmApi from './services/crmApi';
 import {
   gateOrOpenWhatsApp,
@@ -75,10 +75,10 @@ const gets = [
 ];
 
 const steps = [
-  ['Step 1: Tell Us About Your Business', 'Share your business name, industry, products or services, target location and the type of customers you want to reach.'],
-  ['Step 2: We Find Potential Customers', 'We work on generating relevant enquiries based on your business category, target audience and customer requirements.'],
-  ['Step 3: Receive Qualified Customer Leads', 'Get customer enquiries with available contact details, including names and phone numbers, so you can connect with potential customers directly.'],
-  ['Step 4: Connect, Follow Up and Convert', 'Contact your leads, understand their requirements, explain your offerings and turn genuine business opportunities into paying customers.'],
+  ['Set Your Business & Territory', 'Verify your WhatsApp in 30 seconds and pick your industry category, operating city, and daily pacing budget.'],
+  ['Buyer Discovery & Qualification', 'Our lead routing engine captures high-intent commercial and B2B buyer enquiries matching your category and city.'],
+  ['Instant Direct Mobile Dispatch', 'Receive unmasked +91 buyer phone numbers directly in your live CRM inbox with real-time push alerts.'],
+  ['Call, WhatsApp & Close Sales', 'Connect in 1 tap via Call or WhatsApp, discuss requirements directly, and convert enquiries into customers.'],
 ];
 
 const why = [
@@ -462,8 +462,8 @@ export default function App({ initialCountry = null } = {}) {
           confirmButtonColor: '#059669',
         }).then((r) => {
           if (r.isConfirmed) {
-            setCurrentView('portal-login');
-            window.history.pushState({}, '', '/login');
+            transitionView('login');
+            window.history.pushState({}, '', '/#login');
           }
         });
       } else if (payStatus === 'failed') {
@@ -553,6 +553,18 @@ export default function App({ initialCountry = null } = {}) {
     ['How can I get started?', 'Simply share your business details, products or services, target audience and preferred location. Our team will help you understand the process and start receiving verified leads.'],
   ];
 
+  const transitionView = (nextView) => {
+    if (typeof document !== 'undefined' && typeof document.startViewTransition === 'function') {
+      try {
+        document.startViewTransition(() => {
+          setCurrentView(nextView);
+        });
+        return;
+      } catch {}
+    }
+    setCurrentView(nextView);
+  };
+
   const navigateTo = (path, targetView) => {
     try {
       window.history.pushState({}, '', path);
@@ -560,7 +572,7 @@ export default function App({ initialCountry = null } = {}) {
     window.location.hash = path.startsWith('#') ? path : '';
     const protectedViews = ['superadmin-portal', 'sales-portal', 'marketing-portal', 'graphics-portal', 'portal'];
     const v = protectedViews.includes(targetView) ? resolveView() : (targetView || resolveView());
-    setCurrentView(v);
+    transitionView(v);
     setMobileMenuOpen(false);
 
     if (path.startsWith('#') && (!targetView || targetView === 'landing')) {
@@ -590,7 +602,7 @@ export default function App({ initialCountry = null } = {}) {
       window.history.pushState({}, '', '/register');
     } catch (err) {}
     setCurrentUser(null);
-    setCurrentView('register');
+    transitionView('register');
     setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -619,6 +631,7 @@ export default function App({ initialCountry = null } = {}) {
           contactPerson: trimmedName,
           mobile: cleanedPhone,
           companyName: formData.business.trim(),
+          city: formData.city.trim(),
         });
         return;
       }
@@ -638,7 +651,7 @@ export default function App({ initialCountry = null } = {}) {
     try {
       window.history.pushState({}, '', '/?site=1');
     } catch (e) {}
-    setCurrentView('landing');
+    transitionView('landing');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -783,50 +796,34 @@ export default function App({ initialCountry = null } = {}) {
     );
   }
 
-  // View 2: Customer Universal Login (/login)
-  if (currentView === 'login') {
+  // View 2 & 3: Persistent Smooth-Sliding Customer Auth Shell (/login & /register)
+  if (currentView === 'login' || currentView === 'register') {
     return (
-      <CustomerLoginPage
+      <CustomerAuthShell
+        mode={currentView}
         onLoggedIn={(user) => {
           if (user) {
-            try { localStorage.setItem('growthline_active_user', JSON.stringify(user)); } catch(e) {}
+            try { localStorage.setItem('growthline_active_user', JSON.stringify(user)); } catch (e) {}
             setCurrentUser(user);
           }
-          try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch(e) {}
+          try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch (e) {}
           window.location.hash = '#app/dashboard';
-          setCurrentView('portal');
+          transitionView('portal');
         }}
-        onSwitchToRegister={() => {
-          try { window.history.pushState({}, '', '/#register'); } catch(e) {}
-          window.location.hash = '#register';
-          setCurrentView('register');
-        }}
-        onBackToWebsite={openPublicWebsitePreview}
-      />
-    );
-  }
-
-  // View 3: Customer Registration (/register)
-  if (currentView === 'register') {
-    return (
-      <CustomerRegisterPage
         onRegistered={(newCustomer) => {
           if (newCustomer) {
-            try {
-              localStorage.setItem('growthline_active_user', JSON.stringify(newCustomer));
-            } catch(e) {}
+            try { localStorage.setItem('growthline_active_user', JSON.stringify(newCustomer)); } catch (e) {}
             setCurrentUser(newCustomer);
           }
-          try {
-            window.history.pushState({}, '', '/app/lead#app/dashboard');
-          } catch(e) {}
+          try { window.history.pushState({}, '', '/app/lead#app/dashboard'); } catch (e) {}
           window.location.hash = '#app/dashboard';
-          setCurrentView('portal');
+          transitionView('portal');
         }}
-        onSwitchToLogin={() => {
-          try { window.history.pushState({}, '', '/#login'); } catch(e) {}
-          window.location.hash = '#login';
-          setCurrentView(resolveView());
+        onSwitchMode={(nextMode) => {
+          const targetPath = nextMode === 'login' ? '/#login' : '/register';
+          try { window.history.pushState({}, '', targetPath); } catch (e) {}
+          window.location.hash = nextMode === 'login' ? '#login' : '';
+          setCurrentView(nextMode);
         }}
         onBackToWebsite={openPublicWebsitePreview}
       />
@@ -1023,7 +1020,7 @@ export default function App({ initialCountry = null } = {}) {
                   onClick={() => {
                     try { window.history.pushState({}, '', '/#login'); } catch (e) {}
                     window.location.hash = '#login';
-                    setCurrentView(resolveView());
+                    transitionView('login');
                     setMobileMenuOpen(false);
                   }}
                   className="nav-btn nav-btn-outline"
@@ -1033,7 +1030,7 @@ export default function App({ initialCountry = null } = {}) {
                 <button 
                   type="button" 
                   onClick={(e) => openRegisterWizard(e)}
-                  className="nav-btn nav-btn-primary desktop-only"
+                  className="nav-btn nav-btn-primary"
                 >
                   Create Account
                 </button>
@@ -1179,11 +1176,13 @@ export default function App({ initialCountry = null } = {}) {
             <div>
               <div className="hero-badge">
                 <Sparkles size={16} />
-                <span>Start Generating Leads from Just {dailyRate}!</span>
+                <span>Verified B2B &amp; Commercial Buyer Lead Platform</span>
               </div>
-              <h1 id="h1">{`Start Generating Leads from Just ${dailyRate}!`}</h1>
+              <h1 id="h1">
+                Receive Verified Buyer Enquiries Direct to Your CRM — <span>From {dailyRate}</span>
+              </h1>
               <div className="hero-subhead">
-                Stop Searching for Customers. Start Connecting With Them.
+                Stop searching for customers. Get unmasked buyer mobile numbers matched to your industry &amp; city.
               </div>
               <div className="row hero-cta-row">
                 {currentAdmin ? (
@@ -1224,16 +1223,16 @@ export default function App({ initialCountry = null } = {}) {
                     </span>
                   </a>
                 )}
-                <a className="btn alt btn-hero-secondary" href="#how">
-                  Start Growing Your Business
+                <a className="btn alt btn-hero-secondary" href="#pricing">
+                  Estimate Monthly Leads ↓
                 </a>
               </div>
               <div className="hero-cta-trust-strip">
                 <span>
-                  <CheckCircle2 size={15} /> Instant Free Account
+                  <CheckCircle2 size={15} /> Instant WhatsApp Verification
                 </span>
                 <span>
-                  <CheckCircle2 size={15} /> Verified Buyer Phone Numbers
+                  <CheckCircle2 size={15} /> Direct Unmasked Mobile Numbers
                 </span>
                 <span>
                   <CheckCircle2 size={15} /> Zero Setup Fee
@@ -1242,34 +1241,34 @@ export default function App({ initialCountry = null } = {}) {
             </div>
             <div className="stack" aria-hidden="true">
               <div className="lead-card">
-                <i>R</i>
+                <i>91</i>
                 <div>
-                  <strong>Rohit Sharma</strong>
-                  <span>+91 98•••• 4521</span>
+                  <strong>+91 98•••• 4521</strong>
+                  <span>Real Estate • Ahmedabad • 2m ago</span>
                 </div>
-                <em>New lead</em>
+                <em>Call • WA</em>
               </div>
               <div className="lead-card">
-                <i>P</i>
+                <i>91</i>
                 <div>
-                  <strong>Priya Patel</strong>
-                  <span>+91 99•••• 8830</span>
+                  <strong>+91 99•••• 8830</strong>
+                  <span>Manufacturing • Pune • 6m ago</span>
                 </div>
-                <em>New lead</em>
+                <em>Call • WA</em>
               </div>
               <div className="lead-card">
-                <i>A</i>
+                <i>91</i>
                 <div>
-                  <strong>Amit Verma</strong>
-                  <span>+91 97•••• 1207</span>
+                  <strong>+91 97•••• 1207</strong>
+                  <span>Commercial Services • Surat • 11m ago</span>
                 </div>
-                <em>New lead</em>
+                <em>Call • WA</em>
               </div>
               <div className="lead-card">
                 <i>{currencySymbol}</i>
                 <div>
-                  <strong>Direct Customer Connect</strong>
-                  <span>Call. Explain. Convert.</span>
+                  <strong>Daily Wallet Pacing Control</strong>
+                  <span>Pause, resume &amp; scale from {dailyRate}</span>
                 </div>
               </div>
             </div>
@@ -1281,21 +1280,25 @@ export default function App({ initialCountry = null } = {}) {
           <div className="wrap">
             <div className="top">
               <div>
-                <h2 id="h-budget">Affordable Lead Generation Services Starting at {dailyRate}</h2>
+                <h2 id="h-budget">Flexible Daily Growth Budget Starting at {dailyRate}</h2>
                 <div className="section-subhead">
-                  More Opportunities for Your Business. Without a Huge Budget.
+                  More Buyer Enquiries for Your Business — With Full Wallet Control.
                 </div>
                 <p className="lead" style={{ marginTop: '12px', fontWeight: 700, color: 'var(--ink2)', fontSize: '1.08rem' }}>
-                  Start with a minimum budget of just {dailyBudget} per day and create more opportunities to grow your customer base.
+                  Start from {dailyBudget}/day, choose your active delivery days, and scale anytime with zero lock-in contracts.
                 </p>
-              </div>
-              <div className="price">
-                <small>Starting</small>{dailyBudget}
               </div>
             </div>
 
-            <div style={{ marginTop: '48px', marginBottom: '48px' }}>
-              <MetaAdsCalculator initialCountry={activeCountry} />
+            <div style={{ marginTop: '36px', marginBottom: '44px' }}>
+              <MetaAdsCalculator
+                initialCountry={activeCountry}
+                onStartWithBudget={(e, chosenBudget) =>
+                  currentUser
+                    ? navigateTo('/app/lead#app/wallet', 'portal')
+                    : openRegisterWizard(e, { initialBudget: chosenBudget })
+                }
+              />
             </div>
 
             <h3 style={{ marginTop: '44px', fontSize: '1.45rem', fontWeight: 800 }}>

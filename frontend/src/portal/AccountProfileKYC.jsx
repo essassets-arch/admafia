@@ -80,12 +80,14 @@ export default function AccountProfileKYC({
     }
   }, [customer]);
 
-  // Direct fetch from PostgreSQL on component mount to guarantee latest saved data is filled
+  // Direct fetch from MongoDB on component mount to guarantee latest saved data is filled
   useEffect(() => {
     const idOrPhone = customer?.id || customer?.phone;
     if (idOrPhone) {
-      crmApi
-        .getCustomerWorkspace(idOrPhone)
+      const fetchPromise = crmApi.getCustomerToken()
+        ? crmApi.getMyWorkspace()
+        : crmApi.getCustomerWorkspace(idOrPhone);
+      fetchPromise
         .then((res) => {
           if (res?.customer) {
             const c = res.customer;
@@ -353,8 +355,8 @@ export default function AccountProfileKYC({
     }
   };
 
-  return (
-    <div className="portal-profile-view">
+  const headerAndBannerBlock = (
+    <>
       {/* 1. Header Card */}
       <div className="profile-header-card">
         <div>
@@ -363,15 +365,17 @@ export default function AccountProfileKYC({
             Verified organization details, authorized administrator contacts, geographic territory, and lead distribution eligibility.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleScrollToEdit}
-          className="btn-jump-edit"
-          title="Scroll down to edit profile form"
-        >
-          <Edit3 size={15} />
-          <span>✏️ Edit Profile</span>
-        </button>
+        {isProfileComplete && (
+          <button
+            type="button"
+            onClick={handleScrollToEdit}
+            className="btn-jump-edit"
+            title="Scroll down to edit profile form"
+          >
+            <Edit3 size={15} />
+            <span>✏️ Edit Profile</span>
+          </button>
+        )}
       </div>
 
       {/* Incomplete Profile Alert Strip */}
@@ -398,33 +402,17 @@ export default function AccountProfileKYC({
                 Profile {profEval.kycPercent}% Complete — {profEval.missingFields.length} required {profEval.missingFields.length === 1 ? 'field' : 'fields'} remaining
               </div>
               <div style={{ fontSize: '0.82rem', color: '#b45309', marginTop: '3px' }}>
-                Missing: <strong>{profEval.missingFields.join(', ')}</strong>. Complete the highlighted fields below and save to reach 100%.
+                Missing: <strong>{profEval.missingFields.join(', ')}</strong>. Fill the highlighted fields right below and click Save to reach 100%.
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            className="btn-complete-missing-fields"
-            onClick={handleScrollToEdit}
-            style={{
-              background: '#d97706',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '10px',
-              padding: '9px 16px',
-              fontSize: '0.84rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Complete Missing Fields ↓
-          </button>
         </div>
       )}
+    </>
+  );
 
-      {/* 2. Comprehensive Profile Overview Dashboard — Displays ALL customer-filled data cleanly */}
-      <div className="profile-overview-dashboard">
+  const overviewDashboardBlock = (
+    <div className="profile-overview-dashboard" style={{ marginTop: !isProfileComplete ? '24px' : '0' }}>
         <div className="profile-overview-top">
           <div className="profile-overview-title-block">
             <span style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', fontWeight: 800 }}>
@@ -636,8 +624,11 @@ export default function AccountProfileKYC({
             </div>
           </div>
         </div>
-      </div>
+    </div>
+  );
 
+  const editFormBlock = (
+    <>
       {saveError && (
         <div style={{
           background: '#fef2f2',
@@ -895,10 +886,27 @@ export default function AccountProfileKYC({
             disabled={isSaving}
             style={{ padding: '14px 34px', fontSize: '1rem', fontWeight: 700 }}
           >
-            {isSaving ? 'Saving Changes to Database...' : '💾 Save Profile Details'}
+            {isSaving ? 'Saving Changes to Database...' : isProfileComplete ? '💾 Save Profile Details' : '🚀 Complete Profile & Unlock Leads (100%)'}
           </button>
         </div>
       </form>
+    </>
+  );
+
+  return (
+    <div className="portal-profile-view">
+      {headerAndBannerBlock}
+      {isProfileComplete ? (
+        <>
+          {overviewDashboardBlock}
+          {editFormBlock}
+        </>
+      ) : (
+        <>
+          {editFormBlock}
+          {overviewDashboardBlock}
+        </>
+      )}
     </div>
   );
 }

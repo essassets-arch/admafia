@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import countryService, { formatCurrency } from '../services/countryService';
 
-export default function MetaAdsCalculator({ initialCountry = null }) {
+export default function MetaAdsCalculator({ initialCountry = null, onStartWithBudget }) {
   const [country, setCountry] = useState(() => initialCountry || countryService.getCurrentCountry());
   const minDaily = Number(country?.daily_min_budget || 0);
   const maxDaily = minDaily * 10;
@@ -36,6 +36,7 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
   const costPerLeadRef = minDaily === 300 ? 120 : (minDaily * 0.4);
   const minLeads = Math.max(3, Math.round(monthlySpend / (costPerLeadRef * 1.5)));
   const maxLeads = Math.max(8, Math.round(monthlySpend / costPerLeadRef));
+  const fillPct = maxDaily > minDaily ? Math.min(100, Math.max(0, ((dailyBudget - minDaily) / (maxDaily - minDaily)) * 100)) : 0;
 
   return (
     <div className="planner-container">
@@ -69,7 +70,12 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
 
       {/* Thick Pill Slider Track */}
       <div className="planner-slider-section">
-        <div className="slider-track-capsule">
+        <div
+          className="slider-track-capsule"
+          style={{
+            background: `linear-gradient(90deg, #ffb800 0%, #ff5a4f ${fillPct}%, #e9ebfa ${fillPct}%, #e9ebfa 100%)`,
+          }}
+        >
           <input
             type="range"
             min={minDaily}
@@ -137,7 +143,33 @@ export default function MetaAdsCalculator({ initialCountry = null }) {
         </div>
       </div>
 
-      <div style={{ marginTop: '16px', fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>
+      {onStartWithBudget && (
+        <div style={{ marginTop: '22px', display: 'flex', justifyContent: 'center' }}>
+          <button
+            type="button"
+            onClick={(e) => onStartWithBudget(e, dailyBudget)}
+            style={{
+              background: 'linear-gradient(135deg, #232043 0%, #3b3578 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '999px',
+              padding: '13px 26px',
+              fontSize: '0.96rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 10px 24px rgba(35, 32, 67, 0.22)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <span>Launch Workspace at {formatCurrency(dailyBudget, country)}/day</span>
+            <span style={{ color: '#ffb800', fontSize: '1.1rem' }}>→</span>
+          </button>
+        </div>
+      )}
+
+      <div style={{ marginTop: '14px', fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>
         *Projections are estimates based on industry benchmarks in {country?.country_name}. Actual enquiry volumes vary by business category, target territory, and market demand.
       </div>
 

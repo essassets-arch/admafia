@@ -1,27 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   LayoutDashboard,
   HelpCircle,
-  IndianRupee,
-  RotateCcw,
   Wallet,
-  ShieldAlert,
-  UserPlus,
+  Users,
   LogOut,
   ExternalLink,
   Menu,
   X,
   ShieldCheck,
   RefreshCw,
-  Bell,
-  CheckCircle2,
   Clock,
   Sparkles,
   Palette,
   Briefcase,
-  Globe,
-  TrendingUp,
-  Database,
+  Settings,
 } from 'lucide-react';
 
 import SuperAdminDashboardDesk from './SuperAdminDashboardDesk';
@@ -42,39 +35,89 @@ import AdminThemeToggle from '../components/AdminThemeToggle';
 import { useAdminTheme } from '../utils/adminTheme';
 import './superadmin.css';
 
+const DESK_TO_HUB = {
+  dashboard: 'command_center',
+  growth_analytics: 'command_center',
+  topups: 'finance_hub',
+  refunds: 'finance_hub',
+  finance: 'finance_hub',
+  accounts: 'accounts_hub',
+  add_user: 'accounts_hub',
+  queries: 'queries',
+  country_pricing: 'platform_system',
+  database_backups: 'platform_system',
+};
+
+const DEFAULT_HUB_SUBTAB = {
+  command_center: 'dashboard',
+  finance_hub: 'topups',
+  accounts_hub: 'accounts',
+  queries: 'queries',
+  platform_system: 'country_pricing',
+};
+
+function normalizeDeskKey(rawKey) {
+  if (!rawKey) return 'dashboard';
+  const k = String(rawKey).trim().toLowerCase().replace(/-/g, '_');
+
+  if (k === 'command_center') return 'dashboard';
+  if (k === 'finance_hub') return 'topups';
+  if (k === 'accounts_hub' || k === 'accounts_users' || k === 'audit_logs') return 'accounts';
+  if (k === 'platform_system') return 'country_pricing';
+  if (k === 'database') return 'database_backups';
+
+  if (Object.prototype.hasOwnProperty.call(DESK_TO_HUB, k)) {
+    return k;
+  }
+  return 'dashboard';
+}
+
+function resolveDeskFromUrl() {
+  try {
+    const p = (window.location.pathname || '').toLowerCase();
+    const h = (window.location.hash || '').toLowerCase();
+    const combined = `${p} ${h}`;
+
+    if (combined.includes('growth-analytics') || combined.includes('growth_analytics')) return 'growth_analytics';
+    if (combined.includes('database-backups') || combined.includes('database_backups') || combined.includes('/database')) return 'database_backups';
+    if (combined.includes('country-pricing') || combined.includes('country_pricing')) return 'country_pricing';
+    if (combined.includes('platform-system') || combined.includes('platform_system')) return 'country_pricing';
+    if (combined.includes('queries')) return 'queries';
+    if (combined.includes('refunds')) return 'refunds';
+    if (combined.includes('topups')) return 'topups';
+    if (combined.includes('finance-hub') || combined.includes('finance_hub')) return 'topups';
+    if (combined.includes('finance')) return 'finance';
+    if (combined.includes('add-user') || combined.includes('add_user')) return 'add_user';
+    if (combined.includes('accounts-hub') || combined.includes('accounts_hub') || combined.includes('accounts')) return 'accounts';
+    if (combined.includes('command-center') || combined.includes('command_center') || combined.includes('dashboard')) return 'dashboard';
+    return 'dashboard';
+  } catch (e) {
+    return 'dashboard';
+  }
+}
+
 export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
   const { theme } = useAdminTheme();
   const activeUser = adminAuthApi.getCurrentUser() || {
     fullName: 'Ad Mafia Executive Super Admin',
     role: 'Super Admin',
   };
-  // Resolve active desk from URL pathname or hash
-  const resolveDeskFromUrl = () => {
-    try {
-      const p = (window.location.pathname || '').toLowerCase();
-      const h = (window.location.hash || '').toLowerCase();
-
-      if (p.includes('/superadmin/growth-analytics') || h.includes('growth-analytics') || h.includes('growth_analytics')) return 'growth_analytics';
-      if (p.includes('/superadmin/database-backups') || p.includes('/superadmin/database') || h.includes('database')) return 'database_backups';
-      if (p.includes('/superadmin/queries') || h.includes('superadmin/queries') || h.includes('queries')) return 'queries';
-      if (p.includes('/superadmin/finance') || h.includes('superadmin/finance') || h.includes('finance')) return 'finance';
-      if (p.includes('/superadmin/refunds') || h.includes('superadmin/refunds') || h.includes('refunds')) return 'refunds';
-      if (p.includes('/superadmin/topups') || h.includes('superadmin/topups') || h.includes('topups')) return 'topups';
-      if (p.includes('/superadmin/accounts') || h.includes('superadmin/accounts') || h.includes('accounts')) return 'accounts';
-      if (p.includes('/superadmin/country-pricing') || h.includes('country-pricing')) return 'country_pricing';
-      if (p.includes('/superadmin/add-user') || p.includes('/superadmin/add_user') || h.includes('add-user') || h.includes('add_user')) return 'add_user';
-      if (p.includes('/superadmin/dashboard') || h.includes('superadmin/dashboard') || h.includes('dashboard')) return 'dashboard';
-      return 'dashboard';
-    } catch (e) {
-      return 'dashboard';
-    }
-  };
 
   const [activeDesk, setActiveDesk] = useState(resolveDeskFromUrl);
+  const [lastSubTabByHub, setLastSubTabByHub] = useState(() => {
+    const initial = resolveDeskFromUrl();
+    const initialHub = DESK_TO_HUB[initial] || 'command_center';
+    return {
+      ...DEFAULT_HUB_SUBTAB,
+      [initialHub]: initial,
+    };
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [summary, setSummary] = useState(null);
   const [liveClock, setLiveClock] = useState(() => new Date());
   const [syncing, setSyncing] = useState(false);
+
+  const activeHub = DESK_TO_HUB[activeDesk] || 'command_center';
 
   // Live IST Clock
   useEffect(() => {
@@ -85,7 +128,10 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
   // Sync hash/popstate
   useEffect(() => {
     const handleUrlChange = () => {
-      setActiveDesk(resolveDeskFromUrl());
+      const nextDesk = resolveDeskFromUrl();
+      const nextHub = DESK_TO_HUB[nextDesk] || 'command_center';
+      setActiveDesk(nextDesk);
+      setLastSubTabByHub((prev) => ({ ...prev, [nextHub]: nextDesk }));
     };
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
@@ -96,7 +142,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
   }, []);
 
   // Fetch summary badge counts
-  const loadSummaryData = async () => {
+  const loadSummaryData = useCallback(async () => {
     setSyncing(true);
     try {
       const res = await superadminApi.getDashboardSummary();
@@ -107,121 +153,172 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
       console.error('[SuperAdminLayout] Summary load error:', err);
     } finally {
       setSyncing(false);
-    }
-  };
+    };
+  }, []);
 
   useEffect(() => {
     loadSummaryData();
     const interval = setInterval(loadSummaryData, 30000); // 30s live refresh
     return () => clearInterval(interval);
-  }, [activeDesk]);
+  }, [activeDesk, loadSummaryData]);
 
-  const navigateToDesk = (deskKey) => {
-    setActiveDesk(deskKey);
+  // Supports both hub keys ('finance_hub') and legacy desk keys ('refunds', 'accounts_users', etc.)
+  const navigateToDesk = (keyOrHub) => {
+    const raw = String(keyOrHub || '').trim().toLowerCase().replace(/-/g, '_');
+    let nextDesk;
+
+    if (Object.prototype.hasOwnProperty.call(DEFAULT_HUB_SUBTAB, raw)) {
+      nextDesk = lastSubTabByHub[raw] || DEFAULT_HUB_SUBTAB[raw];
+    } else {
+      nextDesk = normalizeDeskKey(raw);
+    }
+
+    const nextHub = DESK_TO_HUB[nextDesk] || 'command_center';
+    setActiveDesk(nextDesk);
+    setLastSubTabByHub((prev) => ({ ...prev, [nextHub]: nextDesk }));
+
     try {
-      const newPath = `/superadmin/${deskKey.replace('_', '-')}`;
+      const newPath = `/superadmin/${nextDesk.replace(/_/g, '-')}`;
       window.history.pushState(null, '', newPath);
     } catch (e) {
-      window.location.hash = `#/superadmin/${deskKey}`;
+      window.location.hash = `#/superadmin/${nextDesk}`;
     }
     setMobileMenuOpen(false);
   };
 
-  // Nav Items config
-  const navItems = [
+  const pendingFinanceCount = (summary?.pendingTopups || 0) + (summary?.pendingRefunds || 0);
+  const pendingQueriesCount = summary?.pendingQueries || 0;
+
+  // 5 Grouped Hubs under crisp section labels (OVERVIEW, OPERATIONS, SYSTEM)
+  const navSections = [
     {
-      id: 'dashboard',
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      badge: null,
+      section: 'OVERVIEW',
+      items: [
+        {
+          id: 'command_center',
+          label: 'Command Center',
+          icon: LayoutDashboard,
+          badge: null,
+        },
+      ],
     },
     {
-      id: 'growth_analytics',
-      label: 'Growth & Churn Radar',
-      icon: TrendingUp,
-      badge: null,
+      section: 'OPERATIONS',
+      items: [
+        {
+          id: 'finance_hub',
+          label: 'Finance, Top-Ups & Refunds',
+          icon: Wallet,
+          badge: pendingFinanceCount,
+          badgeType: (summary?.pendingRefunds || 0) > 0 ? 'danger' : 'info',
+        },
+        {
+          id: 'accounts_hub',
+          label: 'Accounts & Team Roster',
+          icon: Users,
+          badge: null,
+        },
+        {
+          id: 'queries',
+          label: 'Support Escalations',
+          icon: HelpCircle,
+          badge: pendingQueriesCount,
+          badgeType: 'warning',
+        },
+      ],
     },
     {
-      id: 'database_backups',
-      label: 'DB Compass & Backups',
-      icon: Database,
-      badge: null,
-    },
-    {
-      id: 'queries',
-      label: 'Check Queries',
-      icon: HelpCircle,
-      badge: summary?.pendingQueries || 0,
-      badgeType: 'warning',
-    },
-    {
-      id: 'finance',
-      label: 'Manage Finance',
-      icon: IndianRupee,
-      badge: null,
-    },
-    {
-      id: 'refunds',
-      label: 'Check Refunds',
-      icon: RotateCcw,
-      badge: summary?.pendingRefunds || 0,
-      badgeType: 'danger',
-    },
-    {
-      id: 'topups',
-      label: 'Account Top-Up',
-      icon: Wallet,
-      badge: summary?.pendingTopups || 0,
-      badgeType: 'info',
-    },
-    {
-      id: 'accounts',
-      label: 'Account Block / Activate',
-      icon: ShieldAlert,
-      badge: null,
-    },
-    {
-      id: 'country_pricing',
-      label: 'Country Pricing & IP',
-      icon: Globe,
-      badge: null,
-    },
-    {
-      id: 'add_user',
-      label: 'Add User / Business',
-      icon: UserPlus,
-      badge: null,
+      section: 'SYSTEM',
+      items: [
+        {
+          id: 'platform_system',
+          label: 'Platform & System',
+          icon: Settings,
+          badge: null,
+        },
+      ],
     },
   ];
 
+  // Top Segmented Sub-Navigation per Hub
+  const hubSubTabs = {
+    command_center: [
+      { id: 'dashboard', label: 'Executive Overview' },
+      { id: 'growth_analytics', label: 'Growth & Churn Funnel' },
+    ],
+    finance_hub: [
+      {
+        id: 'topups',
+        label: '💳 Account Top-Ups',
+        badge: summary?.pendingTopups || 0,
+        badgeTone: 'info',
+      },
+      {
+        id: 'refunds',
+        label: '↩️ Refunds Queue',
+        badge: summary?.pendingRefunds || 0,
+        badgeTone: 'danger',
+      },
+      { id: 'finance', label: '📊 Master Finance & Wallets' },
+    ],
+    accounts_hub: [
+      { id: 'accounts', label: '🏢 Business & Client Accounts' },
+      { id: 'add_user', label: '👤 Add User / Staff Roster' },
+    ],
+    platform_system: [
+      { id: 'country_pricing', label: '🌍 Country Pricing & IP' },
+      { id: 'database_backups', label: '🗄️ Database & Backups' },
+    ],
+  };
+
   const getDeskTitle = () => {
-    switch (activeDesk) {
-      case 'dashboard':
-        return { title: 'Super Admin Dashboard', subtitle: 'Live command center & operational metrics' };
-      case 'growth_analytics':
-        return { title: 'Growth & Churn Radar', subtitle: 'Conversion funnel, WhatsApp close queue & low-runway alerts' };
-      case 'database_backups':
-        return { title: 'Database & Snapshot Vault', subtitle: 'MongoDB replica set, live explorer & encrypted backups' };
+    switch (activeHub) {
+      case 'command_center':
+        return {
+          title: 'Command Center',
+          subtitle:
+            activeDesk === 'growth_analytics'
+              ? 'Conversion funnel, WhatsApp close queue & low-runway alerts'
+              : 'Live executive overview & operational telemetry',
+        };
+      case 'finance_hub':
+        return {
+          title: 'Finance, Top-Ups & Refunds',
+          subtitle:
+            activeDesk === 'refunds'
+              ? 'Review & approve customer wallet refund requests'
+              : activeDesk === 'finance'
+              ? 'Master wallet balances, transaction ledger & reconciliation'
+              : 'Bank UTR verification & instant wallet credits',
+        };
+      case 'accounts_hub':
+        return {
+          title: 'Accounts & Team Roster',
+          subtitle:
+            activeDesk === 'add_user'
+              ? 'Provision enterprise businesses & assign staff roles'
+              : 'Business & client account governance with audit trails',
+        };
       case 'queries':
-        return { title: 'Customer & Business Queries', subtitle: 'Support desk triage & administrative responses' };
-      case 'finance':
-        return { title: 'Financial Management & Ledger', subtitle: 'Authoritative balances, transactions & reconciliation' };
-      case 'refunds':
-        return { title: 'Refund Requests Queue', subtitle: 'Review & approve customer wallet refund requests' };
-      case 'topups':
-        return { title: 'Account Top-Up & Deposits', subtitle: 'Bank UTR verification & instant wallet credits' };
-      case 'accounts':
-        return { title: 'Account Governance', subtitle: 'Business & staff status management with audit trails' };
-      case 'country_pricing':
-        return { title: 'Country Pricing & IP Master', subtitle: 'Global daily budgets, local currencies & geolocation' };
-      case 'add_user':
-        return { title: 'Add User / Business', subtitle: 'Provision enterprise businesses & assign staff roles' };
+        return {
+          title: 'Support Escalations',
+          subtitle: 'Customer & business support triage & administrative responses',
+        };
+      case 'platform_system':
+        return {
+          title: 'Platform & System',
+          subtitle:
+            activeDesk === 'database_backups'
+              ? 'Database explorer, live telemetry & encrypted snapshot vault'
+              : 'Global daily budgets, local currencies & geolocation rules',
+        };
       default:
         return { title: 'Super Admin Control Center', subtitle: 'Platform Governance' };
     }
   };
 
   const currentMeta = getDeskTitle();
+  const activeSubTabs = hubSubTabs[activeHub] || null;
 
   return (
     <div className="sa-container adm-theme-scope" data-admin-theme={theme}>
@@ -248,38 +345,37 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
           </button>
         </div>
 
-        {/* Live System Indicator */}
-        <div className="sa-system-pill">
-          <span className="sa-pulse-dot" />
-          <span>MongoDB Authoritative</span>
-        </div>
-
-        {/* Main Navigation Desks */}
+        {/* Grouped Navigation Hubs */}
         <nav className="sa-nav-list">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeDesk === item.id;
-            const hasBadge = typeof item.badge === 'number' && item.badge > 0;
+          {navSections.map((group) => (
+            <div key={group.section} className="sa-nav-group">
+              <div className="sa-nav-section-label">{group.section}</div>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeHub === item.id;
+                const hasBadge = typeof item.badge === 'number' && item.badge > 0;
 
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`sa-nav-item ${isActive ? 'active' : ''}`}
-                onClick={() => navigateToDesk(item.id)}
-              >
-                <div className="sa-nav-item-left">
-                  <Icon size={18} className="sa-nav-icon" />
-                  <span className="sa-nav-label">{item.label}</span>
-                </div>
-                {hasBadge && (
-                  <span className={`sa-nav-badge sa-badge-${item.badgeType}`}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`sa-nav-item ${isActive ? 'active' : ''}`}
+                    onClick={() => navigateToDesk(item.id)}
+                  >
+                    <div className="sa-nav-item-left">
+                      <Icon size={18} className="sa-nav-icon" />
+                      <span className="sa-nav-label">{item.label}</span>
+                    </div>
+                    {hasBadge && (
+                      <span className={`sa-nav-badge sa-badge-${item.badgeType}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Sidebar Footer */}
@@ -403,18 +499,6 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
             {/* Real-Time FCM & SSE Notification Bell */}
             <NotificationBell variant="light" adminThemeAware />
 
-            {/* 1-Tap Sign Out Action */}
-            <button
-              type="button"
-              className="sa-topbar-logout-btn"
-              onClick={onSignOut || (() => (window.location.href = '/login'))}
-              title="Sign Out"
-              aria-label="Sign Out"
-            >
-              <LogOut size={16} />
-              <span className="sa-topbar-logout-label">Sign Out</span>
-            </button>
-
             {/* Super Admin User Profile Pill */}
             <div className="sa-admin-pill" title={`Logged in as ${activeUser.fullName || 'Super Admin'} (${activeUser.email || activeUser.username || ''})`}>
               <div className="sa-admin-avatar">
@@ -430,6 +514,32 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
 
         {/* ACTIVE DESK VIEWPORT */}
         <main className="sa-content-area">
+          {activeSubTabs && (
+            <div className="sa-hub-subnav" role="tablist" aria-label={`${currentMeta.title} Views`}>
+              {activeSubTabs.map((tab) => {
+                const isTabActive = activeDesk === tab.id;
+                const showTabBadge = typeof tab.badge === 'number' && tab.badge > 0;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isTabActive}
+                    className={`sa-hub-tab ${isTabActive ? 'active' : ''}`}
+                    onClick={() => navigateToDesk(tab.id)}
+                  >
+                    <span>{tab.label}</span>
+                    {showTabBadge && (
+                      <span className={`sa-hub-tab-badge ${tab.badgeTone === 'info' ? 'info' : ''}`.trim()}>
+                        {tab.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {activeDesk === 'dashboard' && (
             <SuperAdminDashboardDesk onNavigate={navigateToDesk} onNavigateToDesk={navigateToDesk} />
           )}
@@ -474,4 +584,3 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
     </div>
   );
 }
-

@@ -9,16 +9,7 @@ import {
   AlertTriangle,
   RefreshCw,
   Eye,
-  Edit2,
-  Trash2,
   X,
-  Building,
-  Phone,
-  Mail,
-  MapPin,
-  Clock,
-  Sparkles,
-  ExternalLink,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 import { SmartTable } from '../components/SmartTabulator';
@@ -232,15 +223,13 @@ export default function CustomerGroupsDesk({ customers = [] }) {
 
     try {
       setIsDistributing(true);
+      const formattedBuyerPhone = `+91 ${cleanPhone}`;
       const payload = {
         category: leadForm.category,
         groupId: selOption?.groupId || null,
         contactNumber: cleanPhone,
         buyerPhone: cleanPhone,
-        title: `${leadForm.category} Buyer Requirement`,
-        description: `Direct inbound requirement for ${leadForm.category} products and services.`,
-        requirement: `Direct inbound requirement for ${leadForm.category} products and services.`,
-        buyerName: 'Verified Buyer',
+        buyerName: formattedBuyerPhone,
         priority: 'Normal',
         source: 'Category Lead Distribution',
       };
@@ -651,7 +640,7 @@ export default function CustomerGroupsDesk({ customers = [] }) {
               <thead>
                 <tr style={{ background: 'var(--adm-bg-subtle, #f8fafc)', borderBottom: '1px solid var(--adm-border, #e2e8f0)' }}>
                   <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)' }}>
-                    Lead Title &amp; Buyer
+                    Buyer Mobile (+91)
                   </th>
                   <th style={{ textAlign: 'left', padding: '10px 16px', fontSize: '0.8rem', color: 'var(--adm-text-body, #475569)' }}>
                     Category
@@ -668,58 +657,81 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 </tr>
               </thead>
               <tbody>
-                {historyList.map((h) => (
-                  <tr key={h.id} style={{ borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--adm-text-primary, #0f172a)' }}>{h.title}</div>
-                      <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)' }}>
-                        Buyer: {h.buyerName} • {h.displayPhone}
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span
-                        style={{
-                          padding: '3px 8px',
-                          borderRadius: 6,
-                          fontSize: '0.76rem',
-                          fontWeight: 600,
-                          backgroundColor: 'var(--adm-soft-indigo-bg, #eef2ff)',
-                          color: 'var(--adm-soft-indigo-text, #4338ca)',
-                        }}
-                      >
-                        {h.category}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <span
-                        style={{
-                          padding: '3px 10px',
-                          borderRadius: 14,
-                          fontSize: '0.78rem',
-                          fontWeight: 700,
-                          backgroundColor: 'var(--adm-soft-emerald-bg, #ecfdf5)',
-                          color: 'var(--adm-soft-emerald-text, #047857)',
-                        }}
-                      >
-                        {h.totalRecipients || 0} Accounts
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: 'var(--adm-text-muted, #64748b)' }}>
-                      {h.createdAt ? new Date(h.createdAt).toLocaleString('en-IN') : 'Recently'}
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleInspectHistory(h)}
-                        className="sales-btn-secondary"
-                        style={{ padding: '5px 10px', fontSize: '0.76rem' }}
-                      >
-                        <Eye size={12} style={{ marginRight: 4 }} />
-                        Inspect
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {historyList.map((h) => {
+                  const rawDigits = String(
+                    h.displayPhone || h.buyerPhone || h.contactNumber || h.phone || h.buyerName || h.title || ''
+                  )
+                    .replace(/\D/g, '')
+                    .slice(-10);
+                  const primaryMobile =
+                    rawDigits.length === 10
+                      ? `+91 ${rawDigits}`
+                      : h.displayPhone || h.buyerPhone || '—';
+                  return (
+                    <tr key={h.id} style={{ borderBottom: '1px solid var(--adm-border-subtle, #f1f5f9)' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div
+                          style={{
+                            fontWeight: 800,
+                            fontSize: '0.96rem',
+                            fontFamily: 'monospace',
+                            letterSpacing: '0.02em',
+                            color: 'var(--adm-text-primary, #0f172a)',
+                          }}
+                        >
+                          {primaryMobile}
+                        </div>
+                        {h.id && (
+                          <div style={{ fontSize: '0.72rem', fontFamily: 'monospace', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
+                            {h.id}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            fontSize: '0.76rem',
+                            fontWeight: 600,
+                            backgroundColor: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                            color: 'var(--adm-soft-indigo-text, #4338ca)',
+                          }}
+                        >
+                          {h.category}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <span
+                          style={{
+                            padding: '3px 10px',
+                            borderRadius: 14,
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            backgroundColor: 'var(--adm-soft-emerald-bg, #ecfdf5)',
+                            color: 'var(--adm-soft-emerald-text, #047857)',
+                          }}
+                        >
+                          {h.totalRecipients || 0} Accounts
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: 'var(--adm-text-muted, #64748b)' }}>
+                        {h.createdAt ? new Date(h.createdAt).toLocaleString('en-IN') : 'Recently'}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleInspectHistory(h)}
+                          className="sales-btn-secondary"
+                          style={{ padding: '5px 10px', fontSize: '0.76rem' }}
+                        >
+                          <Eye size={12} style={{ marginRight: 4 }} />
+                          Inspect
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             </SmartTable>
@@ -1214,8 +1226,16 @@ export default function CustomerGroupsDesk({ customers = [] }) {
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
                   Distribution Inspection
                 </h3>
-                <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: 'var(--adm-text-muted, #64748b)', overflowWrap: 'anywhere' }}>
-                  {inspectItem.title} ({inspectItem.category})
+                <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: 'var(--adm-text-muted, #64748b)', overflowWrap: 'anywhere', fontFamily: 'monospace', fontWeight: 700 }}>
+                  {(() => {
+                    const d = String(
+                      inspectItem.displayPhone || inspectItem.buyerPhone || inspectItem.contactNumber || inspectItem.phone || inspectItem.title || ''
+                    )
+                      .replace(/\D/g, '')
+                      .slice(-10);
+                    return d.length === 10 ? `+91 ${d}` : inspectItem.displayPhone || inspectItem.title;
+                  })()}{' '}
+                  • {inspectItem.category}
                 </p>
               </div>
               <button

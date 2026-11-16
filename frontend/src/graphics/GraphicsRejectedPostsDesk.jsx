@@ -16,17 +16,31 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import graphicsApi from '../services/graphicsApi';
+import adminAuthApi from '../services/adminAuthApi';
 import { SmartTable } from '../components/SmartTabulator';
 
 const CREATIVE_FORMATS = [
-  { id: 'Instagram / Facebook Post', label: 'Instagram / Facebook Post' },
-  { id: 'Story / Status', label: 'Story / Status' },
-  { id: 'Carousel', label: 'Carousel Multi-Card' },
-  { id: 'Reel Cover', label: 'Reel Cover' },
-  { id: 'Custom Design', label: 'Custom Dimension' },
+  '1080x1080 Square',
+  '1080x1350 Portrait',
+  '1080x1920 Story/Reel',
+  '1200x628 Landscape',
 ];
 
-export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
+function normalizeCreativeFormat(raw) {
+  if (!raw) return '1080x1080 Square';
+  if (CREATIVE_FORMATS.includes(raw)) return raw;
+  const s = String(raw).toLowerCase();
+  if (s.includes('1350') || s.includes('portrait')) return '1080x1350 Portrait';
+  if (s.includes('1920') || s.includes('story') || s.includes('reel')) return '1080x1920 Story/Reel';
+  if (s.includes('1200') || s.includes('landscape')) return '1200x628 Landscape';
+  return '1080x1080 Square';
+}
+
+export default function GraphicsRejectedPostsDesk({ onNavigateToDesk, onSummaryRefresh }) {
+  const currentUser = adminAuthApi.getCurrentUser();
+  const defaultDesignerName =
+    currentUser?.name || currentUser?.fullName || 'Graphics Studio';
+
   const [rejectedPosts, setRejectedPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -36,11 +50,12 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
   // Reupload Modal State
   const [reuploadPost, setReuploadPost] = useState(null);
   const [newMediaUrl, setNewMediaUrl] = useState('');
+  const [newMediaType, setNewMediaType] = useState('image');
   const [localPreview, setLocalPreview] = useState('');
-  const [newCreativeFormat, setNewCreativeFormat] = useState('Instagram / Facebook Post');
+  const [newCreativeFormat, setNewCreativeFormat] = useState('1080x1080 Square');
   const [revisionSummary, setRevisionSummary] = useState('');
   const [designerNotes, setDesignerNotes] = useState('');
-  const [designerName, setDesignerName] = useState('Senior Graphics Designer');
+  const [designerName, setDesignerName] = useState(defaultDesignerName);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [submittingReupload, setSubmittingReupload] = useState(false);
 
@@ -85,13 +100,14 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
   const handleOpenReupload = (post) => {
     setReuploadPost(post);
     setNewMediaUrl('');
+    setNewMediaType('image');
     setLocalPreview('');
-    setNewCreativeFormat(post.creativeFormat || 'Instagram / Facebook Post');
+    setNewCreativeFormat(normalizeCreativeFormat(post.creativeFormat));
     setRevisionSummary('');
     setDesignerNotes('');
   };
 
-  // File Upload for Reupload
+  // File Upload for Reupload (silent instant preview — no intermediate popup)
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -101,13 +117,15 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
       return;
     }
 
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'];
     if (!allowed.includes(file.type)) {
-      Swal.fire({ icon: 'error', title: 'Unsupported Format', text: 'Please upload a PNG, JPG, or WEBP image.' });
+      Swal.fire({ icon: 'error', title: 'Unsupported Format', text: 'Please upload a PNG, JPG, WEBP image or MP4 video.' });
       return;
     }
 
-    // Instant local preview
+    const isVideo = file.type.startsWith('video/');
+    setNewMediaType(isVideo ? 'video' : 'image');
+
     try {
       const objUrl = URL.createObjectURL(file);
       setLocalPreview(objUrl);
@@ -122,12 +140,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
         const uploadRes = await graphicsApi.uploadMedia(base64Data, file.name, file.type);
         if (uploadRes && uploadRes.ok) {
           setNewMediaUrl(uploadRes.url);
-          Swal.fire({
-            icon: 'success',
-            title: 'Corrected Artwork Uploaded',
-            timer: 1200,
-            showConfirmButton: false,
-          });
+          setNewMediaType(isVideo ? 'video' : 'image');
         }
       } catch (err) {
         Swal.fire({ icon: 'error', title: 'Upload Failed', text: err.message });
@@ -138,55 +151,40 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
     reader.readAsDataURL(file);
   };
 
-  // Submit Reupload
+  // Submit Reupload (1 single clean confirmation toast)
   const handleSubmitReupload = async (e) => {
     e.preventDefault();
     if (!reuploadPost || !newMediaUrl) {
-      Swal.fire({ icon: 'warning', title: 'Please upload the corrected artwork image first.' });
+      Swal.fire({ icon: 'warning', title: 'Please upload the corrected creative first.' });
       return;
     }
 
     const nextRev = (reuploadPost.revisionNumber || 1) + 1;
 
-    const confirm = await Swal.fire({
-      title: `Submit Revision #${nextRev}?`,
-      html: `
-        <div style="text-align: left; font-size: 0.88rem; line-height: 1.5;">
-          <div>Customer: <strong>${reuploadPost.companyName}</strong></div>
-          <div>New Creative Version: <strong>Revision #${nextRev}</strong></div>
-          <div style="margin-top: 8px; padding: 10px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.28); border-radius: 8px; color: #6366f1;">
-            ✓ The corrected creative will return to Marketing's <strong>Verify Posts</strong> queue for review.
-            <div style="font-size: 0.78rem; opacity: 0.85; margin-top: 4px;">Previous rejected version and feedback are preserved in audit history.</div>
-          </div>
-        </div>
-      `,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#6366f1',
-      confirmButtonText: 'Yes, Submit Corrected Artwork',
-    });
-
-    if (!confirm.isConfirmed) return;
-
     setSubmittingReupload(true);
     try {
       const res = await graphicsApi.reuploadArtwork(reuploadPost.id, {
         mediaUrl: newMediaUrl,
+        mediaType: newMediaType,
         creativeFormat: newCreativeFormat,
         designerNotes: designerNotes.trim(),
         revisionSummary: revisionSummary.trim(),
-        designerName: designerName.trim() || 'Senior Graphics Designer',
+        designerName: designerName.trim() || defaultDesignerName,
       });
 
       if (res && res.ok) {
-        await Swal.fire({
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
           icon: 'success',
-          title: 'Resubmitted for Review! 🚀',
-          text: `Revision #${nextRev} has been submitted to Marketing for verification.`,
-          confirmButtonColor: '#4f46e5',
+          title: `Revision #${nextRev} submitted for verification`,
+          showConfirmButton: false,
+          timer: 2600,
+          timerProgressBar: true,
         });
         setReuploadPost(null);
         fetchRejected(true);
+        if (onSummaryRefresh) onSummaryRefresh();
       }
     } catch (err) {
       Swal.fire({ icon: 'error', title: 'Reupload Failed', text: err.message });
@@ -473,10 +471,44 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                   </div>
                 </div>
 
+                {/* Creative Format & Studio Designer */}
+                <div className="gfx-specs-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
+                      Creative Format *
+                    </label>
+                    <select
+                      className="graphics-select"
+                      style={{ width: '100%', padding: '8px 12px', fontSize: '0.86rem', fontWeight: 600 }}
+                      value={newCreativeFormat}
+                      onChange={(e) => setNewCreativeFormat(e.target.value)}
+                    >
+                      {CREATIVE_FORMATS.map((fmt) => (
+                        <option key={fmt} value={fmt}>
+                          {fmt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
+                      Studio Designer
+                    </label>
+                    <input
+                      type="text"
+                      className="graphics-search-input"
+                      style={{ width: '100%', padding: '8px 12px', fontSize: '0.86rem', fontWeight: 600 }}
+                      value={designerName}
+                      onChange={(e) => setDesignerName(e.target.value)}
+                      placeholder="Graphics Studio"
+                    />
+                  </div>
+                </div>
+
                 {/* Upload New File */}
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: '0.80rem', fontWeight: 800, color: 'var(--adm-text-body, #334155)', marginBottom: 6, textTransform: 'uppercase' }}>
-                    1. Upload Corrected Artwork Image (PNG, JPG, WEBP) *
+                    1. Upload Corrected Creative (PNG, JPG, WEBP, MP4) *
                   </label>
                   <div
                     className={`gfx-upload-dropzone ${(localPreview || newMediaUrl) ? 'has-preview' : ''}`.trim()}
@@ -491,7 +523,7 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                   >
                     <input
                       type="file"
-                      accept="image/png, image/jpeg, image/webp"
+                      accept="image/png,image/jpeg,image/webp,video/mp4"
                       onChange={handleFileChange}
                       disabled={uploadingFile}
                       style={{
@@ -511,16 +543,26 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                       </div>
                     ) : (localPreview || newMediaUrl) ? (
                       <div>
-                        <img
-                          src={localPreview || newMediaUrl}
-                          alt="Corrected Preview"
-                          style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', objectFit: 'contain' }}
-                          onError={(e) => {
-                            if (localPreview && e.currentTarget.src !== localPreview) {
-                              e.currentTarget.src = localPreview;
-                            }
-                          }}
-                        />
+                        {newMediaType === 'video' || (localPreview || newMediaUrl).startsWith('data:video/') || /\.mp4(\?|$)/i.test(localPreview || newMediaUrl) ? (
+                          <video
+                            src={localPreview || newMediaUrl}
+                            controls
+                            muted
+                            playsInline
+                            style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
+                          />
+                        ) : (
+                          <img
+                            src={localPreview || newMediaUrl}
+                            alt="Corrected Preview"
+                            style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', objectFit: 'contain' }}
+                            onError={(e) => {
+                              if (localPreview && e.currentTarget.src !== localPreview) {
+                                e.currentTarget.src = localPreview;
+                              }
+                            }}
+                          />
+                        )}
                         <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#10b981', fontWeight: 700 }}>
                           ✓ Corrected File Ready for Resubmission (Click to change)
                         </div>
@@ -529,10 +571,10 @@ export default function GraphicsRejectedPostsDesk({ onNavigateToDesk }) {
                       <div>
                         <UploadCloud size={28} color="#94a3b8" style={{ marginBottom: 6 }} />
                         <div style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--adm-text-secondary, #1e293b)' }}>
-                          Drag &amp; drop corrected image or click to browse
+                          Drag &amp; drop corrected creative or click to browse
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
-                          PNG, JPG, WEBP up to 15MB
+                          PNG, JPG, WEBP, or MP4 up to 15MB
                         </div>
                       </div>
                     )}

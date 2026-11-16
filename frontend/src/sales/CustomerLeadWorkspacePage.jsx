@@ -2,8 +2,6 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   ArrowLeft,
   Building2,
-  CheckCircle2,
-  Clock,
   ExternalLink,
   Layers,
   Mail,
@@ -22,7 +20,7 @@ import {
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 import { SmartTable } from '../components/SmartTabulator';
-import { formatIndianDateTime, getLiveNowFormatted } from './OperationalDesksViews';
+import { formatIndianDateTime } from './OperationalDesksViews';
 import {
   extractCustomerKey,
   buildCustomerLeadHref,
@@ -30,6 +28,74 @@ import {
 } from './customerLeadNavigation';
 
 export { extractCustomerKey, buildCustomerLeadHref, navigateToCustomerLeadPage };
+
+export function parseBulkIndianPhones(rawInput, existingPhonesSet = new Set()) {
+  const text = String(rawInput || '');
+  if (!text.trim()) {
+    return {
+      validNumbers: [],
+      invalidTokens: [],
+      clientDuplicates: [],
+      newValidNumbers: [],
+      batchDuplicatesCount: 0,
+    };
+  }
+
+  // Split by lines, commas, semicolons first; normalize "+91 98765 43210" / "98765 43210" within each chunk
+  const segments = text.split(/[\r\n,;]+/);
+  const tokens = [];
+  for (const seg of segments) {
+    const normalizedSeg = seg
+      .replace(/(?:\+91|0091)[\s-]*([6-9]\d{4})[\s-]*(\d{5})/g, ' $1$2 ')
+      .replace(/(?:\+91|0091)[\s-]*([6-9]\d{9})/g, ' $1 ')
+      .replace(/\b([6-9]\d{4})[\s-](\d{5})\b/g, '$1$2');
+    const parts = normalizedSeg.split(/[\t ]+/).map((s) => s.trim()).filter(Boolean);
+    tokens.push(...parts);
+  }
+
+  const validNumbers = [];
+  const invalidTokens = [];
+  const clientDuplicates = [];
+  const newValidNumbers = [];
+  const seenInBatch = new Set();
+  let batchDuplicatesCount = 0;
+
+  for (const tok of tokens) {
+    const digitsOnly = tok.replace(/\D/g, '');
+    if (!digitsOnly && tok === '+91') continue;
+
+    let clean = digitsOnly;
+    if (clean.length === 12 && clean.startsWith('91')) {
+      clean = clean.slice(2);
+    } else if (clean.length === 11 && clean.startsWith('0')) {
+      clean = clean.slice(1);
+    }
+
+    if (clean.length === 10 && ['6', '7', '8', '9'].includes(clean[0])) {
+      if (seenInBatch.has(clean)) {
+        batchDuplicatesCount += 1;
+        continue;
+      }
+      seenInBatch.add(clean);
+      validNumbers.push(clean);
+      if (existingPhonesSet.has(clean)) {
+        clientDuplicates.push(clean);
+      } else {
+        newValidNumbers.push(clean);
+      }
+    } else {
+      invalidTokens.push(tok);
+    }
+  }
+
+  return {
+    validNumbers,
+    invalidTokens,
+    clientDuplicates,
+    newValidNumbers,
+    batchDuplicatesCount,
+  };
+}
 
 function parseUrlState() {
   if (typeof window === 'undefined') {
@@ -91,8 +157,6 @@ function matchLeadToCust(lead, cust) {
   return false;
 }
 
-const BUDGET_PRESETS = ['₹50K – ₹1.5L', '₹1.5L – ₹3.5L', '₹3.5L – ₹10L', '₹10L+'];
-
 export default function CustomerLeadWorkspacePage({ customers: propsCustomers = [], navigateToDesk }) {
   const [urlState, setUrlState] = useState(parseUrlState);
   const [allCustomers, setAllCustomers] = useState(() => (Array.isArray(propsCustomers) ? propsCustomers : []));
@@ -102,15 +166,9 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
   const [submitError, setSubmitError] = useState('');
   const [successBanner, setSuccessBanner] = useState(null);
 
-  // Add Lead Form State (pre-bound to target user — zero customer dropdown hunting!)
-  const [buyerPhone, setBuyerPhone] = useState('');
-  const [buyerName, setBuyerName] = useState('');
-  const [city, setCity] = useState('');
-  const [category, setCategory] = useState('');
-  const [budget, setBudget] = useState('₹1.5L – ₹3.5L');
-  const [priority, setPriority] = useState('Urgent');
-  const [requirement, setRequirement] = useState('');
-  const [notes, setNotes] = useState('');
+  // Sleek Phone-Only (+ Bulk Multi-Number Paste) Lead Dispatch State
+  const [phonesInput, setPhonesInput] = useState('');
+  const [multiLineMode, setMultiLineMode] = useState(false);
 
   // Assigned Leads History Filter State
   const [historyFilter, setHistoryFilter] = useState('all');
@@ -144,14 +202,6 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
     return null;
   }, [allCustomers, urlState.customerKey]);
 
-  // Pre-fill city & category defaults whenever target customer resolves
-  useEffect(() => {
-    if (targetCustomer) {
-      setCity(targetCustomer.city || '');
-      setCategory(targetCustomer.category || '');
-    }
-  }, [targetCustomer?.id, targetCustomer?.phone]);
-
   // Auto-focus buyer phone input when opening in "add" mode
   useEffect(() => {
     if (urlState.mode === 'add') {
@@ -168,11 +218,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
       ...item,
       phone: rawDigits || item.phone || '',
       displayPhone: rawDigits ? `+91 ${rawDigits}` : item.displayPhone || item.phone || '',
-      name: item.name && !/^\+?91?\s*\d{10}$/.test(String(item.name).trim()) ? item.name : (rawDigits ? `+91 ${rawDigits}` : item.name || '—'),
-      buyerLabel:
-        item.name && !/^\+?91?\s*\d{10}$/.test(String(item.name).trim())
-          ? item.name
-          : '',
+      name: rawDigits ? `+91 ${rawDigits}` : item.name || '—',
       read: Boolean(item.read || item.is_read || item.status === 'read'),
       is_read: Boolean(item.read || item.is_read || item.status === 'read'),
     };
@@ -181,7 +227,6 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
   const fetchCustomerLeads = useCallback(async (showSpinner = false) => {
     if (showSpinner) setIsLoadingLeads(true);
     try {
-      // Ensure customers list is also fresh if direct page load
       if (allCustomers.length === 0 || (urlState.customerKey && !targetCustomer)) {
         const state = await crmApi.syncStateFromPostgres();
         if (Array.isArray(state?.customers) && state.customers.length > 0) {
@@ -192,7 +237,11 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
       const resolvedCust =
         targetCustomer ||
         (urlState.customerKey
-          ? { id: urlState.customerKey, phone: urlState.customerKey.replace(/\D/g, '').slice(-10), username: urlState.customerKey }
+          ? {
+              id: urlState.customerKey,
+              phone: urlState.customerKey.replace(/\D/g, '').slice(-10),
+              username: urlState.customerKey,
+            }
           : null);
 
       if (!resolvedCust) {
@@ -212,7 +261,6 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
         setAssignedLeads(apiLeads.map(normalizeLeadItem));
       }
     } catch (_) {
-      // Fallback to localStorage cache if network hiccup
       try {
         const raw = localStorage.getItem('growthline_all_leads');
         if (raw && targetCustomer) {
@@ -242,7 +290,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
     const fromDesk = urlState.from || 'leads';
     if (typeof navigateToDesk === 'function') {
       if (fromDesk === 'customers') return navigateToDesk('customers', '#customers');
-      if (fromDesk === 'approved') return navigateToDesk('approved', '#approved');
+      if (fromDesk === 'approved') return navigateToDesk('customers', '#approved');
       return navigateToDesk('leads', '#leads');
     }
     window.location.hash = '#leads';
@@ -250,119 +298,121 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
 
   const backLabel =
     urlState.from === 'customers'
-      ? 'Back to Customer Registrations'
+      ? 'Back to Customers & Wallets'
       : urlState.from === 'approved'
-        ? 'Back to Approved Members'
-        : 'Back to Lead Management';
+        ? 'Back to Active & Approved'
+        : 'Back to Leads & Distribution';
 
-  // Phone validation & duplicate check for this user
-  const isPhoneValidStart = buyerPhone.length === 0 || ['6', '7', '8', '9'].includes(buyerPhone[0]);
-  const isPhoneComplete = buyerPhone.length === 10 && isPhoneValidStart;
-  const duplicateAssignedLead = useMemo(() => {
-    if (buyerPhone.length !== 10) return null;
-    return assignedLeads.find((l) => String(l.phone || '').replace(/\D/g, '').slice(-10) === buyerPhone) || null;
-  }, [assignedLeads, buyerPhone]);
+  // Live phone parsing & client-duplicate detection
+  const existingPhonesSet = useMemo(() => {
+    const s = new Set();
+    for (const l of assignedLeads) {
+      const d = String(l.phone || '').replace(/\D/g, '').slice(-10);
+      if (d.length === 10) s.add(d);
+    }
+    return s;
+  }, [assignedLeads]);
+
+  const parsedPhones = useMemo(
+    () => parseBulkIndianPhones(phonesInput, existingPhonesSet),
+    [phonesInput, existingPhonesSet]
+  );
+
+  const isSingleLineActive = !multiLineMode && !phonesInput.includes('\n');
+  const canDispatch = Boolean(targetCustomer) && parsedPhones.validNumbers.length > 0 && !isSubmitting;
 
   const handleAssignLead = async (e) => {
-    e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     setSubmitError('');
+
     if (!targetCustomer) {
       setSubmitError('Target customer account could not be resolved.');
       return;
     }
-    if (!isPhoneComplete) {
-      setSubmitError('Enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
+    if (parsedPhones.validNumbers.length === 0) {
+      setSubmitError('Enter at least one valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
       return;
     }
 
     setIsSubmitting(true);
-    const cleanDigits = buyerPhone.replace(/\D/g, '').slice(-10);
-    const formattedPhone = `+91 ${cleanDigits}`;
     const companyDisplay =
       targetCustomer.companyName || targetCustomer.name || `@${targetCustomer.username || 'client'}`;
-    const resolvedBuyerName = buyerName.trim() || formattedPhone;
-    const resolvedReq = requirement.trim() || `Verified Business Enquiry for ${companyDisplay}`;
-    const resolvedCity = city.trim() || targetCustomer.city || '';
-    const resolvedCat = category.trim() || targetCustomer.category || 'Other';
-    const leadId = `lead_${Date.now()}`;
 
     try {
-      const savedLead = await crmApi.createLead({
-        id: leadId,
+      const res = await crmApi.createBulkLeads({
         customerId: targetCustomer.id,
         customerPhone: targetCustomer.phone || '',
         customerUsername: targetCustomer.username || '',
         company: companyDisplay,
-        phone: cleanDigits,
-        name: resolvedBuyerName,
-        category: resolvedCat,
-        city: resolvedCity,
-        requirement: resolvedReq,
-        budget: budget.trim() || '₹1.5L – ₹3.5L',
-        priority: priority || 'Urgent',
-        notes: notes.trim() || `Direct assignment from Lead Workspace for ${companyDisplay}`,
+        phones: parsedPhones.validNumbers,
       });
 
-      const normalized = normalizeLeadItem(
-        savedLead || {
-          id: leadId,
-          customerId: targetCustomer.id,
-          customerPhone: targetCustomer.phone || '',
-          customerUsername: targetCustomer.username || '',
-          company: companyDisplay,
-          assignedCompany: companyDisplay,
-          customerCompanyName: companyDisplay,
-          phone: cleanDigits,
-          displayPhone: formattedPhone,
-          name: resolvedBuyerName,
-          category: resolvedCat,
-          city: resolvedCity,
-          requirement: resolvedReq,
-          budget: budget.trim() || '₹1.5L – ₹3.5L',
-          priority: priority || 'Urgent',
-          status: 'new',
-          read: false,
-          createdAt: getLiveNowFormatted(),
-          notes: notes.trim(),
-        }
-      );
+      const createdList = Array.isArray(res?.leads) ? res.leads.map(normalizeLeadItem) : [];
+      const addedCount = Number(res?.addedCount ?? createdList.length);
+      const skippedDuplicates = Array.isArray(res?.skippedDuplicates) ? res.skippedDuplicates : [];
+      const serverInvalid = Array.isArray(res?.invalidNumbers) ? res.invalidNumbers : [];
 
-      setAssignedLeads((prev) => [normalized, ...prev.filter((l) => l.id !== normalized.id)]);
+      if (addedCount === 0 && skippedDuplicates.length > 0) {
+        setSubmitError(
+          `Duplicate skipped: ${skippedDuplicates.map((d) => `+91 ${d}`).join(', ')} ${
+            skippedDuplicates.length === 1 ? 'was' : 'were'
+          } already assigned to ${companyDisplay}.`
+        );
+        return;
+      }
 
-      // Keep shared localStorage + cross-desk listeners synchronized
-      try {
-        const rawLeads = localStorage.getItem('growthline_all_leads');
-        const existing = rawLeads ? JSON.parse(rawLeads) : [];
-        const nextAll = [
-          normalized,
-          ...(Array.isArray(existing) ? existing.filter((l) => l.id !== normalized.id) : []),
-        ];
-        localStorage.setItem('growthline_all_leads', JSON.stringify(nextAll));
-        localStorage.setItem('growthline_latest_added_lead', JSON.stringify(normalized));
-        window.dispatchEvent(new CustomEvent('growthline_lead_added', { detail: normalized }));
-        window.dispatchEvent(new Event('storage'));
-      } catch (_) {}
+      if (createdList.length > 0) {
+        const createdIds = new Set(createdList.map((l) => l.id));
+        setAssignedLeads((prev) => [...createdList, ...prev.filter((l) => !createdIds.has(l.id))]);
+
+        try {
+          const rawLeads = localStorage.getItem('growthline_all_leads');
+          const existing = rawLeads ? JSON.parse(rawLeads) : [];
+          const nextAll = [
+            ...createdList,
+            ...(Array.isArray(existing) ? existing.filter((l) => !createdIds.has(l.id)) : []),
+          ];
+          localStorage.setItem('growthline_all_leads', JSON.stringify(nextAll));
+          localStorage.setItem('growthline_latest_added_lead', JSON.stringify(createdList[0]));
+          createdList.forEach((leadItem) => {
+            window.dispatchEvent(new CustomEvent('growthline_lead_added', { detail: leadItem }));
+          });
+          window.dispatchEvent(new Event('storage'));
+        } catch (_) {}
+      }
 
       setSuccessBanner({
-        phone: cleanDigits,
-        buyerName: buyerName.trim() || '',
+        addedCount,
+        phones: createdList.map((l) => l.phone),
+        skippedDuplicates,
+        invalidCount: parsedPhones.invalidTokens.length + serverInvalid.length,
         company: companyDisplay,
-        leadId: normalized.id,
-        assignedAt: getLiveNowFormatted(),
       });
 
-      // Reset buyer-specific fields for instant consecutive entry while keeping customer & territory defaults
-      setBuyerPhone('');
-      setBuyerName('');
-      setRequirement('');
-      setNotes('');
+      setPhonesInput('');
       setTimeout(() => {
         if (phoneInputRef.current) phoneInputRef.current.focus();
       }, 50);
     } catch (err) {
-      setSubmitError(err?.message || 'Failed to assign lead. Please verify connection and try again.');
+      setSubmitError(err?.message || 'Failed to dispatch lead(s). Please verify connection and try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleTextareaKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      if ((e.ctrlKey || e.metaKey) && canDispatch) {
+        e.preventDefault();
+        handleAssignLead(e);
+        return;
+      }
+      if (isSingleLineActive && !e.shiftKey) {
+        e.preventDefault();
+        if (canDispatch) {
+          handleAssignLead(e);
+        }
+      }
     }
   };
 
@@ -395,7 +445,6 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
       String(l.status || '').toLowerCase()
     )
   ).length;
-  const urgentCount = assignedLeads.filter((l) => String(l.priority || 'Urgent') === 'Urgent').length;
 
   const filteredHistory = useMemo(() => {
     return assignedLeads.filter((l) => {
@@ -410,26 +459,10 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
       ) {
         return false;
       }
-      if (historyFilter === 'urgent' && String(l.priority || 'Urgent') !== 'Urgent') return false;
 
       const q = historySearch.trim().toLowerCase();
       if (q) {
-        const hay = [
-          l.phone,
-          l.displayPhone,
-          l.name,
-          l.buyerLabel,
-          l.city,
-          l.category,
-          l.requirement,
-          l.budget,
-          l.status,
-          l.notes,
-          l.id,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
+        const hay = [l.phone, l.displayPhone, l.status, l.id].filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -440,7 +473,9 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
     targetCustomer?.companyName || targetCustomer?.name || urlState.customerKey || 'Client Account';
   const cleanCustPhone = String(targetCustomer?.phone || '').replace(/\D/g, '').slice(-10);
   const cleanCustUser = String(targetCustomer?.username || '').replace(/^@/, '').trim();
-  const walletBalance = Number(targetCustomer?.balance ?? targetCustomer?.walletBalance ?? targetCustomer?.wallet_balance ?? 0);
+  const walletBalance = Number(
+    targetCustomer?.balance ?? targetCustomer?.walletBalance ?? targetCustomer?.wallet_balance ?? 0
+  );
   const currentPageHref = buildCustomerLeadHref(targetCustomer || urlState.customerKey, urlState.mode, urlState.from);
 
   const renderAssignedLeadsTable = (rows, tableTitle, maxInitialSize = 15) => (
@@ -453,19 +488,16 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
         <table className="desk-table">
           <thead>
             <tr>
-              <th>Inbound Buyer</th>
-              <th>Requirement &amp; Location</th>
-              <th>Budget &amp; Priority</th>
-              <th>Client CRM Stage</th>
-              <th>Read Status</th>
-              <th>Assigned At</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
+              <th>Buyer Mobile (+91)</th>
+              <th>Read / Unread Status</th>
+              <th>Assigned Date &amp; Time (IST)</th>
+              <th style={{ textAlign: 'right' }}>Call / WhatsApp</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '44px 24px', color: 'var(--adm-text-muted, #64748b)' }}>
+                <td colSpan={4} style={{ textAlign: 'center', padding: '44px 24px', color: 'var(--adm-text-muted, #64748b)' }}>
                   <Layers size={30} style={{ margin: '0 auto 10px auto', opacity: 0.55 }} />
                   <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                     {totalAssigned === 0
@@ -474,7 +506,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                   </div>
                   <div style={{ fontSize: '0.84rem', marginTop: 4 }}>
                     {totalAssigned === 0
-                      ? 'Use the Direct Lead Assignment form to dispatch your first verified buyer enquiry to this user.'
+                      ? 'Enter or paste 10-digit buyer mobile numbers above to dispatch verified leads instantly.'
                       : 'Try clearing the search query or switching status filter tabs.'}
                   </div>
                   {totalAssigned === 0 && urlState.mode === 'history' && (
@@ -491,7 +523,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                         gap: 6,
                       }}
                     >
-                      <Plus size={15} /> Add First Lead to {companyTitle}
+                      <Plus size={15} /> Send First Lead to {companyTitle}
                     </button>
                   )}
                   {totalAssigned > 0 && (historyFilter !== 'all' || historySearch) && (
@@ -515,33 +547,30 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                 const phoneFormatted = digits.length === 10 ? `+91 ${digits}` : lead.displayPhone || lead.phone || '—';
                 const callHref = digits.length === 10 ? `tel:+91${digits}` : `tel:${lead.phone || ''}`;
                 const isRead = Boolean(lead.read || lead.is_read || lead.status === 'read');
-                const stageRaw = String(lead.status || 'new');
-                const stageDisplay =
-                  stageRaw.toLowerCase() === 'new'
-                    ? 'New Assigned'
-                    : stageRaw.toLowerCase() === 'read'
-                      ? 'Viewed by Client'
-                      : stageRaw;
-                const stagePillClass = ['interested', 'converted', 'won', 'qualified'].includes(stageRaw.toLowerCase())
+                const stageRaw = String(lead.status || 'new').trim();
+                const stageLower = stageRaw.toLowerCase();
+                const showPipelineStage = !['new', 'read', ''].includes(stageLower);
+                const stagePillClass = ['interested', 'converted', 'won', 'qualified'].includes(stageLower)
                   ? 'pill-emerald'
-                  : ['dropped', 'not interested'].includes(stageRaw.toLowerCase())
+                  : ['dropped', 'not interested'].includes(stageLower)
                     ? 'pill-rose'
-                    : ['in follow-up', 'callback'].includes(stageRaw.toLowerCase())
-                      ? 'pill-amber'
-                      : 'pill-indigo';
+                    : 'pill-indigo';
 
                 return (
                   <tr key={lead.id}>
-                    {/* 1. Buyer Phone & Name */}
+                    {/* 1. Buyer Mobile (+91) */}
                     <td>
-                      <div style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', fontFamily: 'monospace' }}>
+                      <div
+                        style={{
+                          fontSize: '1.02rem',
+                          fontWeight: 800,
+                          color: 'var(--adm-text-primary, #0f172a)',
+                          fontFamily: 'monospace',
+                          letterSpacing: '0.02em',
+                        }}
+                      >
                         {phoneFormatted}
                       </div>
-                      {lead.buyerLabel && (
-                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-soft-blue-text, #1e3a8a)', marginTop: 2 }}>
-                          {lead.buyerLabel}
-                        </div>
-                      )}
                       {lead.id && (
                         <div style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted, #64748b)', fontFamily: 'monospace', marginTop: 2 }}>
                           {lead.id}
@@ -549,99 +578,40 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                       )}
                     </td>
 
-                    {/* 2. Requirement & Location */}
+                    {/* 2. Read / Unread Status */}
                     <td>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--adm-text-primary, #0f172a)', maxWidth: 280 }}>
-                        {lead.requirement || 'Verified Business Enquiry'}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                        {lead.category && (
-                          <span
-                            style={{
-                              fontSize: '0.7rem',
-                              fontWeight: 700,
-                              color: 'var(--adm-text-body, #475569)',
-                              background: 'var(--adm-bg-muted, #f1f5f9)',
-                              padding: '1px 7px',
-                              borderRadius: 4,
-                            }}
-                          >
-                            {lead.category}
-                          </span>
-                        )}
-                        {lead.city && (
-                          <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                            <MapPin size={11} /> {lead.city}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* 3. Budget & Priority */}
-                    <td>
-                      <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
-                        {lead.budget || '₹1.5L – ₹3.5L'}
-                      </div>
-                      <div style={{ marginTop: 4 }}>
-                        <span
-                          className={`desk-pill ${lead.priority === 'Urgent' ? 'pill-rose' : lead.priority === 'High' ? 'pill-amber' : 'pill-indigo'}`}
-                          style={{ fontSize: '0.68rem', fontWeight: 800 }}
-                        >
-                          {lead.priority || 'Urgent'}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* 4. Client CRM Stage */}
-                    <td>
-                      <span className={`desk-pill ${stagePillClass}`} style={{ fontWeight: 800 }}>
-                        {stageDisplay}
-                      </span>
-                      {lead.notes && (
-                        <div
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLeadRead(lead)}
+                          title="Click to toggle read / unread status"
+                          className={`desk-pill ${isRead ? 'pill-emerald' : 'pill-amber'}`}
                           style={{
-                            fontSize: '0.74rem',
-                            color: 'var(--adm-text-muted, #64748b)',
-                            marginTop: 4,
-                            maxWidth: 230,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
+                            fontWeight: 800,
+                            border: 'none',
+                            cursor: 'pointer',
                           }}
-                          title={lead.notes}
                         >
-                          {lead.notes}
-                        </div>
-                      )}
+                          {isRead ? '✓ Marked as Read' : '⏳ Unread by Client'}
+                        </button>
+                        {showPipelineStage && (
+                          <span className={`desk-pill ${stagePillClass}`} style={{ fontSize: '0.72rem', fontWeight: 800 }}>
+                            {stageRaw}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* 5. Client Read Status */}
+                    {/* 3. Assigned Date & Time (IST) */}
                     <td>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleLeadRead(lead)}
-                        title="Click to toggle read / unread status"
-                        className={`desk-pill ${isRead ? 'pill-emerald' : 'pill-amber'}`}
-                        style={{
-                          fontWeight: 800,
-                          border: 'none',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {isRead ? '✓ Marked as Read' : '⏳ Unread by Client'}
-                      </button>
-                    </td>
-
-                    {/* 6. Assigned At */}
-                    <td>
-                      <span style={{ fontSize: '0.83rem', fontWeight: 600, color: 'var(--adm-text-body, #334155)' }}>
+                      <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--adm-text-body, #334155)' }}>
                         {lead.createdAt || lead.assignedAt
                           ? formatIndianDateTime(lead.createdAt, lead.createdAtRaw || lead.created_at || lead.assignedAt)
                           : '—'}
                       </span>
                     </td>
 
-                    {/* 7. Actions */}
+                    {/* 4. Call / WhatsApp Actions */}
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                         <a
@@ -657,7 +627,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                             fontWeight: 700,
                           }}
                         >
-                          <Phone size={13} /> Call Buyer
+                          <Phone size={13} /> Call
                         </a>
                         {digits.length === 10 && (
                           <a
@@ -724,7 +694,6 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {/* Dedicated Page Mode Switcher */}
           <div
             style={{
               display: 'inline-flex',
@@ -755,7 +724,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                 color: urlState.mode === 'add' ? '#ffffff' : 'var(--adm-text-body, #475569)',
               }}
             >
-              <Plus size={14} strokeWidth={2.6} /> Add Lead Directly
+              <Plus size={14} strokeWidth={2.6} /> Quick Phone Dispatch
             </button>
             <button
               type="button"
@@ -777,7 +746,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                 color: urlState.mode === 'history' ? '#ffffff' : 'var(--adm-text-body, #475569)',
               }}
             >
-              <Layers size={14} /> Assigned Leads Till Yet ({totalAssigned})
+              <Layers size={14} /> Assigned Leads ({totalAssigned})
             </button>
           </div>
 
@@ -794,7 +763,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
               fontWeight: 700,
               borderRadius: 10,
             }}
-            title="Refresh live leads from MongoDB"
+            title="Refresh live leads from database"
           >
             <RefreshCw size={14} className={isLoadingLeads ? 'spin' : ''} /> Sync
           </button>
@@ -814,7 +783,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
               fontWeight: 700,
               borderRadius: 10,
             }}
-            title="Open this user's lead page in a separate browser tab"
+            title="Open this client's lead workspace in a new browser tab"
           >
             New Tab <ExternalLink size={13} />
           </a>
@@ -825,22 +794,22 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
       <div className="desk-header" style={{ marginBottom: 16 }}>
         <div>
           <div className="desk-breadcrumb">
-            SUB ADMIN &amp; SUPPORT OPERATIONS / DESK 03 / DEDICATED USER LEAD WORKSPACE
+            AD MAFIA SALES OPERATIONS / LEADS &amp; DISTRIBUTION / CLIENT LEAD WORKSPACE
           </div>
           <h1 className="desk-title">
             {urlState.mode === 'add'
-              ? `Add Lead Directly — ${companyTitle}`
-              : `All Assigned Leads — ${companyTitle}`}
+              ? `Send Buyer Mobile Leads — ${companyTitle}`
+              : `Assigned Buyer Leads — ${companyTitle}`}
           </h1>
           <p className="desk-subtitle">
             {urlState.mode === 'add'
-              ? `Direct 1-step lead assignment locked to ${companyTitle}. Every submitted lead is delivered in real time to this user's CRM Lead Hub.`
-              : `Complete history of all ${totalAssigned} inbound buyer ${totalAssigned === 1 ? 'lead' : 'leads'} assigned till yet to ${companyTitle}, with live client read & pipeline status.`}
+              ? `Instant 1-field verified +91 buyer mobile dispatch locked to ${companyTitle}. Type 1 number or paste multiple 10-digit numbers at once.`
+              : `Complete history of all ${totalAssigned} verified +91 buyer ${totalAssigned === 1 ? 'number' : 'numbers'} delivered to ${companyTitle}, with live read status.`}
           </p>
         </div>
       </div>
 
-      {/* Locked Target Customer Identity Banner (Zero Dropdown Selection Needed!) */}
+      {/* Locked Target Customer Identity Banner */}
       <div className="desk-customer-kpi-banner" style={{ marginBottom: 18 }}>
         <div className="desk-customer-kpi-header">
           <div className="desk-customer-kpi-info">
@@ -878,7 +847,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                     letterSpacing: '0.04em',
                   }}
                 >
-                  ✓ Target User Locked
+                  ✓ Target Client Locked
                 </span>
                 <h2
                   style={{
@@ -1028,12 +997,22 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: '0.96rem' }}>
-                Lead Assigned Directly to {successBanner.company}!
+                {successBanner.addedCount === 1
+                  ? `Lead +91 ${successBanner.phones[0] || ''} Sent to ${successBanner.company}!`
+                  : `${successBanner.addedCount} Verified Buyer Mobile Leads Sent to ${successBanner.company}!`}
               </div>
-              <div style={{ fontSize: '0.83rem', color: '#d1fae5', marginTop: 2 }}>
-                Buyer <strong style={{ color: '#fff' }}>+91 {successBanner.phone}</strong>
-                {successBanner.buyerName ? ` (${successBanner.buyerName})` : ''} is now live in their CRM Lead Hub. Total assigned till yet:{' '}
-                <strong style={{ color: '#fff' }}>{totalAssigned}</strong>.
+              <div style={{ fontSize: '0.82rem', color: '#d1fae5', marginTop: 2 }}>
+                {successBanner.phones.length > 1 && (
+                  <span>
+                    Numbers: <strong style={{ color: '#fff' }}>{successBanner.phones.slice(0, 4).map((p) => `+91 ${p}`).join(', ')}{successBanner.phones.length > 4 ? ` +${successBanner.phones.length - 4} more` : ''}</strong>.{' '}
+                  </span>
+                )}
+                {successBanner.skippedDuplicates?.length > 0 && (
+                  <span>
+                    Skipped {successBanner.skippedDuplicates.length} existing duplicate{successBanner.skippedDuplicates.length === 1 ? '' : 's'}.{' '}
+                  </span>
+                )}
+                Total assigned till yet: <strong style={{ color: '#fff' }}>{totalAssigned}</strong>.
               </div>
             </div>
           </div>
@@ -1052,7 +1031,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                 cursor: 'pointer',
               }}
             >
-              View All Assigned Leads ({totalAssigned}) →
+              View All ({totalAssigned}) →
             </button>
             <button
               type="button"
@@ -1074,7 +1053,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
       )}
 
       {/* =====================================================================
-          MODE 1: DIRECT LEAD ASSIGNMENT PAGE (NO CUSTOMER DROPDOWN NEEDED)
+          MODE 1: PHONE-ONLY (+ BULK PASTE) LEAD DISPATCH CARD
          ===================================================================== */}
       {urlState.mode === 'add' && (
         <>
@@ -1083,7 +1062,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
               background: 'var(--adm-bg-card, #ffffff)',
               border: '1px solid var(--adm-border-strong, #cbd5e1)',
               borderRadius: 16,
-              padding: '24px',
+              padding: '22px 24px',
               marginBottom: 22,
               boxShadow: '0 4px 18px rgba(15, 23, 42, 0.06)',
             }}
@@ -1095,7 +1074,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                 alignItems: 'center',
                 gap: 12,
                 flexWrap: 'wrap',
-                marginBottom: 18,
+                marginBottom: 16,
                 paddingBottom: 14,
                 borderBottom: '1px solid var(--adm-border, #e2e8f0)',
               }}
@@ -1110,38 +1089,87 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                     color: '#ffffff',
                     display: 'grid',
                     placeItems: 'center',
+                    flexShrink: 0,
                   }}
                 >
                   <Sparkles size={18} />
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
-                    New Buyer Lead Details for {companyTitle}
+                    Phone-Only (+ Bulk Paste) Lead Dispatch
                   </h3>
                   <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
-                    Enter the 10-digit buyer mobile number to dispatch immediately, or include optional enquiry details below.
+                    Ad Mafia delivers verified <strong>+91 10-digit buyer mobile numbers</strong> directly to {companyTitle}.
                   </div>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => switchMode('history')}
-                className="desk-action-btn"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '8px 14px',
-                  fontSize: '0.82rem',
-                  fontWeight: 800,
-                  color: 'var(--adm-soft-indigo-text, #4f46e5)',
-                  borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)',
-                  background: 'var(--adm-soft-indigo-bg, #eef2ff)',
-                }}
-              >
-                <Layers size={14} /> See All {totalAssigned} Assigned Leads →
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    background: 'var(--adm-bg-subtle, #f8fafc)',
+                    border: '1px solid var(--adm-border, #e2e8f0)',
+                    borderRadius: 8,
+                    padding: 2,
+                    gap: 2,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setMultiLineMode(false)}
+                    style={{
+                      border: 'none',
+                      borderRadius: 6,
+                      padding: '5px 10px',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      background: !multiLineMode ? 'var(--adm-bg-card, #ffffff)' : 'transparent',
+                      color: !multiLineMode ? '#059669' : 'var(--adm-text-muted, #64748b)',
+                      boxShadow: !multiLineMode ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    ⚡ Single-Line (Enter = Send)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMultiLineMode(true)}
+                    style={{
+                      border: 'none',
+                      borderRadius: 6,
+                      padding: '5px 10px',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      background: multiLineMode ? 'var(--adm-bg-card, #ffffff)' : 'transparent',
+                      color: multiLineMode ? '#4f46e5' : 'var(--adm-text-muted, #64748b)',
+                      boxShadow: multiLineMode ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    📋 Bulk Paste Mode
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => switchMode('history')}
+                  className="desk-action-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 13px',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    color: 'var(--adm-soft-indigo-text, #4f46e5)',
+                    borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)',
+                    background: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                  }}
+                >
+                  <Layers size={14} /> Assigned ({totalAssigned}) →
+                </button>
+              </div>
             </div>
 
             {submitError && (
@@ -1154,7 +1182,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                   borderRadius: 10,
                   fontSize: '0.84rem',
                   fontWeight: 700,
-                  marginBottom: 16,
+                  marginBottom: 14,
                 }}
               >
                 {submitError}
@@ -1162,241 +1190,168 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
             )}
 
             <form onSubmit={handleAssignLead}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
-                  gap: 16,
-                }}
-              >
-                {/* 1. Buyer Mobile Number (Required) */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label
-                      className="desk-form-label"
-                      style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', margin: 0 }}
-                    >
-                      Buyer Mobile Number (10 Digits) <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
+              <div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                    marginBottom: 8,
+                  }}
+                >
+                  <label
+                    className="desk-form-label"
+                    style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--adm-text-primary, #0f172a)', margin: 0 }}
+                  >
+                    Buyer 10-Digit Mobile Number(s) <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    {/* Live Valid Count Badge */}
                     <span
                       style={{
-                        fontSize: '0.75rem',
+                        fontSize: '0.76rem',
                         fontWeight: 800,
-                        color: isPhoneComplete ? '#059669' : 'var(--adm-text-muted, #64748b)',
-                        background: isPhoneComplete
-                          ? 'var(--adm-soft-emerald-bg, #ecfdf5)'
-                          : 'var(--adm-bg-muted, #f1f5f9)',
-                        padding: '2px 8px',
-                        borderRadius: 6,
+                        color:
+                          parsedPhones.validNumbers.length > 0
+                            ? 'var(--adm-soft-emerald-text, #059669)'
+                            : phonesInput.trim()
+                              ? 'var(--adm-soft-rose-text, #e11d48)'
+                              : 'var(--adm-text-muted, #64748b)',
+                        background:
+                          parsedPhones.validNumbers.length > 0
+                            ? 'var(--adm-soft-emerald-bg, #ecfdf5)'
+                            : phonesInput.trim()
+                              ? 'var(--adm-soft-rose-bg, #fff1f2)'
+                              : 'var(--adm-bg-muted, #f1f5f9)',
+                        padding: '3px 10px',
+                        borderRadius: 9999,
                         border: `1px solid ${
-                          isPhoneComplete
+                          parsedPhones.validNumbers.length > 0
                             ? 'var(--adm-soft-emerald-border, #a7f3d0)'
-                            : 'var(--adm-border, #e2e8f0)'
+                            : phonesInput.trim()
+                              ? 'var(--adm-soft-rose-border, #fecdd3)'
+                              : 'var(--adm-border, #e2e8f0)'
                         }`,
                       }}
                     >
-                      {buyerPhone.length}/10 digits
+                      {parsedPhones.validNumbers.length > 0
+                        ? `✓ ${parsedPhones.validNumbers.length} valid ${
+                            parsedPhones.validNumbers.length === 1 ? 'number' : 'numbers'
+                          } ready`
+                        : phonesInput.trim()
+                          ? '0 valid numbers detected'
+                          : 'Paste 1 or 50+ numbers (comma, space, or newline)'}
                     </span>
-                  </div>
-                  <input
-                    ref={phoneInputRef}
-                    type="tel"
-                    required
-                    maxLength={10}
-                    className="desk-form-input"
-                    placeholder="e.g. 9876543210"
-                    value={buyerPhone}
-                    onChange={(e) => setBuyerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    style={{
-                      fontFamily: 'monospace',
-                      fontSize: '1.05rem',
-                      fontWeight: 800,
-                      letterSpacing: '0.05em',
-                      padding: '11px 14px',
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      borderColor: !isPhoneValidStart
-                        ? '#ef4444'
-                        : isPhoneComplete
-                          ? '#10b981'
-                          : 'var(--adm-border-strong, #cbd5e1)',
-                    }}
-                  />
-                  {!isPhoneValidStart && (
-                    <div style={{ fontSize: '0.76rem', color: '#ef4444', fontWeight: 700, marginTop: 4 }}>
-                      Indian mobile numbers must start with 6, 7, 8, or 9.
-                    </div>
-                  )}
-                  {duplicateAssignedLead && (
-                    <div
-                      style={{
-                        fontSize: '0.76rem',
-                        color: '#d97706',
-                        fontWeight: 700,
-                        marginTop: 5,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 5,
-                      }}
-                    >
-                      <AlertTriangle size={13} /> Heads up: +91 {buyerPhone} was already assigned to {companyTitle} earlier.
-                    </div>
-                  )}
-                </div>
 
-                {/* 2. Buyer Name (Optional) */}
-                <div>
-                  <label
-                    className="desk-form-label"
-                    style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}
-                  >
-                    Buyer Name <span style={{ color: 'var(--adm-text-muted, #64748b)', fontWeight: 500 }}>(Optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="desk-form-input"
-                    placeholder="e.g. Rajesh Patel (defaults to +91 phone)"
-                    value={buyerName}
-                    onChange={(e) => setBuyerName(e.target.value)}
-                    style={{ padding: '11px 14px', width: '100%', boxSizing: 'border-box' }}
-                  />
-                </div>
-
-                {/* 3. City / Territory (Optional) */}
-                <div>
-                  <label
-                    className="desk-form-label"
-                    style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}
-                  >
-                    Buyer City / Territory
-                  </label>
-                  <input
-                    type="text"
-                    className="desk-form-input"
-                    placeholder="e.g. Ahmedabad, Mumbai, Surat"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    style={{ padding: '11px 14px', width: '100%', boxSizing: 'border-box' }}
-                  />
-                </div>
-
-                {/* 4. Category & Priority */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px', gap: 10 }}>
-                  <div>
-                    <label
-                      className="desk-form-label"
-                      style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}
-                    >
-                      Business Category
-                    </label>
-                    <input
-                      type="text"
-                      className="desk-form-input"
-                      placeholder="Category"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      style={{ padding: '11px 12px', width: '100%', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className="desk-form-label"
-                      style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}
-                    >
-                      Priority
-                    </label>
-                    <select
-                      className="desk-form-input"
-                      value={priority}
-                      onChange={(e) => setPriority(e.target.value)}
-                      style={{ padding: '11px 10px', width: '100%', boxSizing: 'border-box', fontWeight: 700 }}
-                    >
-                      <option value="Urgent">Urgent</option>
-                      <option value="High">High</option>
-                      <option value="Normal">Normal</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* 5. Budget Range */}
-                <div>
-                  <label
-                    className="desk-form-label"
-                    style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}
-                  >
-                    Estimated Buyer Budget
-                  </label>
-                  <input
-                    type="text"
-                    className="desk-form-input"
-                    value={budget}
-                    onChange={(e) => setBudget(e.target.value)}
-                    style={{ padding: '10px 14px', width: '100%', boxSizing: 'border-box' }}
-                  />
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-                    {BUDGET_PRESETS.map((preset) => (
+                    {phonesInput.length > 0 && (
                       <button
-                        key={preset}
                         type="button"
-                        onClick={() => setBudget(preset)}
+                        onClick={() => {
+                          setPhonesInput('');
+                          setSubmitError('');
+                          if (phoneInputRef.current) phoneInputRef.current.focus();
+                        }}
                         style={{
-                          padding: '3px 9px',
-                          borderRadius: 6,
-                          fontSize: '0.72rem',
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--adm-text-muted, #64748b)',
+                          fontSize: '0.74rem',
                           fontWeight: 700,
                           cursor: 'pointer',
-                          border:
-                            budget === preset
-                              ? '1px solid #6366f1'
-                              : '1px solid var(--adm-border-strong, #cbd5e1)',
-                          background:
-                            budget === preset
-                              ? 'var(--adm-soft-indigo-bg, #eef2ff)'
-                              : 'var(--adm-bg-subtle, #f8fafc)',
-                          color: budget === preset ? '#4f46e5' : 'var(--adm-text-muted, #64748b)',
+                          textDecoration: 'underline',
                         }}
                       >
-                        {preset}
+                        Clear
                       </button>
-                    ))}
+                    )}
                   </div>
                 </div>
 
-                {/* 6. Requirement / Enquiry Summary */}
-                <div>
-                  <label
-                    className="desk-form-label"
-                    style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}
-                  >
-                    Buyer Requirement <span style={{ color: 'var(--adm-text-muted, #64748b)', fontWeight: 500 }}>(Optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="desk-form-input"
-                    placeholder="e.g. Bulk order / service inquiry — ready for immediate call"
-                    value={requirement}
-                    onChange={(e) => setRequirement(e.target.value)}
-                    style={{ padding: '11px 14px', width: '100%', boxSizing: 'border-box' }}
-                  />
-                </div>
-              </div>
-
-              {/* Optional Handover Notes */}
-              <div style={{ marginTop: 14 }}>
-                <label
-                  className="desk-form-label"
-                  style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--adm-text-primary, #0f172a)', marginBottom: 6, display: 'block' }}
-                >
-                  Handover Notes for Client <span style={{ color: 'var(--adm-text-muted, #64748b)', fontWeight: 500 }}>(Optional)</span>
-                </label>
-                <input
-                  type="text"
+                <textarea
+                  ref={phoneInputRef}
+                  rows={
+                    isSingleLineActive
+                      ? 2
+                      : Math.min(7, Math.max(4, phonesInput.split('\n').length + 1))
+                  }
                   className="desk-form-input"
-                  placeholder="Optional call instructions or buyer preference..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  style={{ padding: '10px 14px', width: '100%', boxSizing: 'border-box' }}
+                  placeholder={
+                    isSingleLineActive
+                      ? 'Type a 10-digit buyer mobile (e.g. 9876543210) & press Enter — or paste multiple numbers separated by comma, space, or newline...'
+                      : 'Paste multiple 10-digit buyer mobile numbers (one per line, comma-separated, or space-separated)...\n9876543210\n9123456789\n8877665544'
+                  }
+                  value={phonesInput}
+                  onChange={(e) => setPhonesInput(e.target.value)}
+                  onKeyDown={handleTextareaKeyDown}
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '1.04rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.03em',
+                    padding: '12px 14px',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    resize: 'vertical',
+                    lineHeight: 1.5,
+                    borderColor:
+                      parsedPhones.validNumbers.length > 0
+                        ? '#10b981'
+                        : phonesInput.trim() && parsedPhones.invalidTokens.length > 0
+                          ? '#ef4444'
+                          : 'var(--adm-border-strong, #cbd5e1)',
+                  }}
                 />
+
+                {/* Automatic Client-Duplicate Warning */}
+                {parsedPhones.clientDuplicates.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      background: 'var(--adm-soft-amber-bg, #fffbeb)',
+                      border: '1px solid var(--adm-soft-amber-border, #fde68a)',
+                      color: 'var(--adm-soft-amber-text, #b45309)',
+                      fontSize: '0.79rem',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+                    <span>
+                      Already assigned to {companyTitle} ({parsedPhones.clientDuplicates.length}):{' '}
+                      <strong style={{ fontFamily: 'monospace' }}>
+                        {parsedPhones.clientDuplicates.slice(0, 5).map((d) => `+91 ${d}`).join(', ')}
+                        {parsedPhones.clientDuplicates.length > 5
+                          ? ` +${parsedPhones.clientDuplicates.length - 5} more`
+                          : ''}
+                      </strong>{' '}
+                      — duplicates will be skipped automatically.
+                    </span>
+                  </div>
+                )}
+
+                {/* Invalid Token Notice */}
+                {parsedPhones.invalidTokens.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: '0.76rem',
+                      color: '#ef4444',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Ignored {parsedPhones.invalidTokens.length} incomplete/invalid entry
+                    {parsedPhones.invalidTokens.length === 1 ? '' : 'ies'} (
+                    {parsedPhones.invalidTokens.slice(0, 4).join(', ')}) — Indian mobile numbers must be 10 digits starting with 6, 7, 8, or 9.
+                  </div>
+                )}
               </div>
 
               {/* Submit Footer */}
@@ -1407,13 +1362,15 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                   alignItems: 'center',
                   gap: 12,
                   flexWrap: 'wrap',
-                  marginTop: 20,
-                  paddingTop: 16,
+                  marginTop: 16,
+                  paddingTop: 14,
                   borderTop: '1px solid var(--adm-border, #e2e8f0)',
                 }}
               >
-                <div style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 700 }}>
-                  ✓ Strictly isolated delivery — only <strong>{companyTitle}</strong> receives this lead in their CRM.
+                <div style={{ fontSize: '0.79rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 600 }}>
+                  {isSingleLineActive
+                    ? 'Tip: Press Enter to send immediately • Shift+Enter for new line • Paste bulk list anytime'
+                    : 'Tip: Press Ctrl+Enter or click "+ Send Lead(s) Now" to dispatch all valid numbers'}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1422,15 +1379,14 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                   </button>
                   <button
                     type="submit"
-                    disabled={!isPhoneComplete || isSubmitting || !targetCustomer}
+                    disabled={!canDispatch}
                     className="sales-btn-primary"
                     style={{
-                      background:
-                        isPhoneComplete && !isSubmitting
-                          ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
-                          : '#94a3b8',
-                      borderColor: isPhoneComplete && !isSubmitting ? '#059669' : '#94a3b8',
-                      cursor: isPhoneComplete && !isSubmitting ? 'pointer' : 'not-allowed',
+                      background: canDispatch
+                        ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+                        : '#94a3b8',
+                      borderColor: canDispatch ? '#059669' : '#94a3b8',
+                      cursor: canDispatch ? 'pointer' : 'not-allowed',
                       padding: '11px 24px',
                       fontWeight: 800,
                       display: 'inline-flex',
@@ -1439,14 +1395,18 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                     }}
                   >
                     <Send size={15} />
-                    {isSubmitting ? 'Assigning Lead...' : `Assign Lead to ${companyTitle}`}
+                    {isSubmitting
+                      ? 'Sending Lead(s)...'
+                      : parsedPhones.validNumbers.length > 1
+                        ? `+ Send ${parsedPhones.validNumbers.length} Leads Now`
+                        : '+ Send Lead(s) Now'}
                   </button>
                 </div>
               </div>
             </form>
           </div>
 
-          {/* Live Assigned Leads Section Right Below Add Form */}
+          {/* Live Assigned Leads Section Right Below Dispatch Card */}
           <div
             style={{
               display: 'flex',
@@ -1460,7 +1420,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Building2 size={17} color="#6366f1" />
               <span style={{ fontWeight: 800, fontSize: '0.96rem', color: 'var(--adm-text-primary, #0f172a)' }}>
-                Leads Assigned Till Yet to {companyTitle} ({totalAssigned})
+                Assigned Buyer Mobile Leads — {companyTitle} ({totalAssigned})
               </span>
             </div>
             {totalAssigned > 0 && (
@@ -1470,7 +1430,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                 className="desk-action-btn"
                 style={{ fontSize: '0.78rem', fontWeight: 800 }}
               >
-                Open Full History &amp; Analytics View →
+                Open Full History &amp; Filters →
               </button>
             )}
           </div>
@@ -1484,12 +1444,11 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
          ===================================================================== */}
       {urlState.mode === 'history' && (
         <>
-          {/* 4 Scoped KPI Cards */}
           <div className="desk-kpi-grid" style={{ marginBottom: 16 }}>
             <div className="desk-kpi-card">
               <div className="desk-kpi-label">TOTAL ASSIGNED TILL YET</div>
               <div className="desk-kpi-val text-indigo">{totalAssigned}</div>
-              <div className="desk-kpi-sub">All leads delivered to {companyTitle}</div>
+              <div className="desk-kpi-sub">Verified +91 numbers delivered to {companyTitle}</div>
             </div>
             <div className="desk-kpi-card">
               <div className="desk-kpi-label">READ BY CLIENT</div>
@@ -1512,7 +1471,6 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
             </div>
           </div>
 
-          {/* Filter Tabs + Search + Quick "+ Add Lead" CTA */}
           <div
             className="desk-filter-bar"
             style={{
@@ -1553,13 +1511,6 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
               >
                 Interested / Follow-up ({engagedCount})
               </button>
-              <button
-                type="button"
-                className={`desk-tab ${historyFilter === 'urgent' ? 'active' : ''}`}
-                onClick={() => setHistoryFilter('urgent')}
-              >
-                Urgent SLA ({urgentCount})
-              </button>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -1568,7 +1519,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                 <input
                   type="text"
                   className="desk-search-input"
-                  placeholder="Search buyer phone, name, city, notes..."
+                  placeholder="Search +91 mobile number..."
                   value={historySearch}
                   onChange={(e) => setHistorySearch(e.target.value)}
                 />
@@ -1588,7 +1539,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                   whiteSpace: 'nowrap',
                 }}
               >
-                <Plus size={15} strokeWidth={2.5} /> Add Lead to {companyTitle}
+                <Plus size={15} strokeWidth={2.5} /> + Send Lead(s) Now
               </button>
             </div>
           </div>

@@ -76,15 +76,21 @@ export default function LeadPipelineInbox({
   customer,
   walletBalance = 0,
   dailyAdSpend = 300,
+  initialFilter = 'all',
   onUpdateLead,
   onOpenScheduleFollowUp,
   onOpenAddFunds,
   onOpenAddLead,
   onOpenCompleteRegistration,
 }) {
-  const [search, setSearch] = useState('');
-  const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'today' | 'yesterday' | 'dropped'
+  const [stageFilter, setStageFilter] = useState(initialFilter || 'all'); // 'all' | 'unread' | 'followup' | 'dropped'
   const [unmaskedMap, setUnmaskedMap] = useState({});
+
+  React.useEffect(() => {
+    if (initialFilter) {
+      setStageFilter(initialFilter);
+    }
+  }, [initialFilter]);
 
   const currencySymbol = customer?.currencySymbol || (String(customer?.currency || 'INR').toUpperCase() === 'USD' ? '$' : '₹');
 
@@ -93,23 +99,21 @@ export default function LeadPipelineInbox({
   const isProfileDone = profEval.isComplete;
   const isFullyComplete = isPaymentDone && isProfileDone;
 
-  // Active leads: not in follow-up, not callback, not dropped
-  const activeLeads = leads.filter(
-    (l) => l.status !== 'In Follow-up' && l.status !== 'Callback' && l.status !== 'Dropped'
-  );
-
-  // Dropped leads: leads marked as Dropped
+  // Non-dropped leads (New + In Follow-up)
+  const allNonDroppedLeads = leads.filter((l) => l.status !== 'Dropped');
+  const unreadLeads = allNonDroppedLeads.filter((l) => !l.read);
+  const followUpLeads = leads.filter((l) => l.status === 'In Follow-up' || l.status === 'Callback');
   const droppedLeads = leads.filter((l) => l.status === 'Dropped');
 
   const togglePhoneReveal = (id) => {
     setUnmaskedMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Move lead to Follow-ups
-  const handleMoveToFollowUp = (leadId) => {
-    if (onUpdateLead) {
-      onUpdateLead(leadId, { status: 'In Follow-up' });
-    }
+  // Toggle Follow-up stage
+  const handleToggleFollowUp = (lead) => {
+    if (!onUpdateLead || !lead) return;
+    const isFup = lead.status === 'In Follow-up' || lead.status === 'Callback';
+    onUpdateLead(lead.id, { status: isFup ? 'new' : 'In Follow-up', read: true });
   };
 
   // Mark as Read (once read, stays read permanently; cannot be un-read)
@@ -133,43 +137,34 @@ export default function LeadPipelineInbox({
     }
   };
 
-  const currentPool = dateFilter === 'dropped' ? droppedLeads : activeLeads;
-
-  // Filtered leads
-  const filteredLeads = currentPool.filter((item) => {
-    // Date filter
-    if (dateFilter === 'today') {
-      const isToday = item.dateGroup === 'today' || (item.createdAt && item.createdAt.includes('Today'));
-      if (!isToday) return false;
-    } else if (dateFilter === 'yesterday') {
-      const isYesterday = item.dateGroup === 'yesterday' || (item.createdAt && item.createdAt.includes('Yesterday'));
-      if (!isYesterday) return false;
-    }
-
-    // Search query
-    if (search.trim()) {
-      const q = search.toLowerCase().trim();
-      const matchPhone = (item.phone || '').includes(q) || (item.maskedPhone || '').includes(q);
-      const matchDate = (item.createdAt || '').toLowerCase().includes(q);
-      if (!matchPhone && !matchDate) return false;
-    }
-
-    return true;
-  });
-
-  const todayCount = activeLeads.filter((l) => l.dateGroup === 'today' || (l.createdAt && l.createdAt.includes('Today'))).length;
-  const yesterdayCount = activeLeads.filter((l) => l.dateGroup === 'yesterday' || (l.createdAt && l.createdAt.includes('Yesterday'))).length;
+  const filteredLeads =
+    stageFilter === 'dropped'
+      ? droppedLeads
+      : stageFilter === 'followup'
+      ? followUpLeads
+      : stageFilter === 'unread'
+      ? unreadLeads
+      : allNonDroppedLeads;
 
   const handleExportCsv = () => {
     if (filteredLeads.length === 0) return;
     const csvRows = filteredLeads.map((item) => ({
       phone: formatMinimalMaskedPhone(item.phone, item.maskedPhone),
-      status: item.status === 'Dropped' ? 'Dropped Lead' : isFullyComplete ? 'Active Lead' : isPaymentDone ? 'Step 2 Required' : 'Step 1 Required',
+      status:
+        item.status === 'Dropped'
+          ? 'Dropped Lead'
+          : item.status === 'In Follow-up' || item.status === 'Callback'
+          ? 'In Follow-up'
+          : isFullyComplete
+          ? 'Active Lead'
+          : isPaymentDone
+          ? 'Step 2 Required'
+          : 'Step 1 Required',
       readStatus: item.read ? 'Read' : 'Unread',
       receivedAt: formatMinimalDateTime(item.createdAt),
       company: item.company || item.assignedCompany || customer?.companyName || '',
     }));
-    downloadLeadsCsv(csvRows, dateFilter === 'dropped' ? 'dropped-leads' : 'lead-pipeline');
+    downloadLeadsCsv(csvRows, stageFilter === 'dropped' ? 'dropped-leads' : stageFilter === 'followup' ? 'followup-leads' : 'my-leads');
   };
 
   return (
@@ -190,13 +185,17 @@ export default function LeadPipelineInbox({
       <div className="lead-pipeline-header-cluster">
         <div>
           <div className="lead-header-title-row" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <h1>Lead Pipeline</h1>
-            {dateFilter === 'dropped' ? (
+            <h1>My Leads</h1>
+            {stageFilter === 'dropped' ? (
               <span className="lead-count-badge-top" style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}>
-                {droppedLeads.length} Dropped Leads
+                {droppedLeads.length} Dropped
+              </span>
+            ) : stageFilter === 'followup' ? (
+              <span className="lead-count-badge-top" style={{ background: '#fdf2f8', color: '#be185d', borderColor: '#fbcfe8' }}>
+                {followUpLeads.length} In Follow-up
               </span>
             ) : (
-              <span className="lead-count-badge-top">{activeLeads.length} Active Leads</span>
+              <span className="lead-count-badge-top">{allNonDroppedLeads.length} Active Leads</span>
             )}
             {customer?.companyName && (
               <span style={{
@@ -216,7 +215,7 @@ export default function LeadPipelineInbox({
             )}
           </div>
           <p className="lead-header-desc">
-            Streamlined list view of inbound buyer inquiries. Move to follow-ups, initiate direct calls, or connect via WhatsApp.
+            All verified buyer phone numbers, follow-ups, and date-wise filters in one unified workspace.
           </p>
         </div>
 
@@ -248,99 +247,40 @@ export default function LeadPipelineInbox({
               + Top Up
             </button>
           </div>
-
-          {/* Complete Registration Action Button (removed once payment and profile details are submitted) */}
-          {!isFullyComplete && onOpenCompleteRegistration && (
-            <button
-              type="button"
-              className="btn-complete-reg-action"
-              onClick={onOpenCompleteRegistration}
-              title="Complete business profile registration"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-              <span>{isPaymentDone ? 'Complete Profile' : 'Complete Registration'}</span>
-              <span className="action-req-pill">[ACTION REQUIRED]</span>
-            </button>
-          )}
         </div>
       </div>
 
-      {/* 3. Search & Date Filter Bar */}
-      <div className="list-controls-bar">
-        <div className="list-search-wrap">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.2">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            className="list-search-input"
-            placeholder="Search by phone number or date..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
-            <button
-              type="button"
-              className="btn-search-clear"
-              onClick={() => setSearch('')}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        <div className="list-controls-actions-row">
+      {/* 3. Unified Pipeline Stage Filter Bar (Date-Range + Search live directly inside SmartTable below) */}
+      <div className="list-controls-bar" style={{ justifyContent: 'space-between' }}>
+        <div className="list-controls-actions-row" style={{ width: '100%', justifyContent: 'space-between' }}>
           <div className="list-date-tabs">
             <button
               type="button"
-              className={`list-tab-pill ${dateFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setDateFilter('all')}
+              className={`list-tab-pill ${stageFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setStageFilter('all')}
             >
-              All ({activeLeads.length})
+              All Active ({allNonDroppedLeads.length})
             </button>
             <button
               type="button"
-              className={`list-tab-pill ${dateFilter === 'today' ? 'active' : ''}`}
-              onClick={() => setDateFilter('today')}
+              className={`list-tab-pill ${stageFilter === 'unread' ? 'active' : ''}`}
+              onClick={() => setStageFilter('unread')}
             >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                  <line x1="16" y1="2" x2="16" y2="6"/>
-                  <line x1="8" y1="2" x2="8" y2="6"/>
-                  <line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-                <span>Today ({todayCount})</span>
-              </span>
+              Unread ({unreadLeads.length})
             </button>
             <button
               type="button"
-              className={`list-tab-pill ${dateFilter === 'yesterday' ? 'active' : ''}`}
-              onClick={() => setDateFilter('yesterday')}
+              className={`list-tab-pill ${stageFilter === 'followup' ? 'active' : ''}`}
+              onClick={() => setStageFilter('followup')}
             >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12 6 12 12 16 14"/>
-                </svg>
-                <span>Yesterday ({yesterdayCount})</span>
-              </span>
+              In Follow-up ({followUpLeads.length})
             </button>
             <button
               type="button"
-              className={`list-tab-pill dropped-tab ${dateFilter === 'dropped' ? 'active' : ''}`}
-              onClick={() => setDateFilter('dropped')}
+              className={`list-tab-pill dropped-tab ${stageFilter === 'dropped' ? 'active' : ''}`}
+              onClick={() => setStageFilter('dropped')}
             >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="3 6 5 6 21 6"/>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                </svg>
-                <span>Dropped ({droppedLeads.length})</span>
-              </span>
+              Dropped ({droppedLeads.length})
             </button>
           </div>
 
@@ -363,9 +303,9 @@ export default function LeadPipelineInbox({
 
       {/* 4. Tabulator Data Grid for Lead Pipeline */}
       <SmartTable
-        title="Lead Pipeline"
+        title="My Leads"
         defaultPageSize={15}
-        exportFilename="lead-pipeline"
+        exportFilename="my-leads"
       >
         <table className="cp-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -388,11 +328,19 @@ export default function LeadPipelineInbox({
                         <line x1="21" y1="21" x2="16.65" y2="16.65" />
                       </svg>
                     </div>
-                    <h3>{dateFilter === 'dropped' ? 'No dropped leads' : 'No leads found'}</h3>
+                    <h3>
+                      {stageFilter === 'dropped'
+                        ? 'No dropped leads'
+                        : stageFilter === 'followup'
+                        ? 'No leads in follow-up'
+                        : 'No leads found'}
+                    </h3>
                     <p>
-                      {dateFilter === 'dropped'
+                      {stageFilter === 'dropped'
                         ? 'There are currently no dropped leads in your pipeline.'
-                        : 'There are currently no active leads matching your filter.'}
+                        : stageFilter === 'followup'
+                        ? 'Click "Follow-up" on any enquiry to pin it here for callback.'
+                        : 'Inbound buyer phone numbers will appear here in real time.'}
                     </p>
                   </div>
                 </td>
@@ -608,22 +556,27 @@ export default function LeadPipelineInbox({
                           </button>
                         )}
 
-                        {/* 3. In Follow-up */}
-                        <button
-                          type="button"
-                          className="btn-list-action followup"
-                          style={btnCompact}
-                          onClick={() => handleMoveToFollowUp(item.id)}
-                          title="Move lead to Follow-ups page"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                            <line x1="16" y1="2" x2="16" y2="6" />
-                            <line x1="8" y1="2" x2="8" y2="6" />
-                            <line x1="3" y1="10" x2="21" y2="10" />
-                          </svg>
-                          <span>In Follow-up</span>
-                        </button>
+                        {/* 3. Follow-up Toggle */}
+                        {item.status !== 'Dropped' && (
+                          <button
+                            type="button"
+                            className={`btn-list-action followup ${isInFollowUp ? 'is-read' : ''}`}
+                            style={{
+                              ...btnCompact,
+                              ...(isInFollowUp ? { background: '#fdf2f8', color: '#be185d', borderColor: '#fbcfe8', fontWeight: 700 } : {}),
+                            }}
+                            onClick={() => handleToggleFollowUp(item)}
+                            title={isInFollowUp ? 'Mark follow-up complete & return to active' : 'Pin lead to In Follow-up filter'}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            <span>{isInFollowUp ? 'Follow-up ✓' : 'Follow-up'}</span>
+                          </button>
+                        )}
 
                         {/* If Dropped, show Restore; else show Mark Read and Drop */}
                         {item.status === 'Dropped' ? (

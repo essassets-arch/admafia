@@ -10,7 +10,6 @@ import {
   History,
   Calendar,
   Settings,
-  Sparkles,
   Check,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -51,7 +50,6 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
   const [editActiveDays, setEditActiveDays] = useState(['MON', 'TUE', 'WED', 'THU', 'FRI']);
   const [editPreset, setEditPreset] = useState('weekdays');
   const [savingPacing, setSavingPacing] = useState(false);
-  const [processingPacing, setProcessingPacing] = useState(false);
 
   // Campaign History Modal State
   const [historyModalCustomer, setHistoryModalCustomer] = useState(null);
@@ -129,37 +127,6 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     setEditActiveDays(days);
     setEditPreset(customer.schedulePreset || (days.length === 7 ? 'all' : days.length === 5 ? 'weekdays' : 'custom'));
     setIsPacingModalOpen(true);
-  };
-
-  // Run or Trigger Automated Daily Ad Spend Pacing
-  const handleProcessDailyPacing = async () => {
-    setProcessingPacing(true);
-    try {
-      const res = await marketingApi.processDailyPacing();
-      if (res && res.ok) {
-        await Swal.fire({
-          icon: 'success',
-          title: 'Daily Pacing Processed ⚡',
-          html: `
-            <div style="text-align: left; font-size: 0.88rem; line-height: 1.6;">
-              <div>Today: <strong>${res.todayDayCode}</strong> (${res.todayDateStr})</div>
-              <div style="margin-top: 6px; color: #10b981; font-weight: 700;">
-                ✓ <strong>${res.processedCount}</strong> per-day services settled from customer wallets.
-              </div>
-              <div style="margin-top: 4px; color: ${res.autoPausedCount > 0 ? '#f43f5e' : '#94a3b8'}; font-weight: 700;">
-                ● <strong>${res.autoPausedCount}</strong> low-balance accounts automatically paused.
-              </div>
-            </div>
-          `,
-          confirmButtonColor: '#4f46e5',
-        });
-        fetchData(true);
-      }
-    } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Daily Pacing Error', text: err.message });
-    } finally {
-      setProcessingPacing(false);
-    }
   };
 
   // Preset Days Selection
@@ -522,17 +489,6 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           </p>
         </div>
         <div className="marketing-header-actions">
-          <button
-            type="button"
-            className="marketing-btn-refresh"
-            onClick={handleProcessDailyPacing}
-            disabled={processingPacing || refreshing}
-            title="Evaluate and process per-day service deductions for today"
-            style={{ borderColor: '#6366f1', color: '#6366f1' }}
-          >
-            <Sparkles size={14} className={processingPacing ? 'spin' : ''} />
-            <span>{processingPacing ? 'Processing...' : 'Run Daily Service'}</span>
-          </button>
           <button
             type="button"
             className="marketing-btn-primary"

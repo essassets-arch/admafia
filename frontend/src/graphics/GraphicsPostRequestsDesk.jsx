@@ -69,7 +69,7 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
 
   const handleOpenUploadForRequest = (req) => {
     if (onNavigateToDesk) {
-      onNavigateToDesk('upload_post', req?.id || req);
+      onNavigateToDesk('upload_post', req);
     }
   };
 
@@ -292,7 +292,7 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
                             title="Upload Creative Artwork"
                           >
                             <UploadCloud size={13} />
-                            <span>Upload</span>
+                            <span>Upload Artwork</span>
                           </a>
                         )}
                       </div>
@@ -417,11 +417,21 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
                     Current Uploaded Artwork (Revision #{selectedRequest.revisionNumber})
                   </label>
                   <div className="gfx-artwork-preview-box" style={{ marginTop: 6, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--adm-border, #e2e8f0)', maxHeight: 260, display: 'flex', justifyContent: 'center', background: '#0f172a' }}>
-                    <img
-                      src={selectedRequest.mediaUrl}
-                      alt={selectedRequest.title}
-                      style={{ maxHeight: 260, width: 'auto', objectFit: 'contain' }}
-                    />
+                    {selectedRequest.mediaType === 'video' || /\.mp4(\?|$)/i.test(selectedRequest.mediaUrl) ? (
+                      <video
+                        src={selectedRequest.mediaUrl}
+                        controls
+                        muted
+                        playsInline
+                        style={{ maxHeight: 260, maxWidth: '100%', objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <img
+                        src={selectedRequest.mediaUrl}
+                        alt={selectedRequest.title}
+                        style={{ maxHeight: 260, width: 'auto', objectFit: 'contain' }}
+                      />
+                    )}
                   </div>
                 </div>
               )}

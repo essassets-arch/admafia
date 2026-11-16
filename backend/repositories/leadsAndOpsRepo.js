@@ -81,10 +81,10 @@ export async function createDirectLeadRow(body = {}) {
     email = '',
     category = '',
     city = '',
-    requirement = 'Verified Business Enquiry',
-    budget = '₹1.5L – ₹3.5L',
+    requirement = '',
+    budget = '',
     source = 'Direct Intake',
-    priority = 'Urgent',
+    priority = 'Normal',
     notes = '',
   } = body;
 
@@ -107,7 +107,7 @@ export async function createDirectLeadRow(body = {}) {
   }
 
   const buyerDigits = scalar(phone || name).replace(/\D/g, '').slice(-10);
-  const leadId = scalar(body.id).trim() || `lead_${Date.now()}`;
+  const leadId = scalar(body.id).trim() || `lead_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const displayPhone = `+91 ${buyerDigits}`;
   const now = new Date();
 
@@ -122,16 +122,16 @@ export async function createDirectLeadRow(body = {}) {
     phone: buyerDigits,
     displayPhone,
     fullName: scalar(name).trim() || displayPhone,
-    email: scalar(email).trim() || `lead_${buyerDigits.slice(-4)}@example.com`,
+    email: scalar(email).trim(),
     city: scalar(city) || cust.city || '',
-    requirement: scalar(requirement) || 'Verified Business Enquiry',
-    budget: scalar(budget) || '₹1.5L – ₹3.5L',
+    requirement: scalar(requirement).trim(),
+    budget: scalar(budget).trim(),
     source: scalar(source) || 'Direct Intake',
-    priority: scalar(priority) || 'Urgent',
+    priority: scalar(priority) || 'Normal',
     status: 'new',
     isHot: true,
     isRead: false,
-    notes: scalar(notes) || `Direct intake for ${cust.companyName}`,
+    notes: scalar(notes).trim(),
     assignedAt: now,
     updatedAt: now,
   });
@@ -143,13 +143,131 @@ export async function createDirectLeadRow(body = {}) {
     payload: {
       leadId,
       customerId: cust._id,
-      buyerName: scalar(name).trim() || displayPhone,
+      buyerName: displayPhone,
       city: scalar(city) || cust.city || '',
       category: cust.category || 'Other',
     },
   }).catch(() => {});
 
   return { row: leadToRow(created.toObject(), cust) };
+}
+
+export async function createBulkDirectLeadsRows(body = {}) {
+  const {
+    customerId,
+    customerPhone,
+    customerUsername,
+    company,
+    assignedCompany,
+    phones = [],
+  } = body;
+
+  const targetCompany = scalar(company || assignedCompany).trim();
+  const cleanCustPhone = scalar(customerPhone).replace(/\D/g, '').slice(-10);
+  const cid = scalar(customerId).trim();
+  const uname = scalar(customerUsername).trim();
+
+  const or = [];
+  if (cid) or.push({ _id: cid });
+  if (cleanCustPhone) or.push({ phone: cleanCustPhone });
+  if (uname) or.push({ username: ciExact(uname) });
+  if (targetCompany) or.push({ companyName: ciExact(targetCompany) });
+
+  const cust = or.length
+    ? await Customer.findOne({ $or: or }).sort({ registeredAt: -1 }).lean()
+    : null;
+  if (!cust) {
+    return { notFound: true, targetCompany };
+  }
+
+  const rawList = Array.isArray(phones)
+    ? phones
+    : String(phones || '')
+        .split(/[\r\n,;\t ]+/)
+        .filter(Boolean);
+
+  const uniqueValid = [];
+  const invalidNumbers = [];
+  const seenInBatch = new Set();
+
+  for (const raw of rawList) {
+    const digits = String(raw || '').replace(/\D/g, '').slice(-10);
+    if (digits.length !== 10 || !['6', '7', '8', '9'].includes(digits[0])) {
+      invalidNumbers.push(String(raw || '').trim());
+      continue;
+    }
+    if (seenInBatch.has(digits)) continue;
+    seenInBatch.add(digits);
+    uniqueValid.push(digits);
+  }
+
+  if (uniqueValid.length === 0) {
+    return { empty: true, invalidNumbers };
+  }
+
+  const existingForCustomer = new Set(
+    await Lead.distinct('phone', {
+      customerId: cust._id,
+      phone: { $in: uniqueValid },
+    })
+  );
+
+  const skippedDuplicates = [];
+  const createdRows = [];
+  const now = new Date();
+
+  for (let i = 0; i < uniqueValid.length; i += 1) {
+    const buyerDigits = uniqueValid[i];
+    if (existingForCustomer.has(buyerDigits)) {
+      skippedDuplicates.push(buyerDigits);
+      continue;
+    }
+    const leadId = `lead_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
+    const displayPhone = `+91 ${buyerDigits}`;
+    const doc = await Lead.create({
+      _id: leadId,
+      masterLeadId: null,
+      customerId: cust._id,
+      customerPhone: cust.phone || '',
+      customerUsername: cust.username || '',
+      companyName: cust.companyName || '',
+      category: cust.category || 'Other',
+      phone: buyerDigits,
+      displayPhone,
+      fullName: displayPhone,
+      email: '',
+      city: cust.city || '',
+      requirement: '',
+      budget: '',
+      source: 'Direct Intake',
+      priority: 'Normal',
+      status: 'new',
+      isHot: true,
+      isRead: false,
+      notes: '',
+      assignedAt: now,
+      updatedAt: now,
+    });
+    createdRows.push(leadToRow(doc.toObject(), cust));
+    recordOutboxEvent(null, {
+      aggregateType: 'lead',
+      aggregateId: leadId,
+      eventType: 'LEAD_DISPATCHED',
+      payload: {
+        leadId,
+        customerId: cust._id,
+        buyerName: displayPhone,
+        city: cust.city || '',
+        category: cust.category || 'Other',
+      },
+    }).catch(() => {});
+  }
+
+  return {
+    rows: createdRows,
+    skippedDuplicates,
+    invalidNumbers,
+  };
 }
 
 export async function updateLeadAndSyncAssignment(leadId, body = {}) {

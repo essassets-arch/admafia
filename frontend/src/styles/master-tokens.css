@@ -1,0 +1,388 @@
+/* ==========================================================================
+   AD MAFIA — MASTER DESIGN TOKENS, MOTION CHOREOGRAPHY & PORTAL DARK THEME
+   Unified across Landing, Auth, Customer Portal, Sales, Marketing, Graphics & Super Admin
+   ========================================================================== */
+
+:root {
+  /* Unified Typography System */
+  --am-font-display: 'Bricolage Grotesque', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --am-font-sans: 'Plus Jakarta Sans', 'Figtree', system-ui, -apple-system, sans-serif;
+  --am-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Motion Choreography Curves */
+  --am-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --am-ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --am-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --am-dur-fast: 150ms;
+  --am-dur-base: 260ms;
+  --am-dur-slow: 360ms;
+
+  /* Radii & Elevation */
+  --am-radius-xs: 6px;
+  --am-radius-sm: 10px;
+  --am-radius-md: 14px;
+  --am-radius-lg: 20px;
+  --am-radius-pill: 9999px;
+
+  /* Light Surfaces & Semantic Palette */
+  --am-bg-canvas: #f8fafc;
+  --am-bg-surface: #ffffff;
+  --am-bg-elevated: #ffffff;
+  --am-bg-subtle: #f1f5f9;
+  --am-border: #e2e8f0;
+  --am-border-strong: #cbd5e1;
+  --am-text-primary: #0f172a;
+  --am-text-secondary: #334155;
+  --am-text-muted: #64748b;
+
+  --am-brand: #4f46e5;
+  --am-brand-hover: #4338ca;
+  --am-gold: #ffb800;
+  --am-success: #10b981;
+  --am-warning: #f59e0b;
+  --am-danger: #ef4444;
+  --am-whatsapp: #25d366;
+}
+
+[data-admin-theme="dark"] {
+  --am-bg-canvas: #0b1120;
+  --am-bg-surface: #111827;
+  --am-bg-elevated: #172033;
+  --am-bg-subtle: #1e293b;
+  --am-border: rgba(148, 163, 184, 0.18);
+  --am-border-strong: rgba(148, 163, 184, 0.3);
+  --am-text-primary: #f8fafc;
+  --am-text-secondary: #cbd5e1;
+  --am-text-muted: #94a3b8;
+}
+
+/* --------------------------------------------------------------------------
+   1. GPU-ACCELERATED DIRECTIONAL MOTION & VIEW TRANSITIONS
+   -------------------------------------------------------------------------- */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes amSlideInRight {
+  from {
+    opacity: 0;
+    transform: translate3d(26px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes amSlideInLeft {
+  from {
+    opacity: 0;
+    transform: translate3d(-26px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes amFadeUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.am-slide-in-right {
+  animation: amSlideInRight var(--am-dur-base) var(--am-ease-out) both;
+  will-change: transform, opacity;
+}
+
+.am-slide-in-left {
+  animation: amSlideInLeft var(--am-dur-base) var(--am-ease-out) both;
+  will-change: transform, opacity;
+}
+
+.am-fade-up {
+  animation: amFadeUp 220ms var(--am-ease-out) both;
+  will-change: transform, opacity;
+}
+
+/* Native View Transition API Polish */
+::view-transition-old(root) {
+  animation: fadeIn 140ms ease reverse;
+}
+::view-transition-new(root) {
+  animation: amFadeUp 220ms var(--am-ease-out);
+}
+
+/* Sliding Segmented Glider Tabs for Login ⇄ Create Account */
+.am-auth-glider-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 20px;
+  isolation: isolate;
+}
+
+.am-auth-glider-pill {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  background: #ffffff;
+  border-radius: 9px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: transform 280ms var(--am-ease-out);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.am-auth-glider-pill.is-login {
+  transform: translate3d(100%, 0, 0);
+}
+
+.am-auth-glider-btn {
+  position: relative;
+  z-index: 1;
+  border: none;
+  background: transparent;
+  padding: 9px 12px;
+  font-family: var(--am-font-sans);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  border-radius: 9px;
+  transition: color 200ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.am-auth-glider-btn.active {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+/* Smooth Stepper Progress Bar Transition */
+.am-wizard-divider {
+  position: relative;
+  overflow: hidden;
+  transition: background-color 280ms var(--am-ease-out);
+}
+
+.am-wizard-step .am-wizard-step-num {
+  transition: transform 240ms var(--am-ease-spring), background-color 240ms ease, color 240ms ease;
+}
+
+.am-wizard-step.done .am-wizard-step-num {
+  transform: scale(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .am-slide-in-right,
+  .am-slide-in-left,
+  .am-fade-up {
+    animation: none !important;
+  }
+  .am-auth-glider-pill {
+    transition: none !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   2. CUSTOMER PORTAL DARK / WHITE THEME OVERRIDES (.portal-app-root)
+   -------------------------------------------------------------------------- */
+.portal-app-root[data-admin-theme="dark"],
+[data-admin-active-theme="dark"] .portal-app-root.adm-theme-scope {
+  background: #0b1120 !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .portal-main-area,
+.portal-app-root[data-admin-theme="dark"] .portal-content-body {
+  background: #0b1120 !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .portal-subheader-bar,
+.portal-app-root[data-admin-theme="dark"] .portal-mobile-top-bar {
+  background: #0f172a !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .portal-subheader-company-name,
+.portal-app-root[data-admin-theme="dark"] .portal-subheader-wallet-btn {
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .portal-subheader-wallet-btn {
+  background: #1e293b !important;
+  border-color: rgba(148, 163, 184, 0.28) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .pacing-control-master-card,
+.portal-app-root[data-admin-theme="dark"] .pacing-metric-card-exact,
+.portal-app-root[data-admin-theme="dark"] .select-marketing-days-engine,
+.portal-app-root[data-admin-theme="dark"] .overall-performance-master-card,
+.portal-app-root[data-admin-theme="dark"] .perf-box-card,
+.portal-app-root[data-admin-theme="dark"] .recent-priority-enquiries-panel,
+.portal-app-root[data-admin-theme="dark"] .wallet-exact-kpi-card,
+.portal-app-root[data-admin-theme="dark"] .instant-wallet-topup-card,
+.portal-app-root[data-admin-theme="dark"] .daywise-adspend-engine-card,
+.portal-app-root[data-admin-theme="dark"] .engine-mini-box,
+.portal-app-root[data-admin-theme="dark"] .wallet-ledger-history-card,
+.portal-app-root[data-admin-theme="dark"] .profile-header-card,
+.portal-app-root[data-admin-theme="dark"] .profile-overview-dashboard,
+.portal-app-root[data-admin-theme="dark"] .profile-info-card-box,
+.portal-app-root[data-admin-theme="dark"] .profile-form-section,
+.portal-app-root[data-admin-theme="dark"] .list-controls-bar,
+.portal-app-root[data-admin-theme="dark"] .header-ad-wallet-card,
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-card {
+  background: #111827 !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] h1,
+.portal-app-root[data-admin-theme="dark"] h2,
+.portal-app-root[data-admin-theme="dark"] h3,
+.portal-app-root[data-admin-theme="dark"] h4,
+.portal-app-root[data-admin-theme="dark"] .pacing-big-amount,
+.portal-app-root[data-admin-theme="dark"] .kpi-card-value,
+.portal-app-root[data-admin-theme="dark"] .perf-box-number,
+.portal-app-root[data-admin-theme="dark"] .header-wallet-val,
+.portal-app-root[data-admin-theme="dark"] .profile-kv-val,
+.portal-app-root[data-admin-theme="dark"] .phone-strong {
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] p,
+.portal-app-root[data-admin-theme="dark"] .overview-desc-lead,
+.portal-app-root[data-admin-theme="dark"] .lead-header-desc,
+.portal-app-root[data-admin-theme="dark"] .wallet-desc-lead,
+.portal-app-root[data-admin-theme="dark"] .profile-kv-label {
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected {
+  background: #0f172a !important;
+  border-color: rgba(148, 163, 184, 0.2) !important;
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected {
+  background: rgba(79, 70, 229, 0.16) !important;
+  border-color: #6366f1 !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-ad-booked {
+  background: rgba(16, 185, 129, 0.14) !important;
+  border-color: #10b981 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .clean-input,
+.portal-app-root[data-admin-theme="dark"] .clean-select,
+.portal-app-root[data-admin-theme="dark"] .list-search-wrap,
+.portal-app-root[data-admin-theme="dark"] .list-search-input,
+.portal-app-root[data-admin-theme="dark"] .custom-input-box-exact,
+.portal-app-root[data-admin-theme="dark"] .custom-field-exact,
+.portal-app-root[data-admin-theme="dark"] .topup-preset-card-exact:not(.selected) {
+  background: #090e1a !important;
+  border-color: rgba(148, 163, 184, 0.24) !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .today-campaign-bottom-bar-exact,
+.portal-app-root[data-admin-theme="dark"] .engine-week-calendar-toolbar {
+  background: #0f172a !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #e2e8f0 !important;
+}
+
+/* Inline Quick-Complete Profile Card */
+.am-quick-profile-card {
+  background: linear-gradient(135deg, #fffbeb 0%, #ffffff 65%, #f8fafc 100%);
+  border: 1.5px solid #f59e0b;
+  border-left: 5px solid #d97706;
+  border-radius: 16px;
+  padding: 20px 22px;
+  margin-bottom: 22px;
+  box-shadow: 0 10px 28px -12px rgba(217, 119, 6, 0.24);
+}
+
+.am-quick-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.am-quick-profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.am-quick-profile-field label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #92400e;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-field label {
+  color: #fbbf24 !important;
+}
+
+.am-quick-profile-field input,
+.am-quick-profile-field select {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1.5px solid #fcd34d;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.86rem;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.am-quick-profile-field input:focus,
+.am-quick-profile-field select:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-field input,
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-field select {
+  background: #090e1a !important;
+  border-color: rgba(251, 191, 36, 0.45) !important;
+  color: #f8fafc !important;
+}

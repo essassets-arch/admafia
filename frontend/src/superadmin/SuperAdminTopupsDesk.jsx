@@ -14,7 +14,6 @@ import {
   Users,
   Wallet,
   Zap,
-  Sparkles,
   ExternalLink,
   Check,
   Copy,
@@ -1042,20 +1041,11 @@ export default function SuperAdminTopupsDesk() {
                   </div>
                 </div>
 
-                {/* Bank Reference UTR with Quick Generator */}
+                {/* Bank Reference UTR */}
                 <div className="sa-form-group" style={{ marginBottom: 14 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                    <label className="sa-form-label" style={{ margin: 0 }}>
-                      Bank Transaction Reference / UTR Number *
-                    </label>
-                    <button
-                      type="button"
-                      style={{ background: 'transparent', border: 'none', color: isDark ? '#34d399' : '#059669', fontSize: '0.74rem', fontWeight: 700, cursor: 'pointer' }}
-                      onClick={() => setManualForm({ ...manualForm, referenceUtr: `TOP_${Date.now().toString().slice(-6)}_${Math.random().toString(36).substr(2, 4).toUpperCase()}` })}
-                    >
-                      <Sparkles size={12} style={{ display: 'inline', marginRight: 2 }} /> Auto-Generate
-                    </button>
-                  </div>
+                  <label className="sa-form-label" style={{ marginBottom: 6 }}>
+                    Bank Transaction Reference / UTR Number *
+                  </label>
                   <input
                     type="text"
                     required

@@ -1,18 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  LayoutDashboard,
-  Users,
-  Lightbulb,
-  FileCheck2,
   ShieldCheck,
   Rocket,
   LogOut,
   ExternalLink,
   Menu,
   X,
-  Sparkles,
 } from 'lucide-react';
-import MarketingDashboard from './MarketingDashboard';
 import MarketingCustomersDesk from './MarketingCustomersDesk';
 import BuildIdeasDesk from './BuildIdeasDesk';
 import CreatePostIdeasDesk from './CreatePostIdeasDesk';
@@ -25,35 +19,77 @@ import { useAdminTheme } from '../utils/adminTheme';
 import AdminThemeToggle from '../components/AdminThemeToggle';
 import './marketing.css';
 
+const DESK_TO_STUDIO = {
+  customer_marketing: 'campaigns_hub',
+  customers: 'campaigns_hub',
+  verify_posts: 'content_studio',
+  create_posts: 'content_studio',
+  build_ideas: 'content_studio',
+};
+
+const DEFAULT_STUDIO_SUBTAB = {
+  campaigns_hub: 'customer_marketing',
+  content_studio: 'verify_posts',
+};
+
+function normalizeMarketingDeskKey(rawKey) {
+  if (!rawKey) return 'customer_marketing';
+  const k = String(rawKey).trim().toLowerCase().replace(/-/g, '_');
+
+  if (k === 'campaigns_hub' || k === 'overview') return 'customer_marketing';
+  if (k === 'content_studio') return 'verify_posts';
+  if (k === 'create_post_ideas' || k === 'create_post') return 'create_posts';
+
+  if (Object.prototype.hasOwnProperty.call(DESK_TO_STUDIO, k)) {
+    return k;
+  }
+  return 'customer_marketing';
+}
+
+function resolveDeskFromUrl() {
+  try {
+    const p = (window.location.pathname || '').toLowerCase();
+    const h = (window.location.hash || '').toLowerCase();
+    const combined = `${p} ${h}`;
+
+    if (combined.includes('/marketing/customers') || combined.includes('#marketing/customers')) return 'customers';
+    if (combined.includes('build-ideas') || combined.includes('build_ideas')) return 'build_ideas';
+    if (combined.includes('create-post') || combined.includes('create_posts')) return 'create_posts';
+    if (combined.includes('verify-posts') || combined.includes('verify_posts') || combined.includes('content-studio') || combined.includes('content_studio')) {
+      return 'verify_posts';
+    }
+    if (combined.includes('customer-marketing') || combined.includes('customer_marketing') || combined.includes('campaigns-hub') || combined.includes('campaigns_hub')) {
+      return 'customer_marketing';
+    }
+    return 'customer_marketing';
+  } catch (e) {
+    return 'customer_marketing';
+  }
+}
+
 export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
   const { theme } = useAdminTheme();
   const activeUser = adminAuthApi.getCurrentUser() || {
     fullName: 'Senior Marketing Director',
     role: 'Marketing Manager',
   };
-  // Resolve active desk from URL pathname or hash
-  const resolveDeskFromUrl = () => {
-    try {
-      const p = (window.location.pathname || '').toLowerCase();
-      const h = (window.location.hash || '').toLowerCase();
-
-      if (p.includes('/marketing/customers') || h.includes('customers')) return 'customers';
-      if (p.includes('/marketing/build-ideas') || h.includes('build-ideas') || h.includes('build_ideas')) return 'build_ideas';
-      if (p.includes('/marketing/create-post-ideas') || h.includes('create-post') || h.includes('create_posts')) return 'create_posts';
-      if (p.includes('/marketing/verify-posts') || h.includes('verify-posts') || h.includes('verify_posts')) return 'verify_posts';
-      if (p.includes('/marketing/customer-marketing') || h.includes('customer-marketing') || h.includes('customer_marketing')) return 'customer_marketing';
-      return 'overview';
-    } catch (e) {
-      return 'overview';
-    }
-  };
 
   const [activeDesk, setActiveDesk] = useState(resolveDeskFromUrl);
+  const [lastSubTabByStudio, setLastSubTabByStudio] = useState(() => {
+    const initial = resolveDeskFromUrl();
+    const initialStudio = DESK_TO_STUDIO[initial] || 'campaigns_hub';
+    return {
+      ...DEFAULT_STUDIO_SUBTAB,
+      [initialStudio]: initial,
+    };
+  });
   const [targetCustomerId, setTargetCustomerId] = useState(null);
   const [targetIdeaId, setTargetIdeaId] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [summary, setSummary] = useState(null);
   const [liveClock, setLiveClock] = useState(() => new Date());
+
+  const activeStudio = DESK_TO_STUDIO[activeDesk] || 'campaigns_hub';
 
   // Real-time IST Clock
   useEffect(() => {
@@ -64,7 +100,10 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
   // Sync hash/popstate
   useEffect(() => {
     const handleUrlChange = () => {
-      setActiveDesk(resolveDeskFromUrl());
+      const nextDesk = resolveDeskFromUrl();
+      const nextStudio = DESK_TO_STUDIO[nextDesk] || 'campaigns_hub';
+      setActiveDesk(nextDesk);
+      setLastSubTabByStudio((prev) => ({ ...prev, [nextStudio]: nextDesk }));
     };
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
@@ -75,46 +114,55 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
   }, []);
 
   // Fetch summary badge counts
-  useEffect(() => {
-    async function loadSummary() {
-      try {
-        const res = await marketingApi.getSummary();
-        if (res && res.ok) {
-          setSummary(res.summary);
-        }
-      } catch (err) {
-        console.error('[MarketingLayout] Summary error', err);
+  const loadSummary = useCallback(async () => {
+    try {
+      const res = await marketingApi.getSummary();
+      if (res && res.ok) {
+        setSummary(res.summary);
       }
+    } catch (err) {
+      console.error('[MarketingLayout] Summary error', err);
     }
+  }, []);
+
+  useEffect(() => {
     loadSummary();
     const interval = setInterval(loadSummary, 30000);
     return () => clearInterval(interval);
-  }, [activeDesk]);
+  }, [activeDesk, loadSummary]);
 
-  const navigateToDesk = (deskKey, customerId = null, ideaId = null) => {
-    setActiveDesk(deskKey);
+  const navigateToDesk = (deskOrStudioKey, customerId = null, ideaId = null) => {
+    const raw = String(deskOrStudioKey || '').trim().toLowerCase().replace(/-/g, '_');
+    let nextDesk;
+
+    if (Object.prototype.hasOwnProperty.call(DEFAULT_STUDIO_SUBTAB, raw)) {
+      nextDesk = lastSubTabByStudio[raw] || DEFAULT_STUDIO_SUBTAB[raw];
+    } else {
+      nextDesk = normalizeMarketingDeskKey(raw);
+    }
+
+    const nextStudio = DESK_TO_STUDIO[nextDesk] || 'campaigns_hub';
+    setActiveDesk(nextDesk);
+    setLastSubTabByStudio((prev) => ({ ...prev, [nextStudio]: nextDesk }));
     setTargetCustomerId(customerId);
     setTargetIdeaId(ideaId);
     setMobileMenuOpen(false);
 
-    let targetPath = '/marketing';
-    let targetHash = '#marketing/overview';
+    let targetPath = '/marketing/customer-marketing';
+    let targetHash = '#marketing/customer-marketing';
 
-    if (deskKey === 'customers') {
+    if (nextDesk === 'customers') {
       targetPath = '/marketing/customers';
       targetHash = '#marketing/customers';
-    } else if (deskKey === 'build_ideas') {
+    } else if (nextDesk === 'build_ideas') {
       targetPath = '/marketing/build-ideas';
       targetHash = '#marketing/build-ideas';
-    } else if (deskKey === 'create_posts') {
+    } else if (nextDesk === 'create_posts') {
       targetPath = '/marketing/create-post-ideas';
       targetHash = '#marketing/create-post-ideas';
-    } else if (deskKey === 'verify_posts') {
+    } else if (nextDesk === 'verify_posts') {
       targetPath = '/marketing/verify-posts';
       targetHash = '#marketing/verify-posts';
-    } else if (deskKey === 'customer_marketing') {
-      targetPath = '/marketing/customer-marketing';
-      targetHash = '#marketing/customer-marketing';
     }
 
     try {
@@ -127,39 +175,39 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
   };
 
   const navItems = [
-    { id: 'overview', label: 'Department Overview', icon: LayoutDashboard },
     {
-      id: 'customers',
-      label: 'Customer Registrations',
-      icon: Users,
-      badge: summary?.completedCustomersCount || null,
+      id: 'campaigns_hub',
+      label: 'Customers & Pacing Control',
+      icon: Rocket,
+      badge: summary?.activeCampaignsCount || null,
     },
     {
-      id: 'build_ideas',
-      label: 'Build Ideas',
-      icon: Lightbulb,
-      badge: summary?.totalIdeasCount || null,
-    },
-    {
-      id: 'create_posts',
-      label: 'Create Post Ideas',
-      icon: FileCheck2,
-      badge: summary?.totalPostsCount || null,
-    },
-    {
-      id: 'verify_posts',
-      label: 'Verify Posts',
+      id: 'content_studio',
+      label: 'Content & Verification Studio',
       icon: ShieldCheck,
       badge: summary?.pendingVerificationPosts || null,
       urgent: (summary?.pendingVerificationPosts || 0) > 0,
     },
-    {
-      id: 'customer_marketing',
-      label: 'Marketing Control',
-      icon: Rocket,
-      badge: summary?.activeCampaignsCount || null,
-    },
   ];
+
+  const studioSubTabs = {
+    campaigns_hub: [
+      { id: 'customer_marketing', label: '🎯 Pacing & Campaign Control' },
+      { id: 'customers', label: '🏢 Verified Client Directory' },
+    ],
+    content_studio: [
+      {
+        id: 'verify_posts',
+        label: '✅ Verify Posts Queue',
+        badge: summary?.pendingVerificationPosts || 0,
+      },
+      { id: 'create_posts', label: '🎨 Create & Assign Post' },
+      { id: 'build_ideas', label: '💡 Idea Bank' },
+    ],
+  };
+
+  const activeSubTabs = studioSubTabs[activeStudio] || [];
+  const activeNavLabel = navItems.find((n) => n.id === activeStudio)?.label || 'Customers & Pacing Control';
 
   return (
     <div className="marketing-layout-root adm-theme-scope" data-admin-theme={theme}>
@@ -184,7 +232,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
         <nav className="marketing-sidebar-nav">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeDesk === item.id;
+            const isActive = activeStudio === item.id;
             return (
               <button
                 type="button"
@@ -196,7 +244,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
                   <Icon size={18} />
                   <span>{item.label}</span>
                 </div>
-                {item.badge !== null && item.badge !== undefined && (
+                {item.badge !== null && item.badge !== undefined && item.badge > 0 && (
                   <span
                     className={`marketing-nav-badge ${item.urgent ? 'urgent' : ''}`.trim()}
                   >
@@ -232,7 +280,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
             }}
           >
             <LogOut size={15} />
-            <span>Exit Marketing Ops</span>
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>
@@ -261,9 +309,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
             <div className="marketing-breadcrumbs">
               <span>Marketing Department</span>
               <span>/</span>
-              <strong>
-                {navItems.find((n) => n.id === activeDesk)?.label || 'Overview'}
-              </strong>
+              <strong>{activeNavLabel}</strong>
             </div>
           </div>
 
@@ -286,10 +332,6 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
               <LogOut size={16} />
               <span className="mkt-topbar-logout-label">Logout</span>
             </button>
-            <div className="marketing-live-pill">
-              <span className="marketing-live-dot" />
-              <span>MongoDB Live Sync</span>
-            </div>
             <div className="marketing-clock-tag">
               {liveClock.toLocaleTimeString('en-IN', {
                 timeZone: 'Asia/Kolkata',
@@ -322,19 +364,40 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
 
         {/* Dynamic Page Views */}
         <main className="marketing-page-container">
-          {activeDesk === 'overview' && (
-            <MarketingDashboard onNavigateToDesk={navigateToDesk} />
+          {activeSubTabs.length > 0 && (
+            <div className="mkt-studio-subnav" role="tablist" aria-label={`${activeNavLabel} Views`}>
+              {activeSubTabs.map((tab) => {
+                const isTabActive = activeDesk === tab.id;
+                const showTabBadge = typeof tab.badge === 'number' && tab.badge > 0;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isTabActive}
+                    className={`mkt-studio-tab ${isTabActive ? 'active' : ''}`}
+                    onClick={() => navigateToDesk(tab.id)}
+                  >
+                    <span>{tab.label}</span>
+                    {showTabBadge && (
+                      <span className="mkt-studio-tab-badge">{tab.badge}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {activeDesk === 'customer_marketing' && (
+            <CustomerMarketingControlDesk onNavigateToDesk={navigateToDesk} />
           )}
 
           {activeDesk === 'customers' && (
             <MarketingCustomersDesk onNavigateToDesk={navigateToDesk} />
           )}
 
-          {activeDesk === 'build_ideas' && (
-            <BuildIdeasDesk
-              initialCustomerId={targetCustomerId}
-              onNavigateToDesk={navigateToDesk}
-            />
+          {activeDesk === 'verify_posts' && (
+            <VerifyPostsDesk onNavigateToDesk={navigateToDesk} />
           )}
 
           {activeDesk === 'create_posts' && (
@@ -345,16 +408,14 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
             />
           )}
 
-          {activeDesk === 'verify_posts' && (
-            <VerifyPostsDesk onNavigateToDesk={navigateToDesk} />
-          )}
-
-          {activeDesk === 'customer_marketing' && (
-            <CustomerMarketingControlDesk onNavigateToDesk={navigateToDesk} />
+          {activeDesk === 'build_ideas' && (
+            <BuildIdeasDesk
+              initialCustomerId={targetCustomerId}
+              onNavigateToDesk={navigateToDesk}
+            />
           )}
         </main>
       </div>
     </div>
   );
 }
-

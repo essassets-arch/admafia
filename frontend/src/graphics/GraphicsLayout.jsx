@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Inbox,
-  UploadCloud,
+  Layers,
   CheckCircle2,
-  AlertTriangle,
   LogOut,
   ExternalLink,
   Menu,
@@ -22,62 +20,79 @@ import { useAdminTheme } from '../utils/adminTheme';
 import AdminThemeToggle from '../components/AdminThemeToggle';
 import './graphics.css';
 
+const DESK_TO_VIEW = {
+  post_requests: 'studio_board',
+  rejected_posts: 'studio_board',
+  upload_post: 'studio_board',
+  approved_posts: 'approved_posts',
+};
+
+function resolveDeskFromUrl() {
+  try {
+    const p = (window.location.pathname || '').toLowerCase();
+    const h = (window.location.hash || '').toLowerCase();
+    const combined = `${p} ${h}`;
+
+    if (combined.includes('upload-post') || combined.includes('upload_post')) return 'upload_post';
+    if (combined.includes('approved-posts') || combined.includes('approved_posts')) return 'approved_posts';
+    if (combined.includes('rejected-posts') || combined.includes('rejected_posts')) return 'rejected_posts';
+    if (combined.includes('post-requests') || combined.includes('post_requests') || combined.includes('studio-board') || combined.includes('studio_board')) {
+      return 'post_requests';
+    }
+    return 'post_requests';
+  } catch (e) {
+    return 'post_requests';
+  }
+}
+
+function resolveRequestIdFromUrl() {
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    const fromSearch = searchParams.get('requestId') || searchParams.get('id');
+    if (fromSearch) return fromSearch;
+
+    const hashParts = (window.location.hash || '').split('?');
+    if (hashParts.length > 1) {
+      const hashParams = new URLSearchParams(hashParts[1]);
+      return hashParams.get('requestId') || hashParams.get('id');
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function normalizeDeskKey(key) {
+  if (!key) return 'post_requests';
+  const s = String(key).toLowerCase().replace(/[-/]/g, '_');
+  if (s.includes('upload')) return 'upload_post';
+  if (s.includes('approved')) return 'approved_posts';
+  if (s.includes('rejected')) return 'rejected_posts';
+  if (s.includes('post') || s.includes('request')) return 'post_requests';
+  return 'post_requests';
+}
+
 export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
   const { theme } = useAdminTheme();
   const activeUser = adminAuthApi.getCurrentUser() || {
     fullName: 'Lead Creative & Graphics Designer',
     role: 'Senior Graphics Designer',
   };
-  // Resolve active desk from URL pathname or hash
-  const resolveDeskFromUrl = () => {
-    try {
-      const p = (window.location.pathname || '').toLowerCase();
-      const h = (window.location.hash || '').toLowerCase();
-
-      if (p.includes('/graphics/upload-post') || h.includes('upload-post') || h.includes('upload_post')) return 'upload_post';
-      if (p.includes('/graphics/approved-posts') || h.includes('approved-posts') || h.includes('approved_posts')) return 'approved_posts';
-      if (p.includes('/graphics/rejected-posts') || h.includes('rejected-posts') || h.includes('rejected_posts')) return 'rejected_posts';
-      if (p.includes('/graphics/post-requests') || h.includes('post-requests') || h.includes('post_requests')) return 'post_requests';
-      return 'post_requests';
-    } catch (e) {
-      return 'post_requests';
-    }
-  };
-
-  const resolveRequestIdFromUrl = () => {
-    try {
-      const searchParams = new URLSearchParams(window.location.search);
-      const fromSearch = searchParams.get('requestId') || searchParams.get('id');
-      if (fromSearch) return fromSearch;
-
-      const hashParts = (window.location.hash || '').split('?');
-      if (hashParts.length > 1) {
-        const hashParams = new URLSearchParams(hashParts[1]);
-        return hashParams.get('requestId') || hashParams.get('id');
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  };
-
-  const normalizeDeskKey = (key) => {
-    if (!key) return 'post_requests';
-    const s = String(key).toLowerCase().replace(/[-/]/g, '_');
-    if (s.includes('upload')) return 'upload_post';
-    if (s.includes('approved')) return 'approved_posts';
-    if (s.includes('rejected')) return 'rejected_posts';
-    if (s.includes('post') || s.includes('request')) return 'post_requests';
-    return 'post_requests';
-  };
 
   const [activeDesk, setActiveDesk] = useState(resolveDeskFromUrl);
+  const [lastBoardTab, setLastBoardTab] = useState(() => {
+    const initial = resolveDeskFromUrl();
+    return DESK_TO_VIEW[initial] === 'studio_board' ? initial : 'post_requests';
+  });
   const [selectedRequestId, setSelectedRequestId] = useState(resolveRequestIdFromUrl);
+  const [selectedRequest, setSelectedRequest] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [summary, setSummary] = useState(null);
   const [liveClock, setLiveClock] = useState(() => new Date());
 
-  // Real-time IST Clock
+  const activeView = DESK_TO_VIEW[activeDesk] || 'studio_board';
+
+  // Single 1-second IST Clock (topbar only)
   useEffect(() => {
     const timer = setInterval(() => setLiveClock(new Date()), 1000);
     return () => clearInterval(timer);
@@ -86,9 +101,14 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
   // Sync hash/popstate
   useEffect(() => {
     const handleUrlChange = () => {
-      setActiveDesk(resolveDeskFromUrl());
+      const nextDesk = resolveDeskFromUrl();
+      setActiveDesk(nextDesk);
+      if (DESK_TO_VIEW[nextDesk] === 'studio_board') {
+        setLastBoardTab(nextDesk);
+      }
       const reqId = resolveRequestIdFromUrl();
       setSelectedRequestId(reqId || null);
+      if (!reqId) setSelectedRequest(null);
     };
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
@@ -99,29 +119,43 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
   }, []);
 
   // Fetch summary badge counts
-  useEffect(() => {
-    async function loadSummary() {
-      try {
-        const res = await graphicsApi.getSummary();
-        if (res && res.ok) {
-          setSummary(res.summary);
-        }
-      } catch (err) {
-        console.error('[GraphicsLayout] Summary error', err);
+  const loadSummary = useCallback(async () => {
+    try {
+      const res = await graphicsApi.getSummary();
+      if (res && res.ok) {
+        setSummary(res.summary);
       }
+    } catch (err) {
+      console.error('[GraphicsLayout] Summary error', err);
     }
+  }, []);
+
+  useEffect(() => {
     loadSummary();
     const interval = setInterval(loadSummary, 30000);
     return () => clearInterval(interval);
-  }, [activeDesk]);
+  }, [activeDesk, loadSummary]);
 
   const navigateToDesk = (deskKey, requestData = null) => {
-    const normalizedKey = normalizeDeskKey(deskKey);
-    setActiveDesk(normalizedKey);
+    const raw = String(deskKey || '').trim().toLowerCase().replace(/[-/]/g, '_');
+    const normalizedKey =
+      raw === 'studio_board' ? (lastBoardTab || 'post_requests') : normalizeDeskKey(raw);
 
-    const reqId = typeof requestData === 'object' && requestData !== null
-      ? (requestData.initialRequestId || requestData.id || requestData.requestId || null)
-      : (requestData || null);
+    setActiveDesk(normalizedKey);
+    if (DESK_TO_VIEW[normalizedKey] === 'studio_board') {
+      setLastBoardTab(normalizedKey);
+    }
+
+    let reqId = null;
+    if (typeof requestData === 'object' && requestData !== null) {
+      reqId = requestData.initialRequestId || requestData.id || requestData.requestId || null;
+      if (requestData.id) {
+        setSelectedRequest(requestData);
+      }
+    } else if (requestData) {
+      reqId = requestData;
+      setSelectedRequest((prev) => (prev && String(prev.id) === String(requestData) ? prev : null));
+    }
 
     if (reqId) {
       setSelectedRequestId(reqId);
@@ -141,9 +175,6 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
     } else if (normalizedKey === 'rejected_posts') {
       targetPath = '/graphics/rejected-posts';
       targetHash = '#graphics/rejected-posts';
-    } else {
-      targetPath = '/graphics/post-requests';
-      targetHash = '#graphics/post-requests';
     }
 
     try {
@@ -155,36 +186,45 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
     } catch (e) {}
   };
 
+  const studioBoardBadge = (summary?.pendingUploads || 0) + (summary?.rejectedCount || 0);
+
   const navItems = [
     {
-      id: 'post_requests',
-      label: 'Post Requests',
+      id: 'studio_board',
+      label: 'Creative Studio Board',
       path: '/graphics/post-requests',
-      icon: Inbox,
-      badge: summary?.pendingUploads || null,
-    },
-    {
-      id: 'upload_post',
-      label: 'Upload Post',
-      path: '/graphics/upload-post',
-      icon: UploadCloud,
-      badge: null,
+      icon: Layers,
+      badge: studioBoardBadge > 0 ? studioBoardBadge : null,
+      urgent: (summary?.rejectedCount || 0) > 0,
     },
     {
       id: 'approved_posts',
-      label: 'Approved Posts',
+      label: 'Approved Portfolio',
       path: '/graphics/approved-posts',
       icon: CheckCircle2,
-      badge: summary?.approvedCount || null,
+      badge: summary?.approvedCount > 0 ? summary.approvedCount : null,
       color: '#10b981',
+    },
+  ];
+
+  const studioBoardTabs = [
+    {
+      id: 'post_requests',
+      label: '📥 Post Requests',
+      badge: summary?.pendingUploads || 0,
+      urgent: false,
     },
     {
       id: 'rejected_posts',
-      label: 'Rejected Posts',
-      path: '/graphics/rejected-posts',
-      icon: AlertTriangle,
-      badge: summary?.rejectedCount || null,
-      urgent: (summary?.rejectedCount || 0) > 0,
+      label: '🔄 Revisions & Rejected',
+      badge: summary?.rejectedCount || 0,
+      urgent: true,
+    },
+    {
+      id: 'upload_post',
+      label: '⬆️ Direct Upload',
+      badge: 0,
+      urgent: false,
     },
   ];
 
@@ -212,28 +252,14 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
           </button>
         </div>
 
-        {/* Live IST clock */}
-        <div className="graphics-sidebar-clock-card">
-          <span>India Standard Time</span>
-          <strong>
-            {liveClock.toLocaleTimeString('en-IN', {
-              timeZone: 'Asia/Kolkata',
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              hour12: true,
-            })}
-          </strong>
-        </div>
-
         <nav className="graphics-sidebar-nav">
           <div className="graphics-nav-category-header">
-            Creative Desks
+            Creative Studios
           </div>
 
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeDesk === item.id;
+            const isActive = activeView === item.id;
             return (
               <a
                 key={item.id}
@@ -245,12 +271,12 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
                 }}
               >
                 <div className="graphics-nav-label-box">
-<Icon size={18} className="graphics-nav-icon" />
+                  <Icon size={18} className="graphics-nav-icon" />
                   <span className="graphics-nav-title">{item.label}</span>
                 </div>
                 {item.badge !== null && item.badge !== undefined && (
                   <span
-                    className={`graphics-nav-badge ${item.urgent ? 'urgent' : ''} ${item.color ? 'emerald' : ''}`}
+                    className={`graphics-nav-badge ${item.urgent ? 'urgent' : ''} ${item.color ? 'emerald' : ''}`.trim()}
                   >
                     {item.badge}
                   </span>
@@ -285,7 +311,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
             }}
           >
             <LogOut size={15} />
-            <span>Exit Graphics</span>
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>
@@ -316,10 +342,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
               <span className="graphics-bc-dept">Graphics Department</span>
               <span className="graphics-bc-sep">/</span>
               <strong className="graphics-bc-current">
-                {activeDesk === 'post_requests' && 'Post Requests'}
-                {activeDesk === 'upload_post' && 'Upload Finished Artwork'}
-                {activeDesk === 'approved_posts' && 'Approved Posts Registry'}
-                {activeDesk === 'rejected_posts' && 'Rejected Posts & Reupload Queue'}
+                {activeView === 'approved_posts' ? 'Approved Portfolio' : 'Creative Studio Board'}
               </strong>
             </div>
           </div>
@@ -337,16 +360,12 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
                   window.location.href = '/';
                 }
               }}
-              title="Exit Graphics"
-              aria-label="Exit Graphics"
+              title="Sign Out"
+              aria-label="Sign Out"
             >
               <LogOut size={16} />
               <span className="gfx-topbar-logout-label">Logout</span>
             </button>
-            <div className="graphics-live-pill">
-              <span className="graphics-live-dot" />
-              <span>MongoDB Live Sync</span>
-            </div>
 
             <div className="graphics-clock-tag">
               {liveClock.toLocaleTimeString('en-IN', {
@@ -363,7 +382,7 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
                 <Paintbrush size={16} />
               </div>
               <div className="graphics-user-meta">
-                <span className="graphics-user-title">{activeUser.fullName || 'Creative Designer'}</span>
+                <span className="graphics-user-title">{activeUser.fullName || activeUser.name || 'Creative Designer'}</span>
                 <span className="graphics-user-dept">{activeUser.role || 'Senior Graphics Designer'}</span>
               </div>
             </div>
@@ -372,28 +391,57 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
 
         {/* Content Body */}
         <main className="graphics-content-body">
+          {activeView === 'studio_board' && (
+            <div className="gfx-studio-subnav" role="tablist" aria-label="Creative Studio Board Views">
+              {studioBoardTabs.map((tab) => {
+                const isTabActive = activeDesk === tab.id;
+                const showTabBadge = typeof tab.badge === 'number' && tab.badge > 0;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isTabActive}
+                    className={`gfx-studio-tab ${isTabActive ? 'active' : ''}`}
+                    onClick={() => navigateToDesk(tab.id)}
+                  >
+                    <span>{tab.label}</span>
+                    {showTabBadge && (
+                      <span className={`gfx-studio-tab-badge ${tab.urgent ? 'urgent' : ''}`.trim()}>
+                        {tab.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {activeDesk === 'post_requests' && (
             <GraphicsPostRequestsDesk
-              onNavigateToDesk={(deskKey, reqId) => navigateToDesk(deskKey, reqId)}
+              onNavigateToDesk={(deskKey, reqData) => navigateToDesk(deskKey, reqData)}
             />
           )}
 
           {activeDesk === 'upload_post' && (
             <GraphicsUploadPostDesk
               initialRequestId={selectedRequestId}
+              initialRequest={selectedRequest}
               onNavigateToDesk={(deskKey) => navigateToDesk(deskKey)}
+              onSummaryRefresh={loadSummary}
             />
           )}
 
           {activeDesk === 'approved_posts' && (
             <GraphicsApprovedPostsDesk
-              onNavigateToDesk={(deskKey, reqId) => navigateToDesk(deskKey, reqId)}
+              onNavigateToDesk={(deskKey, reqData) => navigateToDesk(deskKey, reqData)}
             />
           )}
 
           {activeDesk === 'rejected_posts' && (
             <GraphicsRejectedPostsDesk
-              onNavigateToDesk={(deskKey, reqId) => navigateToDesk(deskKey, reqId)}
+              onNavigateToDesk={(deskKey, reqData) => navigateToDesk(deskKey, reqData)}
+              onSummaryRefresh={loadSummary}
             />
           )}
         </main>
@@ -401,4 +449,3 @@ export default function GraphicsLayout({ onSignOut, onBackToWebsite }) {
     </div>
   );
 }
-                  

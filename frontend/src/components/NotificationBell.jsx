@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCheck, ExternalLink, BellRing, Send, X } from 'lucide-react';
+import { Bell, CheckCheck, ExternalLink, BellRing, X } from 'lucide-react';
 import crmApi, { getActiveAuthToken } from '../services/crmApi';
 import { subscribeToRealtimeNotifications, enableBrowserPushNotifications } from '../services/firebaseClient';
 import { useAdminTheme } from '../utils/adminTheme';
 
 /**
- * Universal Real-Time Notification Bell (Google Firebase FCM + Live SSE)
- * Mounted across Super Admin, Sales, Marketing, Graphics, and Customer Portal headers.
+ * Universal Real-Time Notification Bell
+ * Mounted across Customer Portal, Sales, Marketing, Graphics, and Super Admin headers.
  */
 export default function NotificationBell({ variant = 'light', adminThemeAware = false, onNavigateLink }) {
   const { isDark: adminDark } = useAdminTheme({ syncDocument: false });
@@ -14,8 +14,6 @@ export default function NotificationBell({ variant = 'light', adminThemeAware = 
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [liveConnected, setLiveConnected] = useState(false);
-  const [testingPush, setTestingPush] = useState(false);
-  const [testPushSent, setTestPushSent] = useState(false);
   const [pushPerm, setPushPerm] = useState(() =>
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
@@ -73,27 +71,6 @@ export default function NotificationBell({ variant = 'light', adminThemeAware = 
       setPushPerm(Notification.permission);
     }
     return res;
-  };
-
-  const handleTestPush = async () => {
-    if (testingPush) return;
-    setTestingPush(true);
-    setTestPushSent(false);
-    try {
-      if (pushPerm === 'default') {
-        await handleEnablePush();
-      } else if (pushPerm === 'granted') {
-        await enableBrowserPushNotifications({ promptIfDefault: false }).catch(() => {});
-      }
-      await crmApi.sendTestNotification();
-      setTestPushSent(true);
-      await loadNotifications();
-      setTimeout(() => setTestPushSent(false), 3000);
-    } catch (e) {
-      // Ignore transient errors
-    } finally {
-      setTestingPush(false);
-    }
   };
 
   const handleMarkAllRead = async () => {
@@ -168,7 +145,7 @@ export default function NotificationBell({ variant = 'light', adminThemeAware = 
           setOpen(next);
           if (next) loadNotifications();
         }}
-        title="Real-Time Notifications (Firebase FCM & Live Stream)"
+        title="Notifications"
         aria-label="Notifications"
         style={{
           position: 'relative',
@@ -299,44 +276,23 @@ export default function NotificationBell({ variant = 'light', adminThemeAware = 
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <strong style={{ fontSize: '0.9rem', color: titleCol }}>Notifications</strong>
-              <span
-                style={{
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                  padding: '2px 7px',
-                  borderRadius: '999px',
-                  background: liveConnected ? (isDark ? 'rgba(16, 185, 129, 0.16)' : '#dcfce7') : (isDark ? '#1e293b' : '#f1f5f9'),
-                  color: liveConnected ? (isDark ? '#34d399' : '#15803d') : mutedCol,
-                }}
-              >
-                {liveConnected ? 'LIVE' : 'SYNC'}
-              </span>
+              {unreadCount > 0 && (
+                <span
+                  style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    padding: '2px 7px',
+                    borderRadius: '999px',
+                    background: isDark ? 'rgba(99, 102, 241, 0.22)' : '#eef2ff',
+                    color: isDark ? '#a5b4fc' : '#4338ca',
+                  }}
+                >
+                  {unreadCount} new
+                </span>
+              )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={handleTestPush}
-                disabled={testingPush}
-                title="Send a real Firebase FCM + Live Stream test notification to this device"
-                style={{
-                  background: testPushSent ? '#dcfce7' : '#eff6ff',
-                  border: testPushSent ? '1px solid #86efac' : '1px solid #bfdbfe',
-                  borderRadius: '6px',
-                  padding: '4px 9px',
-                  color: testPushSent ? '#15803d' : '#1d4ed8',
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  cursor: testingPush ? 'wait' : 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Send size={11} /> {testingPush ? 'Sending…' : testPushSent ? 'Sent ✓' : 'Test Push'}
-              </button>
-
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'flex-end' }}>
               {unreadCount > 0 && (
                 <button
                   type="button"
@@ -355,7 +311,7 @@ export default function NotificationBell({ variant = 'light', adminThemeAware = 
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  <CheckCheck size={14} /> Read all
+                  <CheckCheck size={14} /> Mark all read
                 </button>
               )}
 
@@ -383,16 +339,16 @@ export default function NotificationBell({ variant = 'light', adminThemeAware = 
             <div
               style={{
                 padding: '9px 14px',
-                background: '#eff6ff',
-                borderBottom: '1px solid #dbeafe',
+                background: isDark ? 'rgba(37, 99, 235, 0.14)' : '#eff6ff',
+                borderBottom: `1px solid ${rowBorderCol}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '8px',
               }}
             >
-              <span style={{ fontSize: '0.76rem', color: '#1e40af', fontWeight: 600 }}>
-                Enable instant browser push alerts (FCM)
+              <span style={{ fontSize: '0.76rem', color: isDark ? '#93c5fd' : '#1e40af', fontWeight: 600 }}>
+                Get instant alerts when new leads arrive
               </span>
               <button
                 type="button"
