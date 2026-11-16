@@ -17,6 +17,14 @@
 # ==============================================================================
 set -euo pipefail
 
+SECRET_BACKUP_DIR=""
+cleanup_secret_backup() {
+  if [[ -n "${SECRET_BACKUP_DIR:-}" && -d "${SECRET_BACKUP_DIR}" ]]; then
+    rm -rf "${SECRET_BACKUP_DIR}"
+  fi
+}
+trap cleanup_secret_backup EXIT
+
 # Wrapped in `main()` so `git reset --hard` updating `deploy.sh` on disk mid-run
 # never affects the currently executing Bash parse buffer.
 main() {
@@ -81,15 +89,21 @@ main() {
 
   local COMPOSE_FILE="docker-compose.yml"
   local API_HEALTH_URL="http://127.0.0.1:5000/api/health"
-  local WEB_URL="http://127.0.0.1:5050/"
+  # Note: `/` SSR requires a public visitor IP for GeoIP pricing (returns 503 on 127.0.0.1 loopback),
+  # so we verify Nginx static SPA delivery on `/login` AND Nginx->Backend proxy on `/api/health`.
+  local WEB_URL="http://127.0.0.1:5050/login"
+  local WEB_API_PROXY_URL="http://127.0.0.1:5050/api/health"
   local BACKEND_CONTAINER="admafia-backend"
+  local FRONTEND_CONTAINER="admafia-frontend"
   local MONGO_CONTAINER="admafia-mongo"
 
   if [[ "${MODE}" == "local" ]]; then
     COMPOSE_FILE="docker-compose.local.yml"
     API_HEALTH_URL="http://127.0.0.1:5001/api/health"
-    WEB_URL="http://127.0.0.1:5051/"
+    WEB_URL="http://127.0.0.1:5051/login"
+    WEB_API_PROXY_URL="http://127.0.0.1:5051/api/health"
     BACKEND_CONTAINER="admafia-backend-local"
+    FRONTEND_CONTAINER="admafia-frontend-local"
     MONGO_CONTAINER="admafia-mongo-local"
   fi
 
@@ -121,7 +135,7 @@ main() {
       docker compose -f "${COMPOSE_FILE}" build --no-cache
     fi
     docker compose -f "${COMPOSE_FILE}" up -d --build --remove-orphans
-    wait_for_health "${API_HEALTH_URL}" "${WEB_URL}" "${BACKEND_CONTAINER}"
+    wait_for_health "${API_HEALTH_URL}" "${WEB_URL}" "${WEB_API_PROXY_URL}" "${BACKEND_CONTAINER}" "${FRONTEND_CONTAINER}"
     docker compose -f "${COMPOSE_FILE}" ps
     echo ""
     echo "✅ Local Staging Ready:"
@@ -175,9 +189,7 @@ main() {
 
   # 2. Safeguard all private git-ignored secret files across Git operations
   echo "🔐 [2/5] Safeguarding private environment & credential files..."
-  local SECRET_BACKUP_DIR
   SECRET_BACKUP_DIR="$(mktemp -d)"
-  trap 'rm -rf "${SECRET_BACKUP_DIR}"' EXIT
 
   local SECRET_FILES=(
     ".env"
@@ -245,7 +257,7 @@ main() {
 
   # 5. Live Readiness & Health Verification + Image Cleanup
   echo "🩺 [5/5] Verifying live API, MongoDB rs0 & Nginx SPA health..."
-  if ! wait_for_health "${API_HEALTH_URL}" "${WEB_URL}" "${BACKEND_CONTAINER}"; then
+  if ! wait_for_health "${API_HEALTH_URL}" "${WEB_URL}" "${WEB_API_PROXY_URL}" "${BACKEND_CONTAINER}" "${FRONTEND_CONTAINER}"; then
     echo ""
     echo "❌ DEPLOYMENT HEALTH CHECK FAILED!"
     echo "   To roll back immediately to ${PREV_SHA}, run:"
@@ -270,19 +282,29 @@ main() {
 wait_for_health() {
   local api_url="$1"
   local web_url="$2"
-  local backend_container="$3"
+  local web_api_proxy_url="$3"
+  local backend_container="$4"
+  local frontend_container="$5"
   local max_attempts=30
   local attempt=1
+  local reloaded_nginx=0
 
   while [[ "${attempt}" -le "${max_attempts}" ]]; do
     local health_json=""
     health_json="$(curl -fsS --max-time 3 "${api_url}" 2>/dev/null || true)"
     if [[ "${health_json}" == *'"ok":true'* && "${health_json}" == *'"connected":true'* ]]; then
       local web_code=""
+      local proxy_code=""
       web_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "${web_url}" 2>/dev/null || echo '000')"
-      if [[ "${web_code}" == "200" ]]; then
+      proxy_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "${web_api_proxy_url}" 2>/dev/null || echo '000')"
+      if [[ "${web_code}" == "200" && "${proxy_code}" == "200" ]]; then
         echo "✓ Backend API + MongoDB rs0 healthy & Frontend Nginx serving HTTP 200 (attempt ${attempt}/${max_attempts})."
         return 0
+      fi
+      # If backend was recreated with a new Docker IP while frontend stayed up, reload Nginx upstream DNS once
+      if [[ "${web_code}" == "200" && "${proxy_code}" == "502" && "${reloaded_nginx}" -eq 0 ]]; then
+        docker restart "${frontend_container}" >/dev/null 2>&1 || true
+        reloaded_nginx=1
       fi
     fi
     sleep 2
