@@ -78,14 +78,17 @@ npm run setup:firebase
 
 ---
 
-## 6. Production Deployment on VPS (100% Pure Docker Compose + Git)
+## 6. Production Deployment on VPS (1-Command Pure Docker Compose CLI)
 
-No PM2, no host `npm install`, and no wrapper shell scripts — everything builds and runs cleanly inside Docker (`admafia-mongo`, `admafia-redis`, `admafia-backend`, `admafia-frontend`):
+No PM2, no host `npm install`, and zero Host Nginx overwrites — everything builds, snapshots, verifies health, and runs cleanly inside Docker (`admafia-mongo`, `admafia-redis`, `admafia-backend`, `admafia-frontend`, `admafia-mongo-express`) via `./deploy.sh`:
 
 ```bash
 cd /home/ubuntu/admafia
-git pull origin main
-docker compose up -d --build --remove-orphans
+./deploy.sh                  # Full deploy: pre-deploy --oplog snapshot + git pull + docker build + /api/health check
+./deploy.sh --fast           # Fast deploy (skip pre-deploy snapshot)
+./deploy.sh --no-cache       # Full clean Docker rebuild
+./deploy.sh --status         # View running containers, commit SHA & live /api/health
+./deploy.sh --rollback       # Instant 1-command code rollback to previous commit
 ```
 
 ---
