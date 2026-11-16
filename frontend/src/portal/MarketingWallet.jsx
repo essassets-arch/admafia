@@ -8,6 +8,11 @@ import {
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 import { SmartTable } from '../components/SmartTabulator';
+import {
+  launchRazorpayStandardCheckout,
+  clearPendingRazorpayOrder,
+  reconcilePendingOrderWithBackend,
+} from '../utils/razorpayCheckout';
 
 export default function MarketingWallet({
   walletBalance = 0,
@@ -75,9 +80,11 @@ export default function MarketingWallet({
       const hashParams = new URLSearchParams(hashParts[1] || '');
       const paymentStatus = urlParams.get('payment_status') || hashParams.get('payment_status');
       const paymentId = urlParams.get('payment_id') || hashParams.get('payment_id');
+      const orderIdParam = urlParams.get('order_id') || hashParams.get('order_id');
       const amountStr = urlParams.get('amount') || hashParams.get('amount');
 
       if (paymentStatus === 'success') {
+        clearPendingRazorpayOrder(orderIdParam || null);
         setIsVerifyingPayment(true);
         const creditedAmt = Number(amountStr) || activeAmount || minTopUp;
         setPaymentResultModal({
@@ -93,14 +100,16 @@ export default function MarketingWallet({
         });
 
         const idOrPhone = customer?.id || customer?.phone || customer?.username;
-        if (idOrPhone) {
-          crmApi.getCustomerWorkspace(idOrPhone).then((workspace) => {
-            if (workspace?.customer && onTopUpWallet) {
-              onTopUpWallet(creditedAmt, paymentId || `rzp_${Date.now()}`, workspace);
-            }
-          }).finally(() => {
-            setIsVerifyingPayment(false);
-          });
+        if (idOrPhone || crmApi.getCustomerToken()) {
+          (crmApi.getCustomerToken() ? crmApi.getMyWorkspace() : crmApi.getCustomerWorkspace(idOrPhone))
+            .then((workspace) => {
+              if (workspace?.customer && onTopUpWallet) {
+                onTopUpWallet(creditedAmt, paymentId || `rzp_${Date.now()}`, workspace);
+              }
+            })
+            .finally(() => {
+              setIsVerifyingPayment(false);
+            });
         } else {
           setIsVerifyingPayment(false);
         }
@@ -111,6 +120,7 @@ export default function MarketingWallet({
         try { localStorage.removeItem('admafia_pending_payment'); } catch (e) {}
         setTimeout(() => setActionAlert(null), 8000);
       } else if (paymentStatus === 'failed') {
+        clearPendingRazorpayOrder(orderIdParam || null);
         const reason = urlParams.get('reason') || hashParams.get('reason') || 'Transaction was cancelled or declined';
         let pending = null;
         try {
@@ -172,6 +182,29 @@ export default function MarketingWallet({
       }
     } catch (e) {}
   }, []);
+
+  // Listen for auto-reconciled mobile payments (e.g., when switching back from GPay / PhonePe)
+  React.useEffect(() => {
+    const handleReconciled = (e) => {
+      const detail = e?.detail;
+      if (!detail || detail.status !== 'paid') return;
+      const paidAmt = Number(detail.amount || activeAmount || minTopUp);
+      const pid = detail.paymentId || 'Verified';
+      setPaymentResultModal({
+        status: 'success',
+        title: 'Payment Successful!',
+        amount: paidAmt,
+        paymentId: pid,
+        date: new Date().toLocaleString('en-US'),
+      });
+      setActionAlert({
+        type: 'success',
+        message: `Payment Verified! ${formatMoney(paidAmt)} added directly to wallet via Razorpay (Ref: ${pid}).`,
+      });
+    };
+    window.addEventListener('admafia_razorpay_order_paid', handleReconciled);
+    return () => window.removeEventListener('admafia_razorpay_order_paid', handleReconciled);
+  }, [activeAmount, minTopUp]);
 
   // Dynamically load active Razorpay gateway configuration from backend
   React.useEffect(() => {
@@ -290,173 +323,93 @@ export default function MarketingWallet({
     setIsProcessingPayment(true);
 
     try {
-      const cleanPhone = String(customer?.phone || customer?.username || '').replace(/\D/g, '').slice(-10);
-
-      // 1. Create real order on backend
-      const orderRes = await crmApi.createRazorpayOrder({
-        customerId: customer?.id,
-        phone: cleanPhone || customer?.phone,
-        username: customer?.username,
+      await launchRazorpayStandardCheckout({
+        crmApi,
+        customer,
         amount: activeAmount,
-      });
-
-      if (!orderRes?.ok || !orderRes?.orderId) {
-        throw new Error(orderRes?.error || 'Could not start payment. Please retry.');
-      }
-
-      if (orderRes.keyId) {
-        setRazorpayMode(orderRes.keyId.startsWith('rzp_live_') ? 'LIVE MODE' : 'TEST MODE');
-      }
-
-      // 2. Load Razorpay Standard Checkout SDK
-      const scriptReady = await loadRazorpayScript();
-      if (!scriptReady || !window.Razorpay) {
-        // Fallback to hosted payment link if script blocked
-        const linkRes = await crmApi.createRazorpayPaymentLink({
-          customerId: customer?.id,
-          phone: cleanPhone,
-          username: customer?.username,
-          amount: activeAmount,
-        });
-        if (linkRes?.paymentUrl) {
-          window.location.assign(linkRes.paymentUrl);
-          return;
-        }
-        throw new Error('Razorpay Checkout failed to load.');
-      }
-
-      // 3. Open Direct Razorpay Checkout popup
-      const options = {
-        key: orderRes.keyId,
-        amount: orderRes.amount,
-        currency: orderRes.currency || currency || 'INR',
-        name: 'Ad Mafia',
         description: `Growth Wallet Instant Top-Up (${formatMoney(activeAmount)})`,
-        image: 'https://admafia.marketing/assets/logo.png',
-        order_id: orderRes.orderId,
-        prefill: {
-          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'Ad Mafia Customer',
-          ...(cleanPhone && cleanPhone.length === 10 ? { contact: cleanPhone } : {}),
-          email: customer?.email || `${cleanPhone || 'client'}@admafia.marketing`,
-        },
-        notes: {
-          customer_id: String(customer?.id || ''),
-          customer_phone: cleanPhone,
-        },
-        theme: {
-          color: '#4f46e5',
-        },
-        handler: async function (response) {
-          setIsProcessingPayment(false);
-          setIsVerifyingPayment(true);
-
-          const verifyPayload = {
-            orderId: response.razorpay_order_id || orderRes.orderId,
-            paymentId: response.razorpay_payment_id,
-            signature: response.razorpay_signature,
-            customerId: customer?.id,
-            phone: cleanPhone,
-            username: customer?.username,
-            amount: activeAmount,
-          };
-
-          const attemptVerify = async (isRetry = false) => {
-            try {
-              const verifyRes = await crmApi.verifyRazorpayPayment(verifyPayload);
-              if (verifyRes?.ok) {
-                setPaymentResultModal({
-                  status: 'success',
-                  title: 'Payment Successful!',
-                  amount: activeAmount,
-                  paymentId: response.razorpay_payment_id,
-                  date: new Date().toLocaleString('en-US'),
-                });
-                setActionAlert({
-                  type: 'success',
-                  message: `Payment Verified! ${formatMoney(activeAmount)} added directly to wallet via Razorpay (Ref: ${response.razorpay_payment_id}).`,
-                });
-                if (onTopUpWallet) {
-                  onTopUpWallet(activeAmount, response.razorpay_payment_id, verifyRes);
-                }
-                return true;
-              }
-              throw new Error(verifyRes?.error || 'Payment verification could not be confirmed.');
-            } catch (err) {
-              if (!isRetry) {
-                console.warn('[MarketingWallet] Initial verification failed, retrying in 1.5s...', err.message);
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-                return attemptVerify(true);
-              }
-              throw err;
-            }
-          };
-
-          try {
-            await attemptVerify();
-          } catch (vErr) {
-            console.error('[MarketingWallet Payment Verification Error]', vErr);
-            setActionAlert({
-              type: 'warning',
-              message: `Payment received on Razorpay (Ref: ${response.razorpay_payment_id}). Bank confirmation is processing. Your wallet balance will reflect automatically.`,
-            });
-          } finally {
-            setIsVerifyingPayment(false);
+        onOrderCreated: (orderRes) => {
+          if (orderRes?.keyId) {
+            setRazorpayMode(orderRes.keyId.startsWith('rzp_live_') ? 'LIVE MODE' : 'TEST MODE');
           }
         },
-        modal: {
-          ondismiss: function () {
-            setIsProcessingPayment(false);
-            if (onPaymentFailed) {
-              onPaymentFailed({
-                id: `tx_fail_${Date.now()}`,
-                ref: `DISMISS-${Date.now().toString().slice(-6)}`,
-                amount: activeAmount,
-                desc: 'Payment checkout dismissed by user',
-                status: 'Failed ✕',
-                type: 'Credit',
-                method: 'Razorpay Secure',
-                failureReason: 'Checkout closed by user',
-                date: 'Today, Just now',
-              });
-            }
-            setActionAlert({
-              type: 'error',
-              message: 'Payment cancelled. No funds were debited.',
-            });
-            setTimeout(() => setActionAlert(null), 4000);
-          },
+        onBeforeOpen: () => {
+          setIsProcessingPayment(false);
         },
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (resp) {
-        setIsProcessingPayment(false);
-        const failReason = resp.error?.description || resp.error?.reason || 'Payment failed';
-        if (onPaymentFailed) {
-          onPaymentFailed({
-            id: `tx_fail_${Date.now()}`,
-            ref: resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`,
-            amount: activeAmount,
-            desc: `Online recharge failed: ${failReason}`,
-            status: 'Failed ✕',
-            type: 'Credit',
-            method: 'Razorpay Secure',
-            failureReason: failReason,
-            date: 'Today, Just now',
+        onVerified: async ({ amount: paidAmt, paymentId, verifyRes }) => {
+          setIsVerifyingPayment(false);
+          setIsProcessingPayment(false);
+          setPaymentResultModal({
+            status: 'success',
+            title: 'Payment Successful!',
+            amount: paidAmt,
+            paymentId,
+            date: new Date().toLocaleString('en-US'),
           });
-        }
-        setPaymentResultModal({
-          status: 'failed',
-          title: 'Transaction Failed',
-          reason: failReason,
-          amount: activeAmount,
-          paymentId: resp.error?.metadata?.payment_id || 'FAILED',
-          date: new Date().toLocaleString('en-IN'),
-        });
+          setActionAlert({
+            type: 'success',
+            message: `Payment Verified! ${formatMoney(paidAmt)} added directly to wallet via Razorpay (Ref: ${paymentId}).`,
+          });
+          if (onTopUpWallet) {
+            onTopUpWallet(paidAmt, paymentId, verifyRes);
+          }
+        },
+        onPendingConfirmation: ({ paymentId }) => {
+          setIsVerifyingPayment(false);
+          setIsProcessingPayment(false);
+          setActionAlert({
+            type: 'warning',
+            message: `Payment processing with bank (Ref: ${paymentId}). Your wallet balance will credit automatically once confirmed.`,
+          });
+        },
+        onFailed: ({ failReason, failRef, amount: failAmt }) => {
+          setIsProcessingPayment(false);
+          setIsVerifyingPayment(false);
+          if (onPaymentFailed) {
+            onPaymentFailed({
+              id: `tx_fail_${Date.now()}`,
+              ref: failRef,
+              amount: failAmt,
+              desc: `Online recharge failed: ${failReason}`,
+              status: 'Failed ✕',
+              type: 'Credit',
+              method: 'Razorpay Secure',
+              failureReason: failReason,
+              date: 'Today, Just now',
+            });
+          }
+          setPaymentResultModal({
+            status: 'failed',
+            title: 'Transaction Failed',
+            reason: failReason,
+            amount: failAmt,
+            paymentId: failRef || 'FAILED',
+            date: new Date().toLocaleString('en-IN'),
+          });
+        },
+        onDismissed: ({ dismissRef, amount: dismissAmt }) => {
+          setIsProcessingPayment(false);
+          setIsVerifyingPayment(false);
+          if (onPaymentFailed) {
+            onPaymentFailed({
+              id: `tx_fail_${Date.now()}`,
+              ref: dismissRef,
+              amount: dismissAmt,
+              desc: 'Payment checkout dismissed by user',
+              status: 'Failed ✕',
+              type: 'Credit',
+              method: 'Razorpay Secure',
+              failureReason: 'Checkout closed by user',
+              date: 'Today, Just now',
+            });
+          }
+          setActionAlert({
+            type: 'error',
+            message: 'Payment cancelled. No funds were debited.',
+          });
+          setTimeout(() => setActionAlert(null), 4000);
+        },
       });
-
-      setIsProcessingPayment(false);
-      rzp.open();
     } catch (err) {
       console.error('[handlePayViaRazorpay] Checkout open failed:', err);
       setIsProcessingPayment(false);

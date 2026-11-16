@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import { 
   Menu, X, ChevronRight, ChevronDown, Laptop, Shield, 
   Crown, Sparkles, Palette, Briefcase, Layers, ArrowRight, CheckCircle2,
@@ -339,12 +340,17 @@ const resolveView = () => {
       if (raw) activeUser = JSON.parse(raw);
     } catch (e) {}
     if (!activeUser) {
-      // Unauthenticated customer visiting portal: redirect to normal website
+      // Preserve payment callback status query if customer paid a direct WhatsApp Payment Link in an unauthenticated mobile browser
+      const searchStr = typeof window !== 'undefined' ? window.location.search || '' : '';
+      const hasPaymentCallback = searchStr.includes('payment_status=');
+      const targetUrl = hasPaymentCallback ? `/${searchStr}` : '/';
       try {
-        window.history.replaceState({}, '', '/');
+        window.history.replaceState({}, '', targetUrl);
       } catch (e) {}
-      window.location.hash = '';
-      window.location.href = '/';
+      if (!hasPaymentCallback) {
+        window.location.hash = '';
+        window.location.href = '/';
+      }
       return 'landing';
     }
     return 'portal';
@@ -434,6 +440,42 @@ export default function App({ initialCountry = null } = {}) {
       setActiveCountry(country || null);
     });
   }, []);
+
+  // Show confirmation dialog when an unauthenticated mobile customer finishes paying a WhatsApp Direct Razorpay Link
+  useEffect(() => {
+    if (typeof window === 'undefined' || currentView !== 'landing') return;
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      const payStatus = params.get('payment_status');
+      if (!payStatus) return;
+      const amt = Number(params.get('amount') || 0);
+      const pid = params.get('payment_id') || '';
+      const reason = params.get('reason') || 'Payment cancelled or declined';
+      window.history.replaceState({}, document.title, '/');
+
+      if (payStatus === 'success') {
+        Swal.fire({
+          icon: 'success',
+          title: 'Payment Successful!',
+          html: `<strong>₹${amt > 0 ? amt.toLocaleString('en-IN') : ''}</strong> has been verified and credited to your Ad Mafia Growth Wallet.${pid ? `<br/><small style="color:#64748b">Ref: ${pid}</small>` : ''}`,
+          confirmButtonText: 'Sign In to Workspace',
+          confirmButtonColor: '#059669',
+        }).then((r) => {
+          if (r.isConfirmed) {
+            setCurrentView('portal-login');
+            window.history.pushState({}, '', '/login');
+          }
+        });
+      } else if (payStatus === 'failed') {
+        Swal.fire({
+          icon: 'error',
+          title: 'Payment Not Completed',
+          text: `${reason}. No funds were deducted.`,
+          confirmButtonColor: '#4f46e5',
+        });
+      }
+    } catch {}
+  }, [currentView]);
 
   useEffect(() => {
     const syncUser = () => {

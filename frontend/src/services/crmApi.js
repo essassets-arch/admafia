@@ -505,6 +505,10 @@ export const crmApi = {
     return apiRequest('/payments/razorpay/verify', { method: 'POST', body: JSON.stringify(payload) });
   },
 
+  async reconcileRazorpayOrder(payload) {
+    return apiRequest('/payments/razorpay/reconcile', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
   async deductDailyAdSpend(payload) {
     return apiRequest('/wallets/deduct', {
       method: 'POST',

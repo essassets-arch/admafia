@@ -3,6 +3,10 @@ import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { crmApi } from '../services/crmApi';
 import { evaluateCustomerProfileCompletion, sanitizeCustomerProfileFields } from '../utils/profileCompletion';
+import {
+  launchRazorpayStandardCheckout,
+  reconcilePendingOrderWithBackend,
+} from '../utils/razorpayCheckout';
 
 // Reusable SweetAlert2-Style Popup Dialog
 export function SweetAlertModal({
@@ -636,204 +640,111 @@ export function AddFundsModal({
     setIsProcessing(true);
 
     try {
-      const cleanPhone = String(customer?.phone || customer?.username || '').replace(/\D/g, '').slice(-10);
-
-      // 1. Create real Razorpay order on backend
-      const orderRes = await crmApi.createRazorpayOrder({
-        customerId: customer?.id,
-        phone: cleanPhone || customer?.phone,
-        username: customer?.username,
+      await launchRazorpayStandardCheckout({
+        crmApi,
+        customer,
         amount: currentAmount,
-      });
-
-      if (!orderRes?.ok || !orderRes?.orderId) {
-        throw new Error(orderRes?.error || 'Could not start payment. Please retry.');
-      }
-
-      // 2. Load Razorpay Standard Checkout SDK
-      const scriptReady = await loadRazorpayScript();
-      if (!scriptReady || !window.Razorpay) {
-        const linkRes = await crmApi.createRazorpayPaymentLink({
-          customerId: customer?.id,
-          phone: cleanPhone,
-          username: customer?.username,
-          amount: currentAmount,
-        });
-        if (linkRes?.paymentUrl) {
-          window.location.assign(linkRes.paymentUrl);
-          return;
-        }
-        throw new Error('Razorpay Checkout failed to load.');
-      }
-
-      // 3. Open direct Razorpay Checkout popup
-      const options = {
-        key: orderRes.keyId,
-        amount: orderRes.amount,
-        currency: orderRes.currency || 'INR',
-        name: 'Ad Mafia',
         description: `Growth Wallet Instant Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
-        image: 'https://admafia.marketing/assets/logo.png',
-        order_id: orderRes.orderId,
-        prefill: {
-          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'Ad Mafia Customer',
-          ...(cleanPhone && cleanPhone.length === 10 ? { contact: cleanPhone } : {}),
-          email: customer?.email || `${cleanPhone || 'client'}@admafia.marketing`,
+        onBeforeOpen: () => {
+          setIsProcessing(false);
         },
-        notes: {
-          customer_id: String(customer?.id || ''),
-          customer_phone: cleanPhone,
+        onVerified: async ({ amount: paidAmt, paymentId, verifyRes }) => {
+          finalizeTopUp(paidAmt, paymentId, verifyRes);
         },
-        theme: {
-          color: '#4f46e5',
-        },
-        handler: async function (response) {
-          const verifyPayload = {
-            orderId: response.razorpay_order_id || orderRes.orderId,
-            paymentId: response.razorpay_payment_id,
-            signature: response.razorpay_signature,
-            customerId: customer?.id,
-            phone: cleanPhone,
-            username: customer?.username,
-            amount: currentAmount,
-          };
-
-          const attemptVerify = async (isRetry = false) => {
-            try {
-              const verifyRes = await crmApi.verifyRazorpayPayment(verifyPayload);
-              if (verifyRes?.ok) {
-                finalizeTopUp(currentAmount, response.razorpay_payment_id, verifyRes);
-                return true;
-              }
-              throw new Error(verifyRes?.error || 'Payment verification could not be confirmed.');
-            } catch (err) {
-              if (!isRetry) {
-                console.warn('[AddFundsModal] Initial verification attempt failed, retrying in 1.5s...', err.message);
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-                return attemptVerify(true);
-              }
-              throw err;
-            }
-          };
-
-          try {
-            await attemptVerify();
-          } catch (vErr) {
-            console.error('[AddFundsModal Verify Error]', vErr);
-            setIsProcessing(false);
-            setSweetAlert({
-              type: 'warning',
-              title: 'Payment Received — Confirming Status',
-              message: `Your payment was completed on Razorpay (Ref: ${response.razorpay_payment_id}). Bank confirmation is completing. Click "Check Status" to confirm your wallet balance.`,
-              confirmText: '🔄 Check Status Now',
-              onConfirm: async () => {
-                setSweetAlert(null);
-                setIsProcessing(true);
-                try {
-                  const checkRes = await crmApi.verifyRazorpayPayment(verifyPayload);
-                  if (checkRes?.ok) {
-                    finalizeTopUp(currentAmount, response.razorpay_payment_id, checkRes);
-                  } else {
-                    throw new Error(checkRes?.error || 'Verification still pending.');
-                  }
-                } catch (retryErr) {
-                  setIsProcessing(false);
-                  setSweetAlert({
-                    type: 'info',
-                    title: 'Payment Processing with Bank',
-                    message: `Payment reference ${response.razorpay_payment_id} is recorded. Your wallet balance will update automatically within 1–2 minutes.`,
-                    confirmText: 'OK',
-                    onConfirm: () => {
-                      setSweetAlert(null);
-                      onClose();
-                    },
-                  });
-                }
-              },
-              secondaryText: 'Close',
-              onSecondary: () => {
-                setSweetAlert(null);
-                onClose();
-              },
-            });
-          }
-        },
-        modal: {
-          ondismiss: function () {
-            setIsProcessing(false);
-            const dismissRef = `DISMISS-${Date.now().toString().slice(-6)}`;
-            if (onPaymentFailed) {
-              onPaymentFailed({
-                id: `tx_fail_${Date.now()}`,
-                ref: dismissRef,
-                amount: currentAmount,
-                desc: 'Payment checkout dismissed by user',
-                status: 'Failed ✕',
-                type: 'Credit',
-                method: 'Razorpay Secure',
-                failureReason: 'Checkout closed by user',
-                date: 'Today, Just now',
-              });
-            }
-            try {
-              crmApi.recordFailedTransaction({
+        onPendingConfirmation: ({ amount: paidAmt, paymentId, orderId }) => {
+          setIsProcessing(false);
+          setSweetAlert({
+            type: 'warning',
+            title: 'Payment Received — Confirming Status',
+            message: `Your payment (Ref: ${paymentId}) is being confirmed by your bank. Tap "Check Status Now" to sync your wallet balance immediately.`,
+            confirmText: '🔄 Check Status Now',
+            onConfirm: async () => {
+              setSweetAlert(null);
+              setIsProcessing(true);
+              const rec = await reconcilePendingOrderWithBackend(crmApi, {
+                orderId,
+                paymentId,
                 customerId: customer?.id,
                 phone: customer?.phone,
                 username: customer?.username,
-                companyName: customer?.companyName || customer?.name,
-                amount: currentAmount,
-                referenceUtr: dismissRef,
-                description: 'Payment checkout dismissed by user',
-                failureReason: 'Checkout closed by user',
-                paymentMethod: 'Razorpay Secure',
-              }).catch(() => {});
-            } catch (e) {}
-          },
-        },
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (resp) {
-        setIsProcessing(false);
-        const failReason = resp.error?.description || resp.error?.reason || 'Payment failed';
-        const failRef = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
-        if (onPaymentFailed) {
-          onPaymentFailed({
-            id: `tx_fail_${Date.now()}`,
-            ref: failRef,
-            amount: currentAmount,
-            desc: `Online recharge failed: ${failReason}`,
-            status: 'Failed ✕',
-            type: 'Credit',
-            method: 'Razorpay Secure',
-            failureReason: failReason,
-            date: 'Today, Just now',
+                amount: paidAmt,
+              });
+              setIsProcessing(false);
+              if (rec?.status === 'paid') {
+                finalizeTopUp(Number(rec.amount || paidAmt), rec.paymentId || paymentId, rec);
+              } else {
+                setSweetAlert({
+                  type: 'info',
+                  title: 'Payment Processing with Bank',
+                  message: `Reference ${paymentId} is queued for automatic bank settlement. Your wallet balance will credit automatically within 1–2 minutes.`,
+                  confirmText: 'OK',
+                  onConfirm: () => {
+                    setSweetAlert(null);
+                    onClose();
+                  },
+                });
+              }
+            },
+            secondaryText: 'Close',
+            onSecondary: () => {
+              setSweetAlert(null);
+              onClose();
+            },
           });
-        }
-        try {
-          crmApi.recordFailedTransaction({
-            customerId: customer?.id,
-            phone: customer?.phone,
-            username: customer?.username,
-            companyName: customer?.companyName || customer?.name,
-            amount: currentAmount,
-            referenceUtr: failRef,
-            description: `Online recharge failed: ${failReason}`,
-            failureReason: failReason,
-            paymentMethod: 'Razorpay Secure',
-          }).catch(() => {});
-        } catch (e) {}
-        setSweetAlert({
-          type: 'error',
-          title: 'Payment Failed',
-          message: failReason,
-          confirmText: 'OK',
-          onConfirm: () => setSweetAlert(null),
-        });
+        },
+        onFailed: ({ failReason, failRef, amount: failAmt }) => {
+          setIsProcessing(false);
+          if (onPaymentFailed) {
+            onPaymentFailed({
+              id: `tx_fail_${Date.now()}`,
+              ref: failRef,
+              amount: failAmt,
+              desc: `Online recharge failed: ${failReason}`,
+              status: 'Failed ✕',
+              type: 'Credit',
+              method: 'Razorpay Secure',
+              failureReason: failReason,
+              date: 'Today, Just now',
+            });
+          }
+          setSweetAlert({
+            type: 'error',
+            title: 'Payment Failed',
+            message: failReason,
+            confirmText: 'OK',
+            onConfirm: () => setSweetAlert(null),
+          });
+        },
+        onDismissed: ({ dismissRef, amount: dismissAmt }) => {
+          setIsProcessing(false);
+          if (onPaymentFailed) {
+            onPaymentFailed({
+              id: `tx_fail_${Date.now()}`,
+              ref: dismissRef,
+              amount: dismissAmt,
+              desc: 'Payment checkout dismissed by user',
+              status: 'Failed ✕',
+              type: 'Credit',
+              method: 'Razorpay Secure',
+              failureReason: 'Checkout closed by user',
+              date: 'Today, Just now',
+            });
+          }
+          try {
+            crmApi.recordFailedTransaction({
+              customerId: customer?.id,
+              phone: customer?.phone,
+              username: customer?.username,
+              companyName: customer?.companyName || customer?.name,
+              amount: dismissAmt,
+              referenceUtr: dismissRef,
+              description: 'Payment checkout dismissed by user',
+              failureReason: 'Checkout closed by user',
+              paymentMethod: 'Razorpay Secure',
+            }).catch(() => {});
+          } catch {}
+        },
       });
-
-      setIsProcessing(false);
-      rzp.open();
     } catch (err) {
       setIsProcessing(false);
       setSweetAlert({
@@ -2222,208 +2133,114 @@ export function MarketingGrowthPaymentModal({
     setIsProcessing(true);
 
     try {
-      const cleanPhone = String(customer?.phone || customer?.username || '').replace(/\D/g, '').slice(-10);
-
-      // 1. Create real Razorpay order on backend
-      const orderRes = await crmApi.createRazorpayOrder({
-        customerId: customer?.id,
-        phone: cleanPhone || customer?.phone,
-        username: customer?.username,
+      await launchRazorpayStandardCheckout({
+        crmApi,
+        customer,
         amount: currentAmount,
-      });
-
-      if (!orderRes?.ok || !orderRes?.orderId) {
-        throw new Error(orderRes?.error || 'Could not start payment. Please retry.');
-      }
-
-      // 2. Load Razorpay Standard Checkout SDK
-      const scriptReady = await loadRazorpayScript();
-      if (!scriptReady || !window.Razorpay) {
-        const linkRes = await crmApi.createRazorpayPaymentLink({
-          customerId: customer?.id,
-          phone: cleanPhone,
-          username: customer?.username,
-          amount: currentAmount,
-        });
-        if (linkRes?.paymentUrl) {
-          window.location.assign(linkRes.paymentUrl);
-          return;
-        }
-        throw new Error('Razorpay Checkout failed to load.');
-      }
-
-      // 3. Open direct Razorpay Checkout popup
-      const options = {
-        key: orderRes.keyId,
-        amount: orderRes.amount,
-        currency: orderRes.currency || 'INR',
-        name: 'Ad Mafia',
         description: `Growth Wallet Instant Top-Up (₹${currentAmount.toLocaleString('en-IN')})`,
-        image: 'https://admafia.marketing/assets/logo.png',
-        order_id: orderRes.orderId,
-        prefill: {
-          name: customer?.contactPerson || customer?.companyName || customer?.name || customer?.username || 'Ad Mafia Customer',
-          ...(cleanPhone && cleanPhone.length === 10 ? { contact: cleanPhone } : {}),
-          email: customer?.email || `${cleanPhone || 'client'}@admafia.marketing`,
+        onBeforeOpen: () => {
+          setIsProcessing(false);
         },
-        notes: {
-          customer_id: String(customer?.id || ''),
-          customer_phone: cleanPhone,
-        },
-        theme: {
-          color: '#4f46e5',
-        },
-        handler: async function (response) {
-          const verifyPayload = {
-            orderId: response.razorpay_order_id || orderRes.orderId,
-            paymentId: response.razorpay_payment_id,
-            signature: response.razorpay_signature,
-            customerId: customer?.id,
-            phone: cleanPhone,
-            username: customer?.username,
-            amount: currentAmount,
-          };
-
-          const attemptVerify = async (isRetry = false) => {
-            try {
-              const verifyRes = await crmApi.verifyRazorpayPayment(verifyPayload);
-              if (verifyRes?.ok) {
-                setIsProcessing(false);
-                if (onPay) {
-                  onPay(currentAmount, response.razorpay_payment_id, verifyRes);
-                }
-                return true;
-              }
-              throw new Error(verifyRes?.error || 'Payment verification could not be confirmed.');
-            } catch (err) {
-              if (!isRetry) {
-                console.warn('[GrowthWalletModal] Initial verification attempt failed, retrying in 1.5s...', err.message);
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-                return attemptVerify(true);
-              }
-              throw err;
-            }
-          };
-
-          try {
-            await attemptVerify();
-          } catch (vErr) {
-            console.error('[GrowthWalletModal Verify Error]', vErr);
-            setIsProcessing(false);
-            setSweetAlert({
-              type: 'warning',
-              title: 'Payment Received — Confirming Status',
-              message: `Your payment was completed on Razorpay (Ref: ${response.razorpay_payment_id}). Bank confirmation is completing. Click "Check Status" to confirm your wallet balance.`,
-              confirmText: '🔄 Check Status Now',
-              onConfirm: async () => {
-                setSweetAlert(null);
-                setIsProcessing(true);
-                try {
-                  const checkRes = await crmApi.verifyRazorpayPayment(verifyPayload);
-                  if (checkRes?.ok) {
-                    setIsProcessing(false);
-                    if (onPay) onPay(currentAmount, response.razorpay_payment_id, checkRes);
-                  } else {
-                    throw new Error(checkRes?.error || 'Verification still pending.');
-                  }
-                } catch (retryErr) {
-                  setIsProcessing(false);
-                  setSweetAlert({
-                    type: 'info',
-                    title: 'Payment Processing with Bank',
-                    message: `Payment reference ${response.razorpay_payment_id} is recorded. Your wallet balance will update automatically within 1–2 minutes.`,
-                    confirmText: 'OK',
-                    onConfirm: () => {
-                      setSweetAlert(null);
-                      onClose();
-                    },
-                  });
-                }
-              },
-              secondaryText: 'Close',
-              onSecondary: () => {
-                setSweetAlert(null);
-                onClose();
-              },
-            });
+        onVerified: async ({ amount: paidAmt, paymentId, verifyRes }) => {
+          setIsProcessing(false);
+          if (onPay) {
+            onPay(paidAmt, paymentId, verifyRes);
           }
         },
-        modal: {
-          ondismiss: function () {
-            setIsProcessing(false);
-            const dismissRef = `DISMISS-${Date.now().toString().slice(-6)}`;
-            if (onPaymentFailed) {
-              onPaymentFailed({
-                id: `tx_fail_${Date.now()}`,
-                ref: dismissRef,
-                amount: currentAmount,
-                desc: 'Payment checkout dismissed by user',
-                status: 'Failed ✕',
-                type: 'Credit',
-                method: 'Razorpay Secure',
-                failureReason: 'Checkout closed by user',
-                date: 'Today, Just now',
-              });
-            }
-            try {
-              crmApi.recordFailedTransaction({
+        onPendingConfirmation: ({ amount: paidAmt, paymentId, orderId }) => {
+          setIsProcessing(false);
+          setSweetAlert({
+            type: 'warning',
+            title: 'Payment Received — Confirming Status',
+            message: `Your payment (Ref: ${paymentId}) is being confirmed by your bank. Tap "Check Status Now" to sync your wallet balance immediately.`,
+            confirmText: '🔄 Check Status Now',
+            onConfirm: async () => {
+              setSweetAlert(null);
+              setIsProcessing(true);
+              const rec = await reconcilePendingOrderWithBackend(crmApi, {
+                orderId,
+                paymentId,
                 customerId: customer?.id,
                 phone: customer?.phone,
                 username: customer?.username,
-                companyName: customer?.companyName || customer?.name,
-                amount: currentAmount,
-                referenceUtr: dismissRef,
-                description: 'Payment checkout dismissed by user',
-                failureReason: 'Checkout closed by user',
-                paymentMethod: 'Razorpay Secure',
-              }).catch(() => {});
-            } catch (e) {}
-          },
-        },
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (resp) {
-        setIsProcessing(false);
-        const failReason = resp.error?.description || resp.error?.reason || 'Payment failed';
-        const failRef = resp.error?.metadata?.payment_id || `FAIL-${Date.now().toString().slice(-6)}`;
-        if (onPaymentFailed) {
-          onPaymentFailed({
-            id: `tx_fail_${Date.now()}`,
-            ref: failRef,
-            amount: currentAmount,
-            desc: `Online recharge failed: ${failReason}`,
-            status: 'Failed ✕',
-            type: 'Credit',
-            method: 'Razorpay Secure',
-            failureReason: failReason,
-            date: 'Today, Just now',
+                amount: paidAmt,
+              });
+              setIsProcessing(false);
+              if (rec?.status === 'paid') {
+                if (onPay) onPay(Number(rec.amount || paidAmt), rec.paymentId || paymentId, rec);
+              } else {
+                setSweetAlert({
+                  type: 'info',
+                  title: 'Payment Processing with Bank',
+                  message: `Reference ${paymentId} is queued for automatic bank settlement. Your wallet balance will credit automatically within 1–2 minutes.`,
+                  confirmText: 'OK',
+                  onConfirm: () => {
+                    setSweetAlert(null);
+                    onClose();
+                  },
+                });
+              }
+            },
+            secondaryText: 'Close',
+            onSecondary: () => {
+              setSweetAlert(null);
+              onClose();
+            },
           });
-        }
-        try {
-          crmApi.recordFailedTransaction({
-            customerId: customer?.id,
-            phone: customer?.phone,
-            username: customer?.username,
-            companyName: customer?.companyName || customer?.name,
-            amount: currentAmount,
-            referenceUtr: failRef,
-            description: `Online recharge failed: ${failReason}`,
-            failureReason: failReason,
-            paymentMethod: 'Razorpay Secure',
-          }).catch(() => {});
-        } catch (e) {}
-        setSweetAlert({
-          type: 'error',
-          title: 'Payment Failed',
-          message: failReason,
-          confirmText: 'OK',
-          onConfirm: () => setSweetAlert(null),
-        });
+        },
+        onFailed: ({ failReason, failRef, amount: failAmt }) => {
+          setIsProcessing(false);
+          if (onPaymentFailed) {
+            onPaymentFailed({
+              id: `tx_fail_${Date.now()}`,
+              ref: failRef,
+              amount: failAmt,
+              desc: `Online recharge failed: ${failReason}`,
+              status: 'Failed ✕',
+              type: 'Credit',
+              method: 'Razorpay Secure',
+              failureReason: failReason,
+              date: 'Today, Just now',
+            });
+          }
+          setSweetAlert({
+            type: 'error',
+            title: 'Payment Failed',
+            message: failReason,
+            confirmText: 'OK',
+            onConfirm: () => setSweetAlert(null),
+          });
+        },
+        onDismissed: ({ dismissRef, amount: dismissAmt }) => {
+          setIsProcessing(false);
+          if (onPaymentFailed) {
+            onPaymentFailed({
+              id: `tx_fail_${Date.now()}`,
+              ref: dismissRef,
+              amount: dismissAmt,
+              desc: 'Payment checkout dismissed by user',
+              status: 'Failed ✕',
+              type: 'Credit',
+              method: 'Razorpay Secure',
+              failureReason: 'Checkout closed by user',
+              date: 'Today, Just now',
+            });
+          }
+          try {
+            crmApi.recordFailedTransaction({
+              customerId: customer?.id,
+              phone: customer?.phone,
+              username: customer?.username,
+              companyName: customer?.companyName || customer?.name,
+              amount: dismissAmt,
+              referenceUtr: dismissRef,
+              description: 'Payment checkout dismissed by user',
+              failureReason: 'Checkout closed by user',
+              paymentMethod: 'Razorpay Secure',
+            }).catch(() => {});
+          } catch {}
+        },
       });
-
-      setIsProcessing(false);
-      rzp.open();
     } catch (err) {
       setIsProcessing(false);
       setSweetAlert({

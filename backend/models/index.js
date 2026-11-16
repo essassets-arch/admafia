@@ -7,7 +7,8 @@ export {
   TaxInvoice,
   RefundRequest,
   TopupRequest,
-  DeletedFailedTransaction
+  DeletedFailedTransaction,
+  RazorpayOrder
 } from './Finance.js';
 export {
   MasterLead,

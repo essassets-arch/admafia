@@ -107,6 +107,10 @@ import {
   findCustomerByEmailCi,
   findCustomerByPhoneDigits,
   findPaymentCustomerByOrder,
+  upsertRazorpayOrder,
+  findRazorpayOrderById,
+  markRazorpayOrderStatus,
+  listPendingRazorpayOrdersForSweep,
   upsertDeclinedTransaction,
   insertCallbackFailureRow,
   recordFailedTransaction,
@@ -175,10 +179,11 @@ let databaseReady = null;
 app.use(securityHeadersMiddleware);
 app.use(strictCorsMiddleware);
 
-// 2. Route-Scoped 20MB JSON Parser ONLY for Verified Creative Media Uploads; 512KB Everywhere Else
+// 2. Route-Scoped 20MB JSON Parser ONLY for Verified Creative Media Uploads; Form-POST Parser for Razorpay Mobile Redirect Callback; 512KB Everywhere Else
 const mediaUploadJsonParser = express.json({ limit: '20mb' });
 app.use('/api/marketing/media/upload', mediaUploadJsonParser);
 app.use('/api/graphics', mediaUploadJsonParser);
+app.use('/api/payments/razorpay/callback', express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(
   express.json({
     limit: '512kb',
@@ -195,6 +200,7 @@ app.use(attachOptionalAuth);
 // 4. Multi-Tier Distributed Rate Limiters (Redis-backed with automatic memory fallback)
 const globalApiLimiter = createRateLimiter({ name: 'api_global', maxRequests: 300, windowSeconds: 60 });
 const loginBruteForceLimiter = createRateLimiter({ name: 'auth_login', maxRequests: 10, windowSeconds: 300 });
+const paymentOrderLimiter = createRateLimiter({ name: 'rzp_order', maxRequests: 35, windowSeconds: 300 });
 app.use('/api', globalApiLimiter);
 
 // 5. Universal WhatsApp OTP Auth & Real-Time Notifications Routers
@@ -671,6 +677,10 @@ function mapFailedTxRow(row) {
       : 'Recently Failed',
     createdAt: row.created_at || new Date(),
     createdAtRaw: row.created_at || new Date(),
+    isRegistrationDrop: false,
+    failureCategory: String(row.reference_utr || '').startsWith('DISMISS-')
+      ? 'checkout_dismissed'
+      : 'gateway_decline',
   };
 }
 
@@ -2465,8 +2475,17 @@ app.get('/api/sales/failed-transactions', requireStaff(['sales', 'super admin'])
       const planAmount = Number(c.daily_pacing || 300);
 
       const sanitizedUnpaid = sanitizeCustomerProfileFields(c);
+      const hasAttemptedOrder = Boolean(c.latest_order_id);
+      const effectiveDate = c.latest_order_at || c.registered_at;
+      const sourceLabel =
+        c.latest_order_source === 'mobile_webview'
+          ? 'Razorpay Mobile WebView'
+          : c.latest_order_source === 'mobile_browser'
+            ? 'Razorpay Mobile UPI / Gateway'
+            : 'Razorpay UPI / Online Gateway';
+
       list.push({
-        id: `tx_fail_reg_${c.id}`,
+        id: hasAttemptedOrder ? `tx_fail_ord_${c.latest_order_id}` : `tx_fail_reg_${c.id}`,
         customerId: c.id,
         customerName: properCompany,
         companyName: properCompany,
@@ -2477,14 +2496,18 @@ app.get('/api/sales/failed-transactions', requireStaff(['sales', 'super admin'])
         city: sanitizedUnpaid.city || '',
         state: sanitizedUnpaid.state || '',
         category: sanitizedUnpaid.category || '',
-        amount: planAmount,
-        ref: ref,
-        desc: 'Registration payment incomplete: customer abandoned checkout before payment completion',
-        method: 'Razorpay UPI / Online Gateway',
-        status: 'Payment Declined ✕',
-        failureReason: 'Checkout abandoned before bank authorization',
-        date: c.registered_at
-          ? new Date(c.registered_at).toLocaleString('en-IN', {
+        amount: Number(c.latest_order_amount || planAmount),
+        ref: hasAttemptedOrder ? c.latest_order_id : ref,
+        desc: hasAttemptedOrder
+          ? `Checkout initiated (${c.latest_order_id}) — ${c.latest_order_reason || 'dropped before bank confirmation'}`
+          : 'New account registered — first wallet top-up not initiated yet',
+        method: hasAttemptedOrder ? sourceLabel : 'Awaiting First Recharge',
+        status: hasAttemptedOrder ? 'Payment Declined ✕' : 'Pending First Top-Up',
+        failureReason: hasAttemptedOrder
+          ? c.latest_order_reason || 'Mobile/Online checkout dropped before bank authorization'
+          : 'New signup — first wallet recharge not initiated yet',
+        date: effectiveDate
+          ? new Date(effectiveDate).toLocaleString('en-IN', {
             timeZone: 'Asia/Kolkata',
             day: '2-digit',
             month: 'short',
@@ -2493,16 +2516,28 @@ app.get('/api/sales/failed-transactions', requireStaff(['sales', 'super admin'])
             minute: '2-digit',
             hour12: true,
           })
-          : 'Recently Failed',
-        createdAt: c.registered_at || new Date(),
-        createdAtRaw: c.registered_at || new Date(),
-        isRegistrationDrop: true,
+          : 'Recently Registered',
+        createdAt: effectiveDate || new Date(),
+        createdAtRaw: effectiveDate || new Date(),
+        isRegistrationDrop: !hasAttemptedOrder,
+        failureCategory: hasAttemptedOrder ? 'checkout_abandoned' : 'unpaid_signup',
       });
     }
 
     list.sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
 
-    res.json({ ok: true, failedTransactions: list });
+    const gatewayDeclinesCount = list.filter((i) => !i.isRegistrationDrop).length;
+    const unpaidSignupsCount = list.filter((i) => i.isRegistrationDrop).length;
+
+    res.json({
+      ok: true,
+      failedTransactions: list,
+      summary: {
+        total: list.length,
+        gatewayDeclinesCount,
+        unpaidSignupsCount,
+      },
+    });
   } catch (err) {
     console.error('[GET /api/sales/failed-transactions]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -2938,7 +2973,69 @@ function customerSummaryFromDoc(c) {
   };
 }
 
-app.post('/api/payments/razorpay/order', requireAuth, async (req, res) => {
+function razorpayBasicAuthHeader() {
+  return `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`;
+}
+
+function resolvePublicBaseUrl(req) {
+  const hostHeader = req.get('x-forwarded-host') || req.get('host') || 'admafia.marketing';
+  const protoHeader = req.get('x-forwarded-proto') || (hostHeader.includes('localhost') ? 'http' : 'https');
+  return `${protoHeader}://${hostHeader}`;
+}
+
+function verifyRazorpayOrderSignature(orderId, paymentId, signature) {
+  if (!orderId || !paymentId || !signature || !razorpayKeySecret) return false;
+  const expected = createHmac('sha256', razorpayKeySecret).update(`${orderId}|${paymentId}`).digest();
+  let received;
+  try {
+    received = Buffer.from(String(signature).trim(), 'hex');
+  } catch {
+    return false;
+  }
+  return received.length === expected.length && timingSafeEqual(received, expected);
+}
+
+async function captureRazorpayPaymentIfNeeded(payment) {
+  if (!payment || !payment.id) return payment;
+  if (payment.status === 'captured') return payment;
+  if (payment.status !== 'authorized') return payment;
+
+  console.log(`[Razorpay Auto-Capture] Capturing authorized payment ${payment.id} (₹${Number(payment.amount || 0) / 100})...`);
+  try {
+    const capResp = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(payment.id)}/capture`, {
+      method: 'POST',
+      headers: {
+        Authorization: razorpayBasicAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: payment.amount,
+        currency: payment.currency || 'INR',
+      }),
+    });
+    const capData = await capResp.json().catch(() => ({}));
+    if (capResp.ok && capData.status === 'captured') {
+      return capData;
+    }
+    // Race-condition safety: if concurrent webhook/callback captured milliseconds earlier, re-fetch authoritative state
+    const errDesc = String(capData?.error?.description || '');
+    if (/already.*captured/i.test(errDesc)) {
+      const refetchResp = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(payment.id)}`, {
+        headers: { Authorization: razorpayBasicAuthHeader() },
+      });
+      const refetched = await refetchResp.json().catch(() => ({}));
+      if (refetchResp.ok && refetched.status === 'captured') {
+        return refetched;
+      }
+    }
+    console.error('[Razorpay Auto-Capture] Capture did not complete:', errDesc || capResp.status);
+  } catch (err) {
+    console.error('[Razorpay Auto-Capture] Network/API error:', err.message);
+  }
+  return payment;
+}
+
+app.post('/api/payments/razorpay/order', paymentOrderLimiter, async (req, res) => {
   try {
     if (!razorpayKeyId || !razorpayKeySecret) {
       return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
@@ -2960,6 +3057,16 @@ app.post('/api/payments/razorpay/order', requireAuth, async (req, res) => {
       phone: cleanPhone,
       username: req.body?.username || '',
     });
+
+    // Security guard: unauthenticated mobile sessions with an expired JWT can pay into an EXISTING registered account,
+    // while creating a brand-new placeholder customer requires an authenticated session.
+    if (!custDoc && !req.auth) {
+      return res.status(401).json({
+        ok: false,
+        code: 'AUTH_REQUIRED',
+        error: 'Session expired. Please sign in again to top up your wallet.',
+      });
+    }
 
     if (!custDoc) {
       const fallbackPhone = cleanPhone || '9999999999';
@@ -3004,21 +3111,25 @@ app.post('/api/payments/razorpay/order', requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Razorpay only supports INR wallets. International wallet payments are not enabled.' });
     }
 
+    const receipt = `admafia_${Date.now()}_${randomBytes(3).toString('hex')}`;
+    const source = String(req.body?.source || 'web').slice(0, 40);
+
     const response = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`,
+        Authorization: razorpayBasicAuthHeader(),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         amount: amount * 100,
         currency: 'INR',
-        receipt: `admafia_${Date.now()}_${randomBytes(3).toString('hex')}`,
+        receipt,
         payment_capture: 1,
         notes: {
           customer_id: String(cust.id),
           customer_phone: cleanPhone || String(cust.phone || ''),
           customer_username: String(cust.username || ''),
+          checkout_source: source,
         },
       }),
     });
@@ -3027,6 +3138,24 @@ app.post('/api/payments/razorpay/order', requireAuth, async (req, res) => {
       console.error('[Razorpay] Order creation failed:', order.error?.description || response.status);
       return res.status(502).json({ ok: false, error: order.error?.description || 'Could not start Razorpay checkout. Please try again.' });
     }
+
+    // Persist authoritative order mapping in MongoDB so mobile app-switch / tab reloads / closed screens auto-reconcile 100%
+    await upsertRazorpayOrder({
+      orderId: order.id,
+      customerId: cust.id,
+      phone: cleanPhone || cust.phone || '',
+      username: cust.username || '',
+      companyName: cust.company_name || '',
+      contactPerson: cust.contact_person || '',
+      amount,
+      amountPaise: order.amount,
+      currency: order.currency || 'INR',
+      receipt,
+      source,
+    }).catch((e) => console.warn('[RazorpayOrder persist warning]', e.message));
+
+    const baseUrl = resolvePublicBaseUrl(req);
+
     res.status(201).json({
       ok: true,
       keyId: razorpayKeyId,
@@ -3034,7 +3163,8 @@ app.post('/api/payments/razorpay/order', requireAuth, async (req, res) => {
       amount: order.amount,
       amountRupees: amount,
       currency: order.currency,
-      customer: cust,
+      callbackUrl: `${baseUrl}/api/payments/razorpay/callback`,
+      customer: req.auth ? cust : { id: cust.id },
       mode: razorpayKeyId.startsWith('rzp_live_') ? 'LIVE MODE' : 'TEST MODE',
     });
   } catch (err) {
@@ -3050,7 +3180,7 @@ app.get('/api/payments/razorpay/config', (req, res) => {
   });
 });
 
-app.post('/api/payments/razorpay/payment-link', requireAuth, async (req, res) => {
+app.post('/api/payments/razorpay/payment-link', paymentOrderLimiter, async (req, res) => {
   try {
     if (!razorpayKeyId || !razorpayKeySecret) {
       return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
@@ -3065,7 +3195,7 @@ app.post('/api/payments/razorpay/payment-link', requireAuth, async (req, res) =>
       phone: cleanPhone,
       username: req.body?.username || '',
     });
-    if (!custDoc && (cleanPhone || req.body?.username)) {
+    if (!custDoc && req.auth && (cleanPhone || req.body?.username)) {
       const newCustId = req.body?.customerId && !String(req.body.customerId).startsWith('rzp_') ? String(req.body.customerId) : `cust_${Date.now()}`;
       const newPhone = cleanPhone || '9999999999';
       const newName = req.body?.contactPerson || req.body?.username || `Client ${newPhone.slice(-4)}`;
@@ -3102,15 +3232,15 @@ app.post('/api/payments/razorpay/payment-link', requireAuth, async (req, res) =>
       return res.status(400).json({ ok: false, error: 'Razorpay only supports INR wallets. International wallet payments are not enabled.' });
     }
 
-    const hostHeader = req.get('x-forwarded-host') || req.get('host') || 'admafia.marketing';
-    const protoHeader = req.get('x-forwarded-proto') || (hostHeader.includes('localhost') ? 'http' : 'https');
-    const baseUrl = `${protoHeader}://${hostHeader}`;
+    const baseUrl = resolvePublicBaseUrl(req);
     const callbackUrl = `${baseUrl}/api/payments/razorpay/callback`;
+    const phoneDigits = cleanPhone || String(cust.phone || '').replace(/\D/g, '').slice(-10);
+    const formattedContact = phoneDigits.length === 10 ? `+91${phoneDigits}` : (cust.phone || '9999999999');
 
     const response = await fetch('https://api.razorpay.com/v1/payment_links', {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`,
+        Authorization: razorpayBasicAuthHeader(),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -3121,14 +3251,14 @@ app.post('/api/payments/razorpay/payment-link', requireAuth, async (req, res) =>
         description: `Ad Mafia Instant Wallet Top-Up (₹${amount.toLocaleString('en-IN')})`,
         customer: {
           name: cust.contact_person || cust.company_name || cust.username || 'Customer',
-          contact: cleanPhone || cust.phone || '9999999999',
+          contact: formattedContact,
           email: cust.email || 'support@admafia.marketing',
         },
         notify: { sms: false, email: false },
         reminder_enable: false,
         notes: {
           customer_id: String(cust.id),
-          customer_phone: cleanPhone || String(cust.phone || ''),
+          customer_phone: phoneDigits,
           customer_username: String(cust.username || ''),
         },
         callback_url: callbackUrl,
@@ -3168,6 +3298,7 @@ export async function creditCustomerWallet({
   username,
   amount,
   referenceUtr,
+  gatewayOrderId,
   paymentMethod = 'Razorpay Secure (UPI/Card)',
   description,
   currency,
@@ -3179,6 +3310,7 @@ export async function creditCustomerWallet({
     username,
     amount,
     referenceUtr,
+    gatewayOrderId,
     paymentMethod,
     description,
     currency,
@@ -3201,6 +3333,7 @@ export async function creditCustomerWallet({
   return {
     ok: true,
     alreadyCredited: false,
+    customerId: out.customerId,
     walletBalance: out.walletBalance,
     customer: viewRow ? mapCustomerRow(viewRow) : null,
     transaction: out.transaction ? mapWalletTxRow(walletTxToRow(out.transaction)) : null,
@@ -3210,29 +3343,308 @@ export async function creditCustomerWallet({
   };
 }
 
-app.get('/api/payments/razorpay/callback', async (req, res) => {
-  const hostHeader = req.get('x-forwarded-host') || req.get('host') || 'admafia.marketing';
-  const protoHeader = req.get('x-forwarded-proto') || (hostHeader.includes('localhost') ? 'http' : 'https');
-  const baseUrl = `${protoHeader}://${hostHeader}`;
+/**
+ * Unified Server-to-Server Razorpay Order & Payment Reconciliation Engine:
+ * - Queries Razorpay directly by `paymentId` and/or `orderId` (`/v1/orders/:id/payments`)
+ * - Automatically captures any `authorized` payment into our bank settlement
+ * - Atomically & idempotently credits the customer's wallet in MongoDB
+ */
+async function reconcileAndCaptureRazorpayOrder({
+  orderId,
+  paymentId,
+  customerId,
+  phone,
+  username,
+} = {}) {
+  if (!razorpayKeyId || !razorpayKeySecret) {
+    return { ok: false, status: 'unconfigured', error: 'Razorpay is not configured on the server.' };
+  }
+
+  const cleanOrderId = String(orderId || '').trim();
+  const cleanPaymentId = String(paymentId || '').trim();
+  const orderDoc = cleanOrderId ? await findRazorpayOrderById(cleanOrderId) : null;
+
+  const candidatePayments = [];
+
+  if (cleanPaymentId) {
+    try {
+      const pResp = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(cleanPaymentId)}`, {
+        headers: { Authorization: razorpayBasicAuthHeader() },
+      });
+      const pData = await pResp.json().catch(() => ({}));
+      if (pResp.ok && pData?.id) {
+        if (!cleanOrderId || !pData.order_id || pData.order_id === cleanOrderId) {
+          candidatePayments.push(pData);
+        }
+      }
+    } catch (err) {
+      console.warn('[Razorpay Reconcile] Payment fetch warning:', err.message);
+    }
+  }
+
+  if (
+    cleanOrderId &&
+    !candidatePayments.some((p) => p.status === 'captured' || p.status === 'authorized')
+  ) {
+    try {
+      const ordResp = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(cleanOrderId)}/payments`, {
+        headers: { Authorization: razorpayBasicAuthHeader() },
+      });
+      const ordData = await ordResp.json().catch(() => ({}));
+      if (ordResp.ok && Array.isArray(ordData?.items)) {
+        for (const item of ordData.items) {
+          if (item?.id && !candidatePayments.some((existing) => existing.id === item.id)) {
+            candidatePayments.push(item);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Razorpay Reconcile] Order payments fetch warning:', err.message);
+    }
+  }
+
+  let winningPayment =
+    candidatePayments.find((p) => p.status === 'captured') ||
+    candidatePayments.find((p) => p.status === 'authorized') ||
+    null;
+
+  if (winningPayment) {
+    winningPayment = await captureRazorpayPaymentIfNeeded(winningPayment);
+  }
+
+  if (winningPayment && winningPayment.status === 'captured') {
+    if (String(winningPayment.currency || '').toUpperCase() !== 'INR') {
+      return { ok: false, status: 'invalid_currency', error: 'Razorpay payment currency must be INR.' };
+    }
+    const cleanAmount = Number(winningPayment.amount || 0) / 100;
+    if (cleanAmount < 300) {
+      return { ok: false, status: 'below_minimum', error: 'Payment amount is below minimum ₹300.' };
+    }
+
+    let resolvedCustomerId =
+      orderDoc?.customerId ||
+      customerId ||
+      winningPayment.notes?.customer_id ||
+      '';
+    let resolvedPhone = String(
+      orderDoc?.phone ||
+        phone ||
+        winningPayment.notes?.customer_phone ||
+        winningPayment.contact ||
+        resolvedCustomerId
+    )
+      .replace(/\D/g, '')
+      .slice(-10);
+    const resolvedUsername =
+      orderDoc?.username || username || winningPayment.notes?.customer_username || '';
+
+    if (!resolvedCustomerId && !resolvedPhone && winningPayment.email) {
+      const byEmail = await findCustomerByEmailExact(winningPayment.email).catch(() => null);
+      if (byEmail) {
+        resolvedCustomerId = byEmail._id;
+        resolvedPhone = String(byEmail.phone || '').replace(/\D/g, '').slice(-10);
+      }
+    }
+    if (!resolvedCustomerId && (winningPayment.order_id || cleanOrderId)) {
+      const byOrder = await findPaymentCustomerByOrder(winningPayment.order_id || cleanOrderId).catch(() => null);
+      if (byOrder?.customerId) resolvedCustomerId = byOrder.customerId;
+    }
+
+    const targetCustId = resolvedCustomerId || `cust_${resolvedPhone || Date.now()}`;
+    const billingCurrency = await getBillingCurrency(targetCustId);
+    if (billingCurrency && billingCurrency !== 'INR') {
+      return { ok: false, status: 'invalid_wallet_currency', error: 'Razorpay cannot credit a non-INR wallet.' };
+    }
+
+    const effectiveOrderId = winningPayment.order_id || cleanOrderId || undefined;
+    const creditResult = await creditCustomerWallet({
+      customerId: targetCustId,
+      phone: resolvedPhone,
+      username: resolvedUsername,
+      amount: cleanAmount,
+      referenceUtr: winningPayment.id,
+      gatewayOrderId: effectiveOrderId,
+      paymentMethod: winningPayment.method
+        ? `Razorpay ${String(winningPayment.method).toUpperCase()}`
+        : 'Razorpay Secure (UPI/Card)',
+      description: `Ad Mafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
+    });
+
+    if (effectiveOrderId) {
+      await markRazorpayOrderStatus(effectiveOrderId, {
+        status: 'paid',
+        paymentId: winningPayment.id,
+        paymentMethod: winningPayment.method || 'razorpay',
+        creditedAt: new Date(),
+        failureReason: '',
+      }).catch(() => {});
+    }
+
+    return {
+      ok: true,
+      status: 'paid',
+      orderId: effectiveOrderId || null,
+      paymentId: winningPayment.id,
+      amount: cleanAmount,
+      creditResult,
+    };
+  }
+
+  // Still authorized (capture temporarily pending) or UPI intent still open in GPay/PhonePe (`created`)
+  if (candidatePayments.some((p) => p.status === 'authorized' || p.status === 'created')) {
+    const activeAttempt = candidatePayments.find((p) => p.status === 'authorized' || p.status === 'created');
+    if (cleanOrderId) {
+      await markRazorpayOrderStatus(cleanOrderId, {
+        status: activeAttempt?.status === 'authorized' ? 'authorized' : 'created',
+        paymentId: activeAttempt?.id || null,
+      }).catch(() => {});
+    }
+    return {
+      ok: true,
+      status: 'pending',
+      orderId: cleanOrderId || null,
+      paymentId: activeAttempt?.id || null,
+      message: 'Payment is still awaiting UPI / bank confirmation.',
+    };
+  }
+
+  // All submitted attempts on this order failed at the bank / UPI app
+  const failedAttempt = candidatePayments.find((p) => p.status === 'failed');
+  if (failedAttempt) {
+    const failReason =
+      failedAttempt.error_description ||
+      failedAttempt.error_reason ||
+      'Payment declined by bank or UPI app';
+    const failCustId = orderDoc?.customerId || customerId || failedAttempt.notes?.customer_id || '';
+    if (cleanOrderId) {
+      await markRazorpayOrderStatus(cleanOrderId, {
+        status: 'failed',
+        paymentId: failedAttempt.id,
+        paymentMethod: failedAttempt.method || '',
+        failureReason: failReason,
+      }).catch(() => {});
+    }
+    if (failCustId && failedAttempt.id) {
+      const walDoc = await Wallet.findOne({ customerId: failCustId }, { _id: 1, availableBalance: 1 }).lean().catch(() => null);
+      await upsertDeclinedTransaction({
+        customerId: failCustId,
+        walletId: walDoc?._id || `wal_${failCustId}`,
+        amount: Number(failedAttempt.amount || 0) / 100 || orderDoc?.amount || 300,
+        balanceAfter: Number(walDoc?.availableBalance || 0),
+        referenceUtr: failedAttempt.id,
+        description: `Online recharge failed: ${failReason}`,
+        paymentMethod: failedAttempt.method ? `Razorpay ${String(failedAttempt.method).toUpperCase()}` : 'Razorpay Gateway',
+      }).catch(() => {});
+    }
+    return {
+      ok: true,
+      status: 'failed',
+      orderId: cleanOrderId || null,
+      paymentId: failedAttempt.id,
+      reason: failReason,
+    };
+  }
+
+  if (cleanOrderId) {
+    await markRazorpayOrderStatus(cleanOrderId, {}).catch(() => {});
+  }
+  return {
+    ok: true,
+    status: 'awaiting',
+    orderId: cleanOrderId || null,
+    message: 'No bank authorization submitted for this order yet.',
+  };
+}
+
+// Unified Callback Handler: Supports BOTH Standard Mobile Redirect (`POST`/`GET`) AND Hosted Payment Links (`GET`)
+app.all('/api/payments/razorpay/callback', async (req, res) => {
+  const baseUrl = resolvePublicBaseUrl(req);
 
   try {
-    const {
-      razorpay_payment_id,
-      razorpay_payment_link_id,
-      razorpay_payment_link_reference_id,
-      razorpay_payment_link_status,
-      razorpay_signature,
-    } = req.query || {};
+    const params = { ...(req.query || {}), ...(req.body || {}) };
+    const paymentId = String(params.razorpay_payment_id || '').trim();
+    const orderId = String(params.razorpay_order_id || '').trim();
+    const paymentLinkId = String(params.razorpay_payment_link_id || '').trim();
+    const linkRefId = String(params.razorpay_payment_link_reference_id || '').trim();
+    const linkStatus = String(params.razorpay_payment_link_status || '').toLowerCase().trim();
+    const signature = String(params.razorpay_signature || '').trim();
 
-    const paymentId = String(razorpay_payment_id || '').trim();
-    const paymentLinkId = String(razorpay_payment_link_id || '').trim();
-    const linkRefId = String(razorpay_payment_link_reference_id || '').trim();
-    const status = String(razorpay_payment_link_status || '').toLowerCase().trim();
-    const signature = String(razorpay_signature || '').trim();
+    // Extract Razorpay form-POST error fields when mobile checkout fails/cancels
+    const errObj = typeof params.error === 'object' && params.error !== null ? params.error : {};
+    const rawErrDesc =
+      errObj.description ||
+      params['error[description]'] ||
+      errObj.reason ||
+      params['error[reason]'] ||
+      '';
+    let metaOrderId = '';
+    let metaPaymentId = '';
+    const rawErrMeta = errObj.metadata ?? params['error[metadata]'];
+    if (rawErrMeta) {
+      try {
+        const parsedMeta = typeof rawErrMeta === 'string' ? JSON.parse(rawErrMeta) : rawErrMeta;
+        metaOrderId = String(parsedMeta?.order_id || '').trim();
+        metaPaymentId = String(parsedMeta?.payment_id || '').trim();
+      } catch {
+        // Ignore malformed metadata
+      }
+    }
 
-    // Verify Payment Link HMAC SHA-256 signature if signature params are present
-    if (signature && paymentLinkId && linkRefId && status && paymentId) {
-      const payload = `${paymentLinkId}|${linkRefId}|${status}|${paymentId}`;
+    // -------------------------------------------------------------------------
+    // BRANCH A: Standard Mobile Checkout Redirect Callback (`order_id` flow)
+    // -------------------------------------------------------------------------
+    if (!paymentLinkId && (orderId || metaOrderId || rawErrDesc)) {
+      const effectiveOrderId = orderId || metaOrderId;
+      const effectivePaymentId = paymentId || metaPaymentId;
+
+      if (paymentId && orderId && signature) {
+        if (!verifyRazorpayOrderSignature(orderId, paymentId, signature)) {
+          console.warn('[Razorpay Callback] Invalid Standard Order HMAC signature:', orderId, paymentId);
+          return res.redirect(
+            303,
+            `${baseUrl}/app/lead?payment_status=failed&order_id=${encodeURIComponent(orderId)}&reason=Invalid+payment+signature#app/wallet`
+          );
+        }
+      }
+
+      // Always reconcile server-to-server against Razorpay (even on error callbacks, an earlier UPI attempt may have paid!)
+      if (effectiveOrderId || effectivePaymentId) {
+        const rec = await reconcileAndCaptureRazorpayOrder({
+          orderId: effectiveOrderId,
+          paymentId: effectivePaymentId,
+        });
+        if (rec.ok && rec.status === 'paid') {
+          return res.redirect(
+            303,
+            `${baseUrl}/app/lead?payment_status=success&payment_id=${encodeURIComponent(rec.paymentId)}&order_id=${encodeURIComponent(rec.orderId || '')}&amount=${rec.amount}#app/wallet`
+          );
+        }
+        const failMsg = rec.reason || rawErrDesc || 'Payment cancelled or declined before bank confirmation';
+        if (effectiveOrderId && rawErrDesc && rec.status !== 'failed') {
+          await markRazorpayOrderStatus(effectiveOrderId, {
+            status: 'failed',
+            paymentId: effectivePaymentId || null,
+            failureReason: failMsg,
+          }).catch(() => {});
+        }
+        return res.redirect(
+          303,
+          `${baseUrl}/app/lead?payment_status=failed&order_id=${encodeURIComponent(effectiveOrderId || '')}&payment_id=${encodeURIComponent(effectivePaymentId || '')}&reason=${encodeURIComponent(failMsg)}#app/wallet`
+        );
+      }
+
+      const fallbackFail = rawErrDesc || 'Payment cancelled or declined';
+      return res.redirect(
+        303,
+        `${baseUrl}/app/lead?payment_status=failed&reason=${encodeURIComponent(fallbackFail)}#app/wallet`
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // BRANCH B: Hosted Payment Link Callback (`payment_link_id` flow)
+    // -------------------------------------------------------------------------
+    if (signature && paymentLinkId && linkRefId && linkStatus && paymentId) {
+      const payload = `${paymentLinkId}|${linkRefId}|${linkStatus}|${paymentId}`;
       const expected = createHmac('sha256', razorpayKeySecret).update(payload).digest('hex');
       let valid = false;
       try {
@@ -3246,17 +3658,17 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
       }
     }
 
-    if (status !== 'paid' || !paymentId) {
-      const failReason = status === 'cancelled' ? 'Payment Cancelled' : (status === 'failed' ? 'Transaction Failed' : 'Payment cancelled or declined');
+    if ((linkStatus && linkStatus !== 'paid') || !paymentId) {
+      const failReason = linkStatus === 'cancelled' ? 'Payment Cancelled' : (linkStatus === 'failed' ? 'Transaction Failed' : 'Payment cancelled or declined');
       let customerId = null;
       if (paymentLinkId) {
         try {
           const plinkResp = await fetch(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(paymentLinkId)}`, {
-            headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
+            headers: { Authorization: razorpayBasicAuthHeader() },
           });
           const plinkData = await plinkResp.json();
           customerId = plinkData?.notes?.customer_id;
-        } catch (e) { }
+        } catch { }
       }
       if (customerId) {
         await insertCallbackFailureRow({
@@ -3268,30 +3680,32 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
       return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&reason=${encodeURIComponent(failReason)}#app/wallet`);
     }
 
-    // Verify payment directly with Razorpay API (Server-to-Server trusted evidence)
+    // Verify & auto-capture payment directly with Razorpay API
     const paymentResp = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
-      headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
+      headers: { Authorization: razorpayBasicAuthHeader() },
     });
-    const payment = await paymentResp.json();
+    let payment = await paymentResp.json();
+    if (paymentResp.ok && payment?.status === 'authorized') {
+      payment = await captureRazorpayPaymentIfNeeded(payment);
+    }
 
     if (!paymentResp.ok || payment.status !== 'captured' || String(payment.currency || '').toUpperCase() !== 'INR') {
-      console.warn('[Razorpay Callback] Payment not captured:', paymentId, payment.status);
-      return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${paymentId}&reason=Payment+not+captured#app/wallet`);
+      console.warn('[Razorpay Callback] Payment not captured:', paymentId, payment?.status);
+      return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${encodeURIComponent(paymentId)}&reason=Payment+not+captured#app/wallet`);
     }
 
     const cleanAmount = Number(payment.amount || 0) / 100;
     if (cleanAmount < 300) {
-      return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${paymentId}&reason=Amount+below+minimum#app/wallet`);
+      return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${encodeURIComponent(paymentId)}&reason=Amount+below+minimum#app/wallet`);
     }
 
-    // Resolve customer identity from payment notes or contact
     let customerId = payment.notes?.customer_id;
     let custPhone = String(payment.contact || '').replace(/\D/g, '').slice(-10);
 
     if (paymentLinkId) {
       try {
         const plinkResp = await fetch(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(paymentLinkId)}`, {
-          headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
+          headers: { Authorization: razorpayBasicAuthHeader() },
         });
         const plinkData = await plinkResp.json();
         if (plinkData?.notes?.customer_id) {
@@ -3300,7 +3714,7 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
         if (plinkData?.notes?.customer_phone) {
           custPhone = custPhone || plinkData.notes.customer_phone;
         }
-      } catch (e) { }
+      } catch { }
     }
 
     const existingCust = await findCustomerFlexible({ id: customerId || '', phone: custPhone });
@@ -3311,12 +3725,13 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
       return res.redirect(303, `${baseUrl}/app/lead?payment_status=failed&payment_id=${encodeURIComponent(paymentId)}&reason=Razorpay+supports+INR+wallets+only#app/wallet`);
     }
 
-    // Credit the wallet idempotently via atomic MongoDB transaction
     await creditCustomerWallet({
       customerId: targetCustId,
+      phone: custPhone,
       amount: cleanAmount,
       referenceUtr: paymentId,
-      paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
+      gatewayOrderId: payment.order_id || undefined,
+      paymentMethod: payment.method ? `Razorpay ${String(payment.method).toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
       description: `Ad Mafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
     });
 
@@ -3330,117 +3745,166 @@ app.get('/api/payments/razorpay/callback', async (req, res) => {
   }
 });
 
-app.post('/api/payments/razorpay/verify', requireAuth, async (req, res) => {
+// Cryptographically Signed Payment Verification (Never fails with 401 if Mobile WebView stripped Bearer header!)
+app.post('/api/payments/razorpay/verify', async (req, res) => {
   try {
-    if (!razorpayKeySecret) return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
-    const { orderId, paymentId, signature, customerId, phone, username, amount } = req.body || {};
+    if (!razorpayKeySecret) {
+      return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
+    }
+    const { orderId, paymentId, signature, customerId, phone, username } = req.body || {};
     if (!orderId || !paymentId || !signature) {
       return res.status(400).json({ ok: false, error: 'Missing Razorpay payment verification details.' });
     }
 
-    // 1. Constant-time cryptographic signature verification
-    const expected = createHmac('sha256', razorpayKeySecret).update(`${orderId}|${paymentId}`).digest();
-    let received;
-    try {
-      received = Buffer.from(String(signature).trim(), 'hex');
-    } catch {
-      received = Buffer.alloc(0);
-    }
-    if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+    if (!verifyRazorpayOrderSignature(orderId, paymentId, signature)) {
       console.error('[Razorpay Verify] Signature mismatch for order:', orderId, 'payment:', paymentId);
       return res.status(400).json({ ok: false, error: 'Razorpay payment signature is invalid.' });
     }
 
-    // 2. Fetch authoritative payment status directly from Razorpay API
-    const paymentResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
-      headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
+    const rec = await reconcileAndCaptureRazorpayOrder({
+      orderId,
+      paymentId,
+      customerId,
+      phone,
+      username,
     });
-    let payment = await paymentResponse.json();
 
-    if (!paymentResponse.ok || !payment.id) {
-      console.error('[Razorpay Verify] Could not retrieve payment from Razorpay:', payment);
-      return res.status(400).json({ ok: false, error: 'Could not verify payment with Razorpay gateway.' });
+    if (!rec.ok) {
+      return res.status(400).json({ ok: false, error: rec.error || 'Could not verify payment with Razorpay.' });
     }
-
-    if (String(payment.currency || '').toUpperCase() !== 'INR') {
-      return res.status(400).json({ ok: false, error: 'Razorpay payment currency must be INR.' });
-    }
-
-    if (payment.order_id !== orderId) {
-      console.error(`[Razorpay Verify] Order mismatch. Expected ${orderId}, got ${payment.order_id}`);
-      return res.status(400).json({ ok: false, error: 'Payment order ID mismatch.' });
-    }
-
-    // 3. Auto-Capture: If payment is authorized but not captured, safely capture it on Razorpay before crediting wallet
-    if (payment.status === 'authorized') {
-      console.log(`[Razorpay Verify] Payment ${paymentId} is authorized. Auto-capturing ₹${payment.amount / 100}...`);
-      try {
-        const captureResp = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}/capture`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            amount: payment.amount,
-            currency: payment.currency || 'INR',
-          }),
-        });
-        const captureData = await captureResp.json();
-        if (captureResp.ok && captureData.status === 'captured') {
-          console.log(`[Razorpay Verify] Payment ${paymentId} captured successfully.`);
-          payment = captureData;
-        } else {
-          console.error('[Razorpay Verify] Auto-capture failed:', captureData);
-          return res.status(400).json({
-            ok: false,
-            error: captureData.error?.description || 'Payment was authorized but could not be captured by Razorpay.',
-          });
-        }
-      } catch (capErr) {
-        console.error('[Razorpay Verify] Error during auto-capture:', capErr);
-        return res.status(500).json({ ok: false, error: 'Failed to capture authorized payment with Razorpay.' });
-      }
-    }
-
-    // 4. Confirm payment is strictly captured
-    if (payment.status !== 'captured') {
-      console.error(`[Razorpay Verify] Payment ${paymentId} status is '${payment.status}' (not captured).`);
-      return res.status(400).json({
+    if (rec.status !== 'paid') {
+      return res.status(409).json({
         ok: false,
-        error: `Payment status is ${payment.status}. Payment must be captured before crediting wallet.`,
+        status: rec.status,
+        error: rec.reason || rec.message || 'Payment is still awaiting bank capture.',
       });
     }
 
-    const cleanAmount = Number(payment.amount || 0) / 100;
-    if (cleanAmount < 300) {
-      return res.status(400).json({ ok: false, error: 'Payment amount is below minimum ₹300.' });
+    // Only include full customer / invoice objects if the caller holds a valid session for that customer or staff
+    const canViewDetails =
+      req.auth &&
+      (req.auth.actorType === 'staff' ||
+        String(req.auth.sub || '') === String(rec.creditResult?.customerId || ''));
+
+    if (canViewDetails) {
+      return res.status(200).json(rec.creditResult);
     }
 
-    const cleanPhone = String(phone || customerId || payment.contact || '').replace(/\D/g, '').slice(-10);
-    const targetCustId = customerId || payment.notes?.customer_id || `cust_${cleanPhone || Date.now()}`;
-
-    const billingCurrency = await getBillingCurrency(targetCustId);
-    if (billingCurrency && billingCurrency !== 'INR') {
-      return res.status(400).json({ ok: false, error: 'Razorpay cannot credit a non-INR wallet.' });
-    }
-
-    // 5. Credit wallet via atomic idempotent MongoDB transaction
-    const result = await creditCustomerWallet({
-      customerId: targetCustId,
-      phone: cleanPhone,
-      username: username || payment.notes?.customer_username,
-      amount: cleanAmount,
-      referenceUtr: paymentId,
-      paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
-      description: `Ad Mafia wallet top-up (₹${cleanAmount.toLocaleString('en-IN')})`,
+    return res.status(200).json({
+      ok: true,
+      alreadyCredited: Boolean(rec.creditResult?.alreadyCredited),
+      walletBalance: rec.creditResult?.walletBalance,
+      transaction: rec.creditResult?.transaction || null,
+      message: rec.creditResult?.message || 'Payment verified and credited.',
     });
-    return res.status(200).json(result);
   } catch (err) {
     console.error('[Razorpay Verify Handler Error]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// Automatic Mobile Return / Tab-Reload / Post-Dismiss Order Reconciliation Endpoint
+app.post('/api/payments/razorpay/reconcile', paymentOrderLimiter, async (req, res) => {
+  try {
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      return res.status(503).json({ ok: false, error: 'Razorpay is not configured on the server.' });
+    }
+    const orderId = String(req.body?.orderId || '').trim();
+    const paymentId = String(req.body?.paymentId || '').trim();
+    if (!orderId && !paymentId) {
+      return res.status(400).json({ ok: false, error: 'Missing Razorpay orderId or paymentId.' });
+    }
+
+    const trackedOrder = orderId ? await findRazorpayOrderById(orderId) : null;
+    if (!trackedOrder && !req.auth) {
+      return res.status(404).json({ ok: false, error: 'Order not found for reconciliation.' });
+    }
+
+    const rec = await reconcileAndCaptureRazorpayOrder({
+      orderId,
+      paymentId,
+      customerId: trackedOrder?.customerId || req.body?.customerId,
+      phone: trackedOrder?.phone || req.body?.phone,
+      username: trackedOrder?.username || req.body?.username,
+    });
+
+    if (!rec.ok) {
+      return res.status(400).json({ ok: false, error: rec.error || 'Reconciliation failed.' });
+    }
+
+    if (rec.status === 'paid') {
+      const canViewDetails =
+        req.auth &&
+        (req.auth.actorType === 'staff' ||
+          String(req.auth.sub || '') === String(rec.creditResult?.customerId || ''));
+
+      return res.status(200).json({
+        ok: true,
+        status: 'paid',
+        orderId: rec.orderId,
+        paymentId: rec.paymentId,
+        amount: rec.amount,
+        walletBalance: rec.creditResult?.walletBalance,
+        alreadyCredited: Boolean(rec.creditResult?.alreadyCredited),
+        transaction: rec.creditResult?.transaction || null,
+        ...(canViewDetails
+          ? {
+              customer: rec.creditResult?.customer || null,
+              invoice: rec.creditResult?.invoice || null,
+            }
+          : {}),
+        message: rec.creditResult?.message || 'Payment captured and credited.',
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      status: rec.status,
+      orderId: rec.orderId,
+      paymentId: rec.paymentId || null,
+      reason: rec.reason || null,
+      message: rec.message || null,
+    });
+  } catch (err) {
+    console.error('[POST /api/payments/razorpay/reconcile]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Background Server Sweep: Captures & Credits Any Authorized/Paid Mobile Orders Even If User Closed Their Phone
+async function sweepPendingRazorpayOrders() {
+  if (!razorpayKeyId || !razorpayKeySecret) return { checked: 0, credited: 0 };
+  const pendingOrders = await listPendingRazorpayOrdersForSweep(25);
+  let checked = 0;
+  let credited = 0;
+  const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+
+  for (const ord of pendingOrders) {
+    checked += 1;
+    try {
+      const rec = await reconcileAndCaptureRazorpayOrder({
+        orderId: ord._id,
+        customerId: ord.customerId,
+        phone: ord.phone,
+        username: ord.username,
+      });
+      if (rec.ok && rec.status === 'paid') {
+        credited += 1;
+        console.log(`[Razorpay Order Sweep] Auto-captured & credited ₹${rec.amount} for order ${ord._id} (Payment: ${rec.paymentId}, Customer: ${ord.customerId}).`);
+      } else if (
+        rec.ok &&
+        rec.status === 'awaiting' &&
+        ord.createdAt &&
+        new Date(ord.createdAt).getTime() < twoHoursAgo
+      ) {
+        await markRazorpayOrderStatus(ord._id, { status: 'expired' }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn(`[Razorpay Order Sweep] Warning checking ${ord._id}:`, err.message);
+    }
+  }
+  return { checked, credited };
+}
 
 // Helper: Multi-Secret Cryptographic Webhook Signature Validator
 function verifyRazorpayWebhookSignature(rawPayload, signature, primarySecret, fallbackSecret) {
@@ -3492,31 +3956,12 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
         if (event === 'payment.captured' || event === 'payment.authorized') {
           let payment = req.body?.payload?.payment?.entity;
           const paymentId = payment?.id;
-          let amount = Number(payment?.amount || 0) / 100;
           let customerId = payment?.notes?.customer_id;
           let cleanPhone = String(payment?.contact || payment?.notes?.customer_phone || '').replace(/\D/g, '').slice(-10);
 
-          // Auto-capture authorized payments before crediting
-          if (payment?.status === 'authorized') {
-            try {
-              const capResp = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}/capture`, {
-                method: 'POST',
-                headers: {
-                  Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ amount: payment.amount, currency: payment.currency || 'INR' }),
-              });
-              if (capResp.ok) {
-                payment = await capResp.json();
-                amount = Number(payment.amount || 0) / 100;
-              }
-            } catch (capErr) {
-              console.error('[Razorpay Webhook] Auto-capture call failed:', capErr.message);
-            }
-          }
+          payment = await captureRazorpayPaymentIfNeeded(payment);
+          const amount = Number(payment?.amount || 0) / 100;
 
-          // Fallback Customer Resolution if notes were truncated or omitted
           if (!customerId && !cleanPhone && payment?.email) {
             try {
               const custByEmail = await findCustomerByEmailExact(payment.email);
@@ -3533,7 +3978,8 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
             try {
               const custByOrder = await findPaymentCustomerByOrder(payment.order_id);
               if (custByOrder?.customerId) {
-                customerId = custByOrder.customerId;
+                customerId = customerId || custByOrder.customerId;
+                cleanPhone = cleanPhone || String(custByOrder.phone || '').replace(/\D/g, '').slice(-10);
               }
             } catch { }
           }
@@ -3545,7 +3991,8 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
               username: payment?.notes?.customer_username,
               amount,
               referenceUtr: paymentId,
-              paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
+              gatewayOrderId: payment?.order_id || undefined,
+              paymentMethod: payment.method ? `Razorpay ${String(payment.method).toUpperCase()}` : 'Razorpay Secure (UPI/Card)',
               description: `Ad Mafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
             });
             console.log(`[Razorpay Webhook] Successfully credited ₹${amount} for payment ${paymentId} (Customer: ${customerId || cleanPhone}).`);
@@ -3555,32 +4002,15 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
         } else if (event === 'order.paid') {
           const order = req.body?.payload?.order?.entity;
           const orderId = order?.id;
-          const amount = Number(order?.amount_paid || order?.amount || 0) / 100;
-          const customerId = order?.notes?.customer_id;
-          const cleanPhone = String(order?.notes?.customer_phone || '').replace(/\D/g, '').slice(-10);
-
-          if (orderId && amount >= 300) {
-            try {
-              const ordPaymentsResp = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}/payments`, {
-                headers: { Authorization: `Basic ${Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64')}` },
-              });
-              const ordPayments = await ordPaymentsResp.json();
-              const items = Array.isArray(ordPayments?.items) ? ordPayments.items : [];
-              const capturedPayment = items.find((p) => p.status === 'captured') || items[0];
-              const canonicalPaymentId = capturedPayment?.id || orderId;
-
-              await creditCustomerWallet({
-                customerId,
-                phone: cleanPhone,
-                username: order?.notes?.customer_username,
-                amount,
-                referenceUtr: canonicalPaymentId,
-                paymentMethod: capturedPayment?.method ? `Razorpay ${capturedPayment.method.toUpperCase()}` : 'Razorpay Secure (Order)',
-                description: `Ad Mafia wallet top-up (₹${amount.toLocaleString('en-IN')})`,
-              });
-              console.log(`[Razorpay Webhook] Successfully credited order ${orderId} (Payment: ${canonicalPaymentId}).`);
-            } catch (ordErr) {
-              console.error('[Razorpay Webhook] Order payments fetch error:', ordErr.message);
+          if (orderId) {
+            const rec = await reconcileAndCaptureRazorpayOrder({
+              orderId,
+              customerId: order?.notes?.customer_id,
+              phone: order?.notes?.customer_phone,
+              username: order?.notes?.customer_username,
+            });
+            if (rec.ok && rec.status === 'paid') {
+              console.log(`[Razorpay Webhook] Successfully credited order ${orderId} (Payment: ${rec.paymentId}).`);
             }
           }
         } else if (event === 'refund.processed' || event === 'refund.created') {
@@ -3610,6 +4040,10 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
           let customerId = payment?.notes?.customer_id;
           const cleanPhone = String(payment?.contact || '').replace(/\D/g, '').slice(-10);
 
+          if (!customerId && payment?.order_id) {
+            const ordLookup = await findPaymentCustomerByOrder(payment.order_id).catch(() => null);
+            if (ordLookup?.customerId) customerId = ordLookup.customerId;
+          }
           if (!customerId && cleanPhone) {
             const custLookup = await findCustomerByPhoneDigits(cleanPhone);
             if (custLookup) customerId = custLookup._id;
@@ -3617,6 +4051,16 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
           if (!customerId && payment?.email) {
             const emailLookup = await findCustomerByEmailCi(payment.email);
             if (emailLookup) customerId = emailLookup._id;
+          }
+
+          const failReason = payment?.error_description || payment?.error_reason || 'Payment declined by bank';
+          if (payment?.order_id) {
+            await markRazorpayOrderStatus(payment.order_id, {
+              status: 'failed',
+              paymentId: payment.id || null,
+              paymentMethod: payment.method || '',
+              failureReason: failReason,
+            }).catch(() => {});
           }
 
           if (customerId && payment?.id) {
@@ -3631,8 +4075,8 @@ app.post('/api/payments/razorpay/webhook', async (req, res) => {
               amount: failAmount > 0 ? failAmount : 300,
               balanceAfter: currentBal,
               referenceUtr: payment.id,
-              description: `Online recharge failed: ${payment.error_description || payment.error_reason || 'Payment declined by bank'}`,
-              paymentMethod: payment.method ? `Razorpay ${payment.method.toUpperCase()}` : 'Razorpay Gateway',
+              description: `Online recharge failed: ${failReason}`,
+              paymentMethod: payment.method ? `Razorpay ${String(payment.method).toUpperCase()}` : 'Razorpay Gateway',
             }).catch((err) => console.error('[Razorpay Webhook payment.failed]', err.message));
           }
         }
@@ -4426,6 +4870,19 @@ app.listen(PORT, () => {
           })
           .catch((err) => console.warn('[Daily Ad Spend Pacing] Auto-run warning:', err.message));
       }, 30 * 60 * 1000);
+
+      // Background Razorpay Pending Order Reconciliation Sweep (12s after boot, then every 2 minutes)
+      setTimeout(() => {
+        withDistributedCronLock('razorpay_order_reconcile', 90 * 1000, () => sweepPendingRazorpayOrders()).catch((err) =>
+          console.warn('[Razorpay Order Sweep] Initial run warning:', err.message)
+        );
+      }, 12000);
+
+      setInterval(() => {
+        withDistributedCronLock('razorpay_order_reconcile', 90 * 1000, () => sweepPendingRazorpayOrders()).catch((err) =>
+          console.warn('[Razorpay Order Sweep] Auto-run warning:', err.message)
+        );
+      }, 2 * 60 * 1000);
     })
     .catch((err) => {
       console.error('Failed to initialize MongoDB database:', err);

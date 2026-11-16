@@ -208,3 +208,39 @@ const DeletedFailedTransactionSchema = new mongoose.Schema({
 });
 
 export const DeletedFailedTransaction = mongoose.models.DeletedFailedTransaction || mongoose.model('DeletedFailedTransaction', DeletedFailedTransactionSchema);
+
+// 8. RAZORPAY ORDER TRACKER (MOBILE REDIRECT & BACKGROUND RECONCILIATION)
+const RazorpayOrderSchema = new mongoose.Schema({
+  _id: { type: String, required: true }, // Razorpay order_id (e.g., order_Pxyz123456)
+  customerId: { type: String, required: true, index: true },
+  phone: { type: String, default: '', index: true },
+  username: { type: String, default: '' },
+  companyName: { type: String, default: '' },
+  contactPerson: { type: String, default: '' },
+  amount: { type: Number, required: true, min: 0 }, // INR Rupees
+  amountPaise: { type: Number, required: true, min: 0 }, // Paise
+  currency: { type: String, default: 'INR' },
+  receipt: { type: String, default: '' },
+  source: { type: String, default: 'web' },
+  status: {
+    type: String,
+    enum: ['created', 'authorized', 'paid', 'failed', 'expired'],
+    default: 'created',
+    index: true,
+  },
+  paymentId: { type: String, default: null, index: true },
+  paymentMethod: { type: String, default: '' },
+  failureReason: { type: String, default: '' },
+  reconcileAttempts: { type: Number, default: 0 },
+  lastCheckedAt: { type: Date, default: null },
+  creditedAt: { type: Date, default: null },
+  createdAt: { type: Date, default: Date.now, index: true },
+}, {
+  collection: 'razorpay_orders',
+  timestamps: true,
+});
+
+RazorpayOrderSchema.index({ status: 1, createdAt: -1 });
+RazorpayOrderSchema.index({ customerId: 1, createdAt: -1 });
+
+export const RazorpayOrder = mongoose.models.RazorpayOrder || mongoose.model('RazorpayOrder', RazorpayOrderSchema);

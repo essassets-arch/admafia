@@ -36,17 +36,18 @@ export function securityHeadersMiddleware(req, res, next) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
 
-  // Content-Security-Policy compatible with Vite SPA, SSR country bootstrap, Razorpay Checkout, Firebase FCM & Analytics Pixel
+  // Content-Security-Policy compatible with Vite SPA, SSR country bootstrap, Razorpay Mobile/3DS/UPI Checkout, Firebase FCM & Analytics Pixel
   res.setHeader(
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.gstatic.com https://apis.google.com https://connect.facebook.net",
+      "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com https://www.gstatic.com https://apis.google.com https://connect.facebook.net",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: blob: https:",
-      "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://fcm.googleapis.com https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com https://firebase.googleapis.com https://*.googleapis.com https://www.gstatic.com https://www.facebook.com https://connect.facebook.net",
-      "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://www.facebook.com",
+      "connect-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://lumberjack.razorpay.com https://*.razorpay.com https://fcm.googleapis.com https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com https://firebase.googleapis.com https://*.googleapis.com https://www.gstatic.com https://www.facebook.com https://connect.facebook.net",
+      "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://*.razorpay.com https://www.facebook.com https:",
+      "form-action 'self' https://api.razorpay.com https://checkout.razorpay.com https://*.razorpay.com https:",
       "object-src 'none'",
       "base-uri 'self'",
     ].join('; ')
@@ -71,6 +72,16 @@ export function strictCorsMiddleware(req, res, next) {
 
   const origin = req.headers.origin ? String(req.headers.origin).trim().replace(/\/$/, '') : '';
   res.setHeader('Vary', 'Origin');
+
+  const reqPath = String(req.path || req.originalUrl || '');
+  // Allow top-level Razorpay form-POST browser callbacks (Origin: https://api.razorpay.com / null) & HMAC webhooks
+  // without granting cross-origin credential headers.
+  if (
+    reqPath.startsWith('/api/payments/razorpay/callback') ||
+    reqPath.startsWith('/api/payments/razorpay/webhook')
+  ) {
+    return next();
+  }
 
   // Same-origin / server-to-server / curl / webhook requests have no Origin header
   if (!origin) {

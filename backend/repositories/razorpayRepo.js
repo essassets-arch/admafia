@@ -8,6 +8,7 @@ import {
   PendingVerification,
   RefundRequest,
   MarketingCampaign,
+  RazorpayOrder,
 } from '../models/index.js';
 import { withMongoTransaction, genId } from './tx.js';
 import { recordMongoOutboxEvent } from '../services/mongoOutbox.js';
@@ -121,7 +122,92 @@ export async function findCustomerByPhoneDigits(cleanPhone) {
 export async function findPaymentCustomerByOrder(orderId) {
   const oid = scalar(orderId);
   if (!oid) return null;
+  const rzpOrder = await RazorpayOrder.findById(oid, { customerId: 1, phone: 1, username: 1, amount: 1 }).lean();
+  if (rzpOrder?.customerId) return rzpOrder;
   return PaymentRecord.findOne({ $or: [{ gatewayOrderId: oid }, { referenceUtr: oid }] }, { customerId: 1 }).lean();
+}
+
+export async function upsertRazorpayOrder({
+  orderId,
+  customerId,
+  phone = '',
+  username = '',
+  companyName = '',
+  contactPerson = '',
+  amount,
+  amountPaise,
+  currency = 'INR',
+  receipt = '',
+  source = 'web',
+}) {
+  const oid = scalar(orderId).trim();
+  if (!oid || !customerId) return null;
+  const now = new Date();
+  return RazorpayOrder.findOneAndUpdate(
+    { _id: oid },
+    {
+      $setOnInsert: {
+        customerId: scalar(customerId),
+        phone: scalar(phone).replace(/\D/g, '').slice(-10),
+        username: scalar(username),
+        companyName: scalar(companyName),
+        contactPerson: scalar(contactPerson),
+        amount: Number(amount || 0),
+        amountPaise: Number(amountPaise || Math.round(Number(amount || 0) * 100)),
+        currency: scalar(currency) || 'INR',
+        receipt: scalar(receipt),
+        source: scalar(source) || 'web',
+        status: 'created',
+        reconcileAttempts: 0,
+        createdAt: now,
+      },
+      $set: { updatedAt: now },
+    },
+    { upsert: true, new: true }
+  ).lean();
+}
+
+export async function findRazorpayOrderById(orderId) {
+  const oid = scalar(orderId).trim();
+  if (!oid) return null;
+  return RazorpayOrder.findById(oid).lean();
+}
+
+export async function markRazorpayOrderStatus(orderId, fields = {}) {
+  const oid = scalar(orderId).trim();
+  if (!oid) return null;
+  const now = new Date();
+  return RazorpayOrder.findOneAndUpdate(
+    { _id: oid },
+    {
+      $set: {
+        ...fields,
+        lastCheckedAt: now,
+        updatedAt: now,
+      },
+      $inc: { reconcileAttempts: 1 },
+    },
+    { new: true }
+  ).lean();
+}
+
+export async function listPendingRazorpayOrdersForSweep(limit = 25) {
+  const now = Date.now();
+  const cutoff24h = new Date(now - 24 * 60 * 60 * 1000);
+  const recentGrace = new Date(now - 5 * 60 * 1000);
+  const recheckCooldown = new Date(now - 60 * 1000);
+  return RazorpayOrder.find({
+    status: { $in: ['created', 'authorized'] },
+    createdAt: { $gte: cutoff24h },
+    $or: [
+      { lastCheckedAt: null },
+      { createdAt: { $gte: recentGrace } },
+      { lastCheckedAt: { $lte: recheckCooldown } },
+    ],
+  })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +366,7 @@ export async function recordFailedTransaction(body = {}) {
 // ---------------------------------------------------------------------------
 // Authoritative atomic, UTR-idempotent wallet credit
 // ---------------------------------------------------------------------------
-async function creditOnce({ customerId, cleanPhone, username, cleanAmount, utr, paymentMethod, description, currency }) {
+async function creditOnce({ customerId, cleanPhone, username, cleanAmount, utr, gatewayOrderId, paymentMethod, description, currency }) {
   return withMongoTransaction(async (session) => {
     const now = new Date();
 
@@ -328,6 +414,20 @@ async function creditOnce({ customerId, cleanPhone, username, cleanAmount, utr, 
     // 2. UTR idempotency
     const existingTx = await WalletTransaction.findOne({ referenceUtr: utr }).session(session).lean();
     if (existingTx && String(existingTx.status).includes('Verified')) {
+      if (gatewayOrderId) {
+        await RazorpayOrder.updateOne(
+          { _id: gatewayOrderId },
+          {
+            $set: {
+              status: 'paid',
+              paymentId: utr,
+              lastCheckedAt: now,
+              updatedAt: now,
+            },
+          },
+          { session }
+        );
+      }
       return {
         alreadyCredited: true,
         customerId: cust._id,
@@ -423,6 +523,7 @@ async function creditOnce({ customerId, cleanPhone, username, cleanAmount, utr, 
           gstAmount: 0,
           totalAmount: cleanAmount,
           paymentMethod,
+          gatewayOrderId: gatewayOrderId || null,
           gatewayPaymentId: utr,
           referenceUtr: utr,
           status: 'paid',
@@ -482,7 +583,35 @@ async function creditOnce({ customerId, cleanPhone, username, cleanAmount, utr, 
       { session, updatePipeline: true }
     );
 
-    // 9. Transactional outbox (same transaction)
+    // 9. Mark linked RazorpayOrder paid & purge transient dismiss/failure rows for the same order
+    if (gatewayOrderId) {
+      await RazorpayOrder.updateOne(
+        { _id: gatewayOrderId },
+        {
+          $set: {
+            status: 'paid',
+            paymentId: utr,
+            paymentMethod,
+            creditedAt: now,
+            lastCheckedAt: now,
+            updatedAt: now,
+          },
+        },
+        { session }
+      );
+      await WalletTransaction.deleteMany(
+        {
+          customerId: cust._id,
+          status: { $not: SETTLED_STATUS },
+          referenceUtr: {
+            $in: [gatewayOrderId, `DISMISS-${gatewayOrderId}`, `FAIL-${gatewayOrderId}`],
+          },
+        },
+        { session }
+      );
+    }
+
+    // 10. Transactional outbox (same transaction)
     await recordMongoOutboxEvent(session, {
       aggregateType: 'wallet',
       aggregateId: walletId,
@@ -511,6 +640,7 @@ export async function creditWalletByUtr({
   username,
   amount,
   referenceUtr,
+  gatewayOrderId,
   paymentMethod = 'Razorpay Secure (UPI/Card)',
   description,
   currency,
@@ -525,6 +655,7 @@ export async function creditWalletByUtr({
   const cid = scalar(customerId);
   const cleanPhone = scalar(phone || customerId).replace(/\D/g, '').slice(-10);
   const utr = (scalar(referenceUtr) || `rzp_${Date.now()}`).trim();
+  const oid = scalar(gatewayOrderId).trim() || undefined;
 
   const args = {
     customerId: cid,
@@ -532,6 +663,7 @@ export async function creditWalletByUtr({
     username: scalar(username),
     cleanAmount,
     utr,
+    gatewayOrderId: oid,
     paymentMethod: scalar(paymentMethod) || 'Razorpay Secure (UPI/Card)',
     description: scalar(description) || undefined,
     currency: scalar(currency) || undefined,

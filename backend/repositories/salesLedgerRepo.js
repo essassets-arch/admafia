@@ -13,6 +13,7 @@ import {
   RefundRequest,
   TopupRequest,
   DeletedFailedTransaction,
+  RazorpayOrder,
   MasterLead,
   Lead,
   LeadAssignment,
@@ -180,14 +181,25 @@ export async function loadBalanceLogRows() {
 // GET /api/sales/failed-transactions
 // ---------------------------------------------------------------------------
 export async function loadFailedTransactionData() {
-  const [deleted, failedTxs, customers, wallets, creditCustIds, paidPayments] = await Promise.all([
+  const [deleted, failedTxs, customers, wallets, creditCustIds, paidPayments, unpaidRzpOrders] = await Promise.all([
     DeletedFailedTransaction.find({}).sort({ deletedAt: -1 }).lean().catch(() => []),
     WalletTransaction.find(SALES_FAILED_TX_FILTER).sort({ createdAt: -1 }).lean(),
     Customer.find({}).sort({ registeredAt: -1 }).lean(),
     Wallet.find({}).select('customerId availableBalance dailyAdSpend').lean(),
     WalletTransaction.distinct('customerId', { txType: 'Credit', status: CREDIT_OK_STATUS_RE }),
     PaymentRecord.find({ status: PAID_STATUS_RE }).select('customerId phone').lean(),
+    RazorpayOrder.find({ status: { $ne: 'paid' } }).sort({ createdAt: -1 }).lean().catch(() => []),
   ]);
+
+  const latestOrderByCust = new Map();
+  for (const ord of unpaidRzpOrders) {
+    if (ord.customerId && !latestOrderByCust.has(ord.customerId)) {
+      latestOrderByCust.set(ord.customerId, ord);
+    }
+    if (ord.phone && !latestOrderByCust.has(ord.phone)) {
+      latestOrderByCust.set(ord.phone, ord);
+    }
+  }
 
   const deletedRows = deleted.map(deletedFailedTxToRow);
 
@@ -232,6 +244,7 @@ export async function loadFailedTransactionData() {
     const phone10 = last10Digits(c.phone);
     if (paidCustIds.has(c._id) || (phone10 && paidPhones.has(phone10))) continue;
     if (creditIds.has(c._id) || (c.phone && creditIds.has(c.phone))) continue;
+    const latestOrd = latestOrderByCust.get(c._id) || (phone10 ? latestOrderByCust.get(phone10) : null);
     unpaidRows.push({
       id: c._id,
       username: c.username,
@@ -247,6 +260,12 @@ export async function loadFailedTransactionData() {
       payment_status: c.paymentStatus,
       balance,
       daily_pacing: num(w?.dailyAdSpend, 300),
+      latest_order_id: latestOrd?._id || null,
+      latest_order_status: latestOrd?.status || null,
+      latest_order_source: latestOrd?.source || null,
+      latest_order_amount: latestOrd?.amount || null,
+      latest_order_reason: latestOrd?.failureReason || null,
+      latest_order_at: latestOrd?.createdAt || null,
     });
   }
   return { deletedRows, failedRows, unpaidRows };
@@ -791,6 +810,7 @@ export async function deleteCustomerCascade(custId, custPhone) {
     const rVerif = await PendingVerification.deleteMany(idOrPhone('phone'), opts);
     const rWtx = await WalletTransaction.deleteMany({ customerId: { $in: targetIds } }, opts);
     const rPay = await PaymentRecord.deleteMany(idOrPhone('phone'), opts);
+    const rRzpOrders = await RazorpayOrder.deleteMany(idOrPhone('phone'), opts);
     const rInv = await TaxInvoice.deleteMany({ customerId: { $in: targetIds } }, opts);
     const rDelTx = await DeletedFailedTransaction.deleteMany(idOrPhone('phone'), opts);
     const rAssign = await LeadAssignment.deleteMany({ customerId: { $in: targetIds } }, opts);
@@ -872,6 +892,7 @@ export async function deleteCustomerCascade(custId, custPhone) {
       wallets: rWallets.deletedCount || 0,
       walletTransactions: rWtx.deletedCount || 0,
       paymentRecords: rPay.deletedCount || 0,
+      razorpayOrders: rRzpOrders.deletedCount || 0,
       taxInvoices: rInv.deletedCount || 0,
       deletedFailedTransactions: rDelTx.deletedCount || 0,
       pendingVerifications: rVerif.deletedCount || 0,

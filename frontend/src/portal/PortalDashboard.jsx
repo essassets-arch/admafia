@@ -35,6 +35,10 @@ import {
   evaluateCustomerProfileCompletion,
   sanitizeCustomerProfileFields,
 } from '../utils/profileCompletion';
+import {
+  getPendingRazorpayOrder,
+  reconcilePendingOrderWithBackend,
+} from '../utils/razorpayCheckout';
 
 export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab }) {
   const getTabFromHash = () => {
@@ -586,20 +590,38 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     setFollowUps((prev) => [newFup, ...prev]);
   };
 
+  const creditedUtrsRef = React.useRef(new Set());
+
   const handleTopUpWallet = (amount, utr, sourceInfo = {}) => {
+    const refCode = utr || `rzp_${Date.now().toString().slice(-8)}`;
+    if (utr && creditedUtrsRef.current.has(utr)) {
+      if (typeof sourceInfo?.walletBalance === 'number') {
+        setWalletBalance(sourceInfo.walletBalance);
+      } else if (sourceInfo?.customer) {
+        const syncedBal = Number(sourceInfo.customer.walletBalance ?? sourceInfo.customer.balance);
+        if (Number.isFinite(syncedBal)) setWalletBalance(syncedBal);
+      }
+      return;
+    }
+    if (utr) {
+      creditedUtrsRef.current.add(utr);
+    }
+
     const payNum = Number(amount) || 0;
     const currentBal = Number(walletBalance) || 0;
+    const hasBackendCredit = Boolean(sourceInfo?.customer || typeof sourceInfo?.walletBalance === 'number');
     const newBal = sourceInfo?.customer
       ? Number(sourceInfo.customer.walletBalance ?? sourceInfo.customer.balance ?? (currentBal + payNum))
-      : (currentBal + payNum);
+      : typeof sourceInfo?.walletBalance === 'number'
+        ? Number(sourceInfo.walletBalance)
+        : currentBal + payNum;
 
     setWalletBalance(newBal);
 
-    const refCode = utr || `rzp_${Date.now().toString().slice(-8)}`;
     const nowTimeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + ', Today';
     const runtimeDays = Math.max(1, Math.floor(payNum / (customer?.dailyAdSpend || 300)));
 
-    if (!sourceInfo?.customer) {
+    if (!hasBackendCredit) {
       crmApi
         .topUpWallet({
           customerId: customer?.id,
@@ -786,6 +808,52 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       return updated;
     });
   };
+
+  // Automatic Mobile Return / Tab-Reload / Focus Razorpay Order Reconciler
+  // Guarantees 100% capture & wallet credit when returning from GPay / PhonePe / Paytm on mobile
+  useEffect(() => {
+    const triggerOrderReconcile = () => {
+      if (!getPendingRazorpayOrder()) return;
+      reconcilePendingOrderWithBackend(crmApi);
+    };
+
+    triggerOrderReconcile();
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        triggerOrderReconcile();
+      }
+    };
+    const onFocus = () => triggerOrderReconcile();
+    const onPageShow = () => triggerOrderReconcile();
+
+    const onOrderPaid = (e) => {
+      const detail = e?.detail;
+      if (!detail || detail.status !== 'paid') return;
+      handleTopUpWallet(detail.amount, detail.paymentId, detail);
+      if (activeTab !== 'wallet') {
+        Swal.fire({
+          icon: 'success',
+          title: 'Payment Verified & Credited!',
+          html: `<strong>₹${Number(detail.amount || 0).toLocaleString('en-IN')}</strong> has been added to your Growth Wallet.<br/><small style="color:#64748b">Ref: ${detail.paymentId || 'Verified'}</small>`,
+          confirmButtonColor: '#059669',
+          timer: 4000,
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('admafia_razorpay_order_paid', onOrderPaid);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('admafia_razorpay_order_paid', onOrderPaid);
+    };
+  }, [activeTab]);
 
   const handlePaymentFailed = (failedTx) => {
     if (!failedTx) return;

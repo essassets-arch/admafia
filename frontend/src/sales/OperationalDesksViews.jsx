@@ -8071,6 +8071,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
   const [selectedFailTx, setSelectedFailTx] = useState(null);
   const [topupCust, setTopupCust] = useState(null);
   const [topupAmount, setTopupAmount] = useState(1000);
+  const [sendingLinkId, setSendingLinkId] = useState(null);
 
   // Deleted history archive state (dynamically fetched from PostgreSQL & synced)
   const [deletedHistoryList, setDeletedHistoryList] = useState(() => {
@@ -8190,6 +8191,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
       (item.failureReason || '').toLowerCase().includes(q);
 
     if (!matchSearch) return false;
+    const isUnpaidReg = Boolean(item.isRegistrationDrop || String(item.ref || '').startsWith('FAIL-REG-'));
+    if (filter === 'gateway') return !isUnpaidReg;
+    if (filter === 'unpaid') return isUnpaidReg;
     if (filter === 'high') return (Number(item.amount) || 0) >= 2000;
     if (filter === 'upi') return (item.method || '').toLowerCase().includes('upi') || (item.desc || '').toLowerCase().includes('upi');
     if (filter === 'card') return (item.method || '').toLowerCase().includes('card') || (item.method || '').toLowerCase().includes('gateway');
@@ -8212,9 +8216,69 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
     );
   });
 
+  const gatewayDropsCount = failedList.filter(
+    (item) => !(item.isRegistrationDrop || String(item.ref || '').startsWith('FAIL-REG-'))
+  ).length;
+  const unpaidSignupsCount = failedList.length - gatewayDropsCount;
   const totalAtRisk = failedList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const avgFailedAmount = failedList.length ? Math.round(totalAtRisk / failedList.length) : 0;
   const totalDeletedAmount = deletedHistoryList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+  const handleSendDirectPaymentLink = async (tx, contactTitle) => {
+    const cleanPhone = String(tx.phone || '').replace(/\D/g, '').slice(-10);
+    const amountNum = Math.max(300, Math.round(Number(tx.amount || 300)));
+    const rowKey = tx.id || tx.ref;
+    setSendingLinkId(rowKey);
+    try {
+      const linkRes = await crmApi.createRazorpayPaymentLink({
+        customerId: tx.customerId,
+        phone: cleanPhone || tx.phone,
+        username: tx.username,
+        amount: amountNum,
+      });
+      const payUrl = linkRes?.paymentUrl || linkRes?.short_url;
+      if (!payUrl) {
+        throw new Error(linkRes?.error || 'Could not generate Razorpay payment link.');
+      }
+      try {
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(payUrl);
+        }
+      } catch {}
+
+      const msg = `Hello ${contactTitle || 'Partner'}, here is your direct Ad Mafia Growth Wallet instant UPI / Card payment link for ₹${amountNum.toLocaleString('en-IN')}: ${payUrl} — Tap to pay directly via Google Pay, PhonePe, Paytm, or Card and your wallet will credit automatically.`;
+      const waUrl = cleanPhone ? `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}` : null;
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Direct UPI Payment Link Ready!',
+        html: `
+          <div style="text-align:left;font-size:0.88rem;line-height:1.6;">
+            <div>Amount: <strong>₹${amountNum.toLocaleString('en-IN')}</strong></div>
+            <div style="margin:8px 0;padding:8px 10px;background:#f1f5f9;border-radius:8px;word-break:break-all;font-family:monospace;color:#0f172a;">${payUrl}</div>
+            <div style="font-size:0.78rem;color:#059669;">✓ Link copied to clipboard. Works 100% natively on mobile GPay / PhonePe / Paytm.</div>
+          </div>
+        `,
+        showCancelButton: Boolean(waUrl),
+        confirmButtonText: waUrl ? '📲 Send on WhatsApp Now' : 'Done',
+        cancelButtonText: 'Close',
+        confirmButtonColor: '#25D366',
+      }).then((r) => {
+        if (r.isConfirmed && waUrl) {
+          window.open(waUrl, '_blank', 'noopener,noreferrer');
+        }
+      });
+    } catch (err) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Could Not Create Payment Link',
+        text: err.message || 'Please check Razorpay configuration and retry.',
+        confirmButtonColor: '#dc2626',
+      });
+    } finally {
+      setSendingLinkId(null);
+    }
+  };
 
   const handleApplyTopup = async () => {
     if (!topupCust) return;
@@ -8752,9 +8816,9 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
       {/* KPI Quad Grid */}
       <div className="desk-kpi-grid">
         <div className="desk-kpi-card">
-          <div className="desk-kpi-label">TOTAL FAILED TRANSACTIONS</div>
-          <div className="desk-kpi-val text-rose">{failedList.length}</div>
-          <div className="desk-kpi-sub">Total payment attempts declined</div>
+          <div className="desk-kpi-label">GATEWAY DROPS / UNPAID</div>
+          <div className="desk-kpi-val text-rose">{gatewayDropsCount} <span style={{ fontSize: '0.95rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>/ {unpaidSignupsCount} unpaid</span></div>
+          <div className="desk-kpi-sub">{gatewayDropsCount} checkout drops • {unpaidSignupsCount} awaiting 1st top-up</div>
         </div>
         <div className="desk-kpi-card">
           <div className="desk-kpi-label">LOST CAPITAL AT RISK</div>
@@ -8781,7 +8845,21 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
             className={`desk-tab ${filter === 'all' ? 'active' : ''}`}
             onClick={() => setFilter('all')}
           >
-            All Failed ({failedList.length})
+            All ({failedList.length})
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'gateway' ? 'active' : ''}`}
+            onClick={() => setFilter('gateway')}
+          >
+            ⚠️ Gateway &amp; Checkout Drops ({gatewayDropsCount})
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'unpaid' ? 'active' : ''}`}
+            onClick={() => setFilter('unpaid')}
+          >
+            ⏳ Unpaid Signups ({unpaidSignupsCount})
           </button>
           <button
             type="button"
@@ -8796,13 +8874,6 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
             onClick={() => setFilter('upi')}
           >
             📱 UPI &amp; Netbanking
-          </button>
-          <button
-            type="button"
-            className={`desk-tab ${filter === 'card' ? 'active' : ''}`}
-            onClick={() => setFilter('card')}
-          >
-            💳 Card &amp; Gateway
           </button>
           <button
             type="button"
@@ -9107,18 +9178,34 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                       </div>
                     </td>
 
-                    {/* 2. Failed Amount */}
+                    {/* 2. Failed / Pending Amount */}
                     <td>
-                      <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#dc2626', textDecoration: 'line-through' }}>
+                      <span
+                        style={{
+                          fontSize: '1.15rem',
+                          fontWeight: 900,
+                          color: tx.isRegistrationDrop ? '#d97706' : '#dc2626',
+                          textDecoration: tx.isRegistrationDrop ? 'none' : 'line-through',
+                        }}
+                      >
                         {formatINR(tx.amount)}
                       </span>
                       <div style={{ marginTop: 3 }}>
-                        <span
-                          className="desk-pill pill-rose"
-                          style={{ fontSize: '0.66rem', padding: '2px 7px', fontWeight: 800 }}
-                        >
-                          ✕ Payment Declined
-                        </span>
+                        {tx.isRegistrationDrop ? (
+                          <span
+                            className="desk-pill pill-amber"
+                            style={{ fontSize: '0.66rem', padding: '2px 7px', fontWeight: 800 }}
+                          >
+                            ⏳ Pending 1st Top-Up
+                          </span>
+                        ) : (
+                          <span
+                            className="desk-pill pill-rose"
+                            style={{ fontSize: '0.66rem', padding: '2px 7px', fontWeight: 800 }}
+                          >
+                            ✕ Payment Declined
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -9146,9 +9233,15 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                     <td style={{ maxWidth: 280 }}>
                       <div
                         style={{
-                          background: 'var(--adm-soft-rose-bg, #fff1f2)',
-                          color: 'var(--adm-soft-rose-text, #be123c)',
-                          border: '1px solid var(--adm-soft-rose-border, #fecdd3)',
+                          background: tx.isRegistrationDrop
+                            ? 'var(--adm-soft-amber-bg, #fffbeb)'
+                            : 'var(--adm-soft-rose-bg, #fff1f2)',
+                          color: tx.isRegistrationDrop
+                            ? 'var(--adm-soft-amber-text, #b45309)'
+                            : 'var(--adm-soft-rose-text, #be123c)',
+                          border: tx.isRegistrationDrop
+                            ? '1px solid var(--adm-soft-amber-border, #fde68a)'
+                            : '1px solid var(--adm-soft-rose-border, #fecdd3)',
                           padding: '6px 10px',
                           borderRadius: 8,
                           fontSize: '0.78rem',
@@ -9156,13 +9249,36 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                           lineHeight: 1.3
                         }}
                       >
-                        ⚠️ {failReason}
+                        {tx.isRegistrationDrop ? '⏳' : '⚠️'} {failReason}
                       </div>
                     </td>
 
                     {/* 6. Recovery Actions */}
                     <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {/* 1-Click Direct Razorpay UPI Link Generator */}
+                        <button
+                          type="button"
+                          className="desk-action-btn"
+                          disabled={sendingLinkId === (tx.id || tx.ref)}
+                          style={{
+                            background: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                            color: 'var(--adm-soft-indigo-text, #4338ca)',
+                            borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)',
+                            fontWeight: 800,
+                            padding: '5px 10px',
+                            fontSize: '0.78rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => handleSendDirectPaymentLink(tx, contactTitle)}
+                          title="Generate a 100% mobile-native Razorpay UPI link & send via WhatsApp"
+                        >
+                          ⚡ {sendingLinkId === (tx.id || tx.ref) ? 'Creating...' : 'Pay Link'}
+                        </button>
+
                         {/* WhatsApp Customer Action */}
                         {cleanPhone ? (
                           <a
