@@ -23,6 +23,7 @@ import {
   ExternalLink,
   Sparkles,
   Key,
+  Trash2,
   X,
   Check,
 } from 'lucide-react';
@@ -484,6 +485,49 @@ Role: ${c.role || 'Business Customer'}`;
       Swal.fire('Error', err.message || 'Could not reset password.', 'error');
     } finally {
       setResetModal((prev) => ({ ...prev, submitting: false }));
+    }
+  };
+
+  // Delete User from Roster
+  const handleDeleteUser = async (u) => {
+    const label = u.full_name || u.username;
+    const confirmRes = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete User Account Permanently?',
+      html: `
+        <div style="text-align:left; font-size:13px; line-height:1.65;">
+          <div><strong>User:</strong> ${label} (<code>@${u.username}</code>)</div>
+          <div><strong>Email:</strong> ${u.email || 'N/A'}</div>
+          <div><strong>Role:</strong> ${u.role}</div>
+          <div style="margin-top:10px; padding:9px 12px; border-radius:8px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); color:#dc2626; font-weight:600;">
+            This permanently removes this user login, notifications, FCM tokens, and OTP cooldowns from MongoDB.
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Delete Permanently',
+    });
+
+    if (!confirmRes.isConfirmed) return;
+
+    try {
+      const res = await superadminApi.deleteUser(u.id, {
+        reason: 'Demo / System User Removed from Staff Roster by Super Admin',
+      });
+      if (res && res.ok) {
+        await loadUsersList();
+        Swal.fire({
+          icon: 'success',
+          title: 'User Deleted End-to-End',
+          text: res.message || `Removed @${u.username} completely.`,
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      }
+    } catch (err) {
+      Swal.fire('Delete Blocked / Failed', err.message || 'Could not delete user account.', 'error');
     }
   };
 
@@ -1199,6 +1243,18 @@ Role: ${c.role || 'Business Customer'}`;
                             >
                               <Key size={12} />
                               <span>Reset Pwd</span>
+                            </button>
+
+                            {/* Permanent End-to-End Delete */}
+                            <button
+                              type="button"
+                              className="sa-btn-danger"
+                              style={{ padding: '5px 9px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              onClick={() => handleDeleteUser(u)}
+                              title="Delete User Account Permanently"
+                            >
+                              <Trash2 size={12} />
+                              <span>Delete</span>
                             </button>
                           </div>
                         </td>

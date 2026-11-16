@@ -2902,21 +2902,21 @@ app.delete('/api/customers/:identifier', requireStaff(['super admin', 'sales']),
     const custId = cust.id;
     const custPhone = cust.phone;
 
-    await deleteCustomerCascade(custId, custPhone);
+    const purgeSummary = await deleteCustomerCascade(custId, custPhone);
 
     // Audit trail (best effort, never blocks the delete response)
     await logSuperAdminAudit({
-      actorId: 'api_admin',
-      actorName: 'Admin API',
-      actorRole: 'Super Admin',
+      actorId: req.auth?.sub || 'api_admin',
+      actorName: req.auth?.username || 'Admin API',
+      actorRole: req.auth?.role || 'Super Admin',
       actionType: 'CUSTOMER_DELETED',
       targetType: 'customer',
       targetId: custId,
-      reason: 'Customer deleted via admin API',
-      details: cust,
+      reason: req.body?.reason || 'Customer deleted via admin API',
+      details: { cust, ...purgeSummary },
     });
 
-    res.json({ ok: true, deleted: cust, deletedId: custId });
+    res.json({ ok: true, deleted: cust, deletedId: custId, ...purgeSummary });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import {
   Customer,
@@ -10,6 +13,7 @@ import {
   RefundRequest,
   TopupRequest,
   DeletedFailedTransaction,
+  MasterLead,
   Lead,
   LeadAssignment,
   SalesTask,
@@ -19,9 +23,15 @@ import {
   MarketingIdea,
   MarketingCampaign,
   MarketingAuditEvent,
+  OutboxEvent,
+  OtpVerification,
+  OtpDeliveryLog,
+  Notification,
+  FcmToken,
 } from '../models/index.js';
 import { withMongoTransaction, genId } from './tx.js';
 import { recordOutboxEvent } from '../services/outboxWorker.js';
+import { delKey } from '../services/redisStore.js';
 import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion.js';
 import {
   getCustomerViewRows,
@@ -699,38 +709,243 @@ export async function applyWalletSettings(customerId, { dailyAdSpend, adCampaign
   await Wallet.updateOne({ customerId }, { $set }, { runValidators: true });
 }
 
-const cascadeCustomerData = async (customerId, session) => {
-  const opts = { session };
-  await MarketingAuditEvent.deleteMany({ customerId }, opts);
-  await MarketingCampaign.deleteMany({ customerId }, opts);
-  await MarketingPost.deleteMany({ customerId }, opts);
-  await MarketingIdea.deleteMany({ customerId }, opts);
-  await PendingVerification.deleteMany({ customerId }, opts);
-  await WalletTransaction.deleteMany({ customerId }, opts);
-  await PaymentRecord.deleteMany({ customerId }, opts);
-  await TaxInvoice.deleteMany({ customerId }, opts);
-  await LeadAssignment.deleteMany({ customerId }, opts);
-  await Lead.deleteMany({ customerId }, opts); // lead follow-ups are embedded
-  await SupportQuery.deleteMany({ customerId }, opts); // support messages are embedded
-  await SalesTask.deleteMany({ customerId }, opts);
-  await RefundRequest.deleteMany({ customerId }, opts);
-  await TopupRequest.deleteMany({ customerId }, opts);
-  await CustomerGroup.updateMany({ members: customerId }, { $pull: { members: customerId } }, opts);
-  await SystemUser.updateMany({ customerId }, { $set: { customerId: null } }, opts); // ON DELETE SET NULL
-  await Wallet.deleteMany({ customerId }, opts);
-};
+const UPLOADS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'uploads');
 
-/** Delete a customer and everything that cascaded from it in the SQL schema. */
-export async function deleteCustomerCascade(custId, custPhone) {
-  await withMongoTransaction(async (session) => {
-    await cascadeCustomerData(custId, session);
-    if (custPhone) {
-      const altId = `cust_reg_${custPhone}`;
-      if (altId !== custId) {
-        await cascadeCustomerData(altId, session);
-        await Customer.deleteOne({ _id: altId }, { session });
+async function purgeLocalUploadUrls(urls = []) {
+  let removed = 0;
+  const unique = Array.from(new Set(urls.filter((u) => typeof u === 'string' && u.startsWith('/uploads/'))));
+  for (const relUrl of unique) {
+    try {
+      const subPath = relUrl.replace(/^\/uploads\/+/, '');
+      const fullPath = path.resolve(UPLOADS_ROOT, subPath);
+      if (fullPath.startsWith(UPLOADS_ROOT + path.sep) && fs.existsSync(fullPath)) {
+        await fs.promises.unlink(fullPath);
+        removed += 1;
       }
+    } catch {
+      // Best-effort file cleanup; never fail DB deletion
     }
-    await Customer.deleteOne({ _id: custId }, { session });
+  }
+  return removed;
+}
+
+export async function clearPhoneOtpState(rawPhone) {
+  const cleanPhone = String(rawPhone || '').replace(/\D/g, '').slice(-10);
+  if (!cleanPhone) return false;
+  await Promise.all([
+    delKey(`rl:otp:cooldown:${cleanPhone}:register`),
+    delKey(`rl:otp:cooldown:${cleanPhone}:password_reset`),
+    delKey(`rl:otp:cooldown:${cleanPhone}:verify_phone`),
+    delKey(`rl:otp:hour:${cleanPhone}`),
+  ]).catch(() => {});
+  return true;
+}
+
+/**
+ * Complete end-to-end purge of a customer account across all MongoDB collections,
+ * linked client logins, notifications/FCM tokens, WhatsApp OTP locks, Redis cooldowns,
+ * and local uploaded creative files.
+ */
+export async function deleteCustomerCascade(custId, custPhone) {
+  const cleanPhone = String(custPhone || '').replace(/\D/g, '').slice(-10);
+  const targetIds = Array.from(
+    new Set([custId, ...(cleanPhone ? [`cust_reg_${cleanPhone}`] : [])].filter(Boolean))
+  );
+
+  // Gather post media URLs, affected master leads, and client-scoped logins prior to transaction
+  const [postsToPurge, assignmentsToPurge, linkedUsers] = await Promise.all([
+    MarketingPost.find({ customerId: { $in: targetIds } }).select('mediaUrl revisions').lean(),
+    LeadAssignment.find({ customerId: { $in: targetIds } }).select('masterLeadId').lean(),
+    SystemUser.find({ customerId: { $in: targetIds } }).select('_id role').lean(),
+  ]);
+
+  const localUploadUrls = [];
+  for (const p of postsToPurge) {
+    if (p.mediaUrl) localUploadUrls.push(p.mediaUrl);
+    for (const rev of p.revisions || []) {
+      if (rev?.artworkUrl) localUploadUrls.push(rev.artworkUrl);
+    }
+  }
+
+  const affectedMasterLeadIds = Array.from(
+    new Set(assignmentsToPurge.map((a) => a.masterLeadId).filter(Boolean))
+  );
+
+  const clientScopedUserIds = linkedUsers
+    .filter((u) => /^client/i.test(String(u.role || '').trim()))
+    .map((u) => u._id);
+
+  const deletedCounts = {};
+
+  await withMongoTransaction(async (session) => {
+    const opts = { session };
+    const idOrPhone = (phoneField = 'phone') =>
+      cleanPhone
+        ? { $or: [{ customerId: { $in: targetIds } }, { [phoneField]: cleanPhone }] }
+        : { customerId: { $in: targetIds } };
+
+    const rAudit = await MarketingAuditEvent.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rCamp = await MarketingCampaign.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rPost = await MarketingPost.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rIdea = await MarketingIdea.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rVerif = await PendingVerification.deleteMany(idOrPhone('phone'), opts);
+    const rWtx = await WalletTransaction.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rPay = await PaymentRecord.deleteMany(idOrPhone('phone'), opts);
+    const rInv = await TaxInvoice.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rDelTx = await DeletedFailedTransaction.deleteMany(idOrPhone('phone'), opts);
+    const rAssign = await LeadAssignment.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rLeads = await Lead.deleteMany(idOrPhone('customerPhone'), opts);
+    const rQueries = await SupportQuery.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rTasks = await SalesTask.deleteMany(idOrPhone('phone'), opts);
+    const rRefunds = await RefundRequest.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rTopups = await TopupRequest.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rGroups = await CustomerGroup.updateMany(
+      { members: { $in: targetIds } },
+      { $pull: { members: { $in: targetIds } } },
+      opts
+    );
+
+    const rNotif = await Notification.deleteMany(
+      {
+        $or: [
+          { recipientType: 'customer', recipientId: { $in: targetIds } },
+          { 'metadata.customerId': { $in: targetIds } },
+          ...(clientScopedUserIds.length
+            ? [{ recipientType: 'staff', recipientId: { $in: clientScopedUserIds } }]
+            : []),
+        ],
+      },
+      opts
+    );
+
+    const rFcm = await FcmToken.deleteMany(
+      {
+        $or: [
+          { ownerType: 'customer', ownerId: { $in: targetIds } },
+          ...(clientScopedUserIds.length
+            ? [{ ownerType: 'staff', ownerId: { $in: clientScopedUserIds } }]
+            : []),
+        ],
+      },
+      opts
+    );
+
+    const rOutbox = await OutboxEvent.deleteMany(
+      {
+        $or: [
+          { aggregateId: { $in: targetIds } },
+          { 'payload.customerId': { $in: targetIds } },
+        ],
+      },
+      opts
+    );
+
+    let otpVerifDeleted = 0;
+    let otpLogsDeleted = 0;
+    if (cleanPhone) {
+      const maskedIn = `+91 ${cleanPhone.slice(0, 2)}••••${cleanPhone.slice(-4)}`;
+      const rOtpV = await OtpVerification.deleteMany(
+        { $or: [{ phone: cleanPhone }, { e164Phone: `91${cleanPhone}` }] },
+        opts
+      );
+      const rOtpL = await OtpDeliveryLog.deleteMany({ phoneMasked: maskedIn }, opts);
+      otpVerifDeleted = rOtpV.deletedCount || 0;
+      otpLogsDeleted = rOtpL.deletedCount || 0;
+    }
+
+    let clientUsersDeleted = 0;
+    if (clientScopedUserIds.length > 0) {
+      const rCu = await SystemUser.deleteMany({ _id: { $in: clientScopedUserIds } }, opts);
+      clientUsersDeleted = rCu.deletedCount || 0;
+    }
+    await SystemUser.updateMany(
+      { customerId: { $in: targetIds } },
+      { $set: { customerId: null } },
+      opts
+    );
+
+    const rWallets = await Wallet.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rCust = await Customer.deleteMany({ _id: { $in: targetIds } }, opts);
+
+    Object.assign(deletedCounts, {
+      customers: rCust.deletedCount || 0,
+      wallets: rWallets.deletedCount || 0,
+      walletTransactions: rWtx.deletedCount || 0,
+      paymentRecords: rPay.deletedCount || 0,
+      taxInvoices: rInv.deletedCount || 0,
+      deletedFailedTransactions: rDelTx.deletedCount || 0,
+      pendingVerifications: rVerif.deletedCount || 0,
+      leads: rLeads.deletedCount || 0,
+      leadAssignments: rAssign.deletedCount || 0,
+      supportQueries: rQueries.deletedCount || 0,
+      salesTasks: rTasks.deletedCount || 0,
+      refundRequests: rRefunds.deletedCount || 0,
+      topupRequests: rTopups.deletedCount || 0,
+      marketingCampaigns: rCamp.deletedCount || 0,
+      marketingPosts: rPost.deletedCount || 0,
+      marketingIdeas: rIdea.deletedCount || 0,
+      marketingAuditEvents: rAudit.deletedCount || 0,
+      notifications: rNotif.deletedCount || 0,
+      fcmTokens: rFcm.deletedCount || 0,
+      outboxEvents: rOutbox.deletedCount || 0,
+      otpVerifications: otpVerifDeleted,
+      otpDeliveryLogs: otpLogsDeleted,
+      linkedClientUsers: clientUsersDeleted,
+      groupsUnlinked: rGroups.modifiedCount || 0,
+    });
   });
+
+  // Reconcile totalDispatched on any MasterLeads that had assignments for this customer
+  for (const mlId of affectedMasterLeadIds) {
+    try {
+      const remaining = await LeadAssignment.countDocuments({ masterLeadId: mlId });
+      await MasterLead.updateOne({ _id: mlId }, { $set: { totalDispatched: remaining } });
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  const [otpCooldownCleared, mediaFilesRemoved] = await Promise.all([
+    clearPhoneOtpState(cleanPhone),
+    purgeLocalUploadUrls(localUploadUrls),
+  ]);
+
+  deletedCounts.mediaFilesRemoved = mediaFilesRemoved;
+  const totalRecordsPurged = Object.values(deletedCounts).reduce((sum, n) => sum + Number(n || 0), 0);
+
+  return {
+    deletedCounts,
+    totalRecordsPurged,
+    otpCooldownCleared,
+    mediaFilesRemoved,
+  };
+}
+
+/**
+ * Complete end-to-end purge of a SystemUser login (client-user or demo staff),
+ * including notifications, FCM device tokens, and optional phone OTP locks.
+ */
+export async function deleteSystemUserCascade(userId, userPhone = '') {
+  const deletedCounts = {};
+  await withMongoTransaction(async (session) => {
+    const opts = { session };
+    const rNotif = await Notification.deleteMany(
+      { recipientType: 'staff', recipientId: userId },
+      opts
+    );
+    const rFcm = await FcmToken.deleteMany(
+      { ownerType: 'staff', ownerId: userId },
+      opts
+    );
+    const rUser = await SystemUser.deleteOne({ _id: userId }, opts);
+    Object.assign(deletedCounts, {
+      systemUsers: rUser.deletedCount || 0,
+      notifications: rNotif.deletedCount || 0,
+      fcmTokens: rFcm.deletedCount || 0,
+    });
+  });
+
+  const otpCooldownCleared = await clearPhoneOtpState(userPhone);
+  const totalRecordsPurged = Object.values(deletedCounts).reduce((sum, n) => sum + Number(n || 0), 0);
+  return { deletedCounts, totalRecordsPurged, otpCooldownCleared };
 }

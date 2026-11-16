@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   Layers,
   Bell,
+  Trash2,
 } from 'lucide-react';
+import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import { SmartTable } from '../components/SmartTabulator';
 import { useAdminTheme } from '../utils/adminTheme';
@@ -39,6 +41,47 @@ export default function SuperAdminGrowthAnalyticsDesk() {
   useEffect(() => {
     loadAnalytics();
   }, []);
+
+  const handlePurgeDemoSignup = async (c) => {
+    const label = c.companyName || c.username || c.phone;
+    const confirmRes = await Swal.fire({
+      icon: 'warning',
+      title: 'Purge Unpaid / Demo Signup End-to-End?',
+      html: `
+        <div style="text-align:left; font-size:13px; line-height:1.65;">
+          <div><strong>Account:</strong> ${label}</div>
+          <div><strong>Phone:</strong> ${c.phone || 'N/A'}</div>
+          <div style="margin-top:10px; padding:9px 12px; border-radius:8px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); color:#dc2626; font-weight:600;">
+            Deletes customer, wallet, leads, verifications, notifications &amp; clears WhatsApp OTP locks so this phone can register fresh immediately.
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Delete End-to-End',
+    });
+    if (!confirmRes.isConfirmed) return;
+
+    try {
+      const res = await superadminApi.deleteAccount(c.id, {
+        accountType: 'business',
+        reason: 'Demo / Unpaid Signup Purged from Growth Radar by Super Admin',
+      });
+      if (res && res.ok) {
+        await loadAnalytics();
+        Swal.fire({
+          icon: 'success',
+          title: 'Account Purged End-to-End',
+          text: res.message,
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      }
+    } catch (err) {
+      Swal.fire('Delete Failed', err.message || 'Could not purge account.', 'error');
+    }
+  };
 
   const funnel = data?.funnel || {};
   const hotUnpaid = data?.hotUnpaidVerifiedLeads || [];
@@ -274,25 +317,45 @@ export default function SuperAdminGrowthAnalyticsDesk() {
                         </span>
                       </td>
                       <td style={{ padding: '9px 10px', textAlign: 'right' }}>
-                        <a
-                          href={c.whatsappOutreachUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '5px 10px',
-                            borderRadius: '8px',
-                            background: '#16a34a',
-                            color: '#ffffff',
-                            textDecoration: 'none',
-                            fontWeight: 700,
-                            fontSize: '0.75rem',
-                          }}
-                        >
-                          <MessageCircle size={13} /> WhatsApp
-                        </a>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                          <a
+                            href={c.whatsappOutreachUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '5px 10px',
+                              borderRadius: '8px',
+                              background: '#16a34a',
+                              color: '#ffffff',
+                              textDecoration: 'none',
+                              fontWeight: 700,
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            <MessageCircle size={13} /> WhatsApp
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handlePurgeDemoSignup(c)}
+                            title="Delete unpaid / demo account end-to-end"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '5px 8px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(239, 68, 68, 0.35)',
+                              background: isDark ? 'rgba(239, 68, 68, 0.16)' : '#fef2f2',
+                              color: isDark ? '#f87171' : '#dc2626',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

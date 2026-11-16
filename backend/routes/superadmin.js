@@ -43,6 +43,10 @@ import {
   creditWalletLedger,
   debitWalletForRefund,
 } from '../repositories/superadminRepo.js';
+import {
+  deleteCustomerCascade,
+  deleteSystemUserCascade,
+} from '../repositories/salesLedgerRepo.js';
 import { hashPassword } from '../utils/passwordCrypto.js';
 
 export const superadminRouter = express.Router();
@@ -2138,6 +2142,219 @@ superadminRouter.get('/accounts/:id/history', async (req, res) => {
   } catch (err) {
     console.error('[GET /api/superadmin/accounts/:id/history]', err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Shared helper to delete a business customer or system user end-to-end with lockout guards
+async function executeEndToEndAccountDeletion({
+  targetId,
+  accountType = 'business',
+  reason = 'Demo / Test Account End-to-End Purge by Super Admin',
+  auth = {},
+  ipAddress = '',
+}) {
+  const rawId = String(targetId || '').trim();
+  if (!rawId) {
+    throw new HttpError(400, 'Account ID is required.');
+  }
+
+  const actorId = String(auth?.sub || auth?.id || 'superadmin');
+  const actorName = String(auth?.fullName || auth?.username || 'Super Admin');
+  const cleanReason = String(reason || '').trim() || 'Demo / Test Account End-to-End Purge by Super Admin';
+
+  if (accountType === 'user') {
+    const user = await SystemUser.findById(rawId).lean();
+    if (!user) {
+      throw new HttpError(404, 'System user account not found.');
+    }
+
+    // Lockout Guard 1: Prevent deleting own active session
+    const selfId = String(auth?.sub || auth?.id || '').trim();
+    const selfUser = String(auth?.username || '').trim().toLowerCase();
+    if (
+      (selfId && selfId === String(user._id)) ||
+      (selfUser && selfUser === String(user.username || '').trim().toLowerCase())
+    ) {
+      throw new HttpError(403, 'Lockout Prevention: You cannot delete your own active Super Admin session.');
+    }
+
+    // Lockout Guard 2: Prevent deleting the last active Super Admin
+    if (SUPER_ADMIN_ROLE_RE.test(user.role || '')) {
+      const remainingSuperAdmins = await SystemUser.countDocuments({
+        role: SUPER_ADMIN_ROLE_RE,
+        status: 'active',
+        _id: { $ne: user._id },
+      });
+      if (remainingSuperAdmins < 1) {
+        throw new HttpError(403, 'Lockout Prevention: Cannot delete the last active Super Admin account.');
+      }
+    }
+
+    const purgeSummary = await deleteSystemUserCascade(user._id, user.phone || '');
+    const deletedUser = {
+      id: user._id,
+      username: user.username,
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone || null,
+      role: user.role,
+      customerId: user.customerId || null,
+    };
+
+    await logSuperAdminAudit({
+      actorId,
+      actorName,
+      actionType: 'USER_DELETED',
+      targetType: 'user',
+      targetId: user._id,
+      reason: cleanReason,
+      ipAddress,
+      details: {
+        deletedUser,
+        ...purgeSummary,
+      },
+    });
+
+    return {
+      ok: true,
+      accountType: 'user',
+      deletedUser,
+      ...purgeSummary,
+      message: `User account "${user.fullName || user.username}" (@${user.username}) has been permanently deleted end-to-end.`,
+    };
+  }
+
+  // Business / Customer Account end-to-end deletion
+  const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
+  const orQuery = [{ _id: rawId }, { username: ciExact(rawId) }];
+  if (cleanPhone.length === 10) {
+    orQuery.push({ phone: cleanPhone }, { _id: `cust_reg_${cleanPhone}` });
+  }
+  const customer = await Customer.findOne({ $or: orQuery }).lean();
+  if (!customer) {
+    throw new HttpError(404, 'Business customer account not found.');
+  }
+
+  const walletDoc = await Wallet.findOne({ customerId: customer._id }).select('availableBalance totalLifetimePaid').lean();
+  const walletBalanceAtDeletion = round2(num(walletDoc?.availableBalance));
+
+  const purgeSummary = await deleteCustomerCascade(customer._id, customer.phone || '');
+  const deletedAccount = {
+    id: customer._id,
+    companyName: customer.companyName,
+    contactPerson: customer.contactPerson,
+    username: customer.username,
+    phone: customer.phone,
+    email: customer.email || '',
+    walletBalanceAtDeletion,
+  };
+
+  await logSuperAdminAudit({
+    actorId,
+    actorName,
+    actionType: 'CUSTOMER_DELETED',
+    targetType: 'business',
+    targetId: customer._id,
+    reason: cleanReason,
+    ipAddress,
+    details: {
+      deletedAccount,
+      ...purgeSummary,
+    },
+  });
+
+  return {
+    ok: true,
+    accountType: 'business',
+    deletedAccount,
+    ...purgeSummary,
+    message: `Business account "${customer.companyName}" (+91 ${customer.phone}) and all ${purgeSummary.totalRecordsPurged} linked records were permanently purged end-to-end.`,
+  };
+}
+
+// Permanent End-to-End Account Deletion (Business Customer or System User)
+superadminRouter.delete('/accounts/:id', async (req, res) => {
+  try {
+    const accountType = String(req.body?.accountType || req.query?.accountType || 'business').toLowerCase();
+    const reason = req.body?.reason || req.query?.reason || 'Demo / Test Account End-to-End Purge by Super Admin';
+    const result = await executeEndToEndAccountDeletion({
+      targetId: req.params.id,
+      accountType: accountType === 'user' ? 'user' : 'business',
+      reason,
+      auth: req.auth,
+      ipAddress: req.ip || '',
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[DELETE /api/superadmin/accounts/:id]', err);
+    sendError(res, err);
+  }
+});
+
+// Direct System User Deletion Alias (for Users & Staff Roster)
+superadminRouter.delete('/users/:id', async (req, res) => {
+  try {
+    const reason = req.body?.reason || req.query?.reason || 'System User Removed by Super Admin';
+    const result = await executeEndToEndAccountDeletion({
+      targetId: req.params.id,
+      accountType: 'user',
+      reason,
+      auth: req.auth,
+      ipAddress: req.ip || '',
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[DELETE /api/superadmin/users/:id]', err);
+    sendError(res, err);
+  }
+});
+
+// Bulk End-to-End Demo Account Purge
+superadminRouter.post('/accounts/bulk-delete', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map((x) => String(x || '').trim()).filter(Boolean) : [];
+    const accountType = String(req.body?.accountType || 'business').toLowerCase() === 'user' ? 'user' : 'business';
+    const reason = req.body?.reason || 'Bulk Demo Account End-to-End Purge by Super Admin';
+
+    if (ids.length === 0) {
+      return res.status(400).json({ ok: false, error: 'At least one account ID is required for bulk deletion.' });
+    }
+    if (ids.length > 50) {
+      return res.status(400).json({ ok: false, error: 'Maximum 50 accounts can be deleted per batch.' });
+    }
+
+    const deleted = [];
+    const failed = [];
+    let totalRecordsPurged = 0;
+
+    for (const targetId of ids) {
+      try {
+        const out = await executeEndToEndAccountDeletion({
+          targetId,
+          accountType,
+          reason,
+          auth: req.auth,
+          ipAddress: req.ip || '',
+        });
+        deleted.push(out.deletedAccount || out.deletedUser);
+        totalRecordsPurged += Number(out.totalRecordsPurged || 0);
+      } catch (itemErr) {
+        failed.push({ id: targetId, error: itemErr.message });
+      }
+    }
+
+    res.json({
+      ok: true,
+      deletedCount: deleted.length,
+      failedCount: failed.length,
+      totalRecordsPurged,
+      deleted,
+      failed,
+      message: `Successfully purged ${deleted.length} ${accountType} account(s) (${totalRecordsPurged} total database records removed).`,
+    });
+  } catch (err) {
+    console.error('[POST /api/superadmin/accounts/bulk-delete]', err);
+    sendError(res, err);
   }
 });
 

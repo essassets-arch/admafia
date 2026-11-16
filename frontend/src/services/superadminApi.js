@@ -112,7 +112,7 @@ export const superadminApi = {
       body: JSON.stringify(data),
     }),
 
-  // 6. Account Block / Activate
+  // 6. Account Block / Activate / Permanent End-to-End Purge
   getAccounts: (params) => request(`/superadmin/accounts${buildQuery(params)}`),
   updateAccountStatus: (id, data) =>
     request(`/superadmin/accounts/${id}/status`, {
@@ -120,6 +120,21 @@ export const superadminApi = {
       body: JSON.stringify(data),
     }),
   getAccountHistory: (id) => request(`/superadmin/accounts/${id}/history`),
+  deleteAccount: (id, data = {}) =>
+    request(`/superadmin/accounts/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      body: JSON.stringify(data),
+    }),
+  bulkDeleteAccounts: (data) =>
+    request('/superadmin/accounts/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteUser: (id, data = {}) =>
+    request(`/superadmin/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      body: JSON.stringify(data),
+    }),
 
   // 7. Add User / Business & Credentials
   createBusiness: (data) =>
