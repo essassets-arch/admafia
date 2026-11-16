@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 const UI_ACTION_LABEL_RE =
-  /^(call|chat|whatsapp|copy|copied|✓|⧉|360°?|view|edit|delete|remove|suspend|activate|verify|approve|reject|add money|\+ add money|receipt|download|invoice|assign|manage|open|reply|resolve|reopen|audit|details)$/i;
+  /^(call|call buyer|chat|whatsapp|copy|copied|✓|⧉|360°?|view|view leads.*|assigned leads.*|add lead|\+ add lead|edit|delete|remove|suspend|activate|verify|approve|reject|add money|\+ add money|receipt|download|invoice|assign|manage|open|reply|resolve|reopen|audit|details)$/i;
 
 /**
  * Extracts human-readable text from any React node tree.

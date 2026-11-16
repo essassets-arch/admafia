@@ -512,6 +512,16 @@ export const crmApi = {
     });
   },
 
+  async getLeads(params = {}) {
+    const qs = new URLSearchParams();
+    if (params.customerId) qs.set('customerId', params.customerId);
+    if (params.phone) qs.set('phone', params.phone);
+    if (params.username) qs.set('username', params.username);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    const res = await apiRequest(`/leads${suffix}`);
+    return res.leads || [];
+  },
+
   async createLead(leadPayload) {
     const res = await apiRequest('/leads', {
       method: 'POST',

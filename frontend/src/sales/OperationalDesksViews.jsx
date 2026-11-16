@@ -49,6 +49,10 @@ import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
 import { SmartTable } from '../components/SmartTabulator';
 import SalesAddMoneyModal from './SalesAddMoneyModal';
+import {
+  buildCustomerLeadHref,
+  navigateToCustomerLeadPage,
+} from './customerLeadNavigation';
 
 const formatINR = (val) =>
   new Intl.NumberFormat('en-IN', {
@@ -1014,7 +1018,43 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
 
                     {/* 10. Actions */}
                     <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '6px' }}>
+                      <div style={{ display: 'inline-flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <a
+                          href={buildCustomerLeadHref(c, 'add', 'customers')}
+                          onClick={(e) => navigateToCustomerLeadPage(c, 'add', 'customers', e)}
+                          className="desk-action-btn"
+                          style={{
+                            textDecoration: 'none',
+                            background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                            borderColor: '#059669',
+                            color: '#ffffff',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          title={`Add lead directly to ${identity.displayName}`}
+                        >
+                          <Plus size={13} strokeWidth={2.5} /> Add Lead
+                        </a>
+                        <a
+                          href={buildCustomerLeadHref(c, 'history', 'customers')}
+                          onClick={(e) => navigateToCustomerLeadPage(c, 'history', 'customers', e)}
+                          className="desk-action-btn"
+                          style={{
+                            textDecoration: 'none',
+                            background: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                            borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)',
+                            color: 'var(--adm-soft-indigo-text, #4f46e5)',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          title={`View all leads assigned till yet to ${identity.displayName}`}
+                        >
+                          <Layers size={13} /> Assigned Leads
+                        </a>
                         <button
                           type="button"
                           className="desk-action-btn"
@@ -2347,7 +2387,27 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
             Master inbound lead ingestion, 10-digit phone sanitization, SLA speed-to-lead monitoring, and senior sales handover.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="sales-btn-secondary"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              fontWeight: 800,
+              borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)',
+              color: '#6366f1',
+              background: 'var(--adm-soft-indigo-bg, #eef2ff)',
+            }}
+            onClick={() =>
+              selectedCustomerObj
+                ? navigateToCustomerLeadPage(selectedCustomerObj, 'history', 'leads')
+                : setFilter('accounts')
+            }
+          >
+            <Layers size={15} /> {selectedCustomerObj ? 'Assigned Leads Page' : 'Assign by Client Account'}
+          </button>
           <button
             type="button"
             className="sales-btn-primary"
@@ -2361,7 +2421,11 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
               gap: 7,
               fontWeight: 700
             }}
-            onClick={handleOpenAddLead}
+            onClick={() =>
+              selectedCustomerObj
+                ? navigateToCustomerLeadPage(selectedCustomerObj, 'add', 'leads')
+                : handleOpenAddLead()
+            }
           >
             <Plus size={16} strokeWidth={2.5} /> Add Lead
           </button>
@@ -3174,10 +3238,230 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
           <button type="button" className={`desk-tab ${filter === 'qualified' ? 'active' : ''}`} onClick={() => setFilter('qualified')}>
             Qualified ({qualifiedCount})
           </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'accounts' ? 'active' : ''}`}
+            onClick={() => setFilter('accounts')}
+            style={
+              filter === 'accounts'
+                ? { background: '#4f46e5', borderColor: '#4f46e5', color: '#ffffff', fontWeight: 800 }
+                : { color: '#6366f1', borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)', fontWeight: 800 }
+            }
+          >
+            🏢 Client Accounts ({customerFilterOptions.length})
+          </button>
         </div>
       </div>
 
-      {/* Leads SmartTable */}
+      {filter === 'accounts' ? (
+        /* Client Accounts Direct Lead Assignment & Assigned History Table */
+        <div className="desk-table-card">
+          <SmartTable
+            title="Client Accounts — Direct Lead Dispatch & Assigned History"
+            defaultPageSize={15}
+            exportFilename="sales-client-lead-accounts"
+          >
+            <table className="desk-table">
+              <thead>
+                <tr>
+                  <th>Client Account &amp; Workspace</th>
+                  <th>Client Contact</th>
+                  <th>Wallet Balance</th>
+                  <th>Leads Assigned Till Yet</th>
+                  <th style={{ textAlign: 'right' }}>Direct Lead Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const q = search.toLowerCase().trim();
+                  const accountRows = customerFilterOptions.filter((opt) => {
+                    if (selectedCustomerId !== 'all' && String(opt.key) !== String(selectedCustomerId)) return false;
+                    if (!q) return true;
+                    const c = opt.customer || {};
+                    const hay = [
+                      opt.displayName,
+                      c.companyName,
+                      c.name,
+                      c.username,
+                      c.phone,
+                      c.email,
+                      c.city,
+                      c.category,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')
+                      .toLowerCase();
+                    return hay.includes(q);
+                  });
+
+                  if (accountRows.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: '44px 24px', color: 'var(--adm-text-muted, #64748b)' }}>
+                          No client accounts match your search filter.
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return accountRows.map((opt) => {
+                    const cust = opt.customer || {};
+                    const userHandle = String(cust.username || '').replace(/^@/, '').trim();
+                    const cleanCustDigits = String(cust.phone || '').replace(/\D/g, '').slice(-10);
+                    const custLeadsList = leads.filter((l) => matchLeadToCustomer(l, cust));
+                    const custReadCnt = custLeadsList.filter(isLeadRead).length;
+                    const custUnreadCnt = custLeadsList.length - custReadCnt;
+                    const bal = Number(cust.balance ?? cust.walletBalance ?? cust.wallet_balance ?? 0);
+
+                    return (
+                      <tr key={opt.key}>
+                        <td>
+                          <a
+                            href={buildCustomerLeadHref(cust, 'history', 'leads')}
+                            onClick={(e) => navigateToCustomerLeadPage(cust, 'history', 'leads', e)}
+                            style={{
+                              fontWeight: 800,
+                              fontSize: '0.94rem',
+                              color: 'var(--adm-soft-blue-text, #1e3a8a)',
+                              textDecoration: 'none',
+                            }}
+                          >
+                            🏢 {opt.displayName}
+                          </a>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                            {userHandle && (
+                              <span
+                                style={{
+                                  fontSize: '0.73rem',
+                                  fontWeight: 700,
+                                  color: '#6366f1',
+                                  background: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                                  border: '1px solid var(--adm-soft-indigo-border, #c7d2fe)',
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                }}
+                              >
+                                @{userHandle}
+                              </span>
+                            )}
+                            {cust.category && (
+                              <span
+                                style={{
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  color: 'var(--adm-text-body, #475569)',
+                                  background: 'var(--adm-bg-muted, #f1f5f9)',
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                }}
+                              >
+                                {cust.category}
+                              </span>
+                            )}
+                            {cust.city && (
+                              <span style={{ fontSize: '0.73rem', color: 'var(--adm-text-muted, #64748b)' }}>
+                                • {cust.city}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td>
+                          {cleanCustDigits ? (
+                            <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
+                              +91 {cleanCustDigits}
+                            </div>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>—</span>
+                          )}
+                          {cust.email && (
+                            <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
+                              {cust.email}
+                            </div>
+                          )}
+                        </td>
+
+                        <td>
+                          <div style={{ fontWeight: 800, color: bal > 0 ? '#059669' : '#e11d48', fontSize: '0.9rem' }}>
+                            ₹{bal.toLocaleString('en-IN')}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>
+                            {bal > 0 ? 'Funded ✓' : 'Low / Unfunded'}
+                          </div>
+                        </td>
+
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span className="desk-pill pill-indigo" style={{ fontWeight: 800 }}>
+                              {custLeadsList.length} Total Assigned
+                            </span>
+                            {custReadCnt > 0 && (
+                              <span className="desk-pill pill-emerald" style={{ fontWeight: 800, fontSize: '0.72rem' }}>
+                                ✓ {custReadCnt} Read
+                              </span>
+                            )}
+                            {custUnreadCnt > 0 && (
+                              <span className="desk-pill pill-amber" style={{ fontWeight: 800, fontSize: '0.72rem' }}>
+                                ⏳ {custUnreadCnt} Unread
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                            <a
+                              href={buildCustomerLeadHref(cust, 'add', 'leads')}
+                              onClick={(e) => navigateToCustomerLeadPage(cust, 'add', 'leads', e)}
+                              className="desk-action-btn"
+                              style={{
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                padding: '6px 12px',
+                                fontSize: '0.78rem',
+                                fontWeight: 800,
+                                background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                                color: '#ffffff',
+                                borderColor: '#059669',
+                              }}
+                              title={`Add lead directly to ${opt.displayName} in dedicated page`}
+                            >
+                              <Plus size={13} strokeWidth={2.6} /> Add Lead
+                            </a>
+                            <a
+                              href={buildCustomerLeadHref(cust, 'history', 'leads')}
+                              onClick={(e) => navigateToCustomerLeadPage(cust, 'history', 'leads', e)}
+                              className="desk-action-btn"
+                              style={{
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                padding: '6px 12px',
+                                fontSize: '0.78rem',
+                                fontWeight: 800,
+                                background: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                                color: 'var(--adm-soft-indigo-text, #4f46e5)',
+                                borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)',
+                              }}
+                              title={`See all ${custLeadsList.length} leads assigned till yet to ${opt.displayName}`}
+                            >
+                              <Layers size={13} /> Assigned Leads ({custLeadsList.length})
+                            </a>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </SmartTable>
+        </div>
+      ) : (
+      /* Leads SmartTable */
       <div className="desk-table-card">
         <SmartTable title="Inbound Leads" defaultPageSize={15} exportFilename="sales-inbound-leads">
           <table className="desk-table">
@@ -3245,6 +3529,9 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                     ? String(matchedCust.phone).replace(/\D/g, '').slice(-10)
                     : (lead.customerPhone ? String(lead.customerPhone).replace(/\D/g, '').slice(-10) : '');
                   const customerUser = String(matchedCust?.username || lead.customerUsername || '').replace(/^@/, '').trim();
+                  const userAssignedCount = matchedCust
+                    ? leads.filter((item) => matchLeadToCustomer(item, matchedCust)).length
+                    : 1;
                   const isRead = isLeadRead(lead);
                   const rawTimestamp = lead.createdAt || lead.time || '';
 
@@ -3282,8 +3569,20 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
 
                       {/* 2. Assigned Client Account */}
                       <td>
-                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--adm-soft-blue-text, #1e3a8a)' }}>
-                          🏢 {customerName}
+                        <div>
+                          <a
+                            href={buildCustomerLeadHref(matchedCust, 'history', 'leads')}
+                            onClick={(e) => navigateToCustomerLeadPage(matchedCust, 'history', 'leads', e)}
+                            style={{
+                              fontWeight: 800,
+                              fontSize: '0.92rem',
+                              color: 'var(--adm-soft-blue-text, #1e3a8a)',
+                              textDecoration: 'none',
+                            }}
+                            title={`View all ${userAssignedCount} leads assigned to ${customerName}`}
+                          >
+                            🏢 {customerName}
+                          </a>
                         </div>
                         {customerUser && (
                           <div style={{ marginTop: 3 }}>
@@ -3351,9 +3650,49 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                         </span>
                       </td>
 
-                      {/* 6. Actions */}
+                      {/* 6. Actions (Direct User Lead Assignment + Assigned Leads History + Buyer Contact) */}
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <a
+                            href={buildCustomerLeadHref(matchedCust, 'add', 'leads')}
+                            onClick={(e) => navigateToCustomerLeadPage(matchedCust, 'add', 'leads', e)}
+                            className="desk-action-btn"
+                            style={{
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '6px 11px',
+                              fontSize: '0.76rem',
+                              fontWeight: 800,
+                              background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                              color: '#ffffff',
+                              borderColor: '#059669',
+                            }}
+                            title={`Add lead directly to ${customerName} (opens dedicated page)`}
+                          >
+                            <Plus size={13} strokeWidth={2.6} /> Add Lead
+                          </a>
+                          <a
+                            href={buildCustomerLeadHref(matchedCust, 'history', 'leads')}
+                            onClick={(e) => navigateToCustomerLeadPage(matchedCust, 'history', 'leads', e)}
+                            className="desk-action-btn"
+                            style={{
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '6px 11px',
+                              fontSize: '0.76rem',
+                              fontWeight: 800,
+                              background: 'var(--adm-soft-indigo-bg, #eef2ff)',
+                              color: 'var(--adm-soft-indigo-text, #4f46e5)',
+                              borderColor: 'var(--adm-soft-indigo-border, #c7d2fe)',
+                            }}
+                            title={`See all ${userAssignedCount} leads assigned till yet to ${customerName}`}
+                          >
+                            <Layers size={13} /> Assigned Leads ({userAssignedCount})
+                          </a>
                           <a
                             href={`tel:${callDigits}`}
                             className="desk-action-btn"
@@ -3362,8 +3701,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 5,
-                              padding: '6px 12px',
-                              fontSize: '0.78rem',
+                              padding: '6px 11px',
+                              fontSize: '0.76rem',
                               fontWeight: 700,
                             }}
                           >
@@ -3379,8 +3718,8 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 5,
-                              padding: '6px 12px',
-                              fontSize: '0.78rem',
+                              padding: '6px 11px',
+                              fontSize: '0.76rem',
                               fontWeight: 700,
                               background: 'var(--adm-soft-emerald-bg, #ecfdf5)',
                               color: 'var(--adm-soft-emerald-text, #065f46)',
@@ -3399,6 +3738,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
           </table>
         </SmartTable>
       </div>
+      )}
 
       {/* ADD LEAD MODAL IN LEAD MANAGEMENT DESK */}
       {isAddLeadModalOpen && (
@@ -7559,6 +7899,32 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                       {/* 4. Operations Actions (Top-Up Removed) */}
                       <td className="appr-actions-cell">
                         <div className="appr-actions-wrap">
+                          <a
+                            href={buildCustomerLeadHref(m, 'add', 'approved')}
+                            onClick={(e) => navigateToCustomerLeadPage(m, 'add', 'approved', e)}
+                            className="appr-action-btn"
+                            style={{
+                              background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                              color: '#ffffff',
+                              borderColor: '#059669',
+                              fontWeight: 800,
+                              textDecoration: 'none',
+                            }}
+                            title="Add lead directly to this approved member"
+                          >
+                            <Plus size={13} strokeWidth={2.5} />
+                            <span>Add Lead</span>
+                          </a>
+                          <a
+                            href={buildCustomerLeadHref(m, 'history', 'approved')}
+                            onClick={(e) => navigateToCustomerLeadPage(m, 'history', 'approved', e)}
+                            className="appr-action-btn appr-action-profile"
+                            style={{ textDecoration: 'none' }}
+                            title="View all leads assigned till yet to this member"
+                          >
+                            <Layers size={13} />
+                            <span>Assigned Leads</span>
+                          </a>
                           <a
                             href={`tel:${cleanPhone}`}
                             className="appr-action-btn appr-action-call"

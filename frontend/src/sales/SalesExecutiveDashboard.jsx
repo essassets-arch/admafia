@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import BalanceLogsDesk from './BalanceLogsDesk';
+import CustomerLeadWorkspacePage from './CustomerLeadWorkspacePage';
 import NotificationBell from '../components/NotificationBell';
 import AdminThemeToggle from '../components/AdminThemeToggle';
 import { useAdminTheme } from '../utils/adminTheme';
@@ -175,6 +176,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
     try {
       const h = (window.location.hash || '').toLowerCase();
       const p = (window.location.pathname || '').toLowerCase();
+      if (h.startsWith('#customer-leads') || p.includes('/customer-leads')) return 'customer_leads';
       if (h.includes('balance') || p.includes('balance')) return 'balance_logs';
       if (h.includes('transaction') || p.includes('transaction') || h.includes('log') || p.includes('log')) return 'transactions';
       if (h.includes('approved') || h.includes('member')) return 'approved';
@@ -726,7 +728,7 @@ return (
         {/* 3. Lead Management */}
         <button
           type="button"
-          className={`sales-nav-btn ${activeTab === 'leads' ? 'active' : ''}`}
+          className={`sales-nav-btn ${activeTab === 'leads' || activeTab === 'customer_leads' ? 'active' : ''}`}
           onClick={() => navigateToDesk('leads', '#leads')}
         >
           <Layers size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
@@ -1065,6 +1067,13 @@ return (
         )}
 
         {activeTab === 'leads' && <LeadManagementDesk customers={customers} />}
+
+        {activeTab === 'customer_leads' && (
+          <CustomerLeadWorkspacePage
+            customers={customers}
+            navigateToDesk={navigateToDesk}
+          />
+        )}
 
         {activeTab === 'profiles' && (
           <ProfileCompletionDesk
