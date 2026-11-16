@@ -147,8 +147,8 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
   // Pre-fill city & category defaults whenever target customer resolves
   useEffect(() => {
     if (targetCustomer) {
-      setCity((prev) => prev || targetCustomer.city || '');
-      setCategory((prev) => prev || targetCustomer.category || 'IT & Software');
+      setCity(targetCustomer.city || '');
+      setCategory(targetCustomer.category || '');
     }
   }, [targetCustomer?.id, targetCustomer?.phone]);
 
@@ -283,7 +283,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
     const resolvedBuyerName = buyerName.trim() || formattedPhone;
     const resolvedReq = requirement.trim() || `Verified Business Enquiry for ${companyDisplay}`;
     const resolvedCity = city.trim() || targetCustomer.city || '';
-    const resolvedCat = category.trim() || targetCustomer.category || 'IT & Software';
+    const resolvedCat = category.trim() || targetCustomer.category || 'Other';
     const leadId = `lead_${Date.now()}`;
 
     try {
