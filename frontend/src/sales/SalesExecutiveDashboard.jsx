@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Sparkles,
   LayoutDashboard,
+  Calendar,
   Clock,
   UserCheck,
   UserPlus,
@@ -19,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
+import SalesActiveScheduleDesk from './SalesActiveScheduleDesk';
 import BalanceLogsDesk from './BalanceLogsDesk';
 import CustomerLeadWorkspacePage from './CustomerLeadWorkspacePage';
 import SalesRegisterCustomerModal from './SalesRegisterCustomerModal';
@@ -193,6 +195,11 @@ function resolveRouteState(rawHashInput, rawPathInput) {
     // 1. Dedicated per-customer lead workspace drill-down (#customer-leads?customer=...)
     if (h.startsWith('#customer-leads') || h.includes('customer_leads') || p.includes('/customer-leads')) {
       return { ...defaults, activeTab: 'leads', leadsSubTab: 'customer_leads' };
+    }
+
+    // 1B. Active Leads Delivery Schedule (#active-schedule / #schedule)
+    if (h.includes('schedule') || p.includes('schedule')) {
+      return { ...defaults, activeTab: 'active_schedule' };
     }
 
     // 2. CRITICAL: Check 'fail' BEFORE 'transaction' so #failed-transactions routes to Failed Recovery!
@@ -751,6 +758,16 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             <span>Overview</span>
           </button>
 
+          {/* 1B. Active Delivery Schedule (Today / Tomorrow / Upcoming Clients & Budgets) */}
+          <button
+            type="button"
+            className={`sales-nav-btn ${activeTab === 'active_schedule' ? 'active' : ''}`}
+            onClick={() => navigateToDesk('active_schedule', '#active-schedule')}
+          >
+            <Calendar size={18} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+            <span>Active Schedule</span>
+          </button>
+
           {/* 2. Customers & Wallets */}
           <button
             type="button"
@@ -1025,6 +1042,11 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
                 updateBalanceLogsCount();
               }}
             />
+          )}
+
+          {/* WORKSPACE 1B: ACTIVE DELIVERY SCHEDULE */}
+          {activeTab === 'active_schedule' && (
+            <SalesActiveScheduleDesk customers={customers} setCustomers={setCustomers} />
           )}
 
           {/* WORKSPACE 2: CUSTOMERS & WALLETS */}

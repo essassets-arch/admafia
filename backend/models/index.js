@@ -8,7 +8,8 @@ export {
   RefundRequest,
   TopupRequest,
   DeletedFailedTransaction,
-  RazorpayOrder
+  RazorpayOrder,
+  DailyAdSpendLog
 } from './Finance.js';
 export {
   MasterLead,

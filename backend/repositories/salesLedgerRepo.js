@@ -14,6 +14,7 @@ import {
   TopupRequest,
   DeletedFailedTransaction,
   RazorpayOrder,
+  DailyAdSpendLog,
   MasterLead,
   Lead,
   LeadAssignment,
@@ -720,8 +721,16 @@ export async function applyCustomerRecordUpdate(
 }
 
 /** Wallet settings update (daily spend, campaign flag, schedule, explicit admin balance override). */
-export async function applyWalletSettings(customerId, { dailyAdSpend, adCampaignActive, activeDays, schedulePreset, balance }) {
-  const $set = { dailyAdSpend, adCampaignActive, activeDays, schedulePreset, updatedAt: new Date() };
+export async function applyWalletSettings(
+  customerId,
+  { dailyAdSpend, adCampaignActive, activeDays, scheduledDates, schedulePreset, balance }
+) {
+  const now = new Date();
+  const $set = { dailyAdSpend, adCampaignActive, activeDays, schedulePreset, updatedAt: now };
+  if (Array.isArray(scheduledDates)) {
+    $set.scheduledDates = scheduledDates;
+    $set.lastScheduleUpdatedAt = now;
+  }
   // Only an explicit admin balance override touches availableBalance; otherwise we never write it
   // back, so a concurrent top-up/deduction can never be clobbered by a stale read.
   if (balance !== undefined) $set.availableBalance = balance;
@@ -809,6 +818,7 @@ export async function deleteCustomerCascade(custId, custPhone) {
     const rIdea = await MarketingIdea.deleteMany({ customerId: { $in: targetIds } }, opts);
     const rVerif = await PendingVerification.deleteMany(idOrPhone('phone'), opts);
     const rWtx = await WalletTransaction.deleteMany({ customerId: { $in: targetIds } }, opts);
+    const rSpend = await DailyAdSpendLog.deleteMany({ customerId: { $in: targetIds } }, opts);
     const rPay = await PaymentRecord.deleteMany(idOrPhone('phone'), opts);
     const rRzpOrders = await RazorpayOrder.deleteMany(idOrPhone('phone'), opts);
     const rInv = await TaxInvoice.deleteMany({ customerId: { $in: targetIds } }, opts);

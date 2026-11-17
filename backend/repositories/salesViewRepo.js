@@ -90,6 +90,8 @@ export function buildCustomerViewRow(c, w, leadCount = 0) {
     total_ad_spent: num(w?.totalAdSpent, 0),
     ad_campaign_active: Boolean(w?.adCampaignActive),
     active_days: joinList(w?.activeDays),
+    scheduled_dates: joinList(w?.scheduledDates),
+    last_schedule_updated_at: w?.lastScheduleUpdatedAt ?? null,
     schedule_preset: w?.schedulePreset || 'custom',
     last_deducted_at: w?.lastDeductedAt ?? null,
     booked_dates: joinList(w?.bookedDates),

@@ -58,6 +58,16 @@ export const graphicsApi = {
       body: JSON.stringify({ base64Data, filename, contentType }),
     }),
 
+  // Start Production (Stamp SLA designStartedAt)
+  startDesignProduction: (postId, designerName = 'Graphics Designer') =>
+    request(`/graphics/requests/${encodeURIComponent(postId)}/start`, {
+      method: 'PATCH',
+      body: JSON.stringify({ designerName }),
+    }),
+
+  // Cross-department SLA Bottlenecks
+  getSlaBottlenecks: () => request('/ops/sla-bottlenecks'),
+
   // Upload Finished Artwork
   uploadArtwork: (data) =>
     request('/graphics/upload', {

@@ -201,7 +201,10 @@ graphicsRouter.get('/requests', async (req, res) => {
       { $project: { revisions: 0 } },
     ]).allowDiskUse(true);
 
-    const ideas = await loadIdeasById(rows.map((r) => r.ideaId));
+    const [ideas, campaignsByPost] = await Promise.all([
+      loadIdeasById(rows.map((r) => r.ideaId)),
+      loadCampaignsByPostId(rows.map((r) => r._id)),
+    ]);
 
     res.json({
       ok: true,
@@ -210,6 +213,8 @@ graphicsRouter.get('/requests', async (req, res) => {
         const idea = (r.ideaId && ideas.get(String(r.ideaId))) || null;
         const latest = latestReviewRow(r);
         const mediaUrl = r._mediaUrl || '';
+        const linkedCamp = campaignsByPost.get(String(r._id)) || null;
+        const isLiveInCampaign = Boolean(linkedCamp && linkedCamp.status === 'Running');
         return {
           id: r._id,
           customerId: r.customerId,
@@ -239,6 +244,14 @@ graphicsRouter.get('/requests', async (req, res) => {
           revisionNumber: Number(r.currentRevisionNumber || 1),
           submittedBy: r.submittedBy ?? null,
           submittedAt: r.submittedAt ?? null,
+          requestedAt: r.requestedAt ?? r.createdAt,
+          designStartedAt: r.designStartedAt ?? null,
+          artworkUploadedAt: r.artworkUploadedAt ?? null,
+          approvedAt: r.approvedAt ?? null,
+          dueAt: r.dueAt ?? null,
+          isLiveInCampaign,
+          linkedCampaignName: linkedCamp ? (linkedCamp.campaignName || linkedCamp.name || 'Live Campaign') : null,
+          linkedCampaignStatus: linkedCamp ? linkedCamp.status : null,
           createdBy: r.createdBy ?? null,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
@@ -339,6 +352,40 @@ graphicsRouter.get('/requests/:id', async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
+// 3B. PATCH /api/graphics/requests/:id/start (Mark Request In Progress & Stamp SLA)
+// -----------------------------------------------------------------------------
+graphicsRouter.patch('/requests/:id/start', async (req, res) => {
+  try {
+    const postId = String(req.params.id || '');
+    const { designerName = 'Graphics Designer' } = req.body || {};
+    const now = new Date();
+    const post = await MarketingPost.findOneAndUpdate(
+      { _id: postId, isDeleted: { $ne: true } },
+      {
+        $set: {
+          status: 'In Progress',
+          designerName,
+          designStartedAt: now,
+          updatedAt: now,
+        },
+      },
+      { new: true }
+    ).lean();
+    if (!post) {
+      return res.status(404).json({ ok: false, error: 'Post request not found.' });
+    }
+    await logAuditEvent(post.customerId, 'graphics_start', postId, 'Started Creative Production', designerName, {
+      postId,
+      designStartedAt: now,
+    });
+    res.json({ ok: true, status: 'In Progress', designStartedAt: now });
+  } catch (err) {
+    console.error('[PATCH /api/graphics/requests/:id/start]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------------
 // 4. POST /api/graphics/upload (Upload Finished Artwork & Submit for Verification)
 // -----------------------------------------------------------------------------
 graphicsRouter.post('/upload', async (req, res) => {
@@ -394,6 +441,7 @@ graphicsRouter.post('/upload', async (req, res) => {
             status: 'Pending Verification',
             submittedBy: designerName,
             submittedAt: now,
+            artworkUploadedAt: now,
             updatedAt: now,
           },
           $push: {
@@ -525,6 +573,7 @@ graphicsRouter.post('/requests/:id/reupload', async (req, res) => {
             status: 'Pending Verification',
             submittedBy: designerName,
             submittedAt: now,
+            artworkUploadedAt: now,
             updatedAt: now,
           },
           $push: {

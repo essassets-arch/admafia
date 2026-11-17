@@ -14,6 +14,8 @@ import {
   ExternalLink,
   Layers,
   ChevronRight,
+  Clock,
+  Play,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import graphicsApi from '../services/graphicsApi';
@@ -29,8 +31,83 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 30, totalPages: 1 });
 
-  // Detail Modal
+  // Detail Modal & Same-Ticket Inline Upload State
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [inlineUploading, setInlineUploading] = useState(false);
+  const [inlineDesignerNotes, setInlineDesignerNotes] = useState('');
+
+  const handleStartProduction = async (reqItem) => {
+    try {
+      await graphicsApi.startDesignProduction(reqItem.id);
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'info',
+        title: 'Marked In Progress (SLA timer active)',
+        showConfirmButton: false,
+        timer: 1800,
+      });
+      fetchRequests(true);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Could not start production', text: err.message });
+    }
+  };
+
+  const handleInlineFileUpload = async (e, reqItem) => {
+    const file = e.target.files?.[0];
+    if (!file || !reqItem) return;
+    if (file.size > 15 * 1024 * 1024) {
+      Swal.fire({ icon: 'error', title: 'File exceeds 15MB limit.' });
+      return;
+    }
+    setInlineUploading(true);
+    try {
+      const base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const upRes = await graphicsApi.uploadMedia(base64Data, file.name, file.type);
+      if (!upRes?.ok || !upRes.url) {
+        throw new Error('Media upload failed.');
+      }
+      const mediaType = file.type.startsWith('video') ? 'video' : 'image';
+      const isReupload = ['Rejected', 'Changes Requested'].includes(reqItem.status);
+      if (isReupload) {
+        await graphicsApi.reuploadArtwork(reqItem.id, {
+          mediaUrl: upRes.url,
+          mediaType,
+          creativeFormat: reqItem.creativeFormat || 'Instagram / Facebook Post',
+          designerNotes: inlineDesignerNotes,
+          revisionSummary: inlineDesignerNotes || 'Uploaded revised creative on same request',
+        });
+      } else {
+        await graphicsApi.uploadArtwork({
+          postId: reqItem.id,
+          mediaUrl: upRes.url,
+          mediaType,
+          creativeFormat: reqItem.creativeFormat || 'Instagram / Facebook Post',
+          designerNotes: inlineDesignerNotes,
+        });
+      }
+      setInlineDesignerNotes('');
+      setSelectedRequest(null);
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Creative attached to request & sent to Marketing!',
+        showConfirmButton: false,
+        timer: 2400,
+      });
+      fetchRequests(true);
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Upload Failed', text: err.message });
+    } finally {
+      setInlineUploading(false);
+    }
+  };
 
   const fetchRequests = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -249,9 +326,38 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
                       )}
                     </td>
 
-                    {/* Status */}
+                    {/* Status & SLA Timer */}
                     <td>
-                      <div>{getStatusBadge(r.status)}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                        {r.isLiveInCampaign ? (
+                          <span className="gfx-pill gfx-pill-emerald" style={{ fontWeight: 800 }}>
+                            🚀 LIVE IN CAMPAIGN
+                          </span>
+                        ) : (
+                          getStatusBadge(r.status)
+                        )}
+
+                        {!r.mediaUrl && r.requestedAt && (() => {
+                          const waitMins = Math.max(0, Math.round((Date.now() - new Date(r.requestedAt).getTime()) / 60000));
+                          const limitMins = r.priority === 'Urgent' ? 120 : 240;
+                          const isOverdue = waitMins >= limitMins;
+                          const label = waitMins < 60 ? `${waitMins}m` : `${Math.floor(waitMins / 60)}h ${waitMins % 60}m`;
+                          return (
+                            <span
+                              style={{
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                color: isOverdue ? '#ef4444' : '#f59e0b',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                              }}
+                            >
+                              <Clock size={11} /> {isOverdue ? `🚨 Delayed (${label})` : `Waiting ${label}`}
+                            </span>
+                          );
+                        })()}
+                      </div>
                       {r.latestReview && r.status === 'Rejected' && (
                         <div style={{ fontSize: '0.72rem', color: '#f43f5e', fontWeight: 700, marginTop: 4 }}>
                           ⚠️ {r.latestReview.rejectionReason}
@@ -266,16 +372,52 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
 
                     {/* Actions */}
                     <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {r.mediaUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRequest(r)}
+                            style={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: 7,
+                              overflow: 'hidden',
+                              border: '1.5px solid #6366f1',
+                              padding: 0,
+                              background: '#0f172a',
+                              cursor: 'pointer',
+                            }}
+                            title="Preview uploaded artwork"
+                          >
+                            {r.mediaType === 'video' || /\.mp4$/i.test(r.mediaUrl) ? (
+                              <video src={r.mediaUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+                            ) : (
+                              <img src={r.mediaUrl} alt={r.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            )}
+                          </button>
+                        )}
+
+                        {['Pending Graphics', 'Draft'].includes(r.status) && !r.mediaUrl && (
+                          <button
+                            type="button"
+                            className="graphics-btn-secondary"
+                            style={{ padding: '5px 10px', fontSize: '0.76rem', fontWeight: 800 }}
+                            onClick={() => handleStartProduction(r)}
+                            title="Mark In Progress & start SLA timer"
+                          >
+                            <Play size={12} /> Start
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           className="graphics-btn-secondary"
                           style={{ padding: '5px 10px', fontSize: '0.78rem' }}
                           onClick={() => setSelectedRequest(r)}
-                          title="View Complete Marketing Brief"
+                          title="View Complete Marketing Brief & Upload Directly"
                         >
                           <Eye size={13} />
-                          <span>Brief</span>
+                          <span>Brief / Upload</span>
                         </button>
 
                         {r.isEligibleForUpload && (
@@ -409,6 +551,79 @@ export default function GraphicsPostRequestsDesk({ onNavigateToDesk }) {
                   </div>
                 </div>
               </div>
+
+              {selectedRequest.creativeInstructions && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: '0.74rem', fontWeight: 800, color: '#ec4899', textTransform: 'uppercase' }}>
+                    Visual Instructions from Marketing
+                  </label>
+                  <div
+                    style={{
+                      background: 'rgba(236, 72, 153, 0.08)',
+                      border: '1px solid rgba(236, 72, 153, 0.28)',
+                      borderRadius: 8,
+                      padding: 10,
+                      fontSize: '0.84rem',
+                      fontWeight: 600,
+                      color: 'var(--adm-text-primary, #0f172a)',
+                      marginTop: 4,
+                    }}
+                  >
+                    {selectedRequest.creativeInstructions}
+                  </div>
+                </div>
+              )}
+
+              {/* Same-Ticket Direct Creative Upload Box */}
+              {selectedRequest.isEligibleForUpload && (
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: 14,
+                    borderRadius: 10,
+                    border: '1.5px dashed #6366f1',
+                    background: 'rgba(99, 102, 241, 0.06)',
+                  }}
+                >
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#6366f1', marginBottom: 8 }}>
+                    ⚡ Attach Finished Creative Directly Onto This Request (Visible Instantly to Marketing)
+                  </div>
+                  <input
+                    type="text"
+                    className="graphics-search-input"
+                    style={{ width: '100%', marginBottom: 8, padding: '7px 10px' }}
+                    placeholder="Optional designer note (e.g. High-contrast Surat offer creative)..."
+                    value={inlineDesignerNotes}
+                    onChange={(e) => setInlineDesignerNotes(e.target.value)}
+                  />
+                  <label
+                    className="graphics-btn-primary"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      cursor: inlineUploading ? 'wait' : 'pointer',
+                      padding: '8px 14px',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                    }}
+                  >
+                    <UploadCloud size={15} />
+                    <span>
+                      {inlineUploading
+                        ? 'Uploading & Sending to Marketing...'
+                        : 'Select Image / MP4 to Attach Now'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif,video/mp4"
+                      disabled={inlineUploading}
+                      style={{ display: 'none' }}
+                      onChange={(e) => handleInlineFileUpload(e, selectedRequest)}
+                    />
+                  </label>
+                </div>
+              )}
 
               {/* Artwork Preview if already exists */}
               {selectedRequest.mediaUrl && (

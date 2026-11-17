@@ -12,6 +12,8 @@ import {
   Eye,
   AlertCircle,
   HelpCircle,
+  Palette,
+  Clock,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
@@ -66,8 +68,12 @@ export default function CreatePostIdeasDesk({
   const [mediaUrl, setMediaUrl] = useState('');
   const [mediaType, setMediaType] = useState('image');
   const [language, setLanguage] = useState('English / Hinglish');
+  const [creativeFormat, setCreativeFormat] = useState('Instagram / Facebook Post (1:1)');
+  const [priority, setPriority] = useState('Normal');
+  const [creativeInstructions, setCreativeInstructions] = useState('');
   const [campaignAssociation, setCampaignAssociation] = useState('');
   const [intendedPublishAt, setIntendedPublishAt] = useState('');
+  const [previewLightbox, setPreviewLightbox] = useState(null);
 
   // Status & Loaders
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -232,8 +238,8 @@ export default function CreatePostIdeasDesk({
       Swal.fire({ icon: 'warning', title: 'Please enter a post title.' });
       return;
     }
-    if (!caption.trim()) {
-      Swal.fire({ icon: 'warning', title: 'Please enter the post caption / copy.' });
+    if (!caption.trim() && !creativeInstructions.trim()) {
+      Swal.fire({ icon: 'warning', title: 'Please enter the post caption / copy or designer instructions.' });
       return;
     }
 
@@ -256,11 +262,14 @@ export default function CreatePostIdeasDesk({
         ideaId: selectedIdeaId || null,
         title,
         platform,
-        caption,
+        caption: caption.trim() || creativeInstructions.trim(),
         hashtags,
         callToAction,
         mediaUrl,
         mediaType,
+        creativeFormat,
+        priority,
+        creativeInstructions,
         language,
         campaignAssociation,
         intendedPublishAt: intendedPublishAt || null,
@@ -271,8 +280,16 @@ export default function CreatePostIdeasDesk({
       if (res && res.ok) {
         await Swal.fire({
           icon: 'success',
-          title: targetStatus === 'Pending Verification' ? 'Submitted for Verification!' : 'Draft Saved!',
-          text: res.message || 'Post operation succeeded.',
+          title:
+            targetStatus === 'Pending Graphics'
+              ? 'Sent to Graphics Studio! 🎨'
+              : targetStatus === 'Pending Verification'
+                ? 'Submitted for Verification!'
+                : 'Draft Saved!',
+          text:
+            targetStatus === 'Pending Graphics'
+              ? 'Graphics team has received your brief and will upload the creative onto this exact request.'
+              : res.message || 'Post operation succeeded.',
           confirmButtonColor: '#4f46e5',
         });
 
@@ -281,6 +298,7 @@ export default function CreatePostIdeasDesk({
         setCaption('');
         setHashtags('');
         setMediaUrl('');
+        setCreativeInstructions('');
         setSelectedIdeaId('');
 
         // Refresh recent posts
@@ -528,8 +546,59 @@ export default function CreatePostIdeasDesk({
             </div>
           </div>
 
+          {/* Closed-Loop Graphics Brief Spec (Format, Priority & Designer Instructions) */}
+          <div
+            style={{
+              background: 'var(--adm-bg-subtle, #f8fafc)',
+              border: '1px solid var(--adm-border, #e2e8f0)',
+              borderRadius: 12,
+              padding: '14px 16px',
+              marginTop: 12,
+            }}
+          >
+            <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#6366f1', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Palette size={14} /> Graphics Handoff Brief (When Requesting Artwork from Graphics)
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 10 }}>
+              <div>
+                <label className="mkt-form-label">Creative Format</label>
+                <select
+                  className="mkt-form-input"
+                  value={creativeFormat}
+                  onChange={(e) => setCreativeFormat(e.target.value)}
+                >
+                  <option value="Instagram / Facebook Post (1:1)">1:1 Feed Square (1080×1080)</option>
+                  <option value="Portrait Feed (4:5)">4:5 Portrait Feed (1080×1350)</option>
+                  <option value="Story / Reel Vertical (9:16)">9:16 Story / Reel (1080×1920)</option>
+                  <option value="MP4 Motion / Video Ad">MP4 Motion / Video Ad</option>
+                </select>
+              </div>
+              <div>
+                <label className="mkt-form-label">Turnaround Priority</label>
+                <select
+                  className="mkt-form-input"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                >
+                  <option value="Normal">Normal (4h Target)</option>
+                  <option value="Urgent">🔥 Urgent — Needed Today (2h Target)</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="mkt-form-label">Designer Visual Instructions (Optional)</label>
+              <input
+                type="text"
+                className="mkt-form-input"
+                placeholder="e.g. Bold offer badge in yellow, show Surat city tag & luxury building background..."
+                value={creativeInstructions}
+                onChange={(e) => setCreativeInstructions(e.target.value)}
+              />
+            </div>
+          </div>
+
           {/* Action Row */}
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '16px' }}>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: '16px' }}>
             <button
               type="button"
               className="mkt-btn-table-action"
@@ -542,11 +611,25 @@ export default function CreatePostIdeasDesk({
             <button
               type="button"
               className="marketing-btn-primary"
+              style={{
+                background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                borderColor: '#db2777',
+              }}
+              onClick={() => handleSaveOrSubmit('Pending Graphics')}
+              disabled={submitting}
+              title="Send brief to Graphics Studio — Graphics will upload finished image onto this exact request"
+            >
+              <Palette size={14} />
+              <span>{submitting ? 'Sending...' : 'Request Creative from Graphics'}</span>
+            </button>
+            <button
+              type="button"
+              className="marketing-btn-primary"
               onClick={() => handleSaveOrSubmit('Pending Verification')}
               disabled={submitting}
             >
               <Send size={14} />
-              <span>{submitting ? 'Submitting...' : 'Submit for Verification'}</span>
+              <span>{submitting ? 'Submitting...' : 'Submit Uploaded Creative'}</span>
             </button>
           </div>
         </div>
@@ -641,16 +724,17 @@ export default function CreatePostIdeasDesk({
           <table className="marketing-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th>Post Title</th>
+                <th>Creative Preview &amp; Title</th>
                 <th>Format / Platform</th>
-                <th>Created</th>
-                <th>Status</th>
+                <th>Requested / Turnaround</th>
+                <th>Pipeline &amp; Campaign Usage</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loadingPosts ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px', color: 'var(--adm-text-muted, #64748b)' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '28px', color: 'var(--adm-text-muted, #64748b)' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                       <RefreshCw size={16} className="spin" />
                       <span>Loading posts...</span>
@@ -659,25 +743,80 @@ export default function CreatePostIdeasDesk({
                 </tr>
               ) : recentPosts.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '28px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.84rem' }}>
-                    No posts created yet for this customer.
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '28px', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.84rem' }}>
+                    No posts or Graphics requests created yet for this customer.
                   </td>
                 </tr>
               ) : (
                 recentPosts.map((p, idx) => {
-                  const rawDate = p.createdAt || p.created_at || p.submittedAt || p.updatedAt;
+                  const rawDate = p.requestedAt || p.createdAt || p.created_at || p.submittedAt || p.updatedAt;
                   const parsedDate = rawDate ? new Date(rawDate) : null;
                   const validDate = parsedDate && !Number.isNaN(parsedDate.getTime());
                   const formatTag = p.creativeFormat || p.creative_format || p.mediaType || p.media_type;
+                  const artUrl = p.mediaUrl || p.media_url || '';
+                  const waitMins = validDate ? Math.max(0, Math.round((Date.now() - parsedDate.getTime()) / 60000)) : 0;
+                  const waitStr = waitMins < 60 ? `${waitMins}m ago` : `${Math.floor(waitMins / 60)}h ${waitMins % 60}m ago`;
 
                   return (
                     <tr key={p.id || idx}>
                       <td>
-                        <strong style={{ fontSize: '0.86rem', color: 'var(--adm-text-primary, #0f172a)' }}>
-                          {p.title || 'Untitled Post'}
-                        </strong>
-                        <div className="mkt-cell-sub" style={{ fontFamily: 'monospace', fontSize: '0.74rem' }}>
-                          ID: {p.id}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {artUrl ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewLightbox({
+                                  url: artUrl,
+                                  title: p.title,
+                                  mediaType: p.mediaType,
+                                })
+                              }
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 8,
+                                overflow: 'hidden',
+                                border: '1.5px solid #6366f1',
+                                padding: 0,
+                                background: '#0f172a',
+                                cursor: 'pointer',
+                                flexShrink: 0,
+                              }}
+                              title="Click to inspect full creative uploaded by Graphics"
+                            >
+                              {p.mediaType === 'video' || /\.mp4$/i.test(artUrl) ? (
+                                <video src={artUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+                              ) : (
+                                <img src={artUrl} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              )}
+                            </button>
+                          ) : (
+                            <div
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 8,
+                                border: '1px dashed var(--adm-border-strong, #cbd5e1)',
+                                display: 'grid',
+                                placeItems: 'center',
+                                color: '#94a3b8',
+                                flexShrink: 0,
+                              }}
+                              title="Awaiting Graphics artwork upload"
+                            >
+                              <Palette size={17} />
+                            </div>
+                          )}
+                          <div>
+                            <strong style={{ fontSize: '0.88rem', color: 'var(--adm-text-primary, #0f172a)' }}>
+                              {p.title || 'Untitled Post'}
+                            </strong>
+                            <div className="mkt-cell-sub" style={{ fontSize: '0.73rem' }}>
+                              {artUrl
+                                ? `✓ Uploaded${p.designerName ? ` by ${p.designerName}` : ''} (Rev #${p.revisionNumber || 1})`
+                                : '⏳ Waiting for Graphics upload'}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td>
@@ -686,42 +825,121 @@ export default function CreatePostIdeasDesk({
                             {p.platform || 'Meta Ads'}
                           </span>
                           {formatTag && (
-                            <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
-                              {formatTag}
+                            <span style={{ fontSize: '0.73rem', color: 'var(--adm-text-muted, #64748b)' }}>
+                              {formatTag} {p.priority === 'Urgent' ? '• 🔥 Urgent' : ''}
                             </span>
                           )}
                         </div>
                       </td>
                       <td>
                         {validDate ? (
-                          <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)' }}>
-                            {parsedDate.toLocaleDateString('en-IN', {
-                              timeZone: 'Asia/Kolkata',
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                            })}
-                          </span>
+                          <div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-body, #475569)', fontWeight: 700 }}>
+                              {parsedDate.toLocaleDateString('en-IN', {
+                                timeZone: 'Asia/Kolkata',
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              })}
+                            </div>
+                            {!artUrl && (
+                              <div style={{ fontSize: '0.71rem', color: waitMins > 240 ? '#ef4444' : '#d97706', fontWeight: 700, marginTop: 2 }}>
+                                <Clock size={11} style={{ verticalAlign: 'middle' }} /> {waitStr}
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted, #94a3b8)' }}>—</span>
                         )}
                       </td>
                       <td>
-                        <span
-                          className={`mkt-pill ${
-                            p.status === 'Approved'
-                              ? 'mkt-pill-green'
-                              : p.status === 'Pending Verification'
-                              ? 'mkt-pill-blue'
-                              : p.status === 'Changes Requested'
-                              ? 'mkt-pill-amber'
-                              : p.status === 'Rejected'
-                              ? 'mkt-pill-rose'
-                              : 'mkt-pill-slate'
-                          }`}
-                        >
-                          {p.status || 'Draft'}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                          {p.isLiveInCampaign ? (
+                            <span
+                              style={{
+                                background: 'rgba(16, 185, 129, 0.16)',
+                                color: '#059669',
+                                border: '1px solid rgba(16, 185, 129, 0.38)',
+                                padding: '3px 9px',
+                                borderRadius: 999,
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                              }}
+                            >
+                              🚀 LIVE IN CAMPAIGN ({p.linkedCampaignName || 'Active'})
+                            </span>
+                          ) : (
+                            <span
+                              className={`mkt-pill ${
+                                p.status === 'Approved'
+                                  ? 'mkt-pill-green'
+                                  : p.status === 'Pending Verification'
+                                    ? 'mkt-pill-blue'
+                                    : p.status === 'Pending Graphics' || p.status === 'In Progress'
+                                      ? 'mkt-pill-amber'
+                                      : p.status === 'Changes Requested' || p.status === 'Rejected'
+                                        ? 'mkt-pill-rose'
+                                        : 'mkt-pill-slate'
+                              }`}
+                            >
+                              {p.status === 'Approved'
+                                ? '✅ Approved — Ready to Use'
+                                : p.status === 'Pending Verification'
+                                  ? '⏳ Graphics Uploaded — Verify!'
+                                  : p.status === 'Pending Graphics'
+                                    ? '🎨 Sent to Graphics'
+                                    : p.status || 'Draft'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {artUrl && (
+                            <button
+                              type="button"
+                              className="mkt-btn-table-action"
+                              onClick={() =>
+                                setPreviewLightbox({
+                                  url: artUrl,
+                                  title: p.title,
+                                  mediaType: p.mediaType,
+                                })
+                              }
+                            >
+                              <Eye size={13} /> Preview
+                            </button>
+                          )}
+                          {p.status === 'Pending Verification' && artUrl && (
+                            <button
+                              type="button"
+                              className="mkt-btn-table-action success"
+                              onClick={async () => {
+                                try {
+                                  await marketingApi.reviewPost(p.id, {
+                                    decision: 'Approved',
+                                    expectedRevisionNumber: p.revisionNumber || 1,
+                                    remarks: 'Approved directly from Creative Studio',
+                                  });
+                                  Swal.fire({
+                                    toast: true,
+                                    position: 'top-end',
+                                    icon: 'success',
+                                    title: 'Creative Approved & Ready for Campaign!',
+                                    showConfirmButton: false,
+                                    timer: 2000,
+                                  });
+                                  fetchCustomerScopedData(selectedCustomerId);
+                                } catch (err) {
+                                  Swal.fire({ icon: 'error', title: 'Review Error', text: err.message });
+                                }
+                              }}
+                              style={{ fontWeight: 800 }}
+                            >
+                              <CheckCircle2 size={13} /> Approve
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -731,6 +949,44 @@ export default function CreatePostIdeasDesk({
           </table>
         </SmartTable>
       </div>
+
+      {/* Lightbox Modal for Graphics Uploaded Creative */}
+      {previewLightbox && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 6, 23, 0.75)',
+            zIndex: 9999,
+            display: 'grid',
+            placeItems: 'center',
+            padding: 16,
+          }}
+          onClick={() => setPreviewLightbox(null)}
+        >
+          <div
+            className="marketing-table-card"
+            style={{ maxWidth: 540, width: '100%', padding: 18 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <strong>{previewLightbox.title}</strong>
+              <button type="button" className="mkt-btn-table-action" onClick={() => setPreviewLightbox(null)}>
+                ✕
+              </button>
+            </div>
+            {previewLightbox.mediaType === 'video' || /\.mp4$/i.test(previewLightbox.url) ? (
+              <video src={previewLightbox.url} controls style={{ width: '100%', borderRadius: 10, maxHeight: '72vh' }} />
+            ) : (
+              <img
+                src={previewLightbox.url}
+                alt={previewLightbox.title}
+                style={{ width: '100%', borderRadius: 10, maxHeight: '72vh', objectFit: 'contain' }}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   X,
 } from 'lucide-react';
 import MarketingCustomersDesk from './MarketingCustomersDesk';
+import MarketingActiveScheduleDesk from './MarketingActiveScheduleDesk';
 import BuildIdeasDesk from './BuildIdeasDesk';
 import CreatePostIdeasDesk from './CreatePostIdeasDesk';
 import VerifyPostsDesk from './VerifyPostsDesk';
@@ -20,6 +21,7 @@ import AdminThemeToggle from '../components/AdminThemeToggle';
 import './marketing.css';
 
 const DESK_TO_STUDIO = {
+  active_schedule: 'campaigns_hub',
   customer_marketing: 'campaigns_hub',
   customers: 'campaigns_hub',
   verify_posts: 'content_studio',
@@ -28,22 +30,22 @@ const DESK_TO_STUDIO = {
 };
 
 const DEFAULT_STUDIO_SUBTAB = {
-  campaigns_hub: 'customer_marketing',
+  campaigns_hub: 'active_schedule',
   content_studio: 'verify_posts',
 };
 
 function normalizeMarketingDeskKey(rawKey) {
-  if (!rawKey) return 'customer_marketing';
+  if (!rawKey) return 'active_schedule';
   const k = String(rawKey).trim().toLowerCase().replace(/-/g, '_');
 
-  if (k === 'campaigns_hub' || k === 'overview') return 'customer_marketing';
+  if (k === 'campaigns_hub' || k === 'overview' || k === 'schedule') return 'active_schedule';
   if (k === 'content_studio') return 'verify_posts';
   if (k === 'create_post_ideas' || k === 'create_post') return 'create_posts';
 
   if (Object.prototype.hasOwnProperty.call(DESK_TO_STUDIO, k)) {
     return k;
   }
-  return 'customer_marketing';
+  return 'active_schedule';
 }
 
 function resolveDeskFromUrl() {
@@ -52,18 +54,21 @@ function resolveDeskFromUrl() {
     const h = (window.location.hash || '').toLowerCase();
     const combined = `${p} ${h}`;
 
+    if (combined.includes('active-schedule') || combined.includes('active_schedule') || combined.includes('daily-schedule')) {
+      return 'active_schedule';
+    }
     if (combined.includes('/marketing/customers') || combined.includes('#marketing/customers')) return 'customers';
     if (combined.includes('build-ideas') || combined.includes('build_ideas')) return 'build_ideas';
     if (combined.includes('create-post') || combined.includes('create_posts')) return 'create_posts';
     if (combined.includes('verify-posts') || combined.includes('verify_posts') || combined.includes('content-studio') || combined.includes('content_studio')) {
       return 'verify_posts';
     }
-    if (combined.includes('customer-marketing') || combined.includes('customer_marketing') || combined.includes('campaigns-hub') || combined.includes('campaigns_hub')) {
+    if (combined.includes('customer-marketing') || combined.includes('customer_marketing')) {
       return 'customer_marketing';
     }
-    return 'customer_marketing';
+    return 'active_schedule';
   } catch (e) {
-    return 'customer_marketing';
+    return 'active_schedule';
   }
 }
 
@@ -148,10 +153,13 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
     setTargetIdeaId(ideaId);
     setMobileMenuOpen(false);
 
-    let targetPath = '/marketing/customer-marketing';
-    let targetHash = '#marketing/customer-marketing';
+    let targetPath = '/marketing/active-schedule';
+    let targetHash = '#marketing/active-schedule';
 
-    if (nextDesk === 'customers') {
+    if (nextDesk === 'customer_marketing') {
+      targetPath = '/marketing/customer-marketing';
+      targetHash = '#marketing/customer-marketing';
+    } else if (nextDesk === 'customers') {
       targetPath = '/marketing/customers';
       targetHash = '#marketing/customers';
     } else if (nextDesk === 'build_ideas') {
@@ -192,6 +200,7 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
 
   const studioSubTabs = {
     campaigns_hub: [
+      { id: 'active_schedule', label: '📅 Daily Active Schedule' },
       { id: 'customer_marketing', label: '🎯 Pacing & Campaign Control' },
       { id: 'customers', label: '🏢 Verified Client Directory' },
     ],
@@ -386,6 +395,10 @@ export default function MarketingLayout({ onSignOut, onBackToWebsite }) {
                 );
               })}
             </div>
+          )}
+
+          {activeDesk === 'active_schedule' && (
+            <MarketingActiveScheduleDesk onNavigateToDesk={navigateToDesk} />
           )}
 
           {activeDesk === 'customer_marketing' && (

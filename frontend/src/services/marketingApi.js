@@ -4,6 +4,29 @@
  */
 
 const BASE_URL = import.meta.env?.VITE_API_URL || '/api/marketing';
+const OPS_BASE_URL = '/api';
+
+async function opsRequest(endpoint, options = {}) {
+  const url = `${OPS_BASE_URL}${endpoint}`;
+  let token = '';
+  try {
+    token = typeof window !== 'undefined' ? localStorage.getItem('admafia_admin_token') || '' : '';
+  } catch (e) {}
+  const response = await fetch(url, {
+    credentials: 'include',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok || json.ok === false) {
+    throw new Error(json.error || `HTTP ${response.status}`);
+  }
+  return json;
+}
 
 async function request(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
@@ -180,6 +203,24 @@ export const marketingApi = {
     request('/process-daily-pacing', {
       method: 'POST',
     }),
+
+  // Daily Active Client Schedule, Actual Ad Spend (50% Preset) & SLA Bottlenecks
+  getActiveDeliverySchedule: (params = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') qs.append(k, v);
+    });
+    const queryStr = qs.toString() ? `?${qs.toString()}` : '';
+    return opsRequest(`/ops/active-schedule${queryStr}`);
+  },
+
+  saveDailyAdSpend: (payload) =>
+    opsRequest('/ops/ad-spend', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  getSlaBottlenecks: () => opsRequest('/ops/sla-bottlenecks'),
 };
 
 export default marketingApi;

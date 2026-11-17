@@ -97,6 +97,7 @@ import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibili
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
 import { superadminRouter, logSuperAdminAudit } from './routes/superadmin.js';
+import { operationsCycleRouter } from './routes/operationsCycle.js';
 import { countryPricingRouter, superadminCountryPricingRouter } from './routes/countryPricing.js';
 import { resolveVisitorCountry, getPricingForCountryCode } from './services/countryDetection.js';
 import { purgeSpecifiedTestUsers } from './scripts/purge-test-users.js';
@@ -396,6 +397,11 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
       return Array.from(lSet);
     })(),
     isSelfRegistered: true,
+    scheduledDates: (row.scheduled_dates || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s)),
+    lastScheduleUpdatedAt: row.last_schedule_updated_at || null,
     registeredFrom: row.registered_from || 'http://localhost:5173/#register',
     registeredAt: row.registered_at
       ? new Date(row.registered_at).toLocaleString('en-IN', {
@@ -2930,10 +2936,21 @@ const handleUpdateCustomerRecord = async (req, res) => {
         }
 
         const nextPreset = updates.schedulePreset || w.schedulePreset || 'custom';
+        let finalScheduledDates = undefined;
+        if (updates.scheduledDates !== undefined) {
+          const incomingIso = toList(updates.scheduledDates).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s));
+          const mergedIso = new Set(incomingIso);
+          // Never allow removing already-paid booked dates
+          for (const bIso of bookedDatesList) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(bIso)) mergedIso.add(bIso);
+          }
+          finalScheduledDates = Array.from(mergedIso).sort();
+        }
         await applyWalletSettings(cust._id, {
           dailyAdSpend: nextDaily,
           adCampaignActive: nextActive,
           activeDays: finalDaysArray,
+          scheduledDates: finalScheduledDates,
           schedulePreset: String(nextPreset),
           balance: nextBal,
         });
@@ -2941,9 +2958,18 @@ const handleUpdateCustomerRecord = async (req, res) => {
     }
 
     const viewRow = await getCustomerViewRowById(cust._id);
+    const mappedCustomer = mapCustomerRow(viewRow);
+    if (req.auth?.actorType !== 'staff' && mappedCustomer) {
+      delete mappedCustomer.salesRemarks;
+      delete mappedCustomer.latestSalesRemark;
+      delete mappedCustomer.latestSalesRemarkAt;
+      delete mappedCustomer.latestSalesRemarkBy;
+      delete mappedCustomer.nextFollowUpAt;
+      delete mappedCustomer.followUpStatus;
+    }
     res.json({
       ok: true,
-      customer: mapCustomerRow(viewRow),
+      customer: mappedCustomer,
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -5239,6 +5265,11 @@ app.patch('/api/lead-assignments/:id', requireAuth, async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// =============================================================================
+// 6A. END-TO-END SCHEDULE, UNIT FINANCE & SLA CYCLE ROUTER (/api/ops/* & /api/superadmin/unit-finance*)
+// =============================================================================
+app.use('/api', operationsCycleRouter);
 
 // =============================================================================
 // 6B. MARKETING DEPARTMENT API ROUTER (/api/marketing/*)

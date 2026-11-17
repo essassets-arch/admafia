@@ -23,6 +23,7 @@ import {
 } from '../repositories/marketingRepo.js';
 import { validateMediaUploadMagicBytes } from '../middleware/securityMiddleware.js';
 import { storeMediaAsset } from '../services/storageProvider.js';
+import { recordOutboxEvent } from '../services/outboxWorker.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -858,12 +859,22 @@ marketingRouter.get('/posts', async (req, res) => {
 
     const custIds = Array.from(new Set(posts.map((p) => p.customerId)));
     const ideaIds = Array.from(new Set(posts.map((p) => p.ideaId).filter(Boolean)));
-    const [custDocs, ideaDocs] = await Promise.all([
+    const postIds = posts.map((p) => String(p._id));
+    const [custDocs, ideaDocs, campDocs] = await Promise.all([
       custIds.length ? Customer.find({ _id: { $in: custIds } }, { companyName: 1, contactPerson: 1, category: 1, city: 1 }).lean() : [],
       ideaIds.length ? MarketingIdea.find({ _id: { $in: ideaIds } }, { title: 1, objective: 1 }).lean() : [],
+      postIds.length ? MarketingCampaign.find({ postId: { $in: postIds } }).sort({ updatedAt: -1 }).lean() : [],
     ]);
     const custBy = new Map(custDocs.map((c) => [String(c._id), c]));
     const ideaBy = new Map(ideaDocs.map((i) => [String(i._id), i]));
+    const campByPost = new Map();
+    for (const cm of campDocs) {
+      const pid = String(cm.postId);
+      const prev = campByPost.get(pid);
+      if (!prev || (cm.status === 'Running' && prev.status !== 'Running')) {
+        campByPost.set(pid, cm);
+      }
+    }
 
     res.json({
       ok: true,
@@ -873,6 +884,8 @@ marketingRouter.get('/posts', async (req, res) => {
           const c = custBy.get(r.customerId);
           const idea = r.ideaId ? ideaBy.get(String(r.ideaId)) : null;
           const lastRev = lastReview(r);
+          const linkedCamp = campByPost.get(String(r._id)) || null;
+          const isLiveInCampaign = Boolean(linkedCamp && linkedCamp.status === 'Running');
           return {
             id: r._id,
             customerId: r.customerId,
@@ -890,12 +903,26 @@ marketingRouter.get('/posts', async (req, res) => {
             callToAction: r.callToAction,
             mediaUrl: effectiveMediaUrl(r),
             mediaType: r.mediaType,
+            creativeFormat: r.creativeFormat || 'Instagram / Facebook Post',
+            creativeInstructions: r.creativeInstructions || '',
+            priority: r.priority || 'Normal',
+            designerName: r.designerName || '',
+            designerNotes: r.designerNotes || '',
             language: r.language,
             campaignAssociation: r.campaignAssociation,
             intendedPublishAt: r.intendedPublishAt ?? null,
             status: r.status,
             submittedBy: r.submittedBy ?? null,
             submittedAt: r.submittedAt ?? null,
+            requestedAt: r.requestedAt ?? r.createdAt,
+            designStartedAt: r.designStartedAt ?? null,
+            artworkUploadedAt: r.artworkUploadedAt ?? null,
+            approvedAt: r.approvedAt ?? null,
+            dueAt: r.dueAt ?? null,
+            isLiveInCampaign,
+            linkedCampaignId: linkedCamp ? linkedCamp._id : null,
+            linkedCampaignName: linkedCamp ? campaignName(linkedCamp) : null,
+            linkedCampaignStatus: linkedCamp ? linkedCamp.status : null,
             revisionNumber: r.currentRevisionNumber,
             lastReviewRemarks: lastRev ? (lastRev.remarks ?? lastRev.notes ?? null) : null,
             lastReviewer: lastRev ? (lastRev.reviewerName ?? lastRev.reviewerId ?? null) : null,
@@ -917,11 +944,15 @@ marketingRouter.post('/posts', async (req, res) => {
       ideaId,
       title,
       platform = 'Meta Ads (Facebook & Instagram)',
-      caption,
+      caption = '',
       hashtags = '',
       callToAction = '',
       mediaUrl = '',
       mediaType = 'image',
+      creativeFormat = 'Instagram / Facebook Post (1:1)',
+      creativeInstructions = '',
+      priority = 'Normal',
+      dueAt = null,
       language = 'English / Hinglish',
       campaignAssociation = '',
       intendedPublishAt = null,
@@ -930,12 +961,15 @@ marketingRouter.post('/posts', async (req, res) => {
     } = req.body || {};
 
     if (!customerId) return res.status(400).json({ ok: false, error: 'Customer is required.' });
-    if (!title || !title.trim()) return res.status(400).json({ ok: false, error: 'Post title is required.' });
-    if (!caption || !caption.trim()) return res.status(400).json({ ok: false, error: 'Caption / post content is required.' });
+    if (!title || !title.trim()) return res.status(400).json({ ok: false, error: 'Post title / headline is required.' });
+    const effectiveCaption = String(caption || creativeInstructions || title || '').trim();
+    if (!effectiveCaption) {
+      return res.status(400).json({ ok: false, error: 'Caption or creative instructions are required.' });
+    }
 
     // Customer check
-    const custExists = await Customer.exists({ _id: String(customerId) });
-    if (!custExists) {
+    const custDoc = await Customer.findById(String(customerId), { companyName: 1 }).lean();
+    if (!custDoc) {
       return res.status(404).json({ ok: false, error: 'Customer does not exist.' });
     }
 
@@ -954,8 +988,11 @@ marketingRouter.post('/posts', async (req, res) => {
     }
 
     const postId = genId('mp');
-    const finalStatus = status === 'Pending Verification' ? 'Pending Verification' : 'Draft';
-    const subTime = finalStatus === 'Pending Verification' ? new Date() : null;
+    const now = new Date();
+    const allowedInitialStatuses = ['Pending Graphics', 'Pending Verification', 'Draft'];
+    const finalStatus = allowedInitialStatuses.includes(status) ? status : 'Draft';
+    const subTime = finalStatus === 'Pending Verification' ? now : null;
+    const hasUploadedMedia = Boolean(mediaUrl && String(mediaUrl).trim());
 
     await MarketingPost.create({
       _id: postId,
@@ -964,14 +1001,20 @@ marketingRouter.post('/posts', async (req, res) => {
       title: title.trim(),
       platform,
       targetPlatform: platform,
-      caption: caption.trim(),
+      caption: effectiveCaption,
       hashtags,
       callToAction,
       mediaUrl,
       mediaType,
+      creativeFormat,
+      creativeInstructions: String(creativeInstructions || '').trim(),
+      priority: priority || 'Normal',
       language,
       campaignAssociation,
       intendedPublishAt: intendedPublishAt ? new Date(intendedPublishAt) : null,
+      dueAt: dueAt ? new Date(dueAt) : null,
+      requestedAt: now,
+      artworkUploadedAt: hasUploadedMedia ? now : null,
       status: finalStatus,
       submittedBy,
       submittedAt: subTime,
@@ -979,7 +1022,36 @@ marketingRouter.post('/posts', async (req, res) => {
       createdBy: submittedBy,
     });
 
-    await logAuditEvent(customerId, 'post', postId, finalStatus === 'Pending Verification' ? 'Submitted Post for Verification' : 'Saved Post Draft', submittedBy, { title, finalStatus });
+    if (finalStatus === 'Pending Graphics') {
+      recordOutboxEvent(null, {
+        aggregateType: 'marketing_post',
+        aggregateId: postId,
+        eventType: 'CREATIVE_REQUESTED',
+        payload: {
+          postId,
+          customerId,
+          companyName: custDoc.companyName || 'Client',
+          title: title.trim(),
+          priority: priority || 'Normal',
+          creativeFormat,
+          requestedBy: submittedBy,
+          requestedAt: now,
+        },
+      }).catch(() => {});
+    }
+
+    await logAuditEvent(
+      customerId,
+      'post',
+      postId,
+      finalStatus === 'Pending Graphics'
+        ? 'Requested Creative from Graphics'
+        : finalStatus === 'Pending Verification'
+          ? 'Submitted Post for Verification'
+          : 'Saved Post Draft',
+      submittedBy,
+      { title, finalStatus, priority, creativeFormat }
+    );
 
     res.status(201).json({
       ok: true,
@@ -990,13 +1062,19 @@ marketingRouter.post('/posts', async (req, res) => {
         ideaId,
         title: title.trim(),
         platform,
+        creativeFormat,
+        priority,
         status: finalStatus,
         submittedBy,
         submittedAt: subTime,
+        requestedAt: now,
       },
-      message: finalStatus === 'Pending Verification'
-        ? 'Post submitted to Verification Review Queue successfully.'
-        : 'Post draft saved successfully.',
+      message:
+        finalStatus === 'Pending Graphics'
+          ? 'Creative request dispatched directly to Graphics Studio!'
+          : finalStatus === 'Pending Verification'
+            ? 'Post submitted to Verification Review Queue successfully.'
+            : 'Post draft saved successfully.',
     });
   } catch (err) {
     console.error('[POST /api/marketing/posts]', err);
@@ -1226,6 +1304,7 @@ marketingRouter.post('/posts/:id/review', async (req, res) => {
         {
           $set: {
             status: decision,
+            ...(decision === 'Approved' ? { approvedAt: now } : {}),
             updatedAt: now,
             ...revisionSet,
           },

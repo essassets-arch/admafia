@@ -987,6 +987,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     if (targetId) {
       const hasWalletOrScheduleKeys =
         updates.activeDays !== undefined ||
+        updates.scheduledDates !== undefined ||
         updates.schedulePreset !== undefined ||
         updates.dailyAdSpend !== undefined ||
         updates.adCampaignActive !== undefined;

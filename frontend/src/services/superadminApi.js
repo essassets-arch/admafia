@@ -179,6 +179,21 @@ export const superadminApi = {
 
   // 10. High-Growth Analytics, Conversion Funnel & Churn Radar
   getGrowthAnalytics: () => request('/superadmin/growth-analytics'),
+
+  // 11. Unit Economics, Per-User Actual Ad Spend (50% Preset), Daily Liability & SLA Bottlenecks
+  getUnitFinance: (params = {}) => request(`/superadmin/unit-finance${buildQuery(params)}`),
+  saveDailyAdSpend: (data) =>
+    request('/ops/ad-spend', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  updateDefaultSpendRatio: (data) =>
+    request('/superadmin/unit-finance/default-ratio', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  getActiveDeliverySchedule: (params = {}) => request(`/ops/active-schedule${buildQuery(params)}`),
+  getSlaBottlenecks: () => request('/ops/sla-bottlenecks'),
 };
 
 export default superadminApi;

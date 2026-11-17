@@ -200,9 +200,15 @@ export default function GraphicsApprovedPostsDesk({ onNavigateToDesk }) {
                       </div>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <span className="gfx-pill gfx-pill-emerald">
-                        Ready for Ad Campaigns
-                      </span>
+                      {p.linkedCampaignStatus === 'Running' ? (
+                        <span className="gfx-pill gfx-pill-emerald" style={{ fontWeight: 800 }}>
+                          🚀 LIVE IN CAMPAIGN {p.linkedCampaignName ? `(${p.linkedCampaignName})` : ''}
+                        </span>
+                      ) : (
+                        <span className="gfx-pill gfx-pill-emerald">
+                          ✅ Ready for Ad Campaigns
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

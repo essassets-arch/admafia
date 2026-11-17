@@ -82,6 +82,11 @@ const MarketingPostSchema = new mongoose.Schema({
   designerName: { type: String, default: 'Graphics Designer' },
   creativeInstructions: { type: String, default: '' },
   priority: { type: String, default: 'Normal' },
+  requestedAt: { type: Date, default: Date.now },
+  designStartedAt: { type: Date, default: null },
+  artworkUploadedAt: { type: Date, default: null },
+  approvedAt: { type: Date, default: null },
+  dueAt: { type: Date, default: null },
   deletedBy: { type: String, default: null },
   createdBy: { type: String, default: 'Marketing Content Team' }
 }, {

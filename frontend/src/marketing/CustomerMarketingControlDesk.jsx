@@ -39,6 +39,8 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedPostId, setSelectedPostId] = useState('');
+  const [approvedPostsForCustomer, setApprovedPostsForCustomer] = useState([]);
   const [campaignName, setCampaignName] = useState('');
   const [createMarketingCode, setCreateMarketingCode] = useState('');
   const [submitMode, setSubmitMode] = useState('start'); // 'start' or 'draft'
@@ -92,6 +94,25 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!isCreateModalOpen || !selectedCustomerId) {
+      setApprovedPostsForCustomer([]);
+      setSelectedPostId('');
+      return;
+    }
+    marketingApi
+      .getPosts({ customerId: selectedCustomerId, status: 'Approved' })
+      .then((res) => {
+        const list = (res?.posts || []).filter((p) => Boolean(p.mediaUrl));
+        setApprovedPostsForCustomer(list);
+        setSelectedPostId(list[0]?.id || '');
+      })
+      .catch(() => {
+        setApprovedPostsForCustomer([]);
+        setSelectedPostId('');
+      });
+  }, [isCreateModalOpen, selectedCustomerId]);
 
   const handleCustomerSelectedForCampaign = (custId) => {
     setSelectedCustomerId(custId);
@@ -233,6 +254,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     try {
       const res = await marketingApi.createCampaign({
         customerId: selectedCustomerId,
+        postId: selectedPostId || undefined,
         name: campaignName.trim(),
         objective: 'Lead Generation',
         platform: 'Meta Ads (Facebook & Instagram)',
@@ -1130,6 +1152,61 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                     onChange={(e) => setCampaignName(e.target.value)}
                     required
                   />
+                </div>
+
+                {/* Visual Creative Picker from Graphics */}
+                <div className="mkt-form-group">
+                  <label className="mkt-form-label">
+                    Select Approved Creative from Graphics (Going to Use)
+                  </label>
+                  {approvedPostsForCustomer.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        border: '1px dashed #f59e0b',
+                        background: 'rgba(245, 158, 11, 0.08)',
+                        fontSize: '0.8rem',
+                        color: '#d97706',
+                        fontWeight: 700,
+                      }}
+                    >
+                      ⚠️ No approved creatives with artwork found for this client yet. Request a creative from Graphics first.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+                      {approvedPostsForCustomer.map((post) => {
+                        const chosen = selectedPostId === post.id;
+                        return (
+                          <div
+                            key={post.id}
+                            onClick={() => setSelectedPostId(post.id)}
+                            style={{
+                              borderRadius: 10,
+                              padding: 8,
+                              cursor: 'pointer',
+                              border: chosen ? '2px solid #10b981' : '1px solid var(--adm-border, #e2e8f0)',
+                              background: chosen ? 'rgba(16, 185, 129, 0.08)' : 'var(--adm-bg-subtle, #f8fafc)',
+                            }}
+                          >
+                            <div style={{ height: 84, borderRadius: 6, overflow: 'hidden', background: '#0f172a', marginBottom: 6 }}>
+                              {post.mediaType === 'video' || /\.mp4$/i.test(post.mediaUrl) ? (
+                                <video src={post.mediaUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+                              ) : (
+                                <img src={post.mediaUrl} alt={post.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {post.title}
+                            </div>
+                            <div style={{ fontSize: '0.67rem', fontWeight: 800, color: chosen ? '#10b981' : 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
+                              {chosen ? '✓ Going to Use' : 'Click to Select'}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mkt-form-group">

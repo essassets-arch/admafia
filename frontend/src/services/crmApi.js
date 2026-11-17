@@ -371,6 +371,22 @@ export const crmApi = {
   },
 
   /**
+   * Synchronized Active Lead Delivery Schedule & SLA Bottlenecks (Staff-Only)
+   */
+  async getActiveDeliverySchedule(params = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') qs.append(k, v);
+    });
+    const queryStr = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/ops/active-schedule${queryStr}`);
+  },
+
+  async getSlaBottlenecks() {
+    return apiRequest('/ops/sla-bottlenecks');
+  },
+
+  /**
    * Permanently delete customer from MongoDB (/api/customers/:identifier)
    */
   async deleteCustomer(idOrPhone) {

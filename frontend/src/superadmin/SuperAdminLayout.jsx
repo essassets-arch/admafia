@@ -22,6 +22,7 @@ import SuperAdminGrowthAnalyticsDesk from './SuperAdminGrowthAnalyticsDesk';
 import SuperAdminDatabaseDesk from './SuperAdminDatabaseDesk';
 import SuperAdminQueriesDesk from './SuperAdminQueriesDesk';
 import SuperAdminFinanceDesk from './SuperAdminFinanceDesk';
+import SuperAdminUnitFinanceDesk from './SuperAdminUnitFinanceDesk';
 import SuperAdminRefundsDesk from './SuperAdminRefundsDesk';
 import SuperAdminTopupsDesk from './SuperAdminTopupsDesk';
 import SuperAdminAccountsDesk from './SuperAdminAccountsDesk';
@@ -38,6 +39,7 @@ import './superadmin.css';
 const DESK_TO_HUB = {
   dashboard: 'command_center',
   growth_analytics: 'command_center',
+  unit_finance: 'finance_hub',
   topups: 'finance_hub',
   refunds: 'finance_hub',
   finance: 'finance_hub',
@@ -50,7 +52,7 @@ const DESK_TO_HUB = {
 
 const DEFAULT_HUB_SUBTAB = {
   command_center: 'dashboard',
-  finance_hub: 'topups',
+  finance_hub: 'unit_finance',
   accounts_hub: 'accounts',
   queries: 'queries',
   platform_system: 'country_pricing',
@@ -61,7 +63,7 @@ function normalizeDeskKey(rawKey) {
   const k = String(rawKey).trim().toLowerCase().replace(/-/g, '_');
 
   if (k === 'command_center') return 'dashboard';
-  if (k === 'finance_hub') return 'topups';
+  if (k === 'finance_hub') return 'unit_finance';
   if (k === 'accounts_hub' || k === 'accounts_users' || k === 'audit_logs') return 'accounts';
   if (k === 'platform_system') return 'country_pricing';
   if (k === 'database') return 'database_backups';
@@ -83,9 +85,10 @@ function resolveDeskFromUrl() {
     if (combined.includes('country-pricing') || combined.includes('country_pricing')) return 'country_pricing';
     if (combined.includes('platform-system') || combined.includes('platform_system')) return 'country_pricing';
     if (combined.includes('queries')) return 'queries';
+    if (combined.includes('unit-finance') || combined.includes('unit_finance') || combined.includes('sla-radar')) return 'unit_finance';
     if (combined.includes('refunds')) return 'refunds';
     if (combined.includes('topups')) return 'topups';
-    if (combined.includes('finance-hub') || combined.includes('finance_hub')) return 'topups';
+    if (combined.includes('finance-hub') || combined.includes('finance_hub')) return 'unit_finance';
     if (combined.includes('finance')) return 'finance';
     if (combined.includes('add-user') || combined.includes('add_user')) return 'add_user';
     if (combined.includes('accounts-hub') || combined.includes('accounts_hub') || combined.includes('accounts')) return 'accounts';
@@ -247,6 +250,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
       { id: 'growth_analytics', label: 'Growth & Churn Funnel' },
     ],
     finance_hub: [
+      { id: 'unit_finance', label: '💹 Unit Economics & Liability' },
       {
         id: 'topups',
         label: '💳 Account Top-Ups',
@@ -259,7 +263,7 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
         badge: summary?.pendingRefunds || 0,
         badgeTone: 'danger',
       },
-      { id: 'finance', label: '📊 Master Finance & Wallets' },
+      { id: 'finance', label: '📊 Master Ledger' },
     ],
     accounts_hub: [
       { id: 'accounts', label: '🏢 Business & Client Accounts' },
@@ -283,13 +287,15 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
         };
       case 'finance_hub':
         return {
-          title: 'Finance, Top-Ups & Refunds',
+          title: 'Finance, Liability & Unit Economics',
           subtitle:
-            activeDesk === 'refunds'
-              ? 'Review & approve customer wallet refund requests'
-              : activeDesk === 'finance'
-              ? 'Master wallet balances, transaction ledger & reconciliation'
-              : 'Bank UTR verification & instant wallet credits',
+            activeDesk === 'unit_finance'
+              ? 'Per-user ad spend (50% default preset), net margin, daily wallet liability & SLA delay radar'
+              : activeDesk === 'refunds'
+                ? 'Review & approve customer wallet refund requests'
+                : activeDesk === 'finance'
+                  ? 'Master wallet balances, transaction ledger & reconciliation'
+                  : 'Bank UTR verification & instant wallet credits',
         };
       case 'accounts_hub':
         return {
@@ -554,6 +560,10 @@ export default function SuperAdminLayout({ onSignOut, onBackToWebsite }) {
 
           {activeDesk === 'queries' && (
             <SuperAdminQueriesDesk />
+          )}
+
+          {activeDesk === 'unit_finance' && (
+            <SuperAdminUnitFinanceDesk />
           )}
 
           {activeDesk === 'finance' && (

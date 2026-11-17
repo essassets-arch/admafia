@@ -11,10 +11,14 @@ const WalletSchema = new mongoose.Schema({
   totalAdSpent: { type: Number, required: true, default: 0, min: 0 },
   adCampaignActive: { type: Boolean, default: false, index: true },
   activeDays: [{ type: String }],
+  scheduledDates: [{ type: String }], // Exact IST ISO dates (e.g. '2026-11-17', '2026-11-19')
+  lastScheduleUpdatedAt: { type: Date, default: null },
   schedulePreset: { type: String, default: 'custom' },
   lastDeductedAt: { type: Date, default: null },
   bookedDates: [{ type: String }],
   marketingCode: { type: String, default: null },
+  // Strictly internal staff-only preset ratio (default 50% of dailyAdSpend — NEVER exposed to client!)
+  defaultSpendRatioPct: { type: Number, default: 50, min: 0, max: 200 },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 }, {
@@ -244,3 +248,32 @@ RazorpayOrderSchema.index({ status: 1, createdAt: -1 });
 RazorpayOrderSchema.index({ customerId: 1, createdAt: -1 });
 
 export const RazorpayOrder = mongoose.models.RazorpayOrder || mongoose.model('RazorpayOrder', RazorpayOrderSchema);
+
+// 9. INTERNAL DAILY ACTUAL AD SPEND LEDGER (STRICTLY STAFF-ONLY — NEVER SENT TO CLIENTS)
+const DailyAdSpendLogSchema = new mongoose.Schema({
+  _id: { type: String, required: true }, // `${customerId}_${dateIso}`
+  customerId: { type: String, required: true, index: true },
+  dateIso: { type: String, required: true, index: true }, // IST 'YYYY-MM-DD'
+  currency: { type: String, default: 'INR' },
+  clientBilledAmount: { type: Number, default: 0, min: 0 },
+  actualSpend: { type: Number, required: true, min: 0 },
+  isPreset: { type: Boolean, default: false },
+  spendRatioPct: { type: Number, default: 50 },
+  platformChannel: { type: String, default: 'Meta / Digital Ads' },
+  campaignId: { type: String, default: null },
+  postId: { type: String, default: null },
+  notes: { type: String, default: '' },
+  updatedBy: { type: String, default: 'Marketing Ops' },
+  updatedByRole: { type: String, default: 'Marketing' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+}, {
+  collection: 'daily_ad_spend_logs',
+  timestamps: true,
+});
+
+DailyAdSpendLogSchema.index({ customerId: 1, dateIso: 1 }, { unique: true });
+DailyAdSpendLogSchema.index({ dateIso: -1 });
+
+export const DailyAdSpendLog =
+  mongoose.models.DailyAdSpendLog || mongoose.model('DailyAdSpendLog', DailyAdSpendLogSchema);

@@ -135,12 +135,31 @@ export default function LeadHubOverview({
   };
 
   const isTodayBooked = Boolean(currentTodayItem && paidDatesSet.has(currentTodayItem.isoDate));
+  const kolkataTodayIso = useMemo(
+    () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+    []
+  );
 
   const [activeDays, setActiveDays] = useState(() => {
     const raw = Array.isArray(customer?.activeDays)
       ? customer.activeDays.map((d) => String(d).trim().toUpperCase()).filter(Boolean)
       : [];
     return raw.length > 0 ? raw : [todayCode];
+  });
+
+  const [scheduledDates, setScheduledDates] = useState(() => {
+    const rawIso = Array.isArray(customer?.scheduledDates)
+      ? customer.scheduledDates.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '').trim()))
+      : [];
+    if (rawIso.length > 0) return rawIso;
+    if (customer?.schedulePreset === 'clear') return Array.from(paidDatesSet);
+    const currentWeek = getKolkataWeekDays(0);
+    const rawCodes = Array.isArray(customer?.activeDays)
+      ? customer.activeDays.map((d) => String(d).trim().toUpperCase()).filter(Boolean)
+      : [todayCode];
+    return currentWeek
+      .filter((d) => (!d.isPast && rawCodes.includes(d.code)) || paidDatesSet.has(d.isoDate))
+      .map((d) => d.isoDate);
   });
   const [unmaskedLeads, setUnmaskedLeads] = useState({});
 
@@ -153,42 +172,65 @@ export default function LeadHubOverview({
       if (paidDatesSet.has(d.isoDate)) merged.add(d.code);
     });
     setActiveDays(Array.from(merged));
-  }, [customer?.activeDays, customer?.schedulePreset, paidDatesSet, todayCode]);
 
-  // Effective funded/paid days in the currently viewed week:
+    const rawIso = Array.isArray(customer?.scheduledDates)
+      ? customer.scheduledDates.map((s) => String(s || '').trim()).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s))
+      : [];
+    if (rawIso.length > 0) {
+      const isoSet = new Set([...rawIso, ...Array.from(paidDatesSet)]);
+      setScheduledDates(Array.from(isoSet).sort());
+    } else if (customer?.schedulePreset === 'clear') {
+      setScheduledDates(Array.from(paidDatesSet).sort());
+    } else {
+      const currentWeek = getKolkataWeekDays(0);
+      const fallbackIso = new Set(paidDatesSet);
+      currentWeek.forEach((d) => {
+        if (!d.isPast && merged.has(d.code)) fallbackIso.add(d.isoDate);
+      });
+      setScheduledDates(Array.from(fallbackIso).sort());
+    }
+  }, [customer?.activeDays, customer?.scheduledDates, customer?.schedulePreset, paidDatesSet, todayCode]);
+
+  // Global funded/paid ISO date set across ALL weeks (Current Week + Next Week + Future):
   // - Never marks past unpaid days as active
-  // - Clamps unpaid selected days strictly to `fundedRunwayDays` so ₹0 wallet NEVER shows unfunded green days!
-  const { effectiveWeekDaysSet, unpaidSelectedCount, remainingFundedSlots } = useMemo(() => {
-    const set = new Set();
+  // - Clamps total unpaid scheduled dates strictly to `fundedRunwayDays`
+  const { effectiveScheduledIsoSet, effectiveWeekDaysSet, unpaidSelectedCount, remainingFundedSlots } = useMemo(() => {
+    const isoSet = new Set();
     let unpaidUsed = 0;
 
-    // 1. Always include already-paid dates in this week
-    daysList.forEach((d) => {
-      if (paidDatesSet.has(d.isoDate)) {
-        set.add(d.code);
-      }
-    });
+    // 1. Always include all already-paid dates
+    paidDatesSet.forEach((iso) => isoSet.add(iso));
 
-    // 2. Include user-selected non-past days ONLY up to available wallet runway (`fundedRunwayDays`)
-    // Prioritize Today first if selected, then chronological order
-    const orderedCandidates = [
-      ...daysList.filter((d) => d.isToday),
-      ...daysList.filter((d) => !d.isToday),
-    ];
-    for (const d of orderedCandidates) {
-      if (d.isPast || paidDatesSet.has(d.isoDate)) continue;
-      if (activeDays.includes(d.code) && unpaidUsed < fundedRunwayDays) {
-        set.add(d.code);
+    // 2. Include user-selected future/today ISO dates up to fundedRunwayDays (Today prioritized first, then chronological)
+    const uniqueCandidates = Array.from(new Set(scheduledDates))
+      .filter((iso) => iso >= kolkataTodayIso && !paidDatesSet.has(iso))
+      .sort((a, b) => {
+        if (a === kolkataTodayIso) return -1;
+        if (b === kolkataTodayIso) return 1;
+        return a.localeCompare(b);
+      });
+
+    for (const iso of uniqueCandidates) {
+      if (unpaidUsed < fundedRunwayDays) {
+        isoSet.add(iso);
         unpaidUsed++;
       }
     }
 
+    const weekCodeSet = new Set();
+    daysList.forEach((d) => {
+      if (isoSet.has(d.isoDate)) {
+        weekCodeSet.add(d.code);
+      }
+    });
+
     return {
-      effectiveWeekDaysSet: set,
+      effectiveScheduledIsoSet: isoSet,
+      effectiveWeekDaysSet: weekCodeSet,
       unpaidSelectedCount: unpaidUsed,
       remainingFundedSlots: Math.max(0, fundedRunwayDays - unpaidUsed),
     };
-  }, [daysList, paidDatesSet, activeDays, fundedRunwayDays]);
+  }, [daysList, paidDatesSet, scheduledDates, fundedRunwayDays, kolkataTodayIso]);
 
   const paidInWeekCount = daysList.filter((d) => paidDatesSet.has(d.isoDate)).length;
   const totalBookedCount = paidInWeekCount;
@@ -197,7 +239,7 @@ export default function LeadHubOverview({
   const weekRangeStr = `${daysList[0].dateFormatted} – ${daysList[6].dateFormatted} ${daysList[6].fullDateString.split(' ')[2]}`;
 
   const isMarketingLiveToday = Boolean(
-    customer.adCampaignActive && (isTodayBooked || effectiveWeekDaysSet.has(currentTodayItem.code))
+    customer.adCampaignActive && (isTodayBooked || effectiveScheduledIsoSet.has(kolkataTodayIso))
   );
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
@@ -287,16 +329,34 @@ export default function LeadHubOverview({
       return;
     }
 
-    const isCurrentlySelected = effectiveWeekDaysSet.has(code);
+    const targetIso = dayObj?.isoDate;
+    const isCurrentlySelected = targetIso
+      ? effectiveScheduledIsoSet.has(targetIso)
+      : effectiveWeekDaysSet.has(code);
+
+    const deriveWeekdayCodesFromIsoList = (isoList) => {
+      const codeMap = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      const cSet = new Set();
+      isoList.forEach((iso) => {
+        if (iso < kolkataTodayIso && !paidDatesSet.has(iso)) return;
+        const [y, m, d] = iso.split('-').map(Number);
+        const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+        if (!Number.isNaN(dt.getTime())) cSet.add(codeMap[dt.getUTCDay()]);
+      });
+      return Array.from(cSet);
+    };
 
     if (isCurrentlySelected) {
-      const next = Array.from(effectiveWeekDaysSet).filter((d) => d !== code);
-      try { window.sessionStorage.setItem('admafia_active_schedule_preset', next.length === 0 ? 'clear' : 'custom'); } catch (e) {}
-      setActiveDays(next);
+      const nextIsoList = Array.from(effectiveScheduledIsoSet).filter((iso) => iso !== targetIso).sort();
+      const nextCodes = deriveWeekdayCodesFromIsoList(nextIsoList);
+      try { window.sessionStorage.setItem('admafia_active_schedule_preset', nextIsoList.length === 0 ? 'clear' : 'custom'); } catch (e) {}
+      setScheduledDates(nextIsoList);
+      setActiveDays(nextCodes);
       if (onUpdateCustomer) {
         onUpdateCustomer({
-          activeDays: next,
-          schedulePreset: next.length === 0 ? 'clear' : 'custom',
+          activeDays: nextCodes,
+          scheduledDates: nextIsoList,
+          schedulePreset: nextIsoList.length === 0 ? 'clear' : 'custom',
         });
       }
       return;
@@ -323,12 +383,15 @@ export default function LeadHubOverview({
       return;
     }
 
-    const next = Array.from(new Set([...Array.from(effectiveWeekDaysSet), code]));
+    const nextIsoList = Array.from(new Set([...Array.from(effectiveScheduledIsoSet), ...(targetIso ? [targetIso] : [])])).sort();
+    const nextCodes = deriveWeekdayCodesFromIsoList(nextIsoList);
     try { window.sessionStorage.setItem('admafia_active_schedule_preset', 'custom'); } catch (e) {}
-    setActiveDays(next);
+    setScheduledDates(nextIsoList);
+    setActiveDays(nextCodes);
     if (onUpdateCustomer) {
       onUpdateCustomer({
-        activeDays: next,
+        activeDays: nextCodes,
+        scheduledDates: nextIsoList,
         schedulePreset: 'custom',
       });
     }
@@ -336,11 +399,13 @@ export default function LeadHubOverview({
 
   const handleSelectPresetDays = (preset) => {
     const bookedCodesInView = daysList.filter((d) => isDayBooked(d)).map((d) => d.code);
+    const allBookedIso = Array.from(paidDatesSet).sort();
 
     if (preset === 'clear') {
       try { window.sessionStorage.setItem('admafia_active_schedule_preset', 'clear'); } catch (e) {}
+      setScheduledDates(allBookedIso);
       setActiveDays(bookedCodesInView);
-      if (bookedCodesInView.length > 0) {
+      if (allBookedIso.length > 0) {
         Swal.fire({
           icon: 'info',
           title: 'Unpaid Days Cleared',
@@ -352,6 +417,7 @@ export default function LeadHubOverview({
       if (onUpdateCustomer) {
         onUpdateCustomer({
           activeDays: bookedCodesInView,
+          scheduledDates: allBookedIso,
           schedulePreset: 'clear',
         });
       }
@@ -420,12 +486,23 @@ export default function LeadHubOverview({
       return;
     }
 
+    const validTargetIso = Array.from(
+      new Set([
+        ...Array.from(paidDatesSet),
+        ...daysList
+          .filter((d) => rawTarget.includes(d.code) && !d.isPast)
+          .map((d) => d.isoDate),
+      ])
+    ).sort();
+
     try { window.sessionStorage.setItem('admafia_active_schedule_preset', preset); } catch (e) {}
+    setScheduledDates(validTargetIso);
     setActiveDays(validTargetCodes);
 
     if (onUpdateCustomer) {
       onUpdateCustomer({
         activeDays: validTargetCodes,
+        scheduledDates: validTargetIso,
         schedulePreset: preset,
       });
     }
@@ -1178,7 +1255,7 @@ export default function LeadHubOverview({
             {daysList.map((d) => {
               const isBooked = isDayBooked(d);
               const isPastUnbooked = Boolean(d.isPast && !isBooked);
-              const isSelected = Boolean(effectiveWeekDaysSet.has(d.code) || isBooked);
+              const isSelected = Boolean(effectiveScheduledIsoSet.has(d.isoDate) || isBooked);
               const canSelectWithWallet = !isBooked && !isSelected && !isPastUnbooked && remainingFundedSlots > 0;
 
               return (
