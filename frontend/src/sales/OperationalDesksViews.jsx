@@ -27,6 +27,7 @@ import {
   Printer,
   DollarSign,
   UserCheck,
+  UserPlus,
   MapPin,
   Mail,
   Globe,
@@ -40,6 +41,7 @@ import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
 import { SmartTable } from '../components/SmartTabulator';
 import SalesAddMoneyModal from './SalesAddMoneyModal';
+import SalesRegisterCustomerModal from './SalesRegisterCustomerModal';
 import SalesCustomerRemarkModal, {
   SalesRemarkInlineBadge,
   getCustomerFollowUpState,
@@ -1199,7 +1201,23 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
             Live directory of verified client registrations from <code>/register</code>. Displays authoritative intake details (Username, Mobile, Work Email, Password, Profile &amp; KYC Audit Progress, and Payment Status).
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="sales-btn-primary"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              fontWeight: 800,
+              boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)',
+            }}
+            onClick={() => setIsAddModalOpen(true)}
+            title="Register a new client account directly from Sales (₹0 Top-Up Required)"
+          >
+            <UserPlus size={16} strokeWidth={2.3} /> + Add User / Register
+          </button>
+
           <button
             type="button"
             className="sales-btn-primary"
@@ -1216,7 +1234,6 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
           >
             <Plus size={16} strokeWidth={2.5} /> Add Lead
           </button>
-
         </div>
       </div>
 
@@ -1811,117 +1828,19 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
         onDispatched={(summary) => setLeadSuccessToast(summary)}
       />
 
-      {/* Add Client Modal */}
-      {isAddModalOpen && (
-        <div className="sales-modal-overlay" onClick={() => setIsAddModalOpen(false)}>
-          <div className="sales-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Register New Client Workspace</h3>
-              <button type="button" className="desk-close-btn" onClick={() => setIsAddModalOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleAddCustomer}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <label className="desk-form-label">Business / Company Name</label>
-                  <input
-                    type="text"
-                    required
-                    className="desk-form-input"
-                    placeholder="e.g. Vikram Tech Solutions"
-                    value={newCust.companyName}
-                    onChange={(e) => setNewCust({ ...newCust, companyName: e.target.value })}
-                  />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10 }}>
-                  <div>
-                    <label className="desk-form-label">Username (Login ID)</label>
-                    <input
-                      type="text"
-                      required
-                      className="desk-form-input"
-                      placeholder="e.g. vikram_malhotra"
-                      value={newCust.username}
-                      onChange={(e) => setNewCust({ ...newCust, username: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="desk-form-label">Mobile Number (10 Digits)</label>
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      className="desk-form-input"
-                      placeholder="e.g. 9724916167"
-                      value={newCust.phone}
-                      onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10 }}>
-                  <div>
-                    <label className="desk-form-label">Work Email Address</label>
-                    <input
-                      type="email"
-                      required
-                      className="desk-form-input"
-                      placeholder="e.g. contact@vikramtech.example"
-                      value={newCust.email}
-                      onChange={(e) => setNewCust({ ...newCust, email: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="desk-form-label">City / Territory</label>
-                    <input
-                      type="text"
-                      className="desk-form-input"
-                      placeholder="e.g. Ahmedabad"
-                      value={newCust.city}
-                      onChange={(e) => setNewCust({ ...newCust, city: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 10 }}>
-                  <div>
-                    <label className="desk-form-label">Industry Category</label>
-                    <select
-                      className="desk-form-input"
-                      value={newCust.category}
-                      onChange={(e) => setNewCust({ ...newCust, category: e.target.value })}
-                    >
-                      <option value="IT & Software">IT &amp; Software</option>
-                      <option value="Healthcare">Healthcare</option>
-                      <option value="Manufacturing">Manufacturing</option>
-                      <option value="Solar & Renewable">Solar &amp; Renewable</option>
-                      <option value="Transportation">Transportation</option>
-                      <option value="Textiles">Textiles</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="desk-form-label">Initial Payment / Deposit (₹)</label>
-                    <input
-                      type="number"
-                      className="desk-form-input"
-                      placeholder="0 (or 3000)"
-                      value={newCust.deposit}
-                      onChange={(e) => setNewCust({ ...newCust, deposit: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-                <button type="button" className="sales-btn-secondary" onClick={() => setIsAddModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="sales-btn-primary">
-                  Create Workspace
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* SALES DIRECT CLIENT REGISTRATION MODAL (₹0 Top-Up Required) */}
+      <SalesRegisterCustomerModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onCustomerCreated={(newCust) => {
+          if (setCustomers && newCust) {
+            setCustomers((prev) => [
+              newCust,
+              ...prev.filter((c) => c.id !== newCust.id && c.phone !== newCust.phone),
+            ]);
+          }
+        }}
+      />
       {/* Sales Assisted Add Money Modal */}
       {addMoneyCust && (
         <SalesAddMoneyModal

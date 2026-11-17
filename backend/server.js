@@ -2954,6 +2954,305 @@ app.patch('/api/customers/:id', requireCustomerSelfOrStaff((req) => req.params.i
 app.put('/api/customers/:id', requireCustomerSelfOrStaff((req) => req.params.id), handleUpdateCustomerRecord);
 
 // -----------------------------------------------------------------------------
+// Sales-Assisted Direct Customer Registration (Staff-Only, ₹0 Top-Up Required)
+// -----------------------------------------------------------------------------
+app.post('/api/sales/customers/register', requireStaff(['sales', 'super admin']), async (req, res) => {
+  let cleanUsername = '';
+  try {
+    const {
+      username = '',
+      phone = '',
+      mobile = '',
+      email = '',
+      password = '',
+      companyName = '',
+      contactPerson = '',
+      city = '',
+      state = '',
+      category = '',
+      countryCode = 'IN',
+      initialRemark = '',
+    } = req.body || {};
+
+    const rawPassword = String(password || '').trim();
+    if (rawPassword.length < 6) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Password is required and must be at least 6 characters long.',
+      });
+    }
+
+    const cleanCountryCode = String(countryCode || 'IN').trim().toUpperCase() || 'IN';
+    const rawPhone = String(phone || mobile || '').trim();
+    const cleanDigits = rawPhone.replace(/\D/g, '');
+
+    let cleanPhone = cleanDigits;
+    if (cleanCountryCode === 'IN') {
+      cleanPhone =
+        cleanDigits.length === 12 && cleanDigits.startsWith('91')
+          ? cleanDigits.slice(2)
+          : cleanDigits.slice(-10);
+      if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Valid 10-digit Indian mobile number (starting with 6–9) is required.',
+        });
+      }
+    } else if (cleanDigits.length < 7 || cleanDigits.length > 15) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Valid international phone number (7–15 digits) is required.',
+      });
+    }
+
+    const existingPhoneAccount = await Customer.findOne({ phone: cleanPhone })
+      .select('_id username companyName')
+      .lean();
+    if (existingPhoneAccount) {
+      return res.status(409).json({
+        ok: false,
+        code: 'PHONE_ALREADY_EXISTS',
+        error: `Mobile +91 ${cleanPhone} is already registered (@${existingPhoneAccount.username || 'user'}).`,
+      });
+    }
+
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (cleanEmail) {
+      const strictEmailRegex =
+        /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,24}$/;
+      if (!strictEmailRegex.test(cleanEmail) || cleanEmail.includes('..')) {
+        return res.status(400).json({
+          ok: false,
+          code: 'INVALID_EMAIL',
+          error: 'Please enter a valid email address or leave it blank.',
+        });
+      }
+    }
+
+    const rawCompany = String(companyName || '').trim();
+    const rawContact = String(contactPerson || '').trim();
+    if (!rawCompany && !rawContact && !String(username || '').trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Client or Business Name is required.',
+      });
+    }
+
+    // Resolve or auto-generate clean @username
+    const requestedUsername = String(username || '')
+      .trim()
+      .replace(/^@/, '')
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_.-]/g, '')
+      .toLowerCase();
+
+    if (requestedUsername) {
+      if (requestedUsername.length < 3) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Workspace username must be at least 3 characters long.',
+        });
+      }
+      const existingUser = await Customer.findOne({ username: ciExact(requestedUsername) })
+        .select('_id username')
+        .lean();
+      if (existingUser) {
+        return res.status(409).json({
+          ok: false,
+          code: 'USERNAME_TAKEN',
+          error: `Username "@${requestedUsername}" is already taken. Choose another or clear it to auto-generate.`,
+        });
+      }
+      cleanUsername = requestedUsername;
+    } else {
+      const baseSlug = (rawCompany || rawContact || 'client')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 14) || 'client';
+      let candidate = `${baseSlug}_${cleanPhone.slice(-4)}`;
+      if (candidate.length < 3) candidate = `user_${cleanPhone.slice(-4)}`;
+      const taken = await Customer.exists({ username: ciExact(candidate) });
+      if (taken) {
+        candidate = `${baseSlug}_${cleanPhone.slice(-4)}_${Math.floor(10 + Math.random() * 89)}`;
+      }
+      cleanUsername = candidate;
+    }
+
+    const pricing = getPricingForCountryCode(cleanCountryCode);
+    const dailyBudget = pricing.daily_min_budget;
+    const registeredCurrency = pricing.currency_code;
+    const registeredCountryName = pricing.country_name;
+
+    const fallbackFormatted =
+      cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1);
+    const formattedName = rawCompany || rawContact || fallbackFormatted;
+    const contactName = rawContact || formattedName;
+    const custId = `cust_reg_${cleanPhone}`;
+    const walId = `wal_${cleanPhone}`;
+    const pvId = `pv_${cleanPhone}`;
+
+    const storedPassword = await hashPassword(rawPassword);
+    const now = new Date();
+    const evalProf = evaluateCustomerProfileCompletion({
+      phone: cleanPhone,
+      contactPerson: contactName,
+      companyName: formattedName,
+      email: cleanEmail,
+      category,
+      city,
+      state,
+    });
+
+    const staffName = String(
+      req.auth?.fullName || req.auth?.username || 'Sales Executive'
+    ).trim();
+    const staffRole = String(req.auth?.role || 'Sales Executive').trim();
+    const cleanNote = String(initialRemark || '').trim().slice(0, 1500);
+    const initialRemarksArr = cleanNote
+      ? [
+          {
+            remarkId: `rmk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            note: cleanNote,
+            followUpAt: null,
+            followUpStatus: 'none',
+            authorName: staffName,
+            authorRole: staffRole,
+            createdAt: now,
+          },
+        ]
+      : [];
+
+    const effectiveCustId = await withMongoTransaction(async (session) => {
+      await Customer.create(
+        [
+          {
+            _id: custId,
+            username: cleanUsername,
+            phone: cleanPhone,
+            email: cleanEmail,
+            passwordHash: storedPassword,
+            companyName: formattedName,
+            category: evalProf.sanitized.category,
+            contactPerson: contactName,
+            city: evalProf.sanitized.city,
+            state: evalProf.sanitized.state,
+            country: registeredCountryName,
+            countryCode: cleanCountryCode,
+            currency: registeredCurrency,
+            status: 'active',
+            profileStatus: evalProf.profileStatus,
+            paymentStatus: 'pending',
+            kycPercent: evalProf.kycPercent,
+            verified: evalProf.isComplete,
+            phoneVerified: true,
+            phoneVerifiedAt: now,
+            completedAt: evalProf.isComplete ? now : null,
+            salesRemarks: initialRemarksArr,
+            latestSalesRemark: cleanNote,
+            latestSalesRemarkAt: cleanNote ? now : null,
+            latestSalesRemarkBy: cleanNote ? staffName : '',
+            nextFollowUpAt: null,
+            followUpStatus: 'none',
+          },
+        ],
+        { session }
+      );
+
+      // ₹0 Initial Wallet — No Top-Up Required at Registration
+      await Wallet.updateOne(
+        { customerId: custId },
+        {
+          $setOnInsert: {
+            _id: walId,
+            availableBalance: 0,
+            totalLifetimePaid: 0,
+            totalAdSpent: 0,
+            adCampaignActive: false,
+            dailyAdSpend: dailyBudget,
+            currency: registeredCurrency,
+            activeDays: [],
+            schedulePreset: 'custom',
+            bookedDates: [],
+            lastDeductedAt: null,
+            createdAt: now,
+          },
+          $set: { updatedAt: now },
+        },
+        { upsert: true, session, timestamps: false }
+      );
+
+      await PendingVerification.updateOne(
+        { customerId: custId },
+        {
+          $set: {
+            profileStatus: evalProf.profileStatus,
+            queueType: !evalProf.isComplete ? 'Profile Incomplete' : 'Payment Pending',
+          },
+          $setOnInsert: {
+            _id: pvId,
+            companyName: formattedName,
+            contactPerson: contactName,
+            phone: cleanPhone,
+            amount: 0,
+            paymentStatus: 'pending',
+            packageTier: 'Sales-Assisted Registration (₹0 Top-Up)',
+            dailyRate: dailyBudget,
+            utrNumber: `Registered by ${staffName}`,
+            submittedAt: now,
+            verifiedAt: null,
+          },
+        },
+        { upsert: true, session }
+      );
+
+      await recordOutboxEvent(session, {
+        aggregateType: 'customer',
+        aggregateId: custId,
+        eventType: 'NEW_CUSTOMER_REGISTERED',
+        payload: {
+          customerId: custId,
+          companyName: formattedName,
+          contactPerson: contactName,
+          phone: cleanPhone,
+          username: cleanUsername,
+          registeredByStaff: staffName,
+        },
+      });
+
+      return custId;
+    });
+
+    const viewRow = await getCustomerViewRowById(effectiveCustId);
+    const customer = mapCustomerRow(viewRow);
+
+    return res.status(201).json({
+      ok: true,
+      customer,
+      message: `Client account @${cleanUsername} (+91 ${cleanPhone}) created with ₹0 top-up required.`,
+    });
+  } catch (err) {
+    console.error('[POST /api/sales/customers/register]', err);
+    const msg = String(err.message || '');
+    if (err.code === 11000 || /E11000|duplicate key/i.test(msg)) {
+      if (msg.toLowerCase().includes('username')) {
+        return res.status(409).json({
+          ok: false,
+          code: 'USERNAME_TAKEN',
+          error: `Username "@${cleanUsername || 'entered'}" is already taken. Please choose another.`,
+        });
+      }
+      return res.status(409).json({
+        ok: false,
+        code: 'PHONE_ALREADY_EXISTS',
+        error: 'An account with this mobile number already exists.',
+      });
+    }
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------------
 // Sales Executive Customer Remarks & Follow-Up Schedule (Staff-Only)
 // -----------------------------------------------------------------------------
 app.post('/api/sales/customers/:id/remarks', requireStaff(['sales', 'super admin', 'marketing']), async (req, res) => {

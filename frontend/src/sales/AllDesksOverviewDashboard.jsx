@@ -10,10 +10,12 @@ import {
   RefreshCw,
   Send,
   FileText,
+  UserPlus,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 import { DEFAULT_DESK_LEADS, formatIndianDateTime, resolveCustomerIdentity } from './OperationalDesksViews';
 import { SmartTable } from '../components/SmartTabulator';
+import SalesRegisterCustomerModal from './SalesRegisterCustomerModal';
 import SalesCustomerRemarkModal, {
   SalesRemarkInlineBadge,
   getCustomerFollowUpState,
@@ -59,6 +61,7 @@ export default function AllDesksOverviewDashboard({
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [remarkCust, setRemarkCust] = useState(null);
+  const [isRegisterUserOpen, setIsRegisterUserOpen] = useState(false);
 
   const handleOverviewRemarkUpdated = (updatedCust) => {
     if (!updatedCust) return;
@@ -480,14 +483,25 @@ export default function AllDesksOverviewDashboard({
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => navigateToDesk('customers', '#customers')}
-              className="sales-btn-secondary"
-              style={{ fontSize: '0.76rem', padding: '5px 12px' }}
-            >
-              All Customers ({customers.length}) →
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setIsRegisterUserOpen(true)}
+                className="sales-btn-primary"
+                style={{ fontSize: '0.76rem', padding: '5px 12px', display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 800 }}
+                title="Register Client Account (₹0 Top-Up Required)"
+              >
+                <UserPlus size={13} /> + Add User / Register
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateToDesk('customers', '#customers')}
+                className="sales-btn-secondary"
+                style={{ fontSize: '0.76rem', padding: '5px 12px' }}
+              >
+                All Customers ({customers.length}) →
+              </button>
+            </div>
           </div>
 
           <div className="desk-table-card">
@@ -807,6 +821,19 @@ export default function AllDesksOverviewDashboard({
         customer={remarkCust}
         onClose={() => setRemarkCust(null)}
         onCustomerUpdated={handleOverviewRemarkUpdated}
+      />
+
+      <SalesRegisterCustomerModal
+        isOpen={isRegisterUserOpen}
+        onClose={() => setIsRegisterUserOpen(false)}
+        onCustomerCreated={(newCust) => {
+          if (typeof setCustomers === 'function' && newCust) {
+            setCustomers((prev) => [
+              newCust,
+              ...prev.filter((c) => c.id !== newCust.id && c.phone !== newCust.phone),
+            ]);
+          }
+        }}
       />
     </div>
   );

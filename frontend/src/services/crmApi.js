@@ -336,6 +336,17 @@ export const crmApi = {
   },
 
   /**
+   * Sales-Assisted Direct Customer Registration (Staff-Only, ₹0 Top-Up Required)
+   * Does NOT overwrite the Sales Executive's active session token.
+   */
+  async salesRegisterCustomer(payload) {
+    return apiRequest('/sales/customers/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
    * Sales Executive Remarks & Next Follow-Up Schedule (Staff-Only)
    */
   async addCustomerSalesRemark(idOrPhone, payload) {

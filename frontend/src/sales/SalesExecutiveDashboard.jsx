@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Clock,
   UserCheck,
+  UserPlus,
   AlertCircle,
   Receipt,
   Scale,
@@ -20,6 +21,7 @@ import {
 import AllDesksOverviewDashboard from './AllDesksOverviewDashboard';
 import BalanceLogsDesk from './BalanceLogsDesk';
 import CustomerLeadWorkspacePage from './CustomerLeadWorkspacePage';
+import SalesRegisterCustomerModal from './SalesRegisterCustomerModal';
 import NotificationBell from '../components/NotificationBell';
 import AdminThemeToggle from '../components/AdminThemeToggle';
 import { useAdminTheme } from '../utils/adminTheme';
@@ -276,6 +278,7 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
   const [txSubTab, setTxSubTab] = useState(initialRoute.txSubTab);
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isRegisterUserOpen, setIsRegisterUserOpen] = useState(false);
   const [failedTxCount, setFailedTxCount] = useState(0);
   const [balanceLogsCount, setBalanceLogsCount] = useState(() => {
     try {
@@ -628,6 +631,23 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
         </div>
 
         <div className="sales-mobile-top-actions sales-mobile-header-actions">
+          <button
+            type="button"
+            className="sales-btn-primary"
+            onClick={() => setIsRegisterUserOpen(true)}
+            title="Register Client Account (₹0 Top-Up)"
+            style={{
+              padding: '6px 10px',
+              fontSize: '0.75rem',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <UserPlus size={14} /> + Add User
+          </button>
           <AdminThemeToggle compact />
           {isMobileViewport && <NotificationBell variant="light" adminThemeAware />}
           <button
@@ -887,6 +907,25 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
             className="sales-topbar-meta-right"
             style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, flexWrap: 'nowrap' }}
           >
+            <button
+              type="button"
+              className="sales-btn-primary"
+              onClick={() => setIsRegisterUserOpen(true)}
+              title="Directly register a client account from Sales (₹0 Top-Up Required)"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 13px',
+                fontSize: '0.79rem',
+                fontWeight: 800,
+                whiteSpace: 'nowrap',
+                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)',
+              }}
+            >
+              <UserPlus size={14} /> + Add User / Register
+            </button>
+
             {/* Single Authoritative Live Date & Time Clock */}
             <div
               className="sales-topbar-clock"
@@ -1226,6 +1265,18 @@ export default function SalesExecutiveDashboard({ onSignOut, onBackToWebsite }) 
           )}
         </div>
       </main>
+
+      {/* Global Sales Direct Client Registration Modal (₹0 Top-Up Required) */}
+      <SalesRegisterCustomerModal
+        isOpen={isRegisterUserOpen}
+        onClose={() => setIsRegisterUserOpen(false)}
+        onCustomerCreated={(newCust) => {
+          setCustomers((prev) => [
+            newCust,
+            ...prev.filter((c) => c.id !== newCust.id && c.phone !== newCust.phone),
+          ]);
+        }}
+      />
     </div>
   );
 }
