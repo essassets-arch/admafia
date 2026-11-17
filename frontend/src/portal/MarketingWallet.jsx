@@ -959,10 +959,10 @@ export default function MarketingWallet({
                     filteredTxList.map((tx, txIdx) => {
                       const isFailed = isFailedTx(tx);
                       return (
-                        <tr key={tx.id || tx.ref || txIdx} style={isFailed ? { background: '#fffcfc' } : {}}>
+                        <tr key={tx.id || tx.ref || txIdx} className={isFailed ? 'am-tx-failed-row' : undefined}>
                           <td>
                             <div className="tx-code-wrap">
-                              <code className="tx-ref-code" style={isFailed ? { color: '#dc2626' } : {}}>
+                              <code className="tx-ref-code" style={isFailed ? { color: '#ef4444' } : {}}>
                                 {tx.ref || tx.id}
                               </code>
                               <button
@@ -977,7 +977,7 @@ export default function MarketingWallet({
                           </td>
                           <td className="tx-date-cell">{tx.date}</td>
                           <td className="tx-desc-cell">
-                            <div style={{ fontWeight: 600, color: isFailed ? '#991b1b' : '#1e293b' }}>
+                            <div className={`am-tx-desc-main ${isFailed ? 'is-failed' : ''}`} style={{ fontWeight: 600 }}>
                               {tx.desc}
                             </div>
                             {tx.failureReason && (
@@ -1164,7 +1164,7 @@ export default function MarketingWallet({
                           </small>
                         </td>
                         <td>
-                          <strong style={{ color: '#0f172a' }}>{formatMoney(inv.totalAmount)}</strong>
+                          <strong className="am-inv-total-strong">{formatMoney(inv.totalAmount)}</strong>
                         </td>
                         <td>
                           <span className="tx-status-verified-pill">Paid ✓</span>

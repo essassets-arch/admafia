@@ -187,18 +187,18 @@ export default function LeadPipelineInbox({
           <div className="lead-header-title-row" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h1>My Leads</h1>
             {stageFilter === 'dropped' ? (
-              <span className="lead-count-badge-top" style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}>
+              <span className="lead-count-badge-top tone-rose" style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}>
                 {droppedLeads.length} Dropped
               </span>
             ) : stageFilter === 'followup' ? (
-              <span className="lead-count-badge-top" style={{ background: '#fdf2f8', color: '#be185d', borderColor: '#fbcfe8' }}>
+              <span className="lead-count-badge-top tone-pink" style={{ background: '#fdf2f8', color: '#be185d', borderColor: '#fbcfe8' }}>
                 {followUpLeads.length} In Follow-up
               </span>
             ) : (
               <span className="lead-count-badge-top">{allNonDroppedLeads.length} Active Leads</span>
             )}
             {customer?.companyName && (
-              <span style={{
+              <span className="am-portal-company-chip" style={{
                 fontSize: '0.82rem',
                 fontWeight: 700,
                 color: '#1e40af',
@@ -367,7 +367,7 @@ export default function LeadPipelineInbox({
                 return (
                   <tr
                     key={item.id || `pipe_lead_${idx}`}
-                    style={!item.read ? { background: '#fbfdff' } : undefined}
+                    className={!item.read ? 'am-unread-lead-row' : undefined}
                   >
                     {/* Col 1: Prospect Mobile */}
                     <td>
@@ -424,21 +424,21 @@ export default function LeadPipelineInbox({
                     <td>
                       {item.status === 'Dropped' ? (
                         <span
-                          className="proper-step-badge"
+                          className="proper-step-badge tone-rose"
                           style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}
                         >
                           Dropped
                         </span>
                       ) : isInFollowUp ? (
                         <span
-                          className="proper-step-badge"
+                          className="proper-step-badge tone-pink"
                           style={{ background: '#fdf2f8', color: '#be185d', borderColor: '#fbcfe8' }}
                         >
                           In Follow-up
                         </span>
                       ) : (
                         <span
-                          className="proper-step-badge"
+                          className="proper-step-badge tone-indigo"
                           style={{ background: '#eef2ff', color: '#4338ca', borderColor: '#c7d2fe' }}
                         >
                           New Enquiry
@@ -449,8 +449,8 @@ export default function LeadPipelineInbox({
                     {/* Col 3: Security / Gate Status */}
                     <td>
                       {item.status === 'Dropped' ? (
-                        <span className="proper-step-badge" style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5">
+                        <span className="proper-step-badge tone-rose" style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <circle cx="12" cy="12" r="10" />
                             <line x1="15" y1="9" x2="9" y2="15" />
                             <line x1="9" y1="9" x2="15" y2="15" />
@@ -458,19 +458,19 @@ export default function LeadPipelineInbox({
                           <span>Dropped Lead</span>
                         </span>
                       ) : isFullyComplete ? (
-                        <span className="proper-step-badge" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
+                        <span className="proper-step-badge tone-emerald" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
                           <span>Active Lead ✓</span>
                         </span>
                       ) : isPaymentDone ? (
-                        <span className="proper-step-badge" style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} />
+                        <span className="proper-step-badge tone-blue" style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
                           <span>Step 2 Required</span>
                         </span>
                       ) : (
-                        <span className="proper-step-badge">
+                        <span className="proper-step-badge tone-amber">
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2.5">
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                             <path d="M7 11V7a5 5 0 0 1 10 0v4" />

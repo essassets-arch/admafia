@@ -9,10 +9,15 @@ import {
   MessageSquare,
   RefreshCw,
   Send,
+  FileText,
 } from 'lucide-react';
 import crmApi from '../services/crmApi';
 import { DEFAULT_DESK_LEADS, formatIndianDateTime, resolveCustomerIdentity } from './OperationalDesksViews';
 import { SmartTable } from '../components/SmartTabulator';
+import SalesCustomerRemarkModal, {
+  SalesRemarkInlineBadge,
+  getCustomerFollowUpState,
+} from './SalesCustomerRemarkModal';
 
 const formatINR = (val) =>
   new Intl.NumberFormat('en-IN', {
@@ -53,6 +58,23 @@ export default function AllDesksOverviewDashboard({
   });
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [remarkCust, setRemarkCust] = useState(null);
+
+  const handleOverviewRemarkUpdated = (updatedCust) => {
+    if (!updatedCust) return;
+    if (typeof setCustomers === 'function') {
+      setCustomers((prev) =>
+        prev.map((item) =>
+          item.id === updatedCust.id || item.phone === updatedCust.phone ? { ...item, ...updatedCust } : item
+        )
+      );
+    }
+    setRemarkCust((prev) =>
+      prev && (prev.id === updatedCust.id || prev.phone === updatedCust.phone)
+        ? { ...prev, ...updatedCust }
+        : prev
+    );
+  };
 
   const handleRefreshData = useCallback(async () => {
     setIsRefreshing(true);
@@ -478,7 +500,7 @@ export default function AllDesksOverviewDashboard({
                     <th>City</th>
                     <th>Verified At</th>
                     <th>Wallet Balance</th>
-                    <th>Status</th>
+                    <th>Status / Follow-Up</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -505,6 +527,7 @@ export default function AllDesksOverviewDashboard({
                                 </span>
                               </div>
                             )}
+                            <SalesRemarkInlineBadge customer={c} onOpen={setRemarkCust} />
                           </td>
                           <td>
                             <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--adm-text-primary, #0f172a)' }}>
@@ -533,9 +556,21 @@ export default function AllDesksOverviewDashboard({
                             </span>
                           </td>
                           <td>
-                            <span className="desk-pill pill-emerald" style={{ fontSize: '0.72rem', fontWeight: 800 }}>
-                              ✓ Auto-Verified
-                            </span>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span className="desk-pill pill-emerald" style={{ fontSize: '0.72rem', fontWeight: 800 }}>
+                                ✓ Auto-Verified
+                              </span>
+                              <button
+                                type="button"
+                                className="desk-action-btn"
+                                onClick={() => setRemarkCust(c)}
+                                style={{ padding: '3px 8px', fontSize: '0.73rem', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                title="Add follow-up remark or call reminder"
+                              >
+                                <FileText size={12} /> Remark
+                                {getCustomerFollowUpState(c).count > 0 ? ` (${getCustomerFollowUpState(c).count})` : ''}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -767,6 +802,12 @@ export default function AllDesksOverviewDashboard({
           </div>
         </div>
       </div>
+
+      <SalesCustomerRemarkModal
+        customer={remarkCust}
+        onClose={() => setRemarkCust(null)}
+        onCustomerUpdated={handleOverviewRemarkUpdated}
+      />
     </div>
   );
 }

@@ -95,6 +95,12 @@ export function buildCustomerViewRow(c, w, leadCount = 0) {
     booked_dates: joinList(w?.bookedDates),
     runway_days: Math.floor(balance / Math.max(dailyPacing, 1)),
     total_leads_dispatched: leadCount,
+    sales_remarks: Array.isArray(c.salesRemarks) ? c.salesRemarks : [],
+    latest_sales_remark: c.latestSalesRemark || '',
+    latest_sales_remark_at: c.latestSalesRemarkAt ?? null,
+    latest_sales_remark_by: c.latestSalesRemarkBy || '',
+    next_follow_up_at: c.nextFollowUpAt ?? null,
+    follow_up_status: c.followUpStatus || 'none',
   };
 }
 

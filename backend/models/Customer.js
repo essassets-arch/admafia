@@ -64,6 +64,22 @@ const CustomerSchema = new mongoose.Schema({
     changedAt: { type: Date, default: Date.now }
   }],
 
+  // Internal Sales Executive Remarks & Follow-Up Schedule (Staff-Only)
+  salesRemarks: [{
+    remarkId: { type: String, required: true },
+    note: { type: String, required: true },
+    followUpAt: { type: Date, default: null },
+    followUpStatus: { type: String, enum: ['none', 'pending', 'done'], default: 'none' },
+    authorName: { type: String, default: 'Sales Executive' },
+    authorRole: { type: String, default: 'sales' },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  latestSalesRemark: { type: String, default: '' },
+  latestSalesRemarkAt: { type: Date, default: null },
+  latestSalesRemarkBy: { type: String, default: '' },
+  nextFollowUpAt: { type: Date, default: null, index: true },
+  followUpStatus: { type: String, enum: ['none', 'pending', 'done'], default: 'none', index: true },
+
   marketingCode: { type: String, default: null },
 
   registeredAt: { type: Date, default: Date.now, index: true },

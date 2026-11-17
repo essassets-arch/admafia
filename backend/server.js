@@ -410,6 +410,12 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
       : 'Today',
     registeredAtRaw: row.registered_at,
     registered_at_raw: row.registered_at,
+    salesRemarks: Array.isArray(row.sales_remarks) ? row.sales_remarks : [],
+    latestSalesRemark: row.latest_sales_remark || '',
+    latestSalesRemarkAt: row.latest_sales_remark_at || null,
+    latestSalesRemarkBy: row.latest_sales_remark_by || '',
+    nextFollowUpAt: row.next_follow_up_at || null,
+    followUpStatus: row.follow_up_status || 'none',
   };
 }
 
@@ -972,6 +978,15 @@ app.get('/api/me/workspace', requireAuth, async (req, res) => {
     }
 
     const customer = mapCustomerRow(viewRow);
+    // Keep internal Sales call remarks strictly staff-only (never send to customer browser)
+    if (req.auth?.actorType !== 'staff' && customer) {
+      delete customer.salesRemarks;
+      delete customer.latestSalesRemark;
+      delete customer.latestSalesRemarkAt;
+      delete customer.latestSalesRemarkBy;
+      delete customer.nextFollowUpAt;
+      delete customer.followUpStatus;
+    }
     const leadsLimit = Math.min(200, Math.max(10, Number(req.query.leadsLimit || 60)));
     const txLimit = Math.min(200, Math.max(10, Number(req.query.txLimit || 60)));
     const leadsPage = Math.max(1, Number(req.query.leadsPage || 1));
@@ -1413,6 +1428,15 @@ app.post('/api/auth/register', async (req, res) => {
 
     const viewRow = await getCustomerViewRowById(effectiveCustId);
     const customer = mapCustomerRow(viewRow);
+    // Keep internal Sales call remarks strictly staff-only (never send to customer browser)
+    if (req.auth?.actorType !== 'staff' && customer) {
+      delete customer.salesRemarks;
+      delete customer.latestSalesRemark;
+      delete customer.latestSalesRemarkAt;
+      delete customer.latestSalesRemarkBy;
+      delete customer.nextFollowUpAt;
+      delete customer.followUpStatus;
+    }
     const token = issueCustomerSession(res, customer);
 
     res.status(201).json({ ok: true, token, customer });
@@ -1555,6 +1579,15 @@ app.post('/api/auth/login', loginBruteForceLimiter, async (req, res) => {
     }
 
     const customer = mapCustomerRow(viewRow);
+    // Keep internal Sales call remarks strictly staff-only (never send to customer browser)
+    if (req.auth?.actorType !== 'staff' && customer) {
+      delete customer.salesRemarks;
+      delete customer.latestSalesRemark;
+      delete customer.latestSalesRemarkAt;
+      delete customer.latestSalesRemarkBy;
+      delete customer.nextFollowUpAt;
+      delete customer.followUpStatus;
+    }
     if (authUser) {
       customer.authUser = authUser;
     }
@@ -1841,6 +1874,15 @@ app.get('/api/customers/:identifier', requireCustomerSelfOrStaff((req) => req.pa
     }
 
     const customer = mapCustomerRow(viewRow);
+    // Keep internal Sales call remarks strictly staff-only (never send to customer browser)
+    if (req.auth?.actorType !== 'staff' && customer) {
+      delete customer.salesRemarks;
+      delete customer.latestSalesRemark;
+      delete customer.latestSalesRemarkAt;
+      delete customer.latestSalesRemarkBy;
+      delete customer.nextFollowUpAt;
+      delete customer.followUpStatus;
+    }
     const leadFilter = [{ customerId: customer.id }];
     if (customer.phone) leadFilter.push({ customerPhone: customer.phone });
     const [leadDocs, txDocs, invDocs] = await Promise.all([
@@ -2910,6 +2952,171 @@ const handleUpdateCustomerRecord = async (req, res) => {
 
 app.patch('/api/customers/:id', requireCustomerSelfOrStaff((req) => req.params.id), handleUpdateCustomerRecord);
 app.put('/api/customers/:id', requireCustomerSelfOrStaff((req) => req.params.id), handleUpdateCustomerRecord);
+
+// -----------------------------------------------------------------------------
+// Sales Executive Customer Remarks & Follow-Up Schedule (Staff-Only)
+// -----------------------------------------------------------------------------
+app.post('/api/sales/customers/:id/remarks', requireStaff(['sales', 'super admin', 'marketing']), async (req, res) => {
+  try {
+    const rawId = String(req.params.id || '').trim();
+    const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
+    const cust = await findCustomerByIdOrPhone(rawId, cleanPhone);
+    if (!cust) {
+      return res.status(404).json({ ok: false, error: 'Customer not found.' });
+    }
+
+    const { note, followUpAt, followUpStatus, authorName } = req.body || {};
+    const cleanNote = String(note || '').trim();
+    if (!cleanNote) {
+      return res.status(400).json({ ok: false, error: 'Please enter a remark or follow-up note.' });
+    }
+    if (cleanNote.length > 1500) {
+      return res.status(400).json({ ok: false, error: 'Remark cannot exceed 1,500 characters.' });
+    }
+
+    let parsedFollowUp = null;
+    if (followUpAt) {
+      const d = new Date(followUpAt);
+      if (!Number.isNaN(d.getTime())) {
+        parsedFollowUp = d;
+      }
+    }
+
+    const resolvedStatus =
+      followUpStatus === 'done'
+        ? 'done'
+        : parsedFollowUp || followUpStatus === 'pending'
+        ? 'pending'
+        : 'none';
+
+    const repName =
+      String(authorName || req.auth?.name || req.auth?.username || 'Sales Executive').trim() ||
+      'Sales Executive';
+    const now = new Date();
+    const entry = {
+      remarkId: `rmk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      note: cleanNote,
+      followUpAt: parsedFollowUp,
+      followUpStatus: resolvedStatus,
+      authorName: repName,
+      authorRole: String(req.auth?.department || req.auth?.role || 'sales'),
+      createdAt: now,
+    };
+
+    const existingRemarks = Array.isArray(cust.salesRemarks) ? cust.salesRemarks : [];
+    const updatedRemarks = [entry, ...existingRemarks].slice(0, 100);
+
+    await Customer.updateOne(
+      { _id: cust._id },
+      {
+        $set: {
+          salesRemarks: updatedRemarks,
+          latestSalesRemark: cleanNote,
+          latestSalesRemarkAt: now,
+          latestSalesRemarkBy: repName,
+          nextFollowUpAt: resolvedStatus === 'pending' ? parsedFollowUp : null,
+          followUpStatus: resolvedStatus,
+          updatedAt: now,
+        },
+      }
+    );
+
+    const viewRow = await getCustomerViewRowById(cust._id);
+    return res.status(201).json({
+      ok: true,
+      remark: entry,
+      customer: mapCustomerRow(viewRow),
+    });
+  } catch (err) {
+    console.error('[POST /api/sales/customers/:id/remarks]', err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.patch('/api/sales/customers/:id/followup-status', requireStaff(['sales', 'super admin', 'marketing']), async (req, res) => {
+  try {
+    const rawId = String(req.params.id || '').trim();
+    const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
+    const cust = await findCustomerByIdOrPhone(rawId, cleanPhone);
+    if (!cust) {
+      return res.status(404).json({ ok: false, error: 'Customer not found.' });
+    }
+
+    const { followUpStatus = 'done', nextFollowUpAt } = req.body || {};
+    const validStatus = ['none', 'pending', 'done'].includes(followUpStatus) ? followUpStatus : 'done';
+    let parsedNext = null;
+    if (validStatus === 'pending' && nextFollowUpAt) {
+      const d = new Date(nextFollowUpAt);
+      if (!Number.isNaN(d.getTime())) parsedNext = d;
+    }
+
+    const updatedRemarks = (Array.isArray(cust.salesRemarks) ? cust.salesRemarks : []).map((r, idx) =>
+      idx === 0 ? { ...r, followUpStatus: validStatus, ...(parsedNext ? { followUpAt: parsedNext } : {}) } : r
+    );
+
+    await Customer.updateOne(
+      { _id: cust._id },
+      {
+        $set: {
+          salesRemarks: updatedRemarks,
+          followUpStatus: validStatus,
+          nextFollowUpAt: validStatus === 'pending' ? (parsedNext || cust.nextFollowUpAt || null) : null,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    const viewRow = await getCustomerViewRowById(cust._id);
+    return res.json({
+      ok: true,
+      customer: mapCustomerRow(viewRow),
+    });
+  } catch (err) {
+    console.error('[PATCH /api/sales/customers/:id/followup-status]', err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete('/api/sales/customers/:id/remarks/:remarkId', requireStaff(['sales', 'super admin', 'marketing']), async (req, res) => {
+  try {
+    const rawId = String(req.params.id || '').trim();
+    const remarkId = String(req.params.remarkId || '').trim();
+    const cleanPhone = rawId.replace(/\D/g, '').slice(-10);
+    const cust = await findCustomerByIdOrPhone(rawId, cleanPhone);
+    if (!cust) {
+      return res.status(404).json({ ok: false, error: 'Customer not found.' });
+    }
+
+    const remaining = (Array.isArray(cust.salesRemarks) ? cust.salesRemarks : []).filter(
+      (r) => String(r.remarkId) !== remarkId
+    );
+    const head = remaining[0] || null;
+
+    await Customer.updateOne(
+      { _id: cust._id },
+      {
+        $set: {
+          salesRemarks: remaining,
+          latestSalesRemark: head ? head.note : '',
+          latestSalesRemarkAt: head ? head.createdAt : null,
+          latestSalesRemarkBy: head ? head.authorName : '',
+          followUpStatus: head ? head.followUpStatus || 'none' : 'none',
+          nextFollowUpAt: head && head.followUpStatus === 'pending' ? head.followUpAt || null : null,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    const viewRow = await getCustomerViewRowById(cust._id);
+    return res.json({
+      ok: true,
+      customer: mapCustomerRow(viewRow),
+    });
+  } catch (err) {
+    console.error('[DELETE /api/sales/customers/:id/remarks/:remarkId]', err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 app.delete('/api/customers/:identifier', requireStaff(['super admin', 'sales']), async (req, res) => {
   try {

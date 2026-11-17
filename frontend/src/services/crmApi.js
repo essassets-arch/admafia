@@ -336,6 +336,30 @@ export const crmApi = {
   },
 
   /**
+   * Sales Executive Remarks & Next Follow-Up Schedule (Staff-Only)
+   */
+  async addCustomerSalesRemark(idOrPhone, payload) {
+    return apiRequest(`/sales/customers/${encodeURIComponent(idOrPhone)}/remarks`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateCustomerFollowUpStatus(idOrPhone, payload) {
+    return apiRequest(`/sales/customers/${encodeURIComponent(idOrPhone)}/followup-status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteCustomerSalesRemark(idOrPhone, remarkId) {
+    return apiRequest(
+      `/sales/customers/${encodeURIComponent(idOrPhone)}/remarks/${encodeURIComponent(remarkId)}`,
+      { method: 'DELETE' }
+    );
+  },
+
+  /**
    * Permanently delete customer from MongoDB (/api/customers/:identifier)
    */
   async deleteCustomer(idOrPhone) {

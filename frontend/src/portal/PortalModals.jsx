@@ -15,6 +15,10 @@ export function SweetAlertModal({
 }) {
   if (!alertState) return null;
 
+  const isDarkTheme =
+    typeof document !== 'undefined' &&
+    document.documentElement.getAttribute('data-admin-active-theme') === 'dark';
+
   const {
     type = 'warning', // 'warning' | 'error' | 'success'
     title = 'Notice',
@@ -28,33 +32,33 @@ export function SweetAlertModal({
   const palette = {
     warning: {
       ringBorder: '#f59e0b',
-      ringBg: '#fffbeb',
+      ringBg: isDarkTheme ? 'rgba(245, 158, 11, 0.14)' : '#fffbeb',
       halo: 'rgba(245, 158, 11, 0.16)',
-      iconColor: '#d97706',
+      iconColor: isDarkTheme ? '#fbbf24' : '#d97706',
       btnBg: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
       btnShadow: '0 8px 20px -4px rgba(79, 70, 229, 0.45)',
     },
     error: {
       ringBorder: '#ef4444',
-      ringBg: '#fef2f2',
+      ringBg: isDarkTheme ? 'rgba(239, 68, 68, 0.14)' : '#fef2f2',
       halo: 'rgba(239, 68, 68, 0.15)',
-      iconColor: '#dc2626',
+      iconColor: isDarkTheme ? '#f87171' : '#dc2626',
       btnBg: 'linear-gradient(135deg, #e11d48 0%, #f43f5e 100%)',
       btnShadow: '0 8px 20px -4px rgba(225, 29, 72, 0.4)',
     },
     success: {
       ringBorder: '#10b981',
-      ringBg: '#ecfdf5',
+      ringBg: isDarkTheme ? 'rgba(16, 185, 129, 0.14)' : '#ecfdf5',
       halo: 'rgba(16, 185, 129, 0.16)',
-      iconColor: '#059669',
+      iconColor: isDarkTheme ? '#34d399' : '#059669',
       btnBg: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
       btnShadow: '0 8px 20px -4px rgba(16, 185, 129, 0.4)',
     },
   }[type] || {
     ringBorder: '#f59e0b',
-    ringBg: '#fffbeb',
+    ringBg: isDarkTheme ? 'rgba(245, 158, 11, 0.14)' : '#fffbeb',
     halo: 'rgba(245, 158, 11, 0.16)',
-    iconColor: '#d97706',
+    iconColor: isDarkTheme ? '#fbbf24' : '#d97706',
     btnBg: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
     btnShadow: '0 8px 20px -4px rgba(79, 70, 229, 0.45)',
   };
@@ -64,7 +68,7 @@ export function SweetAlertModal({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.65)',
+        backgroundColor: 'rgba(2, 6, 23, 0.72)',
         backdropFilter: 'blur(6px)',
         zIndex: 1000005,
         display: 'flex',
@@ -77,15 +81,17 @@ export function SweetAlertModal({
     >
       <div
         style={{
-          background: '#ffffff',
+          background: isDarkTheme ? '#111827' : '#ffffff',
           borderRadius: '24px',
           width: '100%',
           maxWidth: '410px',
           padding: '32px 28px 26px',
           textAlign: 'center',
-          boxShadow: '0 25px 60px -12px rgba(15, 23, 42, 0.4), 0 0 0 1px rgba(226, 232, 240, 0.9)',
+          boxShadow: isDarkTheme
+            ? '0 25px 60px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(148, 163, 184, 0.22)'
+            : '0 25px 60px -12px rgba(15, 23, 42, 0.4), 0 0 0 1px rgba(226, 232, 240, 0.9)',
           fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-          color: '#0f172a',
+          color: isDarkTheme ? '#f8fafc' : '#0f172a',
           position: 'relative',
           animation: 'modalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
@@ -127,7 +133,7 @@ export function SweetAlertModal({
             margin: '0 0 10px',
             fontSize: '1.38rem',
             fontWeight: 800,
-            color: '#0f172a',
+            color: isDarkTheme ? '#f8fafc' : '#0f172a',
             letterSpacing: '-0.02em',
           }}
         >
@@ -139,7 +145,7 @@ export function SweetAlertModal({
           style={{
             margin: '0 0 24px',
             fontSize: '0.94rem',
-            color: '#475569',
+            color: isDarkTheme ? '#cbd5e1' : '#475569',
             lineHeight: 1.55,
             fontWeight: 500,
           }}
@@ -157,9 +163,9 @@ export function SweetAlertModal({
                 else onClose();
               }}
               style={{
-                background: '#f1f5f9',
-                border: '1.5px solid #cbd5e1',
-                color: '#334155',
+                background: isDarkTheme ? '#1e293b' : '#f1f5f9',
+                border: isDarkTheme ? '1.5px solid #334155' : '1.5px solid #cbd5e1',
+                color: isDarkTheme ? '#e2e8f0' : '#334155',
                 fontWeight: 700,
                 fontSize: '0.92rem',
                 padding: '11px 22px',

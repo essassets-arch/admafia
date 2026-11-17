@@ -497,11 +497,11 @@ export default function LeadHubOverview({
                 >
                   {liveQuickEval.isComplete ? '✓ Ready to Unlock 100%' : `⚡ Unlock Priority Leads • ${liveQuickEval.kycPercent}% Ready`}
                 </span>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#92400e' }}>
+                <span className="am-quick-profile-meta-count" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#92400e' }}>
                   {profEval.missingFields.length} quick {profEval.missingFields.length === 1 ? 'detail' : 'details'} left
                 </span>
               </div>
-              <h3 style={{ margin: '0 0 4px', fontSize: '1.04rem', fontWeight: 800, color: '#78350f', lineHeight: 1.3 }}>
+              <h3 className="am-quick-profile-heading" style={{ margin: '0 0 4px', fontSize: '1.04rem', fontWeight: 800, color: '#78350f', lineHeight: 1.3 }}>
                 Finish Your Business Profile Inline to Match Exact Buyer Leads in Your City
               </h3>
             </div>
@@ -509,6 +509,7 @@ export default function LeadHubOverview({
             {/* Live Animated Readiness Bar */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '200px', flex: '0 1 260px' }}>
               <div
+                className="am-quick-profile-track"
                 style={{
                   flex: 1,
                   height: '9px',
@@ -529,7 +530,7 @@ export default function LeadHubOverview({
                   }}
                 />
               </div>
-              <strong style={{ fontSize: '0.84rem', fontWeight: 800, color: liveQuickEval.isComplete ? '#059669' : '#92400e' }}>
+              <strong className={`am-quick-profile-pct ${liveQuickEval.isComplete ? 'is-complete' : ''}`} style={{ fontSize: '0.84rem', fontWeight: 800, color: liveQuickEval.isComplete ? '#059669' : '#92400e' }}>
                 {liveQuickEval.kycPercent}%
               </strong>
             </div>
@@ -626,6 +627,7 @@ export default function LeadHubOverview({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginTop: '14px' }}>
             <button
               type="button"
+              className="am-quick-profile-link"
               onClick={() => onNavigate && onNavigate('profile')}
               style={{
                 background: 'transparent',
@@ -916,7 +918,7 @@ export default function LeadHubOverview({
 
             <div className="pacing-card-footer-between">
               <span>Weekly pacing: <strong>{currencySymbol}{weeklyPacing.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}</strong></span>
-              <span className="pacing-days-badge" style={{ background: totalBookedCount > 0 ? '#ecfdf5' : '#f8fafc', color: totalBookedCount > 0 ? '#047857' : '#64748b', fontWeight: 800 }}>
+              <span className={`pacing-days-badge ${totalBookedCount > 0 ? 'tone-emerald' : 'tone-neutral'}`} style={{ background: totalBookedCount > 0 ? '#ecfdf5' : '#f8fafc', color: totalBookedCount > 0 ? '#047857' : '#64748b', fontWeight: 800 }}>
                 {totalBookedCount > 0 ? `🎯 ${totalBookedCount}d Paid` : `${effectiveActiveCount}d Funded`}
               </span>
             </div>
@@ -984,7 +986,7 @@ export default function LeadHubOverview({
                 {totalBookedCount > 0 ? ` • ${totalBookedCount} PAID` : ''})
               </span>
               {remainingFundedSlots > 0 ? (
-                <span className="engine-booked-highlight-pill" style={{
+                <span className="engine-booked-highlight-pill tone-blue" style={{
                   background: '#eff6ff',
                   color: '#1d4ed8',
                   border: '1px solid #bfdbfe',
@@ -1001,7 +1003,7 @@ export default function LeadHubOverview({
                 </span>
               ) : isTodayBooked && fundedRunwayDays === 0 ? (
                 <span
-                  className="engine-booked-highlight-pill"
+                  className="engine-booked-highlight-pill tone-emerald"
                   style={{
                     background: '#ecfdf5',
                     color: '#047857',
@@ -1023,7 +1025,7 @@ export default function LeadHubOverview({
                 </span>
               ) : fundedRunwayDays === 0 ? (
                 <span
-                  className="engine-booked-highlight-pill"
+                  className="engine-booked-highlight-pill tone-rose"
                   style={{
                     background: '#fff1f2',
                     color: '#e11d48',
@@ -1044,7 +1046,7 @@ export default function LeadHubOverview({
                   🔒 Top Up {currencySymbol}{dailySpend}/day to Unlock Days
                 </span>
               ) : (
-                <span className="engine-booked-highlight-pill" style={{
+                <span className="engine-booked-highlight-pill tone-emerald" style={{
                   background: '#ecfdf5',
                   color: '#047857',
                   border: '1px solid #10b981',
@@ -1496,7 +1498,7 @@ export default function LeadHubOverview({
                     return (
                       <tr
                         key={item.id || `ov_lead_${idx}`}
-                        style={!item.read ? { background: '#fbfdff' } : undefined}
+                        className={!item.read ? 'am-unread-lead-row' : undefined}
                       >
                         {/* Col 1: Prospect Mobile */}
                         <td>
@@ -1547,7 +1549,7 @@ export default function LeadHubOverview({
                               </div>
                               {isInFollowUp && (
                                 <span
-                                  className="fup-status-tag"
+                                  className="fup-status-tag tone-pink"
                                   style={{
                                     background: '#fdf2f8',
                                     color: '#be185d',
@@ -1569,19 +1571,19 @@ export default function LeadHubOverview({
                         {/* Col 2: Access / Gate Status */}
                         <td>
                           {isFullyComplete ? (
-                            <span className="proper-step-badge" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
+                            <span className="proper-step-badge tone-emerald" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                 <polyline points="20 6 9 17 4 12" />
                               </svg>
                               <span>Active Lead ✓</span>
                             </span>
                           ) : isPaymentDone ? (
-                            <span className="proper-step-badge" style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} />
+                            <span className="proper-step-badge tone-blue" style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
                               <span>Step 2 Required</span>
                             </span>
                           ) : (
-                            <span className="proper-step-badge">
+                            <span className="proper-step-badge tone-amber">
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="2.5">
                                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />

@@ -344,8 +344,8 @@ export default function AccountProfileKYC({
   const missingKeySet = new Set(profEval.missingKeys || []);
   const missingFieldStyle = {
     borderColor: '#f59e0b',
-    backgroundColor: '#fffbeb',
-    boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.14)',
+    backgroundColor: 'var(--am-missing-input-bg, #fffbeb)',
+    boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.16)',
   };
 
   const handleScrollToEdit = () => {
@@ -398,10 +398,10 @@ export default function AccountProfileKYC({
           <div className="profile-incomplete-alert-body" style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: '1 1 240px', minWidth: 0 }}>
             <AlertCircle size={20} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 800, color: '#92400e', fontSize: '0.92rem' }}>
+              <div className="profile-incomplete-alert-title" style={{ fontWeight: 800, color: '#92400e', fontSize: '0.92rem' }}>
                 Profile {profEval.kycPercent}% Complete — {profEval.missingFields.length} required {profEval.missingFields.length === 1 ? 'field' : 'fields'} remaining
               </div>
-              <div style={{ fontSize: '0.82rem', color: '#b45309', marginTop: '3px' }}>
+              <div className="profile-incomplete-alert-sub" style={{ fontSize: '0.82rem', color: '#b45309', marginTop: '3px' }}>
                 Missing: <strong>{profEval.missingFields.join(', ')}</strong>. Fill the highlighted fields right below and click Save to reach 100%.
               </div>
             </div>
@@ -439,7 +439,7 @@ export default function AccountProfileKYC({
                 </span>
               )}
               {(profileData.city || profileData.state) && (
-                <span style={{ fontSize: '0.8rem', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
+                <span className="am-profile-pill-blue" style={{ fontSize: '0.8rem', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
                   📍 {[profileData.city, profileData.state].filter(Boolean).join(', ')}
                 </span>
               )}
@@ -447,11 +447,11 @@ export default function AccountProfileKYC({
                 💰 Growth Wallet: ₹{effectiveWallet.toLocaleString('en-IN')}
               </span>
               {isLeadEligible ? (
-                <span style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span className="am-profile-pill-emerald" style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <Sparkles size={13} /> Active for Lead Distribution
                 </span>
               ) : (
-                <span style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700 }}>
+                <span className="am-profile-pill-amber" style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700 }}>
                   ⚠️ {!isProfileComplete ? `Profile Incomplete (${profEval.kycPercent}%)` : 'Low Balance (Min ₹' + effectivePacing + ')'}
                 </span>
               )}

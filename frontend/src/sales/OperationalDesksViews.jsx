@@ -40,6 +40,10 @@ import crmApi from '../services/crmApi';
 import adminAuthApi from '../services/adminAuthApi';
 import { SmartTable } from '../components/SmartTabulator';
 import SalesAddMoneyModal from './SalesAddMoneyModal';
+import SalesCustomerRemarkModal, {
+  SalesRemarkInlineBadge,
+  getCustomerFollowUpState,
+} from './SalesCustomerRemarkModal';
 import {
   buildCustomerLeadHref,
   navigateToCustomerLeadPage,
@@ -860,6 +864,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
   const [search, setSearch] = useState('');
   const [selectedCust, setSelectedCust] = useState(null);
   const [addMoneyCust, setAddMoneyCust] = useState(null);
+  const [remarkCust, setRemarkCust] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -953,6 +958,27 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
   const profileCompleteCount = customers.filter((c) => c.profileStatus === 'complete' || (c.kycPercent || 0) >= 100 || c.verified).length;
   const profileIncompleteCount = customers.filter((c) => c.profileStatus !== 'complete' && (c.kycPercent || 0) < 100 && !c.verified).length;
   const kycCompleteCount = profileCompleteCount;
+  const followUpsDueCount = customers.filter((c) => getCustomerFollowUpState(c).urgency !== 'none').length;
+  const withRemarksCount = customers.filter((c) => getCustomerFollowUpState(c).hasRemark).length;
+
+  const handleRemarkCustomerUpdated = (updatedCust) => {
+    if (!updatedCust) return;
+    if (setCustomers) {
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === updatedCust.id || c.phone === updatedCust.phone ? { ...c, ...updatedCust } : c
+        )
+      );
+    }
+    setRemarkCust((prev) =>
+      prev && (prev.id === updatedCust.id || prev.phone === updatedCust.phone)
+        ? { ...prev, ...updatedCust }
+        : prev
+    );
+    if (selectedCust && (selectedCust.id === updatedCust.id || selectedCust.phone === updatedCust.phone)) {
+      setSelectedCust((prev) => ({ ...prev, ...updatedCust }));
+    }
+  };
 
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase();
@@ -962,13 +988,16 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
       (c.contact && c.contact.toLowerCase().includes(q)) ||
       (c.phone && c.phone.includes(q)) ||
       (c.email && c.email.toLowerCase().includes(q)) ||
-      (c.city && c.city.toLowerCase().includes(q));
+      (c.city && c.city.toLowerCase().includes(q)) ||
+      (c.latestSalesRemark && c.latestSalesRemark.toLowerCase().includes(q));
 
     if (!matchSearch) return false;
     if (filter === 'payment_pending') return c.paymentStatus !== 'paid';
     if (filter === 'payment_paid') return c.paymentStatus === 'paid';
     if (filter === 'profile_incomplete') return c.profileStatus !== 'complete' && (c.kycPercent || 0) < 100 && !c.verified;
     if (filter === 'profile_complete') return c.profileStatus === 'complete' || (c.kycPercent || 0) >= 100 || c.verified;
+    if (filter === 'followup_due') return getCustomerFollowUpState(c).urgency !== 'none';
+    if (filter === 'has_remarks') return getCustomerFollowUpState(c).hasRemark;
     if (filter === 'active') return c.status === 'active';
     if (filter === 'suspended') return c.status === 'suspended';
     return true;
@@ -1329,13 +1358,33 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
           <button type="button" className={`desk-tab ${filter === 'profile_incomplete' ? 'active' : ''}`} onClick={() => setFilter('profile_incomplete')}>
             ⏳ Profile Incomplete ({profileIncompleteCount})
           </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'followup_due' ? 'active' : ''}`}
+            onClick={() => setFilter('followup_due')}
+            style={
+              followUpsDueCount > 0 && filter !== 'followup_due'
+                ? {
+                    background: 'var(--adm-soft-amber-bg, #fffbeb)',
+                    color: 'var(--adm-soft-amber-text, #b45309)',
+                    borderColor: 'var(--adm-soft-amber-border, #fde68a)',
+                    fontWeight: 800,
+                  }
+                : undefined
+            }
+          >
+            📅 Follow-ups Due ({followUpsDueCount})
+          </button>
+          <button type="button" className={`desk-tab ${filter === 'has_remarks' ? 'active' : ''}`} onClick={() => setFilter('has_remarks')}>
+            📝 With Remarks ({withRemarksCount})
+          </button>
         </div>
         <div className="desk-search-wrap">
           <Search size={16} className="desk-search-icon" />
           <input
             type="text"
             className="desk-search-input"
-            placeholder="Search by username, mobile, email, city..."
+            placeholder="Search by username, mobile, email, city, remark..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -1398,6 +1447,7 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                       <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)' }}>
                         {c.city ? `${c.city} • ` : ''}Registered: {formatIndianDateTime(c.registeredAt, c.registeredAtRaw || c.registered_at)}
                       </div>
+                      <SalesRemarkInlineBadge customer={c} onOpen={setRemarkCust} />
                     </td>
 
                     {/* 2. Mobile Number (10 Digits) */}
@@ -1542,6 +1592,41 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
                         <button
                           type="button"
                           className="desk-action-btn"
+                          onClick={() => setRemarkCust(c)}
+                          style={{
+                            background:
+                              getCustomerFollowUpState(c).urgency === 'overdue'
+                                ? 'var(--adm-soft-rose-bg, #fff1f2)'
+                                : getCustomerFollowUpState(c).urgency !== 'none'
+                                  ? 'var(--adm-soft-amber-bg, #fffbeb)'
+                                  : 'var(--adm-bg-subtle, #f8fafc)',
+                            borderColor:
+                              getCustomerFollowUpState(c).urgency === 'overdue'
+                                ? 'var(--adm-soft-rose-border, #fecdd3)'
+                                : getCustomerFollowUpState(c).urgency !== 'none'
+                                  ? 'var(--adm-soft-amber-border, #fde68a)'
+                                  : 'var(--adm-border-strong, #cbd5e1)',
+                            color:
+                              getCustomerFollowUpState(c).urgency === 'overdue'
+                                ? 'var(--adm-soft-rose-text, #be123c)'
+                                : getCustomerFollowUpState(c).urgency !== 'none'
+                                  ? 'var(--adm-soft-amber-text, #b45309)'
+                                  : 'var(--adm-text-primary, #0f172a)',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          title={`Add follow-up remark or call reminder for ${identity.displayName}`}
+                        >
+                          <FileText size={13} /> Remark
+                          {getCustomerFollowUpState(c).count > 0
+                            ? ` (${getCustomerFollowUpState(c).count})`
+                            : ''}
+                        </button>
+                        <button
+                          type="button"
+                          className="desk-action-btn"
                           onClick={() => {
                             setSelectedCust(c);
                             setShowPassword(false);
@@ -1677,7 +1762,18 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="sales-btn-secondary"
+                onClick={() => setRemarkCust(selectedCust)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 800 }}
+              >
+                <FileText size={14} /> Remarks &amp; Follow-Up
+                {getCustomerFollowUpState(selectedCust).count > 0
+                  ? ` (${getCustomerFollowUpState(selectedCust).count})`
+                  : ''}
+              </button>
               <button
                 type="button"
                 className="sales-btn-secondary"
@@ -1698,6 +1794,13 @@ export function CustomerRegistrationsDesk({ customers: propsCustomers = [], setC
           </div>
         </div>
       )}
+
+      {/* SALES CUSTOMER REMARK & FOLLOW-UP MODAL */}
+      <SalesCustomerRemarkModal
+        customer={remarkCust}
+        onClose={() => setRemarkCust(null)}
+        onCustomerUpdated={handleRemarkCustomerUpdated}
+      />
 
       {/* ADD LEAD MODAL (Searchable Customer + Bulk Phone Dispatch) */}
       <QuickBulkLeadDispatchModal
@@ -5839,6 +5942,26 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
   const [search, setSearch] = useState('');
   const [selectedWalletCust, setSelectedWalletCust] = useState(null);
   const [addMoneyCust, setAddMoneyCust] = useState(null);
+  const [remarkCust, setRemarkCust] = useState(null);
+
+  const handleWalletRemarkUpdated = (updatedCust) => {
+    if (!updatedCust) return;
+    if (setCustomers) {
+      setCustomers((prev) =>
+        prev.map((item) =>
+          item.id === updatedCust.id || item.phone === updatedCust.phone ? { ...item, ...updatedCust } : item
+        )
+      );
+    }
+    setRemarkCust((prev) =>
+      prev && (prev.id === updatedCust.id || prev.phone === updatedCust.phone)
+        ? { ...prev, ...updatedCust }
+        : prev
+    );
+    if (selectedWalletCust && (selectedWalletCust.id === updatedCust.id || selectedWalletCust.phone === updatedCust.phone)) {
+      setSelectedWalletCust((prev) => ({ ...prev, ...updatedCust }));
+    }
+  };
 
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase().trim();
@@ -6085,6 +6208,7 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                         <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3 }}>
                           Workspace ID: <code>{c.id}</code> • Registered: {c.registeredAt || 'Active'}
                         </div>
+                        <SalesRemarkInlineBadge customer={c} onOpen={setRemarkCust} />
                       </td>
 
                       {/* 2. Contact & Location */}
@@ -6142,6 +6266,18 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
                             title="Add Money / Credit Client Wallet"
                           >
                             <CreditCard size={13} color="#059669" /> + Add Money
+                          </button>
+
+                          {/* Remark & Follow-Up Button */}
+                          <button
+                            type="button"
+                            className="desk-action-btn"
+                            style={{ background: 'var(--adm-bg-subtle, #f8fafc)', color: 'var(--adm-text-primary, #0f172a)', borderColor: 'var(--adm-border-strong, #cbd5e1)', fontWeight: 700 }}
+                            onClick={() => setRemarkCust(c)}
+                            title="Add follow-up remark or call reminder"
+                          >
+                            <FileText size={13} /> Remark
+                            {getCustomerFollowUpState(c).count > 0 ? ` (${getCustomerFollowUpState(c).count})` : ''}
                           </button>
 
                           {/* Details Modal Button */}
@@ -6315,6 +6451,12 @@ export function WalletsBalancesDesk({ customers: propsCustomers = [], setCustome
           }}
         />
       )}
+
+      <SalesCustomerRemarkModal
+        customer={remarkCust}
+        onClose={() => setRemarkCust(null)}
+        onCustomerUpdated={handleWalletRemarkUpdated}
+      />
     </div>
   );
 }
@@ -7611,7 +7753,27 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [balanceFilter, setBalanceFilter] = useState('all'); // 'all' | 'healthy' | 'low' | 'zero'
   const [selectedMember, setSelectedMember] = useState(null);
+  const [remarkCust, setRemarkCust] = useState(null);
   const [isRefreshingMembers, setIsRefreshingMembers] = useState(false);
+
+  const handleApprovedRemarkUpdated = (updatedCust) => {
+    if (!updatedCust) return;
+    if (setCustomers) {
+      setCustomers((prev) =>
+        prev.map((item) =>
+          item.id === updatedCust.id || item.phone === updatedCust.phone ? { ...item, ...updatedCust } : item
+        )
+      );
+    }
+    setRemarkCust((prev) =>
+      prev && (prev.id === updatedCust.id || prev.phone === updatedCust.phone)
+        ? { ...prev, ...updatedCust }
+        : prev
+    );
+    if (selectedMember && (selectedMember.id === updatedCust.id || selectedMember.phone === updatedCust.phone)) {
+      setSelectedMember((prev) => ({ ...prev, ...updatedCust }));
+    }
+  };
 
   const handleRefreshMembers = async () => {
     setIsRefreshingMembers(true);
@@ -7926,6 +8088,7 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                             <div className="appr-client-meta">
                               ✉️ {m.email || 'Registered via Web Portal'} • 📍 {m.city || 'India'}
                             </div>
+                            <SalesRemarkInlineBadge customer={m} onOpen={setRemarkCust} />
                           </div>
                         </div>
                       </td>
@@ -8030,6 +8193,17 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
                           </a>
                           <button
                             type="button"
+                            onClick={() => setRemarkCust(m)}
+                            className="appr-action-btn appr-action-profile"
+                            title="Add follow-up remark or call reminder"
+                          >
+                            <FileText size={13} />
+                            <span>
+                              Remark{getCustomerFollowUpState(m).count > 0 ? ` (${getCustomerFollowUpState(m).count})` : ''}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setSelectedMember(m)}
                             className="appr-action-btn appr-action-profile"
                             title="View verified business profile"
@@ -8132,6 +8306,12 @@ export function ApprovedMembersDesk({ customers = [], setCustomers, navigateToDe
           </div>
         </div>
       )}
+
+      <SalesCustomerRemarkModal
+        customer={remarkCust}
+        onClose={() => setRemarkCust(null)}
+        onCustomerUpdated={handleApprovedRemarkUpdated}
+      />
     </div>
   );
 }
@@ -8155,7 +8335,24 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
   const [loading, setLoading] = useState(true);
   const [selectedFailTx, setSelectedFailTx] = useState(null);
   const [topupCust, setTopupCust] = useState(null);
+  const [remarkCust, setRemarkCust] = useState(null);
   const [sendingLinkId, setSendingLinkId] = useState(null);
+
+  const handleFailedRemarkUpdated = (updatedCust) => {
+    if (!updatedCust) return;
+    if (setCustomers) {
+      setCustomers((prev) =>
+        prev.map((item) =>
+          item.id === updatedCust.id || item.phone === updatedCust.phone ? { ...item, ...updatedCust } : item
+        )
+      );
+    }
+    setRemarkCust((prev) =>
+      prev && (prev.id === updatedCust.id || prev.phone === updatedCust.phone)
+        ? { ...prev, ...updatedCust }
+        : prev
+    );
+  };
 
   // Deleted history archive state (dynamically fetched from PostgreSQL & synced)
   const [deletedHistoryList, setDeletedHistoryList] = useState(() => {
@@ -9221,6 +9418,7 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                         {(tx.email || matchedCust?.email) && <span>{tx.email || matchedCust?.email} • </span>}
                         {[tx.city || matchedCust?.city, tx.state || matchedCust?.state].filter(Boolean).join(', ') || '—'}
                       </div>
+                      {matchedCust && <SalesRemarkInlineBadge customer={matchedCust} onOpen={setRemarkCust} />}
                     </td>
 
                     {/* 2. Failed / Pending Amount */}
@@ -9381,6 +9579,22 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
                         >
                           <Plus size={13} /> Credit Wallet
                         </button>
+
+                        {/* Remark & Follow-Up Button (when registered customer exists) */}
+                        {matchedCust && (
+                          <button
+                            type="button"
+                            className="desk-action-btn"
+                            style={{ background: 'var(--adm-bg-subtle, #f8fafc)', color: 'var(--adm-text-primary, #0f172a)', fontWeight: 700, padding: '5px 8px' }}
+                            onClick={() => setRemarkCust(matchedCust)}
+                            title="Add follow-up remark or call reminder for this customer"
+                          >
+                            <FileText size={13} /> Remark
+                            {getCustomerFollowUpState(matchedCust).count > 0
+                              ? ` (${getCustomerFollowUpState(matchedCust).count})`
+                              : ''}
+                          </button>
+                        )}
 
                         {/* Details Modal */}
                         <button
@@ -9612,6 +9826,12 @@ export function FailedTransactionsDesk({ customers = [], setCustomers, allTransa
           }}
         />
       )}
+
+      <SalesCustomerRemarkModal
+        customer={remarkCust}
+        onClose={() => setRemarkCust(null)}
+        onCustomerUpdated={handleFailedRemarkUpdated}
+      />
     </div>
   );
 }

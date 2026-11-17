@@ -1627,6 +1627,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
             <img
               src="/AdMafia-Logo.png"
               alt="Ad Mafia Marketing"
+              className="portal-sidebar-logo-img"
               style={{
                 height: !showSidebarLabels ? '34px' : '40px',
                 width: 'auto',

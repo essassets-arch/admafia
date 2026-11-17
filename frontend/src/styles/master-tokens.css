@@ -214,11 +214,33 @@
 
 /* --------------------------------------------------------------------------
    2. CUSTOMER PORTAL DARK / WHITE THEME OVERRIDES (.portal-app-root)
+   Executive Obsidian / Midnight Slate Parity across Sidebar, Header,
+   Overview, My Leads, Wallet & Invoices, Business Profile & Modals
    -------------------------------------------------------------------------- */
+
+/* Light-mode helper defaults for semantic classes */
+.am-tx-desc-main {
+  color: #1e293b;
+}
+.am-tx-desc-main.is-failed {
+  color: #991b1b;
+}
+.am-tx-failed-row {
+  background: #fffcfc;
+}
+.am-inv-total-strong {
+  color: #0f172a;
+}
+.am-unread-lead-row {
+  background: #fbfdff;
+}
+
 .portal-app-root[data-admin-theme="dark"],
 [data-admin-active-theme="dark"] .portal-app-root.adm-theme-scope {
+  --am-missing-input-bg: rgba(245, 158, 11, 0.08);
   background: #0b1120 !important;
   color: #f8fafc !important;
+  color-scheme: dark;
 }
 
 .portal-app-root[data-admin-theme="dark"] .portal-main-area,
@@ -227,44 +249,197 @@
   color: #f8fafc !important;
 }
 
+/* --- 2A. SIDEBAR NAVIGATION (Deep Obsidian Parity with /sales) --- */
+.portal-app-root[data-admin-theme="dark"] .portal-sidebar {
+  background: linear-gradient(180deg, #050811 0%, #090f1d 100%) !important;
+  border-right: 1px solid #1e293b !important;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .sidebar-top {
+  border-bottom-color: rgba(148, 163, 184, 0.12) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .portal-sidebar-logo-img {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(148, 163, 184, 0.16) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .portal-logo-text {
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .portal-logo-text b {
+  color: #fbbf24 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .portal-logo-text span {
+  background: rgba(245, 158, 11, 0.16) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-sidebar-collapse,
+.portal-app-root[data-admin-theme="dark"] .btn-mobile-sidebar-close {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-sidebar-collapse:hover,
+.portal-app-root[data-admin-theme="dark"] .btn-mobile-sidebar-close:hover {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .nav-group-label {
+  color: #64748b !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .nav-item-btn {
+  color: #94a3b8 !important;
+  background: transparent !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .nav-item-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .nav-item-btn.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px -4px rgba(79, 70, 229, 0.5) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .nav-badge-count:not(.coral) {
+  background: rgba(148, 163, 184, 0.16) !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(148, 163, 184, 0.24) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .nav-item-btn.active .nav-badge-count:not(.coral) {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .nav-badge-wallet {
+  background: rgba(16, 185, 129, 0.16) !important;
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.32) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .nav-badge-wallet.zero {
+  background: rgba(244, 63, 94, 0.16) !important;
+  color: #fda4af !important;
+  border-color: rgba(244, 63, 94, 0.34) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .sidebar-footer-actions {
+  background: rgba(2, 6, 23, 0.35) !important;
+  border-top: 1px solid rgba(148, 163, 184, 0.12) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .sidebar-bottom-btn {
+  color: #94a3b8 !important;
+  background: transparent !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .sidebar-bottom-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .sidebar-bottom-btn.logout:hover {
+  background: rgba(244, 63, 94, 0.14) !important;
+  color: #fda4af !important;
+}
+
+/* --- 2B. TOP SUBHEADER, MOBILE BAR & BREADCRUMBS --- */
 .portal-app-root[data-admin-theme="dark"] .portal-subheader-bar,
 .portal-app-root[data-admin-theme="dark"] .portal-mobile-top-bar {
-  background: #0f172a !important;
-  border-color: rgba(148, 163, 184, 0.16) !important;
+  background: #090f1d !important;
+  border-color: #1e293b !important;
   color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .portal-subheader-company-info {
+  color: #cbd5e1 !important;
 }
 
 .portal-app-root[data-admin-theme="dark"] .portal-subheader-company-name,
-.portal-app-root[data-admin-theme="dark"] .portal-subheader-wallet-btn {
+.portal-app-root[data-admin-theme="dark"] .portal-subheader-wallet-btn,
+.portal-app-root[data-admin-theme="dark"] .mobile-brand-title {
   color: #f8fafc !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .portal-subheader-wallet-btn {
-  background: #1e293b !important;
-  border-color: rgba(148, 163, 184, 0.28) !important;
+.portal-app-root[data-admin-theme="dark"] .portal-subheader-wallet-btn,
+.portal-app-root[data-admin-theme="dark"] .mobile-wallet-pill,
+.portal-app-root[data-admin-theme="dark"] .btn-mobile-hamburger,
+.portal-app-root[data-admin-theme="dark"] .portal-mobile-logout-btn {
+  background: #111827 !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
 }
 
+.portal-app-root[data-admin-theme="dark"] .portal-subheader-verified-badge,
+.portal-app-root[data-admin-theme="dark"] .live-pipeline-active-badge {
+  background: rgba(16, 185, 129, 0.14) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.34) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .crumb-root {
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .crumb-slash {
+  color: #475569 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .crumb-current {
+  color: #f8fafc !important;
+  font-weight: 700;
+}
+
+/* --- 2C. MASTER SURFACE CARDS & TYPOGRAPHY --- */
 .portal-app-root[data-admin-theme="dark"] .pacing-control-master-card,
-.portal-app-root[data-admin-theme="dark"] .pacing-metric-card-exact,
-.portal-app-root[data-admin-theme="dark"] .select-marketing-days-engine,
 .portal-app-root[data-admin-theme="dark"] .overall-performance-master-card,
-.portal-app-root[data-admin-theme="dark"] .perf-box-card,
 .portal-app-root[data-admin-theme="dark"] .recent-priority-enquiries-panel,
 .portal-app-root[data-admin-theme="dark"] .wallet-exact-kpi-card,
 .portal-app-root[data-admin-theme="dark"] .instant-wallet-topup-card,
 .portal-app-root[data-admin-theme="dark"] .daywise-adspend-engine-card,
-.portal-app-root[data-admin-theme="dark"] .engine-mini-box,
 .portal-app-root[data-admin-theme="dark"] .wallet-ledger-history-card,
 .portal-app-root[data-admin-theme="dark"] .profile-header-card,
 .portal-app-root[data-admin-theme="dark"] .profile-overview-dashboard,
-.portal-app-root[data-admin-theme="dark"] .profile-info-card-box,
 .portal-app-root[data-admin-theme="dark"] .profile-form-section,
 .portal-app-root[data-admin-theme="dark"] .list-controls-bar,
-.portal-app-root[data-admin-theme="dark"] .header-ad-wallet-card,
-.portal-app-root[data-admin-theme="dark"] .am-quick-profile-card {
+.portal-app-root[data-admin-theme="dark"] .header-ad-wallet-card {
   background: #111827 !important;
-  border-color: rgba(148, 163, 184, 0.18) !important;
+  border-color: #1e293b !important;
   color: #f8fafc !important;
+  box-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.45) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .pacing-metric-card-exact,
+.portal-app-root[data-admin-theme="dark"] .select-marketing-days-engine,
+.portal-app-root[data-admin-theme="dark"] .perf-box-card,
+.portal-app-root[data-admin-theme="dark"] .engine-mini-box,
+.portal-app-root[data-admin-theme="dark"] .profile-info-card-box {
+  background: #0d1424 !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .header-wallet-icon-box,
+.portal-app-root[data-admin-theme="dark"] .profile-info-card-icon {
+  background: rgba(79, 70, 229, 0.16) !important;
+  border-color: rgba(99, 102, 241, 0.3) !important;
+  color: #a5b4fc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .header-wallet-tag {
+  color: #94a3b8 !important;
 }
 
 .portal-app-root[data-admin-theme="dark"] h1,
@@ -276,7 +451,11 @@
 .portal-app-root[data-admin-theme="dark"] .perf-box-number,
 .portal-app-root[data-admin-theme="dark"] .header-wallet-val,
 .portal-app-root[data-admin-theme="dark"] .profile-kv-val,
-.portal-app-root[data-admin-theme="dark"] .phone-strong {
+.portal-app-root[data-admin-theme="dark"] .phone-strong,
+.portal-app-root[data-admin-theme="dark"] .engine-title-text,
+.portal-app-root[data-admin-theme="dark"] .mini-box-big-text,
+.portal-app-root[data-admin-theme="dark"] .mini-box-subline,
+.portal-app-root[data-admin-theme="dark"] .am-inv-total-strong {
   color: #f8fafc !important;
 }
 
@@ -284,25 +463,355 @@
 .portal-app-root[data-admin-theme="dark"] .overview-desc-lead,
 .portal-app-root[data-admin-theme="dark"] .lead-header-desc,
 .portal-app-root[data-admin-theme="dark"] .wallet-desc-lead,
-.portal-app-root[data-admin-theme="dark"] .profile-kv-label {
+.portal-app-root[data-admin-theme="dark"] .profile-kv-label,
+.portal-app-root[data-admin-theme="dark"] .pacing-card-exact-label,
+.portal-app-root[data-admin-theme="dark"] .pacing-card-footer-between,
+.portal-app-root[data-admin-theme="dark"] .perf-box-label,
+.portal-app-root[data-admin-theme="dark"] .perf-box-records,
+.portal-app-root[data-admin-theme="dark"] .kpi-card-label,
+.portal-app-root[data-admin-theme="dark"] .kpi-card-subline,
+.portal-app-root[data-admin-theme="dark"] .mini-box-label,
+.portal-app-root[data-admin-theme="dark"] .mini-box-caption:not(.text-coral),
+.portal-app-root[data-admin-theme="dark"] .engine-realtime-note {
   color: #94a3b8 !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected {
-  background: #0f172a !important;
-  border-color: rgba(148, 163, 184, 0.2) !important;
+.portal-app-root[data-admin-theme="dark"] .pacing-card-footer-between strong {
+  color: #e2e8f0 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-pacing-link-purple,
+.portal-app-root[data-admin-theme="dark"] .kpi-link-addfunds {
+  color: #a5b4fc !important;
+}
+
+/* --- 2D. OVERVIEW PACING CONTROLS, TOGGLE CLUSTER & 7-DAY CALENDAR --- */
+.portal-app-root[data-admin-theme="dark"] .pacing-status-toggle-cluster {
+  background: #0d1424 !important;
+  border: 1px solid #334155 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .pacing-status-micro-label {
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .pacing-status-state-text.paused {
   color: #cbd5e1 !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected {
-  background: rgba(79, 70, 229, 0.16) !important;
+.portal-app-root[data-admin-theme="dark"] .pacing-status-state-text.live {
+  color: #34d399 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .badge-marketing-pill-exact.off {
+  background: rgba(148, 163, 184, 0.14) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(148, 163, 184, 0.28) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .badge-marketing-pill-exact.live,
+.portal-app-root[data-admin-theme="dark"] .pacing-meta-verified-pill,
+.portal-app-root[data-admin-theme="dark"] .live-week-pill,
+.portal-app-root[data-admin-theme="dark"] .pill-ad-booked-badge,
+.portal-app-root[data-admin-theme="dark"] .pacing-days-badge.tone-emerald,
+.portal-app-root[data-admin-theme="dark"] .engine-booked-highlight-pill.tone-emerald {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .pacing-days-badge.tone-neutral {
+  background: rgba(148, 163, 184, 0.14) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(148, 163, 184, 0.24) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .engine-booked-highlight-pill.tone-blue {
+  background: rgba(59, 130, 246, 0.16) !important;
+  color: #93c5fd !important;
+  border: 1px solid rgba(59, 130, 246, 0.36) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .engine-booked-highlight-pill.tone-rose {
+  background: rgba(244, 63, 94, 0.15) !important;
+  color: #fda4af !important;
+  border: 1px solid rgba(244, 63, 94, 0.36) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-preset-chip,
+.portal-app-root[data-admin-theme="dark"] .btn-preset-chip.clear,
+.portal-app-root[data-admin-theme="dark"] .btn-week-step-nav {
+  background: #111827 !important;
+  border: 1px solid #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-preset-chip:hover,
+.portal-app-root[data-admin-theme="dark"] .btn-week-step-nav:hover {
+  background: #1e293b !important;
+  border-color: #475569 !important;
+  color: #ffffff !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-preset-chip.active-purple {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
   border-color: #6366f1 !important;
+  color: #ffffff !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .week-range-indicator-badge {
+  background: #111827 !important;
+  border: 1px solid #334155 !important;
   color: #f8fafc !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-ad-booked {
-  background: rgba(16, 185, 129, 0.14) !important;
+.portal-app-root[data-admin-theme="dark"] .timezone-meta-text {
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .today-campaign-bottom-bar-exact,
+.portal-app-root[data-admin-theme="dark"] .engine-week-calendar-toolbar {
+  background: #090f1d !important;
+  border-color: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .today-day-prefix,
+.portal-app-root[data-admin-theme="dark"] .budget-sub-label,
+.portal-app-root[data-admin-theme="dark"] .budget-per-day {
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .budget-val-purple {
+  color: #a5b4fc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected {
+  background: #090f1d !important;
+  border-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected:hover {
+  background: #111827 !important;
+  border-color: #334155 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected .day-code-title {
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected .day-calendar-date {
+  color: #e2e8f0 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected .day-sub-label {
+  color: #64748b !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected .day-price-badge {
+  background: #111827 !important;
+  border-color: #1e293b !important;
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected {
+  background: rgba(16, 185, 129, 0.11) !important;
   border-color: #10b981 !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-code-title {
+  color: #34d399 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-calendar-date {
+  color: #a7f3d0 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-sub-label {
+  color: #6ee7b7 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-price-badge {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  color: #ecfdf5 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-ad-booked {
+  background: rgba(16, 185, 129, 0.16) !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 8px 20px -8px rgba(16, 185, 129, 0.35) !important;
+}
+
+/* --- 2E. MY LEADS, WALLET & INVOICES, BUSINESS PROFILE & MODALS --- */
+.portal-app-root[data-admin-theme="dark"] .am-unread-lead-row {
+  background: rgba(79, 70, 229, 0.08) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .list-tab-pill,
+.portal-app-root[data-admin-theme="dark"] .ledger-tab-btn,
+.portal-app-root[data-admin-theme="dark"] .btn-leads-csv-export,
+.portal-app-root[data-admin-theme="dark"] .btn-jump-edit {
+  background: #0d1424 !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .list-tab-pill:hover,
+.portal-app-root[data-admin-theme="dark"] .ledger-tab-btn:hover,
+.portal-app-root[data-admin-theme="dark"] .btn-leads-csv-export:hover,
+.portal-app-root[data-admin-theme="dark"] .btn-jump-edit:hover {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .list-tab-pill.active,
+.portal-app-root[data-admin-theme="dark"] .ledger-tab-btn.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+  border-color: #6366f1 !important;
+  color: #ffffff !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .lead-count-badge-top {
+  background: rgba(99, 102, 241, 0.16) !important;
+  color: #a5b4fc !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .lead-count-badge-top.tone-rose,
+.portal-app-root[data-admin-theme="dark"] .proper-step-badge.tone-rose {
+  background: rgba(244, 63, 94, 0.15) !important;
+  color: #fda4af !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .lead-count-badge-top.tone-pink,
+.portal-app-root[data-admin-theme="dark"] .proper-step-badge.tone-pink,
+.portal-app-root[data-admin-theme="dark"] .fup-status-tag.tone-pink {
+  background: rgba(236, 72, 153, 0.15) !important;
+  color: #f9a8d4 !important;
+  border-color: rgba(236, 72, 153, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .proper-step-badge.tone-indigo {
+  background: rgba(99, 102, 241, 0.16) !important;
+  color: #a5b4fc !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .proper-step-badge.tone-emerald,
+.portal-app-root[data-admin-theme="dark"] .am-profile-pill-emerald,
+.portal-app-root[data-admin-theme="dark"] .badge-kyc-verified,
+.portal-app-root[data-admin-theme="dark"] .tx-status-verified-pill,
+.portal-app-root[data-admin-theme="dark"] .exact-type-pill.credit {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .proper-step-badge.tone-blue,
+.portal-app-root[data-admin-theme="dark"] .am-portal-company-chip,
+.portal-app-root[data-admin-theme="dark"] .am-profile-pill-blue,
+.portal-app-root[data-admin-theme="dark"] .badge-category-pill {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #93c5fd !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .proper-step-badge.tone-amber,
+.portal-app-root[data-admin-theme="dark"] .am-profile-pill-amber,
+.portal-app-root[data-admin-theme="dark"] .badge-kyc-pending,
+.portal-app-root[data-admin-theme="dark"] .engine-autocut-badge {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .badge-wallet-info {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .phone-icon-circle {
+  background: #1e293b !important;
+  color: #93c5fd !important;
+  border-color: #334155 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-list-action:not(.chat):not(.call) {
+  background: #111827 !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-list-action.call {
+  background: rgba(59, 130, 246, 0.16) !important;
+  border-color: rgba(59, 130, 246, 0.38) !important;
+  color: #93c5fd !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-list-action.chat {
+  background: rgba(16, 185, 129, 0.16) !important;
+  border-color: rgba(16, 185, 129, 0.38) !important;
+  color: #34d399 !important;
+}
+
+/* Wallet Page Dark Polish */
+.portal-app-root[data-admin-theme="dark"] .kpi-card-icon-badge {
+  background: rgba(99, 102, 241, 0.16) !important;
+  color: #a5b4fc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .wallet-low-balance-exact-alert {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.14) 0%, #111827 75%) !important;
+  border-color: rgba(244, 63, 94, 0.4) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .wallet-low-balance-exact-alert h3 {
+  color: #fda4af !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .wallet-low-balance-exact-alert p {
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .alert-warning-icon {
+  background: rgba(244, 63, 94, 0.18) !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .topup-section-micro-heading,
+.portal-app-root[data-admin-theme="dark"] .payment-method-heading {
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .topup-preset-card-exact:not(.selected) {
+  background: #090f1d !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .topup-preset-card-exact:not(.selected):hover {
+  background: #131c31 !important;
+  border-color: #334155 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .topup-preset-card-exact.selected {
+  background: rgba(79, 70, 229, 0.18) !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 1px #6366f1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .preset-card-val-exact {
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .preset-card-runtime-exact {
+  color: #94a3b8 !important;
 }
 
 .portal-app-root[data-admin-theme="dark"] .clean-input,
@@ -310,21 +819,195 @@
 .portal-app-root[data-admin-theme="dark"] .list-search-wrap,
 .portal-app-root[data-admin-theme="dark"] .list-search-input,
 .portal-app-root[data-admin-theme="dark"] .custom-input-box-exact,
-.portal-app-root[data-admin-theme="dark"] .custom-field-exact,
-.portal-app-root[data-admin-theme="dark"] .topup-preset-card-exact:not(.selected) {
-  background: #090e1a !important;
-  border-color: rgba(148, 163, 184, 0.24) !important;
+.portal-app-root[data-admin-theme="dark"] .custom-field-exact {
+  background: #090f1d !important;
+  border-color: #334155 !important;
   color: #f8fafc !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .today-campaign-bottom-bar-exact,
-.portal-app-root[data-admin-theme="dark"] .engine-week-calendar-toolbar {
+.portal-app-root[data-admin-theme="dark"] .clean-select option,
+.portal-app-root[data-admin-theme="dark"] select option {
   background: #0f172a !important;
-  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .currency-prefix-exact {
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .razorpay-verified-chip {
+  background: rgba(99, 102, 241, 0.16) !important;
+  border-color: rgba(99, 102, 241, 0.34) !important;
+  color: #a5b4fc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .razorpay-gateway-box-exact {
+  background: #090f1d !important;
+  border-color: #334155 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .gateway-box-title-row strong {
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .gateway-box-sub {
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .guarantee-line-exact {
+  color: #34d399 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .engine-status-pill.active {
+  background: rgba(16, 185, 129, 0.16) !important;
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .engine-status-pill.paused {
+  background: rgba(244, 63, 94, 0.15) !important;
+  color: #fda4af !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-resume-campaign-exact {
+  background: #111827 !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-resume-campaign-exact:hover {
+  background: #1e293b !important;
+  border-color: #6366f1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-tx-desc-main {
+  color: #f1f5f9 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-tx-desc-main.is-failed {
+  color: #fda4af !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-tx-failed-row {
+  background: rgba(244, 63, 94, 0.06) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .tx-ref-code {
+  background: #090f1d !important;
+  border-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .tx-date-cell,
+.portal-app-root[data-admin-theme="dark"] .tx-method-cell,
+.portal-app-root[data-admin-theme="dark"] .time-display-wrap {
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .btn-copy-tx,
+.portal-app-root[data-admin-theme="dark"] .btn-receipt-view {
+  background: #090f1d !important;
+  border-color: #334155 !important;
+  color: #a5b4fc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .exact-type-pill.debit {
+  background: rgba(245, 158, 11, 0.16) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .cp-table th,
+.portal-app-root[data-admin-theme="dark"] .wallet-exact-table th {
+  background: #090f1d !important;
+  color: #94a3b8 !important;
+  border-color: #1e293b !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .cp-table td,
+.portal-app-root[data-admin-theme="dark"] .wallet-exact-table td {
+  border-color: #1e293b !important;
   color: #e2e8f0 !important;
 }
 
-/* Inline Quick-Complete Profile Card */
+.portal-app-root[data-admin-theme="dark"] .cp-table tbody tr:hover,
+.portal-app-root[data-admin-theme="dark"] .wallet-exact-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .empty-ledger-title,
+.portal-app-root[data-admin-theme="dark"] .proper-list-empty-state h3 {
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .empty-ledger-subtitle,
+.portal-app-root[data-admin-theme="dark"] .proper-list-empty-state p {
+  color: #94a3b8 !important;
+}
+
+/* Business Profile Dark Polish */
+.portal-app-root[data-admin-theme="dark"] .profile-incomplete-alert-strip {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, #111827 75%) !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .profile-incomplete-alert-title {
+  color: #fbbf24 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .profile-incomplete-alert-sub {
+  color: #fde68a !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .progress-track {
+  background: #1e293b !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .progress-bar-label {
+  color: #cbd5e1 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .form-group-block label,
+.portal-app-root[data-admin-theme="dark"] .profile-form-group label {
+  color: #cbd5e1 !important;
+}
+
+/* Portal Modals Dark Polish */
+[data-admin-active-theme="dark"] .portal-modal-box,
+.portal-app-root[data-admin-theme="dark"] .portal-modal-box {
+  background: #111827 !important;
+  border: 1px solid #334155 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.7) !important;
+}
+
+[data-admin-active-theme="dark"] .portal-modal-box .modal-header,
+.portal-app-root[data-admin-theme="dark"] .portal-modal-box .modal-header {
+  border-bottom-color: #1e293b !important;
+}
+
+[data-admin-active-theme="dark"] .portal-modal-box h3,
+.portal-app-root[data-admin-theme="dark"] .portal-modal-box h3 {
+  color: #f8fafc !important;
+}
+
+[data-admin-active-theme="dark"] .portal-modal-box .clean-input,
+[data-admin-active-theme="dark"] .portal-modal-box .clean-select,
+[data-admin-active-theme="dark"] .portal-modal-box textarea {
+  background: #090f1d !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-admin-active-theme="dark"] .portal-modal-box .btn-cancel-clean,
+.portal-app-root[data-admin-theme="dark"] .btn-cancel-clean {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+/* --- 2F. INLINE QUICK-COMPLETE PROFILE CARD (LIGHT + DARK) --- */
 .am-quick-profile-card {
   background: linear-gradient(135deg, #fffbeb 0%, #ffffff 65%, #f8fafc 100%);
   border: 1.5px solid #f59e0b;
@@ -333,6 +1016,31 @@
   padding: 20px 22px;
   margin-bottom: 22px;
   box-shadow: 0 10px 28px -12px rgba(217, 119, 6, 0.24);
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-card {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.11) 0%, #111827 55%, #0d1424 100%) !important;
+  border: 1.5px solid rgba(245, 158, 11, 0.42) !important;
+  border-left: 5px solid #f59e0b !important;
+  box-shadow: 0 14px 32px -12px rgba(0, 0, 0, 0.55) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-meta-count,
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-pct:not(.is-complete),
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-link {
+  color: #fbbf24 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-pct.is-complete {
+  color: #34d399 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-heading {
+  color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-track {
+  background: rgba(251, 191, 36, 0.18) !important;
 }
 
 .am-quick-profile-grid {
@@ -383,6 +1091,10 @@
 .portal-app-root[data-admin-theme="dark"] .am-quick-profile-field input,
 .portal-app-root[data-admin-theme="dark"] .am-quick-profile-field select {
   background: #090e1a !important;
-  border-color: rgba(251, 191, 36, 0.45) !important;
+  border-color: rgba(251, 191, 36, 0.42) !important;
   color: #f8fafc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-quick-profile-field input::placeholder {
+  color: #64748b !important;
 }
