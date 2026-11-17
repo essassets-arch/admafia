@@ -299,6 +299,8 @@ function parseModalBulkPhones(rawInput, existingPhonesSet = new Set()) {
   return { validNumbers, invalidTokens, clientDuplicates };
 }
 
+const getModalCustomerKey = (c) => String(c?.id || c?.phone || c?.username || '');
+
 function QuickBulkLeadDispatchModal({
   isOpen,
   onClose,
@@ -314,27 +316,58 @@ function QuickBulkLeadDispatchModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const phoneInputRef = useRef(null);
+  const wasOpenRef = useRef(false);
+  const lastInitialKeyRef = useRef('');
 
+  // Reset form ONLY when modal transitions from closed -> open (or explicit target client changes on open).
+  // NEVER reset on background `customers` polling updates while the operator is selecting/typing!
   useEffect(() => {
-    if (!isOpen) return;
-    setCustomerSearch('');
-    setPhonesInput('');
-    setMultiLineMode(false);
-    setSubmitError('');
-    setIsSubmitting(false);
-
-    let defaultKey = initialCustomerKey;
-    if (!defaultKey && customers.length > 0) {
-      const first = customers[0];
-      defaultKey = String(first.id || first.phone || first.username || '');
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      lastInitialKeyRef.current = '';
+      return;
     }
-    setSelectedCustomerKey(defaultKey);
 
-    const t = setTimeout(() => {
-      if (phoneInputRef.current) phoneInputRef.current.focus();
-    }, 60);
-    return () => clearTimeout(t);
-  }, [isOpen, initialCustomerKey, customers]);
+    const justOpened = !wasOpenRef.current;
+    const explicitTargetChanged =
+      Boolean(initialCustomerKey) && String(initialCustomerKey) !== String(lastInitialKeyRef.current);
+
+    if (justOpened || explicitTargetChanged) {
+      wasOpenRef.current = true;
+      lastInitialKeyRef.current = String(initialCustomerKey || '');
+      setCustomerSearch('');
+      setPhonesInput('');
+      setMultiLineMode(false);
+      setSubmitError('');
+      setIsSubmitting(false);
+
+      let resolvedKey = '';
+      if (initialCustomerKey) {
+        const matched = customers.find(
+          (c) =>
+            getModalCustomerKey(c) === String(initialCustomerKey) ||
+            String(c?.id || '') === String(initialCustomerKey) ||
+            String(c?.phone || '') === String(initialCustomerKey) ||
+            String(c?.username || '') === String(initialCustomerKey)
+        );
+        resolvedKey = matched ? getModalCustomerKey(matched) : String(initialCustomerKey);
+      }
+      if (!resolvedKey && customers.length > 0) {
+        resolvedKey = getModalCustomerKey(customers[0]);
+      }
+      setSelectedCustomerKey(resolvedKey);
+
+      const t = setTimeout(() => {
+        if (phoneInputRef.current) phoneInputRef.current.focus();
+      }, 60);
+      return () => clearTimeout(t);
+    }
+
+    // Edge case: if `customers` was empty at t=0 and finishes loading while selection is still blank
+    if (!selectedCustomerKey && customers.length > 0) {
+      setSelectedCustomerKey(getModalCustomerKey(customers[0]));
+    }
+  }, [isOpen, initialCustomerKey, customers, selectedCustomerKey]);
 
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
@@ -358,17 +391,22 @@ function QuickBulkLeadDispatchModal({
     });
   }, [customers, customerSearch]);
 
+  // Only auto-adjust selection to first match when the operator actively types a search filter
   useEffect(() => {
     if (!isOpen) return;
+    if (!customerSearch.trim()) return;
     if (filteredCustomers.length === 0) return;
     const stillVisible = filteredCustomers.some(
-      (c) => String(c.id || c.phone || c.username) === String(selectedCustomerKey)
+      (c) =>
+        getModalCustomerKey(c) === String(selectedCustomerKey) ||
+        String(c?.id || '') === String(selectedCustomerKey) ||
+        String(c?.phone || '') === String(selectedCustomerKey) ||
+        String(c?.username || '') === String(selectedCustomerKey)
     );
     if (!stillVisible) {
-      const first = filteredCustomers[0];
-      setSelectedCustomerKey(String(first.id || first.phone || first.username || ''));
+      setSelectedCustomerKey(getModalCustomerKey(filteredCustomers[0]));
     }
-  }, [filteredCustomers, isOpen, selectedCustomerKey]);
+  }, [customerSearch, filteredCustomers, isOpen, selectedCustomerKey]);
 
   const selectedCustomer = useMemo(() => {
     return (
@@ -2290,19 +2328,22 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
       .catch(() => { });
   };
 
+  const isAddLeadModalOpenRef = useRef(false);
+  useEffect(() => {
+    isAddLeadModalOpenRef.current = isAddLeadModalOpen;
+  }, [isAddLeadModalOpen]);
+
   useEffect(() => {
     fetchAuthoritativeDeskData();
-    // Auto-poll every 6 seconds so status of "Marked as Read" synchronizes in real time
-    const pollTimer = setInterval(fetchAuthoritativeDeskData, 6000);
+    // Auto-poll every 6 seconds so status of "Marked as Read" synchronizes in real time,
+    // while pausing during active modal entry or hidden background tabs
+    const pollTimer = setInterval(() => {
+      if (isAddLeadModalOpenRef.current) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchAuthoritativeDeskData();
+    }, 6000);
     return () => clearInterval(pollTimer);
   }, []);
-
-  const handleOpenAddLead = () => {
-    const firstCust = deskCustomers[0] || null;
-    const firstKey = firstCust ? String(firstCust.id || firstCust.phone || firstCust.username || '') : '';
-    setAddLeadInitialKey(firstKey);
-    setIsAddLeadModalOpen(true);
-  };
 
   const [leads, setLeads] = useState(() => {
     try {
@@ -2365,6 +2406,24 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedCustomerId, setSelectedCustomerId] = useState('all');
+
+  const handleOpenAddLead = (targetCust = null) => {
+    const preferred =
+      targetCust ||
+      (selectedCustomerId && selectedCustomerId !== 'all'
+        ? deskCustomers.find(
+            (c) =>
+              String(c.id) === String(selectedCustomerId) ||
+              String(c.phone) === String(selectedCustomerId) ||
+              String(c.username) === String(selectedCustomerId)
+          )
+        : null) ||
+      deskCustomers[0] ||
+      null;
+    const firstKey = preferred ? getModalCustomerKey(preferred) : '';
+    setAddLeadInitialKey(firstKey);
+    setIsAddLeadModalOpen(true);
+  };
 
   // Smart Searchable Customer Dropdown State
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Calendar,
   RefreshCw,
@@ -39,14 +39,19 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
 
   // Per-row inline Actual Ad Spend state (Marketing ONLY sees Ad Spend — 50% default preset!)
   const [spendEdits, setSpendEdits] = useState({});
+  const dirtySpendIdsRef = useRef(new Set());
   const [savingSpendId, setSavingSpendId] = useState(null);
   const [togglingCampId, setTogglingCampId] = useState(null);
   const [previewMedia, setPreviewMedia] = useState(null);
 
   const loadSchedule = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
-      else setRefreshing(true);
+      if (!silent) {
+        setLoading(true);
+        dirtySpendIdsRef.current.clear();
+      } else {
+        setRefreshing(true);
+      }
       try {
         const res = await marketingApi.getActiveDeliverySchedule({ date: selectedDate });
         if (res && res.ok) {
@@ -55,7 +60,16 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
           (res.clients || []).forEach((c) => {
             initialInputs[c.id] = String(c.actualAdSpend ?? Math.round((c.dailyBudget || 300) * 0.5));
           });
-          setSpendEdits(initialInputs);
+          setSpendEdits((prev) => {
+            if (!silent) return initialInputs;
+            const merged = { ...initialInputs };
+            dirtySpendIdsRef.current.forEach((dirtyId) => {
+              if (prev[dirtyId] !== undefined) {
+                merged[dirtyId] = prev[dirtyId];
+              }
+            });
+            return merged;
+          });
         }
       } catch (err) {
         console.error('[MarketingActiveScheduleDesk] Load error:', err);
@@ -69,7 +83,10 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
 
   useEffect(() => {
     loadSchedule(false);
-    const timer = setInterval(() => loadSchedule(true), 30000);
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      loadSchedule(true);
+    }, 30000);
     return () => clearInterval(timer);
   }, [loadSchedule]);
 
@@ -92,6 +109,7 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
         useDefaultPreset: false, // Explicitly confirmed by Marketing
       });
       if (res && res.ok) {
+        dirtySpendIdsRef.current.delete(client.id);
         setSpendEdits((prev) => ({ ...prev, [client.id]: String(res.actualSpend) }));
         setScheduleData((prev) => {
           if (!prev) return prev;
@@ -611,9 +629,10 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                             className="mkt-input"
                             style={{ paddingLeft: 22, paddingRight: 6, height: 32, fontSize: '0.82rem', fontWeight: 800 }}
                             value={spendEdits[c.id] ?? ''}
-                            onChange={(e) =>
-                              setSpendEdits((prev) => ({ ...prev, [c.id]: e.target.value }))
-                            }
+                            onChange={(e) => {
+                              dirtySpendIdsRef.current.add(c.id);
+                              setSpendEdits((prev) => ({ ...prev, [c.id]: e.target.value }));
+                            }}
                           />
                         </div>
                         <button
