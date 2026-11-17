@@ -103,8 +103,7 @@ export function evaluateCustomerEligibility(row, options = {}) {
   const activeDaysRaw = row.active_days ?? row.activeDays ?? todayCode;
   const rawList = (Array.isArray(activeDaysRaw) ? activeDaysRaw : String(activeDaysRaw).split(','))
     .map((s) => String(s).trim().toUpperCase()).filter(Boolean);
-  const isLegacy = rawList.length === 5 && rawList.includes('MON') && rawList.includes('FRI');
-  const activeDaysList = isLegacy || rawList.length === 0 ? [todayCode] : rawList;
+  const activeDaysList = rawList.length === 0 ? [todayCode] : rawList;
 
   const isScheduledToday = activeDaysList.includes('ALL') || activeDaysList.includes(todayCode);
   const canCampaignRun = isCampaignActive && (isScheduledToday || isTodayBooked);

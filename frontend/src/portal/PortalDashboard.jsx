@@ -162,7 +162,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           dailyAdSpend: typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : (String(u.currency || 'INR').toUpperCase() === 'USD' ? 10 : 300),
           dailyPacing: typeof u.dailyPacing === 'number' ? u.dailyPacing : (typeof u.dailyAdSpend === 'number' ? u.dailyAdSpend : (String(u.currency || 'INR').toUpperCase() === 'USD' ? 10 : 300)),
           adCampaignActive: typeof u.adCampaignActive === 'boolean' ? u.adCampaignActive : Boolean(u.adCampaignActive),
-          activeDays: (Array.isArray(u.activeDays) && u.activeDays.length > 0 && !(u.activeDays.length === 5 && u.activeDays.includes('MON') && u.activeDays.includes('FRI'))) ? u.activeDays : [['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay()]],
+          activeDays: (Array.isArray(u.activeDays) && u.activeDays.length > 0) ? u.activeDays : [['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay()]],
           bookedDates: Array.isArray(u.bookedDates) ? u.bookedDates : [],
           lockedDays: Array.isArray(u.lockedDays) ? u.lockedDays : [],
           isDeductedToday: Boolean(u.isDeductedToday),
@@ -508,10 +508,9 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     const todayDayCode = dayCodes[new Date().getDay()];
 
     setCustomer((prev) => {
-      const isLegacy = Array.isArray(prev?.activeDays) && prev.activeDays.length === 5 && prev.activeDays.includes('MON') && prev.activeDays.includes('FRI');
       const existingDays = Array.isArray(customDays) && customDays.length > 0
         ? customDays
-        : (Array.isArray(prev?.activeDays) && !isLegacy ? prev.activeDays : [todayDayCode]);
+        : (Array.isArray(prev?.activeDays) && prev.activeDays.length > 0 ? prev.activeDays : [todayDayCode]);
       const finalDays = Array.from(new Set([...existingDays, todayDayCode]));
       const isCurrentlyActive = Boolean(prev?.adCampaignActive);
       const isAlreadyDeducted = Boolean(prev?.isDeductedToday);
@@ -986,10 +985,47 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
   const handleUpdateCustomer = (updates) => {
     const targetId = customer?.id || customer?.phone || updates.id || updates.phone;
     if (targetId) {
-      crmApi
-        .updateCustomerProfile(targetId, updates)
-        .then(() => crmApi.syncStateFromPostgres().catch(() => {}))
-        .catch((err) => console.warn('Backend customer update note:', err.message));
+      const hasWalletOrScheduleKeys =
+        updates.activeDays !== undefined ||
+        updates.schedulePreset !== undefined ||
+        updates.dailyAdSpend !== undefined ||
+        updates.adCampaignActive !== undefined;
+      const hasProfileKeys =
+        updates.companyName !== undefined ||
+        updates.category !== undefined ||
+        updates.city !== undefined ||
+        updates.state !== undefined ||
+        updates.email !== undefined ||
+        updates.contactPerson !== undefined ||
+        updates.website !== undefined ||
+        updates.domain !== undefined ||
+        updates.industry !== undefined;
+
+      if (hasWalletOrScheduleKeys) {
+        crmApi
+          .patchCustomer(targetId, updates)
+          .then((savedCust) => {
+            if (savedCust && typeof savedCust === 'object') {
+              setCustomer((prev) => {
+                const merged = { ...prev, ...savedCust };
+                try {
+                  localStorage.setItem('growthline_active_user', JSON.stringify(merged));
+                } catch (e) {}
+                return merged;
+              });
+            }
+          })
+          .catch((err) => console.warn('Backend schedule/wallet patch note:', err.message));
+      } else if (hasProfileKeys) {
+        crmApi
+          .updateCustomerProfile(targetId, updates)
+          .then(() => crmApi.syncStateFromPostgres().catch(() => {}))
+          .catch((err) => console.warn('Backend customer profile update note:', err.message));
+      } else {
+        crmApi
+          .patchCustomer(targetId, updates)
+          .catch((err) => console.warn('Backend customer patch note:', err.message));
+      }
     }
 
     setCustomer((prev) => {
@@ -1305,12 +1341,25 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       return;
     }
 
-    // 3. Low Balance Check: If balance is below daily spend, show prompt & open Top-Up modal directly
-    if (nextActive && walletBalance < dailyLimit) {
+    // Authoritative IST check: Is today's schedule ALREADY paid & booked?
+    const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const todayIso = `${kolkataNow.getFullYear()}-${String(kolkataNow.getMonth() + 1).padStart(2, '0')}-${String(kolkataNow.getDate()).padStart(2, '0')}`;
+    const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const todayDayCode = dayCodes[kolkataNow.getDay()];
+    const isTodayAlreadyPaid = Boolean(
+      customer.isDeductedToday ||
+      (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(todayIso)) ||
+      (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(todayDayCode)) ||
+      (customer.lastDeductedAt &&
+        new Date(customer.lastDeductedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === todayIso)
+    );
+
+    // 3. Low Balance Check: ONLY block when today is NOT already paid and wallet balance < dailySpend!
+    if (nextActive && !isTodayAlreadyPaid && walletBalance < dailyLimit) {
       Swal.fire({
         icon: 'warning',
         title: 'Growth Wallet Balance is Low',
-        html: `Your available Growth Wallet balance is <strong style="color:#ef4444;">${currencySymbol}${walletBalance.toLocaleString()}</strong>, but today's daily growth budget is <strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong>.<br/><br/>Please top up your wallet to activate lead delivery.`,
+        html: `Your available Growth Wallet balance is <strong style="color:#ef4444;">${currencySymbol}${walletBalance.toLocaleString()}</strong>, and today's delivery budget is <strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong>.<br/><br/>Please top up your wallet to activate today's lead delivery.`,
         showCancelButton: true,
         confirmButtonText: '+ Top Up Wallet Now',
         confirmButtonColor: '#4f46e5',
@@ -1323,11 +1372,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       return;
     }
 
-    // 4. Activating Delivery -> Directly deduct daily amount from wallet
-    const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-    const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-    const todayDayCode = dayCodes[kolkataNow.getDay()];
-
+    // 4. Activating / Resuming Delivery
     const currentDays = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
       ? customer.activeDays
       : [todayDayCode];
@@ -1339,7 +1384,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     if (nextActive) {
       const confirmStart = await Swal.fire({
         icon: 'question',
-        title: 'Activate Daily Lead Delivery?',
+        title: isTodayAlreadyPaid ? 'Resume Today\'s Paid Delivery?' : 'Activate Daily Lead Delivery?',
         html: `
           <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px; margin: 10px 0; font-family: inherit;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
@@ -1351,16 +1396,20 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               <strong style="color: #4f46e5; font-size: 1rem;">${currencySymbol}${walletBalance.toLocaleString()}</strong>
             </div>
             <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; display: flex; justify-content: space-between;">
-              <span style="color: #64748b; font-size: 0.85rem;">Today's Schedule:</span>
-              <span style="color: #047857; font-weight: 700; font-size: 0.85rem;">${customer.isDeductedToday ? 'Already Debited ✓' : `Deduct ${currencySymbol}${dailyLimit.toLocaleString()}`}</span>
+              <span style="color: #64748b; font-size: 0.85rem;">Today (${todayDayCode}) Charge:</span>
+              <span style="color: #047857; font-weight: 800; font-size: 0.85rem;">${isTodayAlreadyPaid ? `${currencySymbol}0 — Already Paid & Booked ✓` : `Deduct ${currencySymbol}${dailyLimit.toLocaleString()}`}</span>
             </div>
           </div>
           <p style="font-size: 0.88rem; color: #475569; margin: 0;">
-            Clicking <strong>Start</strong> will activate your verified buyer lead delivery and book today's schedule.
+            ${isTodayAlreadyPaid
+              ? 'Today\'s delivery was already paid earlier today. Resuming now charges <strong>' + currencySymbol + '0</strong>.'
+              : 'Clicking <strong>Start</strong> will activate your verified buyer lead delivery and book today\'s schedule.'}
           </p>
         `,
         showCancelButton: true,
-        confirmButtonText: customer.isDeductedToday ? '▶ Activate Delivery' : `▶ Deduct ${currencySymbol}${dailyLimit.toLocaleString()} & Start`,
+        confirmButtonText: isTodayAlreadyPaid
+          ? `▶ Resume Delivery (${currencySymbol}0 Extra)`
+          : `▶ Deduct ${currencySymbol}${dailyLimit.toLocaleString()} & Start`,
         confirmButtonColor: '#059669',
         cancelButtonText: 'Cancel',
       });

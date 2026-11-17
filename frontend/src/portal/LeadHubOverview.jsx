@@ -105,121 +105,100 @@ export default function LeadHubOverview({
   const currentTodayItem = daysList.find((d) => d.isToday) || daysList[0];
   const todayCode = currentTodayItem?.code || 'MON';
 
-  const isLegacyWeekdays = (arr) => {
-    if (!Array.isArray(arr) || arr.length !== 5) return false;
-    const s = new Set(arr.map((d) => String(d).trim().toUpperCase()));
-    return s.has('MON') && s.has('TUE') && s.has('WED') && s.has('THU') && s.has('FRI');
+  // Compute how many UNBOOKED days are funded by the current wallet balance
+  const fundedRunwayDays = dailySpend > 0 ? Math.floor(walletBalance / dailySpend) : 0;
+
+  // Authoritative set of dates ALREADY PAID & DEBITED in MongoDB (consumes 0 from current walletBalance)
+  const paidDatesSet = useMemo(() => {
+    const set = new Set();
+    if (Array.isArray(customer.bookedDates)) {
+      customer.bookedDates.forEach((iso) => {
+        if (iso) set.add(String(iso).trim());
+      });
+    }
+    const kolkataTodayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    if (customer.isDeductedToday) {
+      set.add(kolkataTodayIso);
+    }
+    if (customer.lastDeductedAt) {
+      try {
+        const lastIso = new Date(customer.lastDeductedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        if (lastIso === kolkataTodayIso) set.add(kolkataTodayIso);
+      } catch (e) {}
+    }
+    return set;
+  }, [customer.bookedDates, customer.isDeductedToday, customer.lastDeductedAt]);
+
+  const isDayBooked = (dayObj) => {
+    if (!dayObj) return false;
+    return paidDatesSet.has(dayObj.isoDate);
   };
 
+  const isTodayBooked = Boolean(currentTodayItem && paidDatesSet.has(currentTodayItem.isoDate));
+
   const [activeDays, setActiveDays] = useState(() => {
-    // If user has booked days, keep those
-    const booked = new Set();
-    if (Array.isArray(customer.bookedDays)) customer.bookedDays.forEach((b) => booked.add(b));
-    if (Array.isArray(customer.lockedDays)) customer.lockedDays.forEach((b) => booked.add(b));
-    if (customer.isDeductedToday && currentTodayItem?.code) booked.add(currentTodayItem.code);
-
-    if (booked.size > 0) {
-      return Array.from(booked);
-    }
-
-    if (Array.isArray(customer.activeDays) && customer.activeDays.length > 0 && !isLegacyWeekdays(customer.activeDays)) {
-      return customer.activeDays;
-    }
-
-    // By default: ONLY select today's day
-    return [todayCode];
+    const raw = Array.isArray(customer?.activeDays)
+      ? customer.activeDays.map((d) => String(d).trim().toUpperCase()).filter(Boolean)
+      : [];
+    return raw.length > 0 ? raw : [todayCode];
   });
   const [unmaskedLeads, setUnmaskedLeads] = useState({});
 
   React.useEffect(() => {
-    const baseDays = (Array.isArray(customer?.activeDays) && customer.activeDays.length > 0 && !isLegacyWeekdays(customer.activeDays))
-      ? customer.activeDays
-      : [todayCode];
-
-    const merged = new Set(baseDays);
-    if (Array.isArray(customer?.bookedDays)) customer.bookedDays.forEach((b) => merged.add(b));
-    if (Array.isArray(customer?.lockedDays)) customer.lockedDays.forEach((b) => merged.add(b));
-    if (customer?.isDeductedToday && currentTodayItem?.code) merged.add(currentTodayItem.code);
+    const raw = Array.isArray(customer?.activeDays)
+      ? customer.activeDays.map((d) => String(d).trim().toUpperCase()).filter(Boolean)
+      : [];
+    const merged = new Set(raw.length > 0 ? raw : (customer?.schedulePreset === 'clear' ? [] : [todayCode]));
+    daysList.forEach((d) => {
+      if (paidDatesSet.has(d.isoDate)) merged.add(d.code);
+    });
     setActiveDays(Array.from(merged));
-  }, [customer?.activeDays, customer?.bookedDays, customer?.lockedDays, customer?.isDeductedToday, currentTodayItem?.code]);
+  }, [customer?.activeDays, customer?.schedulePreset, paidDatesSet, todayCode]);
 
-  // Compute how many days are funded by the current wallet balance
-  const fundedRunwayDays = dailySpend > 0 ? Math.floor(walletBalance / dailySpend) : 0;
-
-  // Real-time calculation of booked dates based on DB deductions + funded wallet runway
-  const bookedDatesSet = useMemo(() => {
+  // Effective funded/paid days in the currently viewed week:
+  // - Never marks past unpaid days as active
+  // - Clamps unpaid selected days strictly to `fundedRunwayDays` so ₹0 wallet NEVER shows unfunded green days!
+  const { effectiveWeekDaysSet, unpaidSelectedCount, remainingFundedSlots } = useMemo(() => {
     const set = new Set();
+    let unpaidUsed = 0;
 
-    // 1. Explicit server booked dates
-    if (Array.isArray(customer.bookedDates)) {
-      customer.bookedDates.forEach((iso) => set.add(iso));
-    }
-    if (customer.isDeductedToday && currentTodayItem?.isoDate) {
-      set.add(currentTodayItem.isoDate);
-    }
-    if (Array.isArray(customer.bookedDays)) {
-      daysList.forEach((d) => {
-        if (customer.bookedDays.includes(d.code)) set.add(d.isoDate);
-      });
-    }
+    // 1. Always include already-paid dates in this week
+    daysList.forEach((d) => {
+      if (paidDatesSet.has(d.isoDate)) {
+        set.add(d.code);
+      }
+    });
 
-    // 2. Allocate funded runway days starting from today across active days ONLY when campaign is active
-    if (customer.adCampaignActive && fundedRunwayDays > 0 && currentTodayItem) {
-      let count = fundedRunwayDays;
-      const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-      const baseDate = new Date(kolkataNow);
-      baseDate.setHours(0, 0, 0, 0);
-
-      const dayCodesMap = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-
-      for (let offset = 0; offset < 60 && count > 0; offset++) {
-        const target = new Date(baseDate);
-        target.setDate(baseDate.getDate() + offset);
-        const dayCode = dayCodesMap[target.getDay()];
-        const y = target.getFullYear();
-        const m = String(target.getMonth() + 1).padStart(2, '0');
-        const dt = String(target.getDate()).padStart(2, '0');
-        const iso = `${y}-${m}-${dt}`;
-
-        if (activeDays.includes(dayCode)) {
-          set.add(iso);
-          if (!(offset === 0 && customer.isDeductedToday)) {
-            count--;
-          }
-        }
+    // 2. Include user-selected non-past days ONLY up to available wallet runway (`fundedRunwayDays`)
+    // Prioritize Today first if selected, then chronological order
+    const orderedCandidates = [
+      ...daysList.filter((d) => d.isToday),
+      ...daysList.filter((d) => !d.isToday),
+    ];
+    for (const d of orderedCandidates) {
+      if (d.isPast || paidDatesSet.has(d.isoDate)) continue;
+      if (activeDays.includes(d.code) && unpaidUsed < fundedRunwayDays) {
+        set.add(d.code);
+        unpaidUsed++;
       }
     }
 
-    return set;
-  }, [customer.adCampaignActive, customer.bookedDates, customer.isDeductedToday, customer.bookedDays, currentTodayItem?.isoDate, fundedRunwayDays, activeDays]);
+    return {
+      effectiveWeekDaysSet: set,
+      unpaidSelectedCount: unpaidUsed,
+      remainingFundedSlots: Math.max(0, fundedRunwayDays - unpaidUsed),
+    };
+  }, [daysList, paidDatesSet, activeDays, fundedRunwayDays]);
 
-  const isTodayBooked = Boolean(
-    customer.isDeductedToday ||
-    (customer.adCampaignActive && (
-      bookedDatesSet.has(currentTodayItem?.isoDate) ||
-      (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(currentTodayItem.isoDate)) ||
-      (Array.isArray(customer.bookedDays) && customer.bookedDays.includes(currentTodayItem.code)) ||
-      (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(currentTodayItem.code))
-    ))
-  );
-
-  const isDayBooked = (dayObj) => {
-    if (!dayObj) return false;
-    if (dayObj.isToday && isTodayBooked) return true;
-    if (customer.isDeductedToday && dayObj.isToday) return true;
-    if (customer.adCampaignActive && bookedDatesSet.has(dayObj.isoDate)) return true;
-    if (customer.adCampaignActive && Array.isArray(customer.bookedDates) && customer.bookedDates.includes(dayObj.isoDate)) return true;
-    return false;
-  };
-
-  const totalBookedCount = customer.adCampaignActive
-    ? fundedRunwayDays + (customer.isDeductedToday ? 1 : 0)
-    : (customer.isDeductedToday ? 1 : 0);
-
-  const weeklyPacing = activeDays.length * dailySpend;
+  const paidInWeekCount = daysList.filter((d) => paidDatesSet.has(d.isoDate)).length;
+  const totalBookedCount = paidInWeekCount;
+  const effectiveActiveCount = effectiveWeekDaysSet.size;
+  const weeklyPacing = effectiveActiveCount * dailySpend;
   const weekRangeStr = `${daysList[0].dateFormatted} – ${daysList[6].dateFormatted} ${daysList[6].fullDateString.split(' ')[2]}`;
 
-  const isMarketingLiveToday = Boolean(customer.adCampaignActive && activeDays.includes(currentTodayItem.code));
+  const isMarketingLiveToday = Boolean(
+    customer.adCampaignActive && (isTodayBooked || effectiveWeekDaysSet.has(currentTodayItem.code))
+  );
 
   const isPaymentDone = customer.paymentStatus === 'paid' || customer.payment_status === 'paid' || (walletBalance > 0);
   const profEval = evaluateCustomerProfileCompletion(customer);
@@ -294,63 +273,159 @@ export default function LeadHubOverview({
     if (isTargetBooked) {
       Swal.fire({
         icon: 'info',
-        title: 'Delivery Day Already Booked',
-        text: 'Lead delivery has already started or been booked for this day. This day is locked and cannot be deselected.',
+        title: dayObj?.isPast ? 'Past Delivery Completed' : 'Today\'s Delivery Already Paid & Booked',
+        text: dayObj?.isPast
+          ? `${dayObj.label} (${dayObj.dateFormatted}) was already delivered and settled.`
+          : `Today's ${currencySymbol}${dailySpend} budget is already paid and locked. You can pause or resume today anytime at ${currencySymbol}0 extra cost.`,
         confirmButtonText: 'Understood',
         confirmButtonColor: '#059669',
       });
       return;
     }
 
-    let next;
-    try { window.sessionStorage.setItem('admafia_active_schedule_preset', 'custom'); } catch (e) {}
-    if (activeDays.includes(code)) {
-      next = activeDays.filter((d) => d !== code);
-      if (next.length === 0) {
-        next = [todayCode];
-      }
-    } else {
-      next = [...activeDays, code];
+    if (dayObj?.isPast) {
+      return;
     }
+
+    const isCurrentlySelected = effectiveWeekDaysSet.has(code);
+
+    if (isCurrentlySelected) {
+      const next = Array.from(effectiveWeekDaysSet).filter((d) => d !== code);
+      try { window.sessionStorage.setItem('admafia_active_schedule_preset', next.length === 0 ? 'clear' : 'custom'); } catch (e) {}
+      setActiveDays(next);
+      if (onUpdateCustomer) {
+        onUpdateCustomer({
+          activeDays: next,
+          schedulePreset: next.length === 0 ? 'clear' : 'custom',
+        });
+      }
+      return;
+    }
+
+    // Strict Pre-Schedule Wallet Runway Guard: prevent scheduling unfunded days!
+    if (remainingFundedSlots <= 0) {
+      const targetLabel = dayObj ? `${dayObj.label} (${dayObj.dateFormatted})` : code;
+      Swal.fire({
+        icon: 'warning',
+        title: `Top Up ${currencySymbol}${dailySpend} to Unlock ${dayObj?.label || code}`,
+        html: fundedRunwayDays === 0
+          ? `Your Growth Wallet has <strong style="color:#ef4444;">${currencySymbol}${walletBalance.toLocaleString()}</strong> available${isTodayBooked ? ' after today\'s paid delivery' : ''}.<br/><br/>Each scheduled delivery day requires <strong>${currencySymbol}${dailySpend.toLocaleString()}</strong> in wallet balance. Top up now to unlock and schedule <strong>${targetLabel}</strong>.`
+          : `Your <strong>${currencySymbol}${walletBalance.toLocaleString()}</strong> wallet balance is already allocated across <strong>${fundedRunwayDays}</strong> scheduled day${fundedRunwayDays > 1 ? 's' : ''}.<br/><br/>Top up <strong>${currencySymbol}${dailySpend.toLocaleString()}</strong> more to add <strong>${targetLabel}</strong>, or unselect another scheduled day first.`,
+        showCancelButton: true,
+        confirmButtonText: `+ Top Up ${currencySymbol}${dailySpend.toLocaleString()} Now`,
+        confirmButtonColor: '#4f46e5',
+        cancelButtonText: 'Cancel',
+      }).then((res) => {
+        if (res.isConfirmed && onOpenAddFunds) {
+          onOpenAddFunds();
+        }
+      });
+      return;
+    }
+
+    const next = Array.from(new Set([...Array.from(effectiveWeekDaysSet), code]));
+    try { window.sessionStorage.setItem('admafia_active_schedule_preset', 'custom'); } catch (e) {}
     setActiveDays(next);
     if (onUpdateCustomer) {
       onUpdateCustomer({
         activeDays: next,
+        schedulePreset: 'custom',
       });
     }
   };
 
   const handleSelectPresetDays = (preset) => {
-    try { window.sessionStorage.setItem('admafia_active_schedule_preset', preset); } catch (e) {}
-    let next = [];
-    if (preset === 'all') next = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    if (preset === 'weekdays') next = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
-    if (preset === 'weekends') next = ['SAT', 'SUN'];
-    if (preset === 'clear') next = [];
-
-    // All booked days in current view CANNOT be deselected by presets
     const bookedCodesInView = daysList.filter((d) => isDayBooked(d)).map((d) => d.code);
-    for (const bCode of bookedCodesInView) {
-      if (!next.includes(bCode)) {
-        next.push(bCode);
+
+    if (preset === 'clear') {
+      try { window.sessionStorage.setItem('admafia_active_schedule_preset', 'clear'); } catch (e) {}
+      setActiveDays(bookedCodesInView);
+      if (bookedCodesInView.length > 0) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Unpaid Days Cleared',
+          text: 'All upcoming unpaid days were cleared. Already-paid days remain locked.',
+          confirmButtonText: 'Understood',
+          confirmButtonColor: '#059669',
+        });
       }
+      if (onUpdateCustomer) {
+        onUpdateCustomer({
+          activeDays: bookedCodesInView,
+          schedulePreset: 'clear',
+        });
+      }
+      return;
     }
 
-    if (preset === 'clear' && bookedCodesInView.length > 0) {
+    let rawTarget = [];
+    if (preset === 'all') rawTarget = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    if (preset === 'weekdays') rawTarget = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+    if (preset === 'weekends') rawTarget = ['SAT', 'SUN'];
+
+    // Exclude past unpaid days in the viewed week so we never try to schedule past dates
+    const validTargetCodes = daysList
+      .filter((d) => (rawTarget.includes(d.code) && !d.isPast) || bookedCodesInView.includes(d.code))
+      .map((d) => d.code);
+
+    const unpaidNeededCount = validTargetCodes.filter((c) => !bookedCodesInView.includes(c)).length;
+
+    if (unpaidNeededCount === 0 && bookedCodesInView.length === 0) {
       Swal.fire({
         icon: 'info',
-        title: 'Delivery Day Already Booked',
-        text: 'All unbooked days cleared. Successfully booked days remain locked in your schedule.',
-        confirmButtonText: 'Understood',
-        confirmButtonColor: '#059669',
+        title: 'Selected Days Have Already Ended This Week',
+        text: 'Switch to "Next Week ›" to schedule those days for next week.',
+        confirmButtonColor: '#4f46e5',
       });
+      return;
     }
 
-    setActiveDays(next);
+    if (unpaidNeededCount > fundedRunwayDays) {
+      const requiredBal = unpaidNeededCount * dailySpend;
+      const shortfall = Math.max(dailySpend, Math.ceil(requiredBal - walletBalance));
+      const presetTitle = preset === 'all' ? 'All Upcoming Days' : preset === 'weekdays' ? 'Weekdays (Mon–Fri)' : 'Weekends (Sat–Sun)';
+      Swal.fire({
+        icon: 'warning',
+        title: `Wallet Top-Up Required for ${presetTitle}`,
+        html: `
+          <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px; margin: 10px 0; font-family: inherit;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b; font-size: 0.84rem;">Upcoming Unpaid Days:</span>
+              <strong style="color: #0f172a; font-size: 0.92rem;">${unpaidNeededCount} day${unpaidNeededCount > 1 ? 's' : ''} × ${currencySymbol}${dailySpend.toLocaleString()}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b; font-size: 0.84rem;">Required Wallet Balance:</span>
+              <strong style="color: #4f46e5; font-size: 0.95rem;">${currencySymbol}${requiredBal.toLocaleString()}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b; font-size: 0.84rem;">Current Wallet Balance:</span>
+              <strong style="color: #64748b; font-size: 0.92rem;">${currencySymbol}${walletBalance.toLocaleString()}</strong>
+            </div>
+            <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; display: flex; justify-content: space-between;">
+              <span style="color: #dc2626; font-weight: 700; font-size: 0.85rem;">Top-Up Needed:</span>
+              <strong style="color: #dc2626; font-size: 1rem;">+${currencySymbol}${shortfall.toLocaleString()}</strong>
+            </div>
+          </div>
+          <p style="font-size: 0.84rem; color: #475569; margin: 0;">Top up your Growth Wallet first to unlock all ${unpaidNeededCount} upcoming days.</p>
+        `,
+        showCancelButton: true,
+        confirmButtonText: `+ Top Up ${currencySymbol}${shortfall.toLocaleString()} Now`,
+        confirmButtonColor: '#4f46e5',
+        cancelButtonText: 'Cancel',
+      }).then((res) => {
+        if (res.isConfirmed && onOpenAddFunds) {
+          onOpenAddFunds();
+        }
+      });
+      return;
+    }
+
+    try { window.sessionStorage.setItem('admafia_active_schedule_preset', preset); } catch (e) {}
+    setActiveDays(validTargetCodes);
 
     if (onUpdateCustomer) {
       onUpdateCustomer({
-        activeDays: next,
+        activeDays: validTargetCodes,
         schedulePreset: preset,
       });
     }
@@ -728,9 +803,20 @@ export default function LeadHubOverview({
                     boxShadow: customer.adCampaignActive ? '0 0 8px #10b981' : 'none',
                   }}
                 />
-                {customer.adCampaignActive ? 'Running (Active)' : 'Paused (Off)'}
+                {customer.adCampaignActive
+                  ? 'Running (Active)'
+                  : isTodayBooked
+                  ? 'Paused (Today Paid ✓)'
+                  : 'Paused (Off)'}
               </strong>
-              {!customer.adCampaignActive && walletBalance < dailySpend && (
+              {!customer.adCampaignActive && isTodayBooked ? (
+                <span
+                  style={{ fontSize: '0.70rem', color: '#059669', fontWeight: 800, marginTop: 2 }}
+                  title="Today's delivery was already paid — resume anytime for free"
+                >
+                  ✓ {currencySymbol}0 to Resume Today
+                </span>
+              ) : !customer.adCampaignActive && walletBalance < dailySpend ? (
                 <span
                   style={{ fontSize: '0.70rem', color: '#e11d48', fontWeight: 800, marginTop: 2, cursor: 'pointer', textDecoration: 'underline' }}
                   onClick={(e) => {
@@ -739,12 +825,12 @@ export default function LeadHubOverview({
                   }}
                   title="Click to Top Up Wallet"
                 >
-                  ⚠️ Balance is Low (Click to Top Up)
+                  ⚠️ Top Up {currencySymbol}{dailySpend} to Start
                 </span>
-              )}
+              ) : null}
             </div>
 
-            {/* Single Action Button: Start when stopped, Stop when running */}
+            {/* Single Action Button: Start/Resume when stopped, Stop when running */}
             <div className="pacing-start-stop-single-button">
               {customer.adCampaignActive ? (
                 <button
@@ -763,12 +849,12 @@ export default function LeadHubOverview({
                   type="button"
                   className="btn-proper-pacing-start is-active"
                   onClick={() => onToggleCampaign && onToggleCampaign(true)}
-                  title="Click to Activate Lead Delivery"
+                  title={isTodayBooked ? `Resume today's already-paid delivery (${currencySymbol}0)` : 'Click to Activate Lead Delivery'}
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                     <polygon points="5 3 19 12 5 21 5 3" />
                   </svg>
-                  <span>Start</span>
+                  <span>{isTodayBooked ? 'Resume' : 'Start'}</span>
                 </button>
               )}
             </div>
@@ -825,13 +911,13 @@ export default function LeadHubOverview({
             </div>
 
             <div className="pacing-card-main-val-row">
-              <strong className="pacing-big-amount">{activeDays.length} of 7 Days Active</strong>
+              <strong className="pacing-big-amount">{effectiveActiveCount} of 7 Days Scheduled</strong>
             </div>
 
             <div className="pacing-card-footer-between">
               <span>Weekly pacing: <strong>{currencySymbol}{weeklyPacing.toLocaleString(savedCurrency === 'INR' ? 'en-IN' : 'en-US')}</strong></span>
               <span className="pacing-days-badge" style={{ background: totalBookedCount > 0 ? '#ecfdf5' : '#f8fafc', color: totalBookedCount > 0 ? '#047857' : '#64748b', fontWeight: 800 }}>
-                {totalBookedCount > 0 ? `🎯 ${totalBookedCount}d Booked` : `${activeDays.length}d / wk`}
+                {totalBookedCount > 0 ? `🎯 ${totalBookedCount}d Paid` : `${effectiveActiveCount}d Funded`}
               </span>
             </div>
           </div>
@@ -864,11 +950,18 @@ export default function LeadHubOverview({
             </div>
 
             <div className="pacing-card-footer-between">
-              <span>Runway: <strong className={walletBalance < dailySpend ? 'text-red-alert' : ''}>{fundedRunwayDays} days funded</strong></span>
-              {walletBalance < dailySpend ? (
+              <span>
+                Extra Runway:{' '}
+                <strong className={!isTodayBooked && walletBalance < dailySpend ? 'text-red-alert' : ''}>
+                  {fundedRunwayDays} {fundedRunwayDays === 1 ? 'day' : 'days'} funded
+                </strong>
+              </span>
+              {isTodayBooked && walletBalance < dailySpend ? (
+                <span style={{ color: '#047857', fontWeight: 800 }}>✓ Today Paid • Top Up for Future Days</span>
+              ) : walletBalance < dailySpend ? (
                 <span className="text-red-alert" style={{ fontWeight: 800 }}>● Balance is Low (Needs Top Up)</span>
               ) : customer.adCampaignActive ? (
-                <span style={{ color: '#047857', fontWeight: 800 }}>● {fundedRunwayDays}d Schedule Booked</span>
+                <span style={{ color: '#047857', fontWeight: 800 }}>● {fundedRunwayDays}d Extra Funded</span>
               ) : (
                 <span style={{ color: '#0284c7', fontWeight: 800 }}>● Ready to Activate (Click Start)</span>
               )}
@@ -887,60 +980,10 @@ export default function LeadHubOverview({
                 <line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
               <span className="engine-title-text">
-                SELECT DELIVERY DAYS ({activeDays.length > 0 ? `${activeDays.length} OF 7 DAYS ACTIVE` : 'SELECT ANY DAY'}
-                {totalBookedCount > 0 ? ` • ${totalBookedCount} DAY${totalBookedCount > 1 ? 'S' : ''} BOOKED` : ''})
+                SELECT DELIVERY DAYS ({effectiveActiveCount} OF 7 DAYS SCHEDULED
+                {totalBookedCount > 0 ? ` • ${totalBookedCount} PAID` : ''})
               </span>
-              {totalBookedCount > 0 ? (
-                <span className="engine-booked-highlight-pill" style={{
-                  background: '#ecfdf5',
-                  color: '#047857',
-                  border: '1px solid #10b981',
-                  borderRadius: '9999px',
-                  padding: '3px 10px',
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  marginLeft: '8px'
-                }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-                  {totalBookedCount} Day{totalBookedCount > 1 ? 's' : ''} Schedule Booked
-                </span>
-              ) : activeDays.length === 0 ? (
-                <span className="engine-booked-highlight-pill" style={{
-                  background: '#f8fafc',
-                  color: '#475569',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '9999px',
-                  padding: '3px 10px',
-                  fontSize: '0.74rem',
-                  fontWeight: 700,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  marginLeft: '8px'
-                }}>
-                  👆 Click any day below to select
-                </span>
-              ) : walletBalance < dailySpend ? (
-                <span className="engine-booked-highlight-pill" style={{
-                  background: '#fff1f2',
-                  color: '#e11d48',
-                  border: '1px solid #fda4af',
-                  borderRadius: '9999px',
-                  padding: '3px 10px',
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  marginLeft: '8px',
-                  cursor: 'pointer'
-                }} onClick={onOpenAddFunds} title="Click to Top Up & Book Delivery Days">
-                  ⚠️ 0 Days Booked (Top Up to Book)
-                </span>
-              ) : (
+              {remainingFundedSlots > 0 ? (
                 <span className="engine-booked-highlight-pill" style={{
                   background: '#eff6ff',
                   color: '#1d4ed8',
@@ -952,9 +995,69 @@ export default function LeadHubOverview({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
+                  marginLeft: '8px'
+                }}>
+                  ✨ {remainingFundedSlots} Funded {remainingFundedSlots === 1 ? 'Day' : 'Days'} Ready to Pick
+                </span>
+              ) : isTodayBooked && fundedRunwayDays === 0 ? (
+                <span
+                  className="engine-booked-highlight-pill"
+                  style={{
+                    background: '#ecfdf5',
+                    color: '#047857',
+                    border: '1px solid #10b981',
+                    borderRadius: '9999px',
+                    padding: '3px 10px',
+                    fontSize: '0.74rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginLeft: '8px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={onOpenAddFunds}
+                  title="Today is paid! Click to add balance if you want to schedule extra upcoming days."
+                >
+                  ✓ Today Paid • + Top Up {currencySymbol}{dailySpend}/day for Extra Days
+                </span>
+              ) : fundedRunwayDays === 0 ? (
+                <span
+                  className="engine-booked-highlight-pill"
+                  style={{
+                    background: '#fff1f2',
+                    color: '#e11d48',
+                    border: '1px solid #fda4af',
+                    borderRadius: '9999px',
+                    padding: '3px 10px',
+                    fontSize: '0.74rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginLeft: '8px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={onOpenAddFunds}
+                  title="Top up your Growth Wallet to unlock scheduling"
+                >
+                  🔒 Top Up {currencySymbol}{dailySpend}/day to Unlock Days
+                </span>
+              ) : (
+                <span className="engine-booked-highlight-pill" style={{
+                  background: '#ecfdf5',
+                  color: '#047857',
+                  border: '1px solid #10b981',
+                  borderRadius: '9999px',
+                  padding: '3px 10px',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
                   marginLeft: '8px',
                 }}>
-                  ● Click Start to Activate Delivery
+                  ✓ All {fundedRunwayDays} Funded {fundedRunwayDays === 1 ? 'Day' : 'Days'} Scheduled
                 </span>
               )}
             </div>
@@ -963,7 +1066,7 @@ export default function LeadHubOverview({
               {/* All 7 Days */}
               <button
                 type="button"
-                className={`btn-preset-chip ${activeDays.length === 7 ? 'active-purple' : ''}`}
+                className={`btn-preset-chip ${effectiveActiveCount === 7 ? 'active-purple' : ''}`}
                 onClick={() => handleSelectPresetDays('all')}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -973,36 +1076,42 @@ export default function LeadHubOverview({
                   <line x1="3" y1="10" x2="21" y2="10"/>
                 </svg>
                 <span>All 7 Days</span>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={activeDays.length === 7 ? '#ffffff' : '#d97706'} strokeWidth="2.4">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
+                {fundedRunwayDays < 6 && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.4">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                )}
               </button>
 
               {/* Mon - Fri (5 Days) */}
               <button
                 type="button"
-                className={`btn-preset-chip ${activeDays.length === 5 && !activeDays.includes('SAT') && !activeDays.includes('SUN') ? 'active-purple' : ''}`}
+                className={`btn-preset-chip ${effectiveActiveCount === 5 && !effectiveWeekDaysSet.has('SAT') && !effectiveWeekDaysSet.has('SUN') ? 'active-purple' : ''}`}
                 onClick={() => handleSelectPresetDays('weekdays')}
               >
-                <span>Mon - Fri (5 Days)</span>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={activeDays.length === 5 && !activeDays.includes('SAT') && !activeDays.includes('SUN') ? '#ffffff' : '#d97706'} strokeWidth="2.4">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
+                <span>Mon - Fri</span>
+                {fundedRunwayDays < 4 && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.4">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                )}
               </button>
 
               {/* Sat - Sun (Weekends) */}
               <button
                 type="button"
-                className={`btn-preset-chip ${activeDays.length === 2 && activeDays.includes('SAT') && activeDays.includes('SUN') ? 'active-purple' : ''}`}
+                className={`btn-preset-chip ${effectiveActiveCount === 2 && effectiveWeekDaysSet.has('SAT') && effectiveWeekDaysSet.has('SUN') ? 'active-purple' : ''}`}
                 onClick={() => handleSelectPresetDays('weekends')}
               >
-                <span>Sat - Sun (Weekends)</span>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={activeDays.length === 2 && activeDays.includes('SAT') && activeDays.includes('SUN') ? '#ffffff' : '#d97706'} strokeWidth="2.4">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
+                <span>Sat - Sun</span>
+                {fundedRunwayDays < 2 && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.4">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                )}
               </button>
 
               {/* Clear */}
@@ -1066,13 +1175,33 @@ export default function LeadHubOverview({
           <div className="seven-days-cards-grid-exact">
             {daysList.map((d) => {
               const isBooked = isDayBooked(d);
-              const isSelected = activeDays.includes(d.code) || isBooked;
+              const isPastUnbooked = Boolean(d.isPast && !isBooked);
+              const isSelected = Boolean(effectiveWeekDaysSet.has(d.code) || isBooked);
+              const canSelectWithWallet = !isBooked && !isSelected && !isPastUnbooked && remainingFundedSlots > 0;
+
               return (
                 <div
                   key={d.code}
                   className={`seven-day-card-exact ${isBooked ? 'is-ad-booked is-selected' : isSelected ? 'is-selected' : 'is-unselected'} ${d.isToday ? 'is-today' : ''}`}
-                  onClick={() => toggleDay(d)}
-                  title={isBooked ? `${d.label} (${d.dateFormatted}): Delivery schedule already booked & locked` : isSelected ? `Click to disable ${d.label} (${d.dateFormatted})` : `Click to enable ${d.label} (${d.dateFormatted})`}
+                  style={
+                    isPastUnbooked
+                      ? { opacity: 0.52, cursor: 'not-allowed', filter: 'grayscale(0.35)' }
+                      : undefined
+                  }
+                  onClick={() => {
+                    if (!isPastUnbooked) toggleDay(d);
+                  }}
+                  title={
+                    isBooked
+                      ? `${d.label} (${d.dateFormatted}): Already paid & booked`
+                      : isPastUnbooked
+                      ? `${d.label} (${d.dateFormatted}): Past date has ended`
+                      : isSelected
+                      ? `Click to unschedule ${d.label} (${d.dateFormatted})`
+                      : canSelectWithWallet
+                      ? `Click to schedule ${d.label} (${d.dateFormatted}) using your wallet balance`
+                      : `Locked — Top up ${currencySymbol}${dailySpend} to unlock ${d.label} (${d.dateFormatted})`
+                  }
                 >
                   {/* If today, floating blue badge */}
                   {d.isToday && <span className="today-floating-pill">Today</span>}
@@ -1081,31 +1210,43 @@ export default function LeadHubOverview({
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: '2px' }}>
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
-                      Booked
+                      {d.isPast ? 'Delivered' : 'Paid'}
                     </span>
                   )}
 
                   <div className="day-code-title">{d.code}</div>
                   <div className="day-calendar-date">{d.dateFormatted}</div>
                   <div className="day-sub-label">{d.label}</div>
-                  
+
                   {/* Price tag */}
                   <div className={`day-price-badge ${isBooked ? 'booked' : isSelected ? 'selected' : 'unselected'}`}>
-                    {currencySymbol}{dailySpend}
+                    {isPastUnbooked ? '—' : `${currencySymbol}${dailySpend}`}
                   </div>
 
                   {isBooked ? (
-                    <div className="day-status-micro-text booked">🔒 SCHEDULE BOOKED</div>
+                    <div className="day-status-micro-text booked">
+                      {d.isPast ? '✓ DELIVERED' : '🔒 PAID & BOOKED'}
+                    </div>
+                  ) : isPastUnbooked ? (
+                    <div className="day-status-micro-text available" style={{ color: '#94a3b8' }}>
+                      ENDED
+                    </div>
                   ) : isSelected ? (
-                    <div className="day-status-micro-text selected">Active Day</div>
+                    <div className="day-status-micro-text selected">✓ SCHEDULED</div>
+                  ) : canSelectWithWallet ? (
+                    <div className="day-status-micro-text available" style={{ color: '#4f46e5', fontWeight: 800 }}>
+                      + SELECT DAY
+                    </div>
                   ) : (
-                    <div className="day-status-micro-text available">Available</div>
+                    <div className="day-status-micro-text available" style={{ color: '#d97706', fontWeight: 800 }}>
+                      🔒 TOP UP {currencySymbol}{dailySpend}
+                    </div>
                   )}
 
                   {/* Bottom Status Wrap */}
                   <div className="day-bottom-status-wrap">
                     {isBooked ? (
-                      <div className="day-check-circle is-booked-lock-pill" style={{ background: '#059669', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px', padding: '0 6px', width: 'auto', minWidth: '38px', borderRadius: '9999px', height: '22px' }} title={`${d.label} (${d.dateFormatted}) is booked & locked`}>
+                      <div className="day-check-circle is-booked-lock-pill" style={{ background: '#059669', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px', padding: '0 6px', width: 'auto', minWidth: '38px', borderRadius: '9999px', height: '22px' }} title={`${d.label} (${d.dateFormatted}) is paid & locked`}>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
@@ -1114,15 +1255,30 @@ export default function LeadHubOverview({
                           <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>
                       </div>
+                    ) : isPastUnbooked ? (
+                      <div className="day-lock-icon" style={{ opacity: 0.45 }} title="Past calendar day">
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8' }}>—</span>
+                      </div>
                     ) : isSelected ? (
-                      <div className="day-check-circle" title={`Click to deselect ${d.label} (${d.dateFormatted})`}>
+                      <div className="day-check-circle" title={`Click to unschedule ${d.label} (${d.dateFormatted})`}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       </div>
+                    ) : canSelectWithWallet ? (
+                      <div
+                        className="day-lock-icon"
+                        style={{ borderColor: '#818cf8', background: '#eef2ff', color: '#4f46e5' }}
+                        title={`Click to schedule ${d.label} (${d.dateFormatted})`}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.6" strokeLinecap="round">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </div>
                     ) : (
-                      <div className="day-lock-icon" title="Click to schedule this day">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.3">
+                      <div className="day-lock-icon" title={`Top up ${currencySymbol}${dailySpend} to unlock ${d.label}`}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.3">
                           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                           <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>
@@ -1142,20 +1298,22 @@ export default function LeadHubOverview({
                 <span className="bullet-dot">●</span>
                 {isMarketingLiveToday
                   ? (isTodayBooked
-                    ? `Lead Delivery is LIVE (Active Schedule • Booked ${currencySymbol}${dailySpend})`
+                    ? `Lead Delivery is LIVE (Today's ${currencySymbol}${dailySpend} Paid & Booked ✓)`
                     : 'Lead Delivery is LIVE (Active Schedule)')
+                  : isTodayBooked
+                  ? `Lead Delivery is PAUSED by You — Today is Already Paid ✓ (Click Resume Above for ${currencySymbol}0)`
                   : walletBalance < dailySpend
-                  ? 'Lead Delivery is OFF (Wallet Balance is Low - Needs Top Up)'
-                  : 'Lead Delivery is OFF (Click Start to Activate Delivery & Book Today)'}
+                  ? `Lead Delivery is OFF (Top Up ${currencySymbol}${dailySpend} to Activate Today)`
+                  : 'Lead Delivery is OFF (Wallet Funded — Click Start to Activate Today)'}
               </span>
               {isTodayBooked && (
                 <span className="pill-ad-booked-badge">
-                  🎯 Schedule Booked &amp; Active
+                  {customer.adCampaignActive ? '🎯 Paid & Delivering' : '✓ Today Paid'}
                 </span>
               )}
-              {totalBookedCount > 0 && !isTodayBooked && (
+              {fundedRunwayDays > 0 && !isTodayBooked && (
                 <span className="pill-ad-booked-badge" style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #10b981' }}>
-                  ✓ {totalBookedCount} Days Funded &amp; Booked
+                  ✓ {fundedRunwayDays} {fundedRunwayDays === 1 ? 'Day' : 'Days'} Funded
                 </span>
               )}
             </div>

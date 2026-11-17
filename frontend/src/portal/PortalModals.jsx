@@ -939,13 +939,8 @@ export function SetDailyLimitModal({
   const currencySymbol = savedCurrency === 'USD' ? '$' : '₹';
   const minDailySpend = savedCurrency === 'USD' ? 10 : 300;
   const [amount, setAmount] = useState(currentLimit || minDailySpend);
-  const [selectedDays, setSelectedDays] = useState(
-    Array.isArray(customer?.activeDays) && customer.activeDays.length > 0
-      ? customer.activeDays
-      : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
-  );
-
-  const todayIdx = new Date().getDay(); // 0: SUN, 1: MON, ..., 6: SAT
+  const todayIdx = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay();
+  const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const dayDefinitions = [
     { code: 'MON', label: 'Monday', short: 'Mon', isToday: todayIdx === 1 },
     { code: 'TUE', label: 'Tuesday', short: 'Tue', isToday: todayIdx === 2 },
@@ -955,35 +950,40 @@ export function SetDailyLimitModal({
     { code: 'SAT', label: 'Saturday', short: 'Sat', isToday: todayIdx === 6 },
     { code: 'SUN', label: 'Sunday', short: 'Sun', isToday: todayIdx === 0 },
   ];
-  const todayItem = dayDefinitions.find((d) => d.isToday) || dayDefinitions[5];
+  const todayItem = dayDefinitions.find((d) => d.isToday) || dayDefinitions[0];
 
   const isTodayAlreadyBooked = Boolean(
     customer?.isDeductedToday ||
-    (customer?.adCampaignActive && (
-      (Array.isArray(customer?.bookedDays) && customer.bookedDays.includes(todayItem.code)) ||
-      (Array.isArray(customer?.lockedDays) && customer.lockedDays.includes(todayItem.code))
-    ))
+    (Array.isArray(customer?.bookedDates) && customer.bookedDates.includes(todayIso)) ||
+    (Array.isArray(customer?.lockedDays) && customer.lockedDays.includes(todayItem.code))
+  );
+
+  const [selectedDays, setSelectedDays] = useState(
+    Array.isArray(customer?.activeDays) && customer.activeDays.length > 0
+      ? customer.activeDays
+      : [todayItem.code]
   );
 
   React.useEffect(() => {
     if (isOpen) {
-      setAmount(currentLimit || minDailySpend);
+      const lim = currentLimit || minDailySpend;
+      setAmount(lim);
+      const maxUnbooked = Math.floor((walletBalance || 0) / Math.max(lim, 1));
       const initialDays = Array.isArray(customer?.activeDays) && customer.activeDays.length > 0
         ? customer.activeDays
-        : ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-      // Ensure today is selected so today's budget can be locked and run
-      if (!initialDays.includes(todayItem.code)) {
-        setSelectedDays([...initialDays, todayItem.code]);
-      } else {
-        setSelectedDays(initialDays);
-      }
+        : [todayItem.code];
+      const unpaidCapped = initialDays.filter((c) => c !== todayItem.code || !isTodayAlreadyBooked).slice(0, maxUnbooked);
+      const cleanInit = isTodayAlreadyBooked
+        ? Array.from(new Set([todayItem.code, ...unpaidCapped]))
+        : unpaidCapped;
+      setSelectedDays(cleanInit);
     }
-  }, [isOpen, currentLimit, customer?.activeDays, todayItem.code, minDailySpend]);
+  }, [isOpen, currentLimit, customer?.activeDays, todayItem.code, minDailySpend, walletBalance, isTodayAlreadyBooked]);
 
   if (!isOpen) return null;
 
   const currentAmountNum = Number(amount) || 0;
-  const isExceeding = currentAmountNum > (walletBalance || 0);
+  const isExceeding = !isTodayAlreadyBooked && currentAmountNum > (walletBalance || 0);
 
   const presets = [
     { label: `${currencySymbol}${minDailySpend} (Min)`, value: minDailySpend },
@@ -996,8 +996,8 @@ export function SetDailyLimitModal({
     if (dayCode === todayItem.code && isTodayAlreadyBooked) {
       Swal.fire({
         icon: 'info',
-        title: `🎯 ${todayItem.label} is Already Booked!`,
-        html: `Lead delivery is actively running for <strong>${todayItem.label}</strong>.<br/><br/>Once started, this day cannot be de-selected.`,
+        title: `🎯 ${todayItem.label} is Already Paid & Booked!`,
+        html: `Today's delivery budget is already paid for <strong>${todayItem.label}</strong> and remains locked.`,
         confirmButtonColor: '#059669',
       });
       return;
@@ -1006,6 +1006,23 @@ export function SetDailyLimitModal({
     if (selectedDays.includes(dayCode)) {
       setSelectedDays(selectedDays.filter((d) => d !== dayCode));
     } else {
+      const effectiveRate = Math.max(minDailySpend, currentAmountNum || minDailySpend);
+      const fundedExtraSlots = Math.floor((walletBalance || 0) / effectiveRate);
+      const currentUnpaidSelected = selectedDays.filter((c) => !(c === todayItem.code && isTodayAlreadyBooked)).length;
+      if (currentUnpaidSelected >= fundedExtraSlots) {
+        Swal.fire({
+          icon: 'warning',
+          title: `Top Up ${currencySymbol}${effectiveRate} to Add Another Day`,
+          html: `Your Growth Wallet balance (<strong>${currencySymbol}${Number(walletBalance || 0).toLocaleString()}</strong>) funds <strong>${fundedExtraSlots}</strong> upcoming day${fundedExtraSlots === 1 ? '' : 's'} at ${currencySymbol}${effectiveRate}/day.<br/><br/>Top up your wallet first to schedule additional days.`,
+          showCancelButton: true,
+          confirmButtonText: '+ Top Up Wallet',
+          confirmButtonColor: '#4f46e5',
+          cancelButtonText: 'Cancel',
+        }).then((res) => {
+          if (res.isConfirmed && onOpenTopUp) onOpenTopUp();
+        });
+        return;
+      }
       setSelectedDays([...selectedDays, dayCode]);
     }
   };
@@ -1027,7 +1044,7 @@ export function SetDailyLimitModal({
       return;
     }
 
-    if (finalAmount > (walletBalance || 0)) {
+    if (!isTodayAlreadyBooked && finalAmount > (walletBalance || 0)) {
       Swal.fire({
         icon: 'error',
         title: 'Insufficient Growth Wallet Balance',
@@ -1042,10 +1059,13 @@ export function SetDailyLimitModal({
       return;
     }
 
-    // Ensure today is part of the final active days
-    const finalActiveDays = selectedDays.includes(todayItem.code)
-      ? selectedDays
-      : [...selectedDays, todayItem.code];
+    const maxFundedSlots = Math.floor((walletBalance || 0) / Math.max(finalAmount, 1));
+    const unpaidSelected = selectedDays.filter((c) => !(c === todayItem.code && isTodayAlreadyBooked)).slice(0, maxFundedSlots);
+    const finalActiveDays = isTodayAlreadyBooked
+      ? Array.from(new Set([todayItem.code, ...unpaidSelected]))
+      : unpaidSelected.length > 0
+      ? unpaidSelected
+      : [todayItem.code];
 
     const isAlreadyActive = Boolean(customer?.adCampaignActive);
 

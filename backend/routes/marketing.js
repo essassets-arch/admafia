@@ -72,9 +72,6 @@ export function resolveActiveDays(rawDays) {
   } else if (Array.isArray(rawDays)) {
     list = rawDays.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
   }
-  if (list.length === 5 && list.includes('MON') && list.includes('TUE') && list.includes('WED') && list.includes('THU') && list.includes('FRI')) {
-    return [todayDayCode];
-  }
   return list.length > 0 ? list : [todayDayCode];
 }
 

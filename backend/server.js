@@ -296,13 +296,12 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
       } else if (Array.isArray(row.active_days)) {
         rawList = row.active_days.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
       }
-      // If legacy 5 weekdays default or empty, default strictly to today's day
-      if (rawList.length === 5 && rawList.includes('MON') && rawList.includes('TUE') && rawList.includes('WED') && rawList.includes('THU') && rawList.includes('FRI')) {
-        return [kToday];
+      if (row.schedule_preset === 'clear' && rawList.length === 0) {
+        return [];
       }
       return rawList.length > 0 ? rawList : [kToday];
     })(),
-    schedulePreset: row.schedule_preset || 'weekdays',
+    schedulePreset: row.schedule_preset || 'custom',
     balance,
     walletBalance: balance,
     dailyPacing,
@@ -2863,9 +2862,6 @@ const handleUpdateCustomerRecord = async (req, res) => {
             ? updates.activeDays.map(d => String(d).trim().toUpperCase()).filter(Boolean)
             : String(updates.activeDays).split(',').map(d => d.trim().toUpperCase()).filter(Boolean))
           : (storedDays.length > 0 ? storedDays : [todayCode]);
-        if (finalDaysArray.length === 5 && finalDaysArray.includes('MON') && finalDaysArray.includes('TUE') && finalDaysArray.includes('WED') && finalDaysArray.includes('THU') && finalDaysArray.includes('FRI')) {
-          finalDaysArray = [todayCode];
-        }
 
         const bookedDatesList = toList(w.bookedDates);
         if (isDeductedToday) {
@@ -2891,7 +2887,7 @@ const handleUpdateCustomerRecord = async (req, res) => {
           }
         }
 
-        const nextPreset = updates.schedulePreset || w.schedulePreset || 'weekdays';
+        const nextPreset = updates.schedulePreset || w.schedulePreset || 'custom';
         await applyWalletSettings(cust._id, {
           dailyAdSpend: nextDaily,
           adCampaignActive: nextActive,

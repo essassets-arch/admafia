@@ -53,7 +53,21 @@ export default function MarketingWallet({
   const activeAmount = customAmount ? Number(customAmount) || 0 : (selectedPreset || minTopUp);
   const calculatedRuntimeDays = Math.max(1, Math.floor(activeAmount / (dailyAdSpend || minTopUp)));
   const daysRunway = Math.floor(walletBalance / (dailyAdSpend || minTopUp));
-  const isCampaignLive = Boolean(customer.adCampaignActive) && walletBalance >= dailyAdSpend;
+
+  const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const todayIso = `${kolkataNow.getFullYear()}-${String(kolkataNow.getMonth() + 1).padStart(2, '0')}-${String(kolkataNow.getDate()).padStart(2, '0')}`;
+  const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
+  const isDeductedToday = Boolean(
+    customer.isDeductedToday ||
+    (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(todayIso)) ||
+    (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(todayDayCode)) ||
+    (customer.lastDeductedAt &&
+      new Date(customer.lastDeductedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === todayIso) ||
+    transactions.some(
+      (d) => d.type === 'Debit' && (String(d.date || '').includes('Today') || String(d.date || '').includes(todayIso))
+    )
+  );
+  const isCampaignLive = Boolean(customer.adCampaignActive) && (isDeductedToday || walletBalance >= dailyAdSpend);
 
   // Presets exact specification (Pure wallet amounts — no days configuration)
   const presets = currency === 'INR' ? [
@@ -235,13 +249,6 @@ export default function MarketingWallet({
     creditsList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
     Number(customer.totalLifetimePaid || customer.amountPaid || 0),
     walletBalance
-  );
-
-  const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date().getDay()];
-  const isDeductedToday = Boolean(
-    customer.isDeductedToday ||
-    (customer.activeDays && customer.activeDays.includes(todayDayCode) && customer.lockedDays?.includes(todayDayCode)) ||
-    debitsList.some((d) => String(d.date || '').includes('Today') || String(d.desc || '').includes(todayDayCode))
   );
 
   const settledTransactions = transactions.filter((tx) => !isFailedTx(tx));
@@ -800,23 +807,25 @@ export default function MarketingWallet({
             <div className="engine-mini-content">
               <span className={`engine-status-pill ${isCampaignLive ? 'active' : 'paused'}`}>
                 {!customer.adCampaignActive
-                  ? 'Delivery Paused'
-                  : walletBalance < dailyAdSpend
+                  ? (isDeductedToday ? 'Paused (Today Paid ✓)' : 'Delivery Paused')
+                  : (!isDeductedToday && walletBalance < dailyAdSpend)
                   ? 'Paused (Low Balance)'
                   : 'Live & Delivering'}
               </span>
               <div className="mini-box-subline">
-                {!customer.adCampaignActive
+                {isDeductedToday
+                  ? `Today's ${formatMoney(dailyAdSpend)} Paid & Booked ✓`
+                  : !customer.adCampaignActive
                   ? 'Delivery Paused'
-                  : isDeductedToday
-                  ? 'Deduction Completed ✓'
                   : 'Pending Deduction'}
               </div>
               <div className="mini-box-caption">
                 {!customer.adCampaignActive
-                  ? 'Delivery paused by user. Resume to start receiving verified leads.'
+                  ? (isDeductedToday
+                      ? `Today is already paid! Click Resume below to restart delivery at ${formatMoney(0)} extra cost.`
+                      : 'Delivery paused by user. Resume to start receiving verified leads.')
                   : isDeductedToday
-                  ? `Today's ${formatMoney(dailyAdSpend)} pacing debited`
+                  ? `Today's ${formatMoney(dailyAdSpend)} pacing settled — actively delivering leads`
                   : `Ready to cut ${formatMoney(dailyAdSpend)} for today's lead delivery`}
               </div>
             </div>
@@ -828,14 +837,18 @@ export default function MarketingWallet({
             <div className="engine-mini-content">
               <div className="mini-box-big-text">
                 {!customer.adCampaignActive
-                  ? 'Schedule Paused'
+                  ? (isDeductedToday ? `${formatMoney(0)} to Resume Today` : 'Schedule Paused')
                   : isDeductedToday
-                  ? 'Tomorrow @ 12:00 AM'
+                  ? (walletBalance >= dailyAdSpend ? 'Tomorrow @ 12:00 AM' : 'Top Up for Tomorrow')
                   : 'Tonight @ 12:00 AM'}
               </div>
               <div className="mini-box-caption text-coral">
                 {!customer.adCampaignActive
-                  ? 'Resume delivery to re-enable scheduled daily pacing'
+                  ? (isDeductedToday
+                      ? 'No extra charge today • Top up wallet before midnight to run future days'
+                      : 'Resume delivery to re-enable scheduled daily pacing')
+                  : (isDeductedToday && walletBalance < dailyAdSpend)
+                  ? `Today is paid ✓ • Add ${formatMoney(dailyAdSpend)} before 12:00 AM to continue tomorrow`
                   : `-${formatMoney(dailyAdSpend)} from wallet (Est. Bal: ${formatMoney(Math.max(0, walletBalance - dailyAdSpend))})`}
               </div>
             </div>
@@ -845,7 +858,7 @@ export default function MarketingWallet({
           <div className="engine-mini-box">
             <div className="mini-box-label">Total Runtime Deducted</div>
             <div className="engine-mini-content">
-              <div className="mini-box-big-text">{actualDaysDelivered} Days Delivered</div>
+              <div className="mini-box-big-text">{actualDaysDelivered} {actualDaysDelivered === 1 ? 'Day' : 'Days'} Delivered</div>
               <div className="mini-box-caption">{formatMoney(actualDebitedTotal)} total debited from wallet</div>
             </div>
           </div>
@@ -858,7 +871,11 @@ export default function MarketingWallet({
             onClick={() => onToggleCampaign && onToggleCampaign()}
             className={`btn-resume-campaign-exact ${customer.adCampaignActive ? 'is-active' : ''}`}
           >
-            {customer.adCampaignActive ? '⏸ Pause Delivery' : '▶️ Resume Delivery'}
+            {customer.adCampaignActive
+              ? '⏸ Pause Delivery'
+              : isDeductedToday
+              ? `▶️ Resume Today's Paid Delivery (${formatMoney(0)})`
+              : '▶️ Resume Delivery'}
           </button>
 
           <span className="engine-realtime-note">
