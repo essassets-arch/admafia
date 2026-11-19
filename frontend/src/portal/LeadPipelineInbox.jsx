@@ -210,8 +210,8 @@ export default function LeadPipelineInbox({
             </div>
             <div style={{ fontSize: '0.83rem', color: '#92400e' }}>
               {walletBalance >= effectiveDaily
-                ? `Activate today's ${currencySymbol}${effectiveDaily} delivery slot to reveal all ${lockedHeldCount} mobile number${lockedHeldCount === 1 ? '' : 's'} immediately.`
-                : `Recharge ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} to unlock all ${lockedHeldCount} mobile number${lockedHeldCount === 1 ? '' : 's'} right inside this table!`}
+                ? `Pre-book your next delivery slot (${currencySymbol}${effectiveDaily}) to reveal all ${lockedHeldCount} mobile number${lockedHeldCount === 1 ? '' : 's'} immediately.`
+                : `Recharge ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} to pre-book tomorrow's slot and unlock all ${lockedHeldCount} mobile number${lockedHeldCount === 1 ? '' : 's'} right inside this table!`}
             </div>
           </div>
           <button
@@ -236,7 +236,7 @@ export default function LeadPipelineInbox({
             }}
           >
             {walletBalance >= effectiveDaily
-              ? `🔓 Activate Today (${currencySymbol}${effectiveDaily}) & Unlock →`
+              ? `🔓 Book Next Day (${currencySymbol}${effectiveDaily}) & Unlock →`
               : `⚡ Recharge ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} & Unlock →`}
           </button>
         </div>

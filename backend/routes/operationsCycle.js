@@ -160,9 +160,11 @@ function computeCustomerEffectiveDates(wallet, todayIso) {
     };
   }
 
+  // Advance Next-Day Rule: Unbooked dates only project onto STRICTLY FUTURE dates (`s > todayIso`).
+  // Today (`todayIso`) is ONLY scheduled if it is already in `bookedSet` (pre-booked in advance or started by Staff).
   const explicitIso = (Array.isArray(wallet?.scheduledDates) ? wallet.scheduledDates : [])
     .map((s) => String(s || '').trim())
-    .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && s >= todayIso && !bookedSet.has(s))
+    .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && s > todayIso && !bookedSet.has(s))
     .sort();
 
   if (explicitIso.length > 0) {
@@ -173,7 +175,7 @@ function computeCustomerEffectiveDates(wallet, todayIso) {
       slotsUsed += 1;
     }
   } else {
-    // Backward-compatible weekday projection when client used activeDays
+    // Backward-compatible weekday projection starting strictly from Tomorrow (`offset = 1`)
     const activeCodes = new Set(
       (Array.isArray(wallet?.activeDays) ? wallet.activeDays : [])
         .map((d) => String(d || '').trim().toUpperCase())
@@ -181,7 +183,7 @@ function computeCustomerEffectiveDates(wallet, todayIso) {
     );
     if (activeCodes.size > 0) {
       let slotsUsed = 0;
-      for (let offset = 0; offset < 14 && slotsUsed < fundedRunwayDays; offset++) {
+      for (let offset = 1; offset <= 14 && slotsUsed < fundedRunwayDays; offset++) {
         const candidateIso = addDaysToIso(todayIso, offset);
         if (bookedSet.has(candidateIso)) continue;
         const meta = getDayMetaFromIso(candidateIso, todayIso);

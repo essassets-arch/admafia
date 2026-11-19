@@ -466,27 +466,44 @@ export async function settleTodayAndUnlockHeldLeadsIfFunded(
       };
     }
 
+    // Advance Next-Day Rule: Customers cannot book Today on the spot — book earliest unbooked advance slot (>= Tomorrow IST)
+    let targetAdvanceIso = '';
+    let targetAdvanceDayCode = todayDayCode;
+    for (let dOff = 1; dOff <= 30; dOff += 1) {
+      const cand = new Date(kolkataNow);
+      cand.setDate(kolkataNow.getDate() + dOff);
+      const iso = `${cand.getFullYear()}-${String(cand.getMonth() + 1).padStart(2, '0')}-${String(cand.getDate()).padStart(2, '0')}`;
+      if (!bookedSet.has(iso)) {
+        targetAdvanceIso = iso;
+        targetAdvanceDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][cand.getDay()];
+        break;
+      }
+    }
+    if (!targetAdvanceIso) {
+      const tom = new Date(kolkataNow);
+      tom.setDate(kolkataNow.getDate() + 1);
+      targetAdvanceIso = `${tom.getFullYear()}-${String(tom.getMonth() + 1).padStart(2, '0')}-${String(tom.getDate()).padStart(2, '0')}`;
+      targetAdvanceDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][tom.getDay()];
+    }
+
     const updatedWal = await Wallet.findOneAndUpdate(
-      { _id: wallet._id, availableBalance: { $gte: dailyBudget }, bookedDates: { $ne: kTodayIso } },
+      { _id: wallet._id, availableBalance: { $gte: dailyBudget }, bookedDates: { $ne: targetAdvanceIso } },
       {
         $inc: { availableBalance: -dailyBudget, totalAdSpent: dailyBudget },
         $set: {
-          adCampaignActive: true,
-          lastDeductedAt: now,
           lastScheduleUpdatedAt: now,
           updatedAt: now,
         },
         $addToSet: {
-          bookedDates: kTodayIso,
-          scheduledDates: kTodayIso,
-          activeDays: todayDayCode,
+          bookedDates: targetAdvanceIso,
+          scheduledDates: targetAdvanceIso,
+          activeDays: targetAdvanceDayCode,
         },
       },
       { new: true, session }
     ).lean();
 
     if (!updatedWal) {
-      // Concurrent request already settled Today — release held leads idempotently
       const rel = await autoReleaseHeldLeadsForCustomer(cid, { session, trigger });
       return {
         unlockedCount: rel.releasedCount,
@@ -505,9 +522,9 @@ export async function settleTodayAndUnlockHeldLeadsIfFunded(
           txType: 'Debit',
           amount: dailyBudget,
           balanceAfter,
-          referenceUtr: `BOOK-${cid}-${kTodayIso}-UNLOCK-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-          description: `Unlocked Waiting Buyer Enquiries & Activated Today's Delivery (${kTodayIso}) (-${currencySym}${dailyBudget})`,
-          paymentMethod: 'Lead Delivery Activation',
+          referenceUtr: `BOOK-${cid}-${targetAdvanceIso}-UNLOCK-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+          description: `Unlocked Waiting Buyer Enquiries & Pre-Booked Next Delivery Slot (${targetAdvanceIso}) (-${currencySym}${dailyBudget})`,
+          paymentMethod: 'Advance Slot & Lead Unlock',
           status: 'Settled ✓',
           currency: walletCurrency,
           createdAt: now,

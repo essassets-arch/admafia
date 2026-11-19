@@ -295,8 +295,9 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     phoneVerifiedAt: row.phone_verified_at || null,
     adCampaignActive: Boolean(row.ad_campaign_active),
     activeDays: (() => {
-      const kDow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getDay();
-      const kToday = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kDow];
+      const kNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const kTomDow = (kNow.getDay() + 1) % 7;
+      const kTomorrow = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kTomDow];
       let rawList = [];
       if (typeof row.active_days === 'string') {
         rawList = row.active_days.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
@@ -306,7 +307,7 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
       if (row.schedule_preset === 'clear' && rawList.length === 0) {
         return [];
       }
-      return rawList.length > 0 ? rawList : [kToday];
+      return rawList.length > 0 ? rawList : [kTomorrow];
     })(),
     schedulePreset: row.schedule_preset || 'custom',
     balance,
@@ -2961,12 +2962,19 @@ const handleUpdateCustomerRecord = async (req, res) => {
         }
         const bookedDatesList = Array.from(bookedDatesSet);
 
+        const isStaffActor = req.auth?.actorType === 'staff';
+        const tomorrowCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][(kolkataNow.getDay() + 1) % 7];
         const storedDays = toList(w.activeDays).map((d) => d.toUpperCase());
         let finalDaysArray = updates.activeDays !== undefined
           ? (Array.isArray(updates.activeDays)
             ? updates.activeDays.map((d) => String(d).trim().toUpperCase()).filter(Boolean)
             : String(updates.activeDays).split(',').map((d) => d.trim().toUpperCase()).filter(Boolean))
-          : (storedDays.length > 0 ? storedDays : [todayCode]);
+          : (storedDays.length > 0 ? storedDays : [tomorrowCode]);
+
+        // Customers cannot self-activate Today unless Today was already pre-booked in advance
+        if (!isStaffActor && nextActive === true && !bookedDatesSet.has(kTodayIso)) {
+          nextActive = false;
+        }
 
         const dayOfWeek = kolkataNow.getDay();
         const distToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -2992,11 +3000,27 @@ const handleUpdateCustomerRecord = async (req, res) => {
         let newlyBookedDates = [];
 
         if (updates.scheduledDates !== undefined) {
-          const incomingIso = toList(updates.scheduledDates).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s));
-          // Identify newly selected dates (>= Today IST) that are NOT yet paid/booked
+          const rawIncomingIso = toList(updates.scheduledDates).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s));
+          if (!isStaffActor) {
+            const unbookedIncoming = Array.from(new Set(rawIncomingIso)).filter(
+              (iso) => iso >= kTodayIso && !bookedDatesSet.has(iso)
+            );
+            if (unbookedIncoming.length === 1 && unbookedIncoming[0] === kTodayIso) {
+              const err = new Error(
+                'Same-day booking is closed. Marketing requires advance preparation for strategy & creatives — please book Tomorrow or any upcoming date.'
+              );
+              err.statusCode = 400;
+              throw err;
+            }
+          }
+          const incomingIso = isStaffActor
+            ? rawIncomingIso
+            : rawIncomingIso.filter((iso) => iso > kTodayIso || bookedDatesSet.has(iso));
+
+          // Identify newly selected dates (strictly > Today IST for customers; >= Today IST for staff)
           if (updates.spotBook !== false && nextBal === undefined) {
             newlyBookedDates = Array.from(new Set(incomingIso))
-              .filter((iso) => iso >= kTodayIso && !bookedDatesSet.has(iso))
+              .filter((iso) => (isStaffActor ? iso >= kTodayIso : iso > kTodayIso) && !bookedDatesSet.has(iso))
               .sort();
           }
 
@@ -4834,6 +4858,28 @@ app.post(
     });
     if (!cust) {
       return res.status(404).json({ ok: false, error: 'Customer not found' });
+    }
+
+    if (req.auth?.actorType === 'customer') {
+      const kTodayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const walCheck = await Wallet.findOne({ customerId: cust._id })
+        .select('bookedDates lastDeductedAt')
+        .lean();
+      const bDates = Array.isArray(walCheck?.bookedDates)
+        ? walCheck.bookedDates.map((s) => String(s || '').trim())
+        : [];
+      const lastDedStr = walCheck?.lastDeductedAt
+        ? new Date(walCheck.lastDeductedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        : '';
+      const isTodayPreBooked = bDates.includes(kTodayStr) || lastDedStr === kTodayStr;
+      if (!isTodayPreBooked) {
+        return res.status(400).json({
+          ok: false,
+          code: 'ADVANCE_BOOKING_REQUIRED',
+          error:
+            'Same-day activation is closed. Marketing requires advance preparation — please pre-book Tomorrow or an upcoming date.',
+        });
+      }
     }
 
     const outcome = await deductWalletForDay({

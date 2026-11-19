@@ -875,11 +875,11 @@ export default function MarketingWallet({
               ? '⏸ Pause Delivery'
               : isDeductedToday
               ? `▶️ Resume Today's Paid Delivery (${formatMoney(0)})`
-              : '▶️ Resume Delivery'}
+              : '📅 Pre-Book Next Delivery Day'}
           </button>
 
           <span className="engine-realtime-note">
-            Automatic midnight IST pacing • Zero manual debit required
+            Advance next-day booking • Strategy &amp; creative prep before launch
           </span>
         </div>
       </div>

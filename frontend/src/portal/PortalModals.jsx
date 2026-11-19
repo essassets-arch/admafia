@@ -957,6 +957,10 @@ export function SetDailyLimitModal({
     { code: 'SUN', label: 'Sunday', short: 'Sun', isToday: todayIdx === 0 },
   ];
   const todayItem = dayDefinitions.find((d) => d.isToday) || dayDefinitions[0];
+  const tomorrowIdx = (todayIdx + 1) % 7;
+  const tomorrowItem =
+    dayDefinitions.find((d) => d.code === ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][tomorrowIdx]) ||
+    dayDefinitions[0];
 
   const isTodayAlreadyBooked = Boolean(
     customer?.isDeductedToday ||
@@ -966,8 +970,8 @@ export function SetDailyLimitModal({
 
   const [selectedDays, setSelectedDays] = useState(
     Array.isArray(customer?.activeDays) && customer.activeDays.length > 0
-      ? customer.activeDays
-      : [todayItem.code]
+      ? customer.activeDays.filter((c) => c !== todayItem.code || isTodayAlreadyBooked)
+      : [tomorrowItem.code]
   );
 
   React.useEffect(() => {
@@ -977,14 +981,16 @@ export function SetDailyLimitModal({
       const maxUnbooked = Math.floor((walletBalance || 0) / Math.max(lim, 1));
       const initialDays = Array.isArray(customer?.activeDays) && customer.activeDays.length > 0
         ? customer.activeDays
-        : [todayItem.code];
-      const unpaidCapped = initialDays.filter((c) => c !== todayItem.code || !isTodayAlreadyBooked).slice(0, maxUnbooked);
+        : [tomorrowItem.code];
+      const unpaidCapped = initialDays
+        .filter((c) => c !== todayItem.code)
+        .slice(0, maxUnbooked);
       const cleanInit = isTodayAlreadyBooked
         ? Array.from(new Set([todayItem.code, ...unpaidCapped]))
         : unpaidCapped;
       setSelectedDays(cleanInit);
     }
-  }, [isOpen, currentLimit, customer?.activeDays, todayItem.code, minDailySpend, walletBalance, isTodayAlreadyBooked]);
+  }, [isOpen, currentLimit, customer?.activeDays, todayItem.code, tomorrowItem.code, minDailySpend, walletBalance, isTodayAlreadyBooked]);
 
   if (!isOpen) return null;
 
@@ -999,13 +1005,22 @@ export function SetDailyLimitModal({
   ];
 
   const toggleDaySelection = (dayCode) => {
-    if (dayCode === todayItem.code && isTodayAlreadyBooked) {
-      Swal.fire({
-        icon: 'info',
-        title: `🎯 ${todayItem.label} is Already Paid & Booked!`,
-        html: `Today's delivery budget is already paid for <strong>${todayItem.label}</strong> and remains locked.`,
-        confirmButtonColor: '#059669',
-      });
+    if (dayCode === todayItem.code) {
+      if (isTodayAlreadyBooked) {
+        Swal.fire({
+          icon: 'info',
+          title: `🎯 ${todayItem.label} is Already Paid & Booked!`,
+          html: `Today's delivery budget is already paid for <strong>${todayItem.label}</strong> and remains locked.`,
+          confirmButtonColor: '#059669',
+        });
+      } else {
+        Swal.fire({
+          icon: 'info',
+          title: 'Advance Booking Required — Starts Tomorrow',
+          html: `Same-day activation is closed so our team can prepare your strategy &amp; creatives.<br/><br/>Please select <strong>${tomorrowItem.label}</strong> or any upcoming day in advance.`,
+          confirmButtonColor: '#4f46e5',
+        });
+      }
       return;
     }
 
@@ -1066,21 +1081,16 @@ export function SetDailyLimitModal({
     }
 
     const maxFundedSlots = Math.floor((walletBalance || 0) / Math.max(finalAmount, 1));
-    const unpaidSelected = selectedDays.filter((c) => !(c === todayItem.code && isTodayAlreadyBooked)).slice(0, maxFundedSlots);
+    const unpaidSelected = selectedDays.filter((c) => c !== todayItem.code).slice(0, maxFundedSlots);
     const finalActiveDays = isTodayAlreadyBooked
       ? Array.from(new Set([todayItem.code, ...unpaidSelected]))
       : unpaidSelected.length > 0
-      ? unpaidSelected
-      : [todayItem.code];
+        ? unpaidSelected
+        : [tomorrowItem.code];
 
-    const isAlreadyActive = Boolean(customer?.adCampaignActive);
+    const isAlreadyActive = Boolean(customer?.adCampaignActive && isTodayAlreadyBooked);
 
-    // 1. Only deduct daily pacing if schedule is already running and today was not yet debited
-    if (isAlreadyActive && onDeductDailyAdSpend && !customer?.isDeductedToday) {
-      onDeductDailyAdSpend(finalAmount);
-    }
-
-    // 2. Update limit & schedule in parent
+    // 1. Update limit & schedule in parent (Advance Next-Day Rule: never self-deduct Today!)
     if (onUpdateLimit) {
       onUpdateLimit(finalAmount, finalActiveDays);
     }

@@ -136,31 +136,39 @@ export default function LeadHubOverview({
   };
 
   const isTodayBooked = Boolean(currentTodayItem && paidDatesSet.has(currentTodayItem.isoDate));
-  const kolkataTodayIso = useMemo(
-    () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
-    []
-  );
+  const { kolkataTodayIso, kolkataTomorrowIso, tomorrowCode, tomorrowDisplayLabel } = useMemo(() => {
+    const kNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const tIso = `${kNow.getFullYear()}-${String(kNow.getMonth() + 1).padStart(2, '0')}-${String(kNow.getDate()).padStart(2, '0')}`;
+    const tom = new Date(kNow);
+    tom.setDate(kNow.getDate() + 1);
+    const tomIso = `${tom.getFullYear()}-${String(tom.getMonth() + 1).padStart(2, '0')}-${String(tom.getDate()).padStart(2, '0')}`;
+    const tCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const tomLabel = tom.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+    return {
+      kolkataTodayIso: tIso,
+      kolkataTomorrowIso: tomIso,
+      tomorrowCode: tCodes[tom.getDay()],
+      tomorrowDisplayLabel: tomLabel,
+    };
+  }, []);
+  const isTomorrowBooked = paidDatesSet.has(kolkataTomorrowIso);
 
   const [activeDays, setActiveDays] = useState(() => {
     const raw = Array.isArray(customer?.activeDays)
       ? customer.activeDays.map((d) => String(d).trim().toUpperCase()).filter(Boolean)
       : [];
-    return raw.length > 0 ? raw : [todayCode];
+    return raw.length > 0 ? raw : [tomorrowCode];
   });
 
   const [scheduledDates, setScheduledDates] = useState(() => {
     const rawIso = Array.isArray(customer?.scheduledDates)
-      ? customer.scheduledDates.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '').trim()))
+      ? customer.scheduledDates
+          .map((s) => String(s || '').trim())
+          .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && (s > kolkataTodayIso || paidDatesSet.has(s)))
       : [];
     if (rawIso.length > 0) return rawIso;
     if (customer?.schedulePreset === 'clear') return Array.from(paidDatesSet);
-    const currentWeek = getKolkataWeekDays(0);
-    const rawCodes = Array.isArray(customer?.activeDays)
-      ? customer.activeDays.map((d) => String(d).trim().toUpperCase()).filter(Boolean)
-      : [todayCode];
-    return currentWeek
-      .filter((d) => (!d.isPast && rawCodes.includes(d.code)) || paidDatesSet.has(d.isoDate))
-      .map((d) => d.isoDate);
+    return Array.from(paidDatesSet);
   });
   const [unmaskedLeads, setUnmaskedLeads] = useState({});
 
@@ -168,32 +176,27 @@ export default function LeadHubOverview({
     const raw = Array.isArray(customer?.activeDays)
       ? customer.activeDays.map((d) => String(d).trim().toUpperCase()).filter(Boolean)
       : [];
-    const merged = new Set(raw.length > 0 ? raw : (customer?.schedulePreset === 'clear' ? [] : [todayCode]));
+    const merged = new Set(raw.length > 0 ? raw : (customer?.schedulePreset === 'clear' ? [] : [tomorrowCode]));
     daysList.forEach((d) => {
       if (paidDatesSet.has(d.isoDate)) merged.add(d.code);
     });
     setActiveDays(Array.from(merged));
 
     const rawIso = Array.isArray(customer?.scheduledDates)
-      ? customer.scheduledDates.map((s) => String(s || '').trim()).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s))
+      ? customer.scheduledDates
+          .map((s) => String(s || '').trim())
+          .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && (s > kolkataTodayIso || paidDatesSet.has(s)))
       : [];
     if (rawIso.length > 0) {
       const isoSet = new Set([...rawIso, ...Array.from(paidDatesSet)]);
       setScheduledDates(Array.from(isoSet).sort());
-    } else if (customer?.schedulePreset === 'clear') {
-      setScheduledDates(Array.from(paidDatesSet).sort());
     } else {
-      const currentWeek = getKolkataWeekDays(0);
-      const fallbackIso = new Set(paidDatesSet);
-      currentWeek.forEach((d) => {
-        if (!d.isPast && merged.has(d.code)) fallbackIso.add(d.isoDate);
-      });
-      setScheduledDates(Array.from(fallbackIso).sort());
+      setScheduledDates(Array.from(paidDatesSet).sort());
     }
-  }, [customer?.activeDays, customer?.scheduledDates, customer?.schedulePreset, paidDatesSet, todayCode]);
+  }, [customer?.activeDays, customer?.scheduledDates, customer?.schedulePreset, paidDatesSet, tomorrowCode, kolkataTodayIso]);
 
   // Global funded/paid ISO date set across ALL weeks (Current Week + Next Week + Future):
-  // - Never marks past unpaid days as active
+  // - Advance Next-Day Rule: Unbooked dates MUST be strictly > kolkataTodayIso (Tomorrow onwards)
   // - Clamps total unpaid scheduled dates strictly to `fundedRunwayDays`
   const { effectiveScheduledIsoSet, effectiveWeekDaysSet, unpaidSelectedCount, remainingFundedSlots } = useMemo(() => {
     const isoSet = new Set();
@@ -202,14 +205,10 @@ export default function LeadHubOverview({
     // 1. Always include all already-paid dates
     paidDatesSet.forEach((iso) => isoSet.add(iso));
 
-    // 2. Include user-selected future/today ISO dates up to fundedRunwayDays (Today prioritized first, then chronological)
+    // 2. Include user-selected strictly future ISO dates (> Today) up to fundedRunwayDays
     const uniqueCandidates = Array.from(new Set(scheduledDates))
-      .filter((iso) => iso >= kolkataTodayIso && !paidDatesSet.has(iso))
-      .sort((a, b) => {
-        if (a === kolkataTodayIso) return -1;
-        if (b === kolkataTodayIso) return 1;
-        return a.localeCompare(b);
-      });
+      .filter((iso) => iso > kolkataTodayIso && !paidDatesSet.has(iso))
+      .sort((a, b) => a.localeCompare(b));
 
     for (const iso of uniqueCandidates) {
       if (unpaidUsed < fundedRunwayDays) {
@@ -347,6 +346,48 @@ export default function LeadHubOverview({
       return;
     }
 
+    // Advance Next-Day Booking Rule: Customers cannot book Today on the spot!
+    if (dayObj?.isToday || dayObj?.isoDate === kolkataTodayIso) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Advance Booking Required — Starts Tomorrow!',
+        html: `
+          <div style="text-align: left; font-size: 0.88rem; color: #334155; line-height: 1.55;">
+            Same-day activation is closed so our team gets proper preparation time for your <strong>campaign strategy, custom creatives, and targeting setup</strong>.<br/><br/>
+            ${
+              isTomorrowBooked
+                ? `✓ <strong>Tomorrow (${tomorrowDisplayLabel})</strong> is already paid &amp; booked! Select any other upcoming day to schedule extra delivery.`
+                : `Book <strong>Tomorrow (${tomorrowDisplayLabel})</strong> in advance (${currencySymbol}${dailySpend}) so everything goes live smoothly tomorrow!`
+            }
+          </div>
+        `,
+        showCancelButton: !isTomorrowBooked,
+        confirmButtonText: isTomorrowBooked
+          ? 'Got It'
+          : walletBalance >= dailySpend
+            ? `📅 Book Tomorrow (${tomorrowDisplayLabel}) — ${currencySymbol}${dailySpend}`
+            : `+ Top Up ${currencySymbol}${dailySpend} for Tomorrow`,
+        confirmButtonColor: '#4f46e5',
+        cancelButtonText: 'Close',
+      }).then((res) => {
+        if (!res.isConfirmed || isTomorrowBooked) return;
+        if (walletBalance < dailySpend) {
+          if (onOpenAddFunds) onOpenAddFunds();
+          return;
+        }
+        const nextIsoList = Array.from(new Set([...Array.from(paidDatesSet), kolkataTomorrowIso])).sort();
+        setScheduledDates(nextIsoList);
+        if (onUpdateCustomer) {
+          onUpdateCustomer({
+            activeDays: Array.from(new Set([...activeDays.filter((c) => c !== todayCode || isTodayBooked), tomorrowCode])),
+            scheduledDates: nextIsoList,
+            schedulePreset: 'custom',
+          });
+        }
+      });
+      return;
+    }
+
     const targetIso = dayObj?.isoDate;
     const isCurrentlySelected = targetIso
       ? effectiveScheduledIsoSet.has(targetIso)
@@ -447,18 +488,30 @@ export default function LeadHubOverview({
     if (preset === 'weekdays') rawTarget = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
     if (preset === 'weekends') rawTarget = ['SAT', 'SUN'];
 
-    // Exclude past unpaid days in the viewed week so we never try to schedule past dates
-    const validTargetCodes = daysList
-      .filter((d) => (rawTarget.includes(d.code) && !d.isPast) || bookedCodesInView.includes(d.code))
-      .map((d) => d.code);
+    // Advance Next-Day Rule: Exclude BOTH past days AND unbooked Today (`iso > kolkataTodayIso`)!
+    let targetWeekDays = daysList;
+    let candidateDays = targetWeekDays.filter(
+      (d) => rawTarget.includes(d.code) && d.isoDate > kolkataTodayIso && !isDayBooked(d)
+    );
+    let switchedToNextWeek = false;
+    if (candidateDays.length === 0 && weekOffset === 0) {
+      targetWeekDays = getKolkataWeekDays(1);
+      candidateDays = targetWeekDays.filter(
+        (d) => rawTarget.includes(d.code) && d.isoDate > kolkataTodayIso && !paidDatesSet.has(d.isoDate)
+      );
+      switchedToNextWeek = candidateDays.length > 0;
+    }
 
-    const unpaidNeededCount = validTargetCodes.filter((c) => !bookedCodesInView.includes(c)).length;
+    const validTargetCodes = Array.from(
+      new Set([...bookedCodesInView, ...candidateDays.map((d) => d.code)])
+    );
+    const unpaidNeededCount = candidateDays.length;
 
     if (unpaidNeededCount === 0 && bookedCodesInView.length === 0) {
       Swal.fire({
         icon: 'info',
-        title: 'Selected Days Have Already Ended This Week',
-        text: 'Switch to "Next Week ›" to schedule those days for next week.',
+        title: 'Selected Days Are Already Booked or Ended',
+        text: 'Switch to "Next Week ›" to pre-book upcoming advance days.',
         confirmButtonColor: '#4f46e5',
       });
       return;
@@ -467,14 +520,14 @@ export default function LeadHubOverview({
     if (unpaidNeededCount > fundedRunwayDays) {
       const requiredBal = unpaidNeededCount * dailySpend;
       const shortfall = Math.max(dailySpend, Math.ceil(requiredBal - walletBalance));
-      const presetTitle = preset === 'all' ? 'All Upcoming Days' : preset === 'weekdays' ? 'Weekdays (Mon–Fri)' : 'Weekends (Sat–Sun)';
+      const presetTitle = preset === 'all' ? 'Upcoming Advance Days' : preset === 'weekdays' ? 'Upcoming Weekdays (Mon–Fri)' : 'Upcoming Weekends (Sat–Sun)';
       Swal.fire({
         icon: 'warning',
         title: `Wallet Top-Up Required for ${presetTitle}`,
         html: `
           <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px; margin: 10px 0; font-family: inherit;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-              <span style="color: #64748b; font-size: 0.84rem;">Upcoming Unpaid Days:</span>
+              <span style="color: #64748b; font-size: 0.84rem;">Advance Unpaid Days:</span>
               <strong style="color: #0f172a; font-size: 0.92rem;">${unpaidNeededCount} day${unpaidNeededCount > 1 ? 's' : ''} × ${currencySymbol}${dailySpend.toLocaleString()}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
@@ -490,7 +543,7 @@ export default function LeadHubOverview({
               <strong style="color: #dc2626; font-size: 1rem;">+${currencySymbol}${shortfall.toLocaleString()}</strong>
             </div>
           </div>
-          <p style="font-size: 0.84rem; color: #475569; margin: 0;">Top up your Growth Wallet first to unlock all ${unpaidNeededCount} upcoming days.</p>
+          <p style="font-size: 0.84rem; color: #475569; margin: 0;">Top up your Growth Wallet first to pre-book all ${unpaidNeededCount} advance days.</p>
         `,
         showCancelButton: true,
         confirmButtonText: `+ Top Up ${currencySymbol}${shortfall.toLocaleString()} Now`,
@@ -507,12 +560,11 @@ export default function LeadHubOverview({
     const validTargetIso = Array.from(
       new Set([
         ...Array.from(paidDatesSet),
-        ...daysList
-          .filter((d) => rawTarget.includes(d.code) && !d.isPast)
-          .map((d) => d.isoDate),
+        ...candidateDays.map((d) => d.isoDate),
       ])
     ).sort();
 
+    if (switchedToNextWeek) setWeekOffset(1);
     try { window.sessionStorage.setItem('admafia_active_schedule_preset', preset); } catch (e) {}
     setScheduledDates(validTargetIso);
     setActiveDays(validTargetCodes);
@@ -613,8 +665,8 @@ export default function LeadHubOverview({
             </h3>
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#92400e', lineHeight: 1.45 }}>
               {walletBalance >= dailySpend
-                ? `Activate today's ${currencySymbol}${dailySpend} delivery slot to unlock all ${lockedHeldCount} buyer contact${lockedHeldCount === 1 ? '' : 's'} into My Leads immediately.`
-                : `Top up ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} in your Growth Wallet to settle today's delivery and unlock all ${lockedHeldCount} buyer contact${lockedHeldCount === 1 ? '' : 's'} instantly.`}
+                ? `Pre-book your next delivery slot (${currencySymbol}${dailySpend}) to unlock all ${lockedHeldCount} waiting buyer contact${lockedHeldCount === 1 ? '' : 's'} into My Leads immediately.`
+                : `Top up ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} in your Growth Wallet to pre-book tomorrow's slot and unlock all ${lockedHeldCount} buyer contact${lockedHeldCount === 1 ? '' : 's'} instantly.`}
             </p>
           </div>
 
@@ -641,7 +693,7 @@ export default function LeadHubOverview({
             }}
           >
             {walletBalance >= dailySpend
-              ? `🔓 Activate Today (${currencySymbol}${dailySpend}) & Unlock ${lockedHeldCount} →`
+              ? `🔓 Book Next Day (${currencySymbol}${dailySpend}) & Unlock ${lockedHeldCount} →`
               : `⚡ Recharge ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} & Unlock ${lockedHeldCount} →`}
           </button>
         </div>
@@ -950,7 +1002,7 @@ export default function LeadHubOverview({
                 </span>
               </div>
               <p className="pacing-master-subtitle-exact">
-                Schedule active days for verified buyer lead delivery. Daily pacing of <strong>{currencySymbol}{dailySpend}</strong> is deducted only on scheduled active days.
+                Pre-book your active days in advance (starting from <strong>Tomorrow, {tomorrowDisplayLabel}</strong>) so our team prepares your strategy &amp; creatives ahead of launch. Daily pacing of <strong>{currencySymbol}{dailySpend}</strong> is deducted on booking.
               </p>
             </div>
           </div>
@@ -987,8 +1039,10 @@ export default function LeadHubOverview({
                 {customer.adCampaignActive
                   ? 'Running (Active)'
                   : isTodayBooked
-                  ? 'Paused (Today Paid ✓)'
-                  : 'Paused (Off)'}
+                    ? 'Paused (Today Paid ✓)'
+                    : isTomorrowBooked
+                      ? `Booked for Tomorrow (${tomorrowDisplayLabel}) ✓`
+                      : 'Advance Booking Open'}
               </strong>
               {!customer.adCampaignActive && isTodayBooked ? (
                 <span
@@ -996,6 +1050,13 @@ export default function LeadHubOverview({
                   title="Today's delivery was already paid — resume anytime for free"
                 >
                   ✓ {currencySymbol}0 to Resume Today
+                </span>
+              ) : !customer.adCampaignActive && isTomorrowBooked ? (
+                <span
+                  style={{ fontSize: '0.70rem', color: '#4f46e5', fontWeight: 800, marginTop: 2 }}
+                  title="Strategy & creative preparation in progress for Tomorrow"
+                >
+                  🎯 Strategy &amp; Creative Prep in Progress
                 </span>
               ) : !customer.adCampaignActive && walletBalance < dailySpend ? (
                 <span
@@ -1006,12 +1067,12 @@ export default function LeadHubOverview({
                   }}
                   title="Click to Top Up Wallet"
                 >
-                  ⚠️ Top Up {currencySymbol}{dailySpend} to Start
+                  ⚠️ Top Up {currencySymbol}{dailySpend} to Book Tomorrow
                 </span>
               ) : null}
             </div>
 
-            {/* Single Action Button: Start/Resume when stopped, Stop when running */}
+            {/* Single Action Button: Resume/Stop when Today is pre-booked, or Book Next Day in advance */}
             <div className="pacing-start-stop-single-button">
               {customer.adCampaignActive ? (
                 <button
@@ -1030,12 +1091,16 @@ export default function LeadHubOverview({
                   type="button"
                   className="btn-proper-pacing-start is-active"
                   onClick={() => onToggleCampaign && onToggleCampaign(true)}
-                  title={isTodayBooked ? `Resume today's already-paid delivery (${currencySymbol}0)` : 'Click to Activate Lead Delivery'}
+                  title={
+                    isTodayBooked
+                      ? `Resume today's already-paid delivery (${currencySymbol}0)`
+                      : `Pre-book next available day in advance (${currencySymbol}${dailySpend})`
+                  }
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                     <polygon points="5 3 19 12 5 21 5 3" />
                   </svg>
-                  <span>{isTodayBooked ? 'Resume' : 'Start'}</span>
+                  <span>{isTodayBooked ? 'Resume' : isTomorrowBooked ? '+ Next Day' : 'Book Tomorrow'}</span>
                 </button>
               )}
             </div>
@@ -1357,8 +1422,11 @@ export default function LeadHubOverview({
             {daysList.map((d) => {
               const isBooked = isDayBooked(d);
               const isPastUnbooked = Boolean(d.isPast && !isBooked);
+              const isTodayUnbooked = Boolean(d.isToday && !isBooked);
+              const isTomorrowUnbooked = Boolean(d.isoDate === kolkataTomorrowIso && !isBooked);
               const isSelected = Boolean(effectiveScheduledIsoSet.has(d.isoDate) || isBooked);
-              const canSelectWithWallet = !isBooked && !isSelected && !isPastUnbooked && remainingFundedSlots > 0;
+              const canSelectWithWallet =
+                !isBooked && !isSelected && !isPastUnbooked && !isTodayUnbooked && remainingFundedSlots > 0;
 
               return (
                 <div
@@ -1367,7 +1435,9 @@ export default function LeadHubOverview({
                   style={
                     isPastUnbooked
                       ? { opacity: 0.52, cursor: 'not-allowed', filter: 'grayscale(0.35)' }
-                      : undefined
+                      : isTodayUnbooked
+                        ? { opacity: 0.78, borderStyle: 'dashed' }
+                        : undefined
                   }
                   onClick={() => {
                     if (!isPastUnbooked) toggleDay(d);
@@ -1376,16 +1446,27 @@ export default function LeadHubOverview({
                     isBooked
                       ? `${d.label} (${d.dateFormatted}): Already paid & booked`
                       : isPastUnbooked
-                      ? `${d.label} (${d.dateFormatted}): Past date has ended`
-                      : isSelected
-                      ? `Click to unschedule ${d.label} (${d.dateFormatted})`
-                      : canSelectWithWallet
-                      ? `Click to schedule ${d.label} (${d.dateFormatted}) using your wallet balance`
-                      : `Locked — Top up ${currencySymbol}${dailySpend} to unlock ${d.label} (${d.dateFormatted})`
+                        ? `${d.label} (${d.dateFormatted}): Past date has ended`
+                        : isTodayUnbooked
+                          ? `Same-day booking closed (Strategy & Creative Prep) — book Tomorrow (${tomorrowDisplayLabel}) onwards`
+                          : isSelected
+                            ? `Click to unschedule ${d.label} (${d.dateFormatted})`
+                            : canSelectWithWallet
+                              ? `Click to pre-book ${d.label} (${d.dateFormatted}) in advance`
+                              : `Locked — Top up ${currencySymbol}${dailySpend} to pre-book ${d.label} (${d.dateFormatted})`
                   }
                 >
-                  {/* If today, floating blue badge */}
-                  {d.isToday && <span className="today-floating-pill">Today</span>}
+                  {/* Floating badge */}
+                  {d.isToday && (
+                    <span className="today-floating-pill">
+                      {isBooked ? 'Today Live' : 'Prep Day'}
+                    </span>
+                  )}
+                  {!d.isToday && isTomorrowUnbooked && (
+                    <span className="today-floating-pill" style={{ background: '#4f46e5' }}>
+                      Next Slot
+                    </span>
+                  )}
                   {isBooked && (
                     <span className="ad-booked-floating-badge">
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: '2px' }}>
@@ -1401,7 +1482,7 @@ export default function LeadHubOverview({
 
                   {/* Price tag */}
                   <div className={`day-price-badge ${isBooked ? 'booked' : isSelected ? 'selected' : 'unselected'}`}>
-                    {isPastUnbooked ? '—' : `${currencySymbol}${dailySpend}`}
+                    {isPastUnbooked || isTodayUnbooked ? '—' : `${currencySymbol}${dailySpend}`}
                   </div>
 
                   {isBooked ? (
@@ -1412,11 +1493,15 @@ export default function LeadHubOverview({
                     <div className="day-status-micro-text available" style={{ color: '#94a3b8' }}>
                       ENDED
                     </div>
+                  ) : isTodayUnbooked ? (
+                    <div className="day-status-micro-text available" style={{ color: '#64748b', fontWeight: 800 }}>
+                      ⏳ BOOK TOMORROW
+                    </div>
                   ) : isSelected ? (
                     <div className="day-status-micro-text selected">✓ SCHEDULED</div>
                   ) : canSelectWithWallet ? (
                     <div className="day-status-micro-text available" style={{ color: '#4f46e5', fontWeight: 800 }}>
-                      + SELECT DAY
+                      + BOOK IN ADVANCE
                     </div>
                   ) : (
                     <div className="day-status-micro-text available" style={{ color: '#d97706', fontWeight: 800 }}>
@@ -1436,9 +1521,9 @@ export default function LeadHubOverview({
                           <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>
                       </div>
-                    ) : isPastUnbooked ? (
-                      <div className="day-lock-icon" style={{ opacity: 0.45 }} title="Past calendar day">
-                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8' }}>—</span>
+                    ) : isPastUnbooked || isTodayUnbooked ? (
+                      <div className="day-lock-icon" style={{ opacity: 0.55 }} title={isTodayUnbooked ? 'Same-day closed — book Tomorrow onwards' : 'Past calendar day'}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8' }}>⏳</span>
                       </div>
                     ) : isSelected ? (
                       <div className="day-check-circle" title={`Click to unschedule ${d.label} (${d.dateFormatted})`}>

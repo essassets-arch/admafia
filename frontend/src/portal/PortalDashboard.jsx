@@ -1462,25 +1462,42 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       return;
     }
 
-    // Authoritative IST check: Is today's schedule ALREADY paid & booked?
+    // Authoritative IST check: Was today's schedule ALREADY pre-booked in advance?
     const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const todayIso = `${kolkataNow.getFullYear()}-${String(kolkataNow.getMonth() + 1).padStart(2, '0')}-${String(kolkataNow.getDate()).padStart(2, '0')}`;
     const dayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const todayDayCode = dayCodes[kolkataNow.getDay()];
+    const bookedDatesList = Array.isArray(customer.bookedDates) ? customer.bookedDates : [];
     const isTodayAlreadyPaid = Boolean(
       customer.isDeductedToday ||
-      (Array.isArray(customer.bookedDates) && customer.bookedDates.includes(todayIso)) ||
-      (Array.isArray(customer.lockedDays) && customer.lockedDays.includes(todayDayCode)) ||
+      bookedDatesList.includes(todayIso) ||
       (customer.lastDeductedAt &&
         new Date(customer.lastDeductedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === todayIso)
     );
+
+    // Find earliest unbooked advance date starting strictly from Tomorrow (T+1)
+    let nextAdvanceIso = '';
+    let nextAdvanceDayCode = dayCodes[(kolkataNow.getDay() + 1) % 7];
+    let nextAdvanceLabel = 'Tomorrow';
+    for (let dOff = 1; dOff <= 30; dOff += 1) {
+      const cand = new Date(kolkataNow);
+      cand.setDate(kolkataNow.getDate() + dOff);
+      const cIso = `${cand.getFullYear()}-${String(cand.getMonth() + 1).padStart(2, '0')}-${String(cand.getDate()).padStart(2, '0')}`;
+      if (!bookedDatesList.includes(cIso)) {
+        nextAdvanceIso = cIso;
+        nextAdvanceDayCode = dayCodes[cand.getDay()];
+        const fmt = cand.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+        nextAdvanceLabel = dOff === 1 ? `Tomorrow (${fmt})` : fmt;
+        break;
+      }
+    }
 
     // 3. Low Balance Check: ONLY block when today is NOT already paid and wallet balance < dailySpend!
     if (nextActive && !isTodayAlreadyPaid && walletBalance < dailyLimit) {
       Swal.fire({
         icon: 'warning',
-        title: 'Growth Wallet Balance is Low',
-        html: `Your available Growth Wallet balance is <strong style="color:#ef4444;">${currencySymbol}${walletBalance.toLocaleString()}</strong>, and today's delivery budget is <strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong>.<br/><br/>Please top up your wallet to activate today's lead delivery.`,
+        title: `Top Up ${currencySymbol}${dailyLimit.toLocaleString()} to Book ${nextAdvanceLabel}`,
+        html: `Same-day activation is closed so our team can prepare your strategy &amp; creatives in advance.<br/><br/>Your Growth Wallet has <strong style="color:#ef4444;">${currencySymbol}${walletBalance.toLocaleString()}</strong> — top up <strong>${currencySymbol}${dailyLimit.toLocaleString()}</strong> to pre-book <strong>${nextAdvanceLabel}</strong>.`,
         showCancelButton: true,
         confirmButtonText: '+ Top Up Wallet Now',
         confirmButtonColor: '#4f46e5',
@@ -1493,7 +1510,57 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       return;
     }
 
-    // 4. Activating / Resuming Delivery
+    // 4A. ADVANCE NEXT-DAY BOOKING FLOW (When Today was NOT pre-booked in advance)
+    if (nextActive && !isTodayAlreadyPaid) {
+      const confirmAdvance = await Swal.fire({
+        icon: 'question',
+        title: `Pre-Book Delivery for ${nextAdvanceLabel}?`,
+        html: `
+          <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px; margin: 10px 0; font-family: inherit;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b; font-size: 0.85rem;">Scheduled Delivery Day:</span>
+              <strong style="color: #4f46e5; font-size: 0.96rem;">${nextAdvanceLabel}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: #64748b; font-size: 0.85rem;">Growth Wallet Balance:</span>
+              <strong style="color: #0f172a; font-size: 0.96rem;">${currencySymbol}${walletBalance.toLocaleString()}</strong>
+            </div>
+            <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; display: flex; justify-content: space-between;">
+              <span style="color: #64748b; font-size: 0.85rem;">Advance Slot Deduction:</span>
+              <span style="color: #047857; font-weight: 800; font-size: 0.88rem;">-${currencySymbol}${dailyLimit.toLocaleString()} (Settled Now ✓)</span>
+            </div>
+          </div>
+          <p style="font-size: 0.84rem; color: #475569; margin: 0;">
+            Same-day activation is closed so our team gets proper preparation time for your <strong>strategy, creatives &amp; targeting</strong> today — live buyer leads begin on <strong>${nextAdvanceLabel}</strong>!
+          </p>
+        `,
+        showCancelButton: true,
+        confirmButtonText: `📅 Book ${nextAdvanceLabel} (${currencySymbol}${dailyLimit.toLocaleString()})`,
+        confirmButtonColor: '#4f46e5',
+        cancelButtonText: 'Cancel',
+      });
+
+      if (!confirmAdvance.isConfirmed) return;
+
+      const existingSched = Array.isArray(customer.scheduledDates) ? customer.scheduledDates : [];
+      const mergedDates = Array.from(
+        new Set([...bookedDatesList, ...existingSched.filter((d) => d > todayIso), nextAdvanceIso])
+      ).sort();
+      const currentCodes = Array.isArray(customer.activeDays)
+        ? customer.activeDays.filter((c) => c !== todayDayCode)
+        : [];
+      const mergedCodes = Array.from(new Set([...currentCodes, nextAdvanceDayCode]));
+
+      handleUpdateCustomer({
+        scheduledDates: mergedDates,
+        activeDays: mergedCodes,
+        schedulePreset: 'custom',
+        spotBook: true,
+      });
+      return;
+    }
+
+    // 4B. RESUMING TODAY'S ALREADY PRE-BOOKED DELIVERY (₹0 Extra Charge)
     const currentDays = Array.isArray(customer.activeDays) && customer.activeDays.length > 0
       ? customer.activeDays
       : [todayDayCode];
@@ -1505,7 +1572,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
     if (nextActive) {
       const confirmStart = await Swal.fire({
         icon: 'question',
-        title: isTodayAlreadyPaid ? 'Resume Today\'s Paid Delivery?' : 'Activate Daily Lead Delivery?',
+        title: "Resume Today's Paid Delivery?",
         html: `
           <div style="text-align: left; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 14px; margin: 10px 0; font-family: inherit;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
