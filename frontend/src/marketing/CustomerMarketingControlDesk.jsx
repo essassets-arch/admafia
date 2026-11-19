@@ -11,10 +11,18 @@ import {
   Calendar,
   Settings,
   Check,
+  Copy,
+  Edit3,
+  Sparkles,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
 import { SmartTable } from '../components/SmartTabulator';
+import {
+  buildClientAdCopyBundle,
+  normalizeDisplayAmmCode,
+  MarketingAdCopyModal,
+} from '../utils/marketingAdCopy';
 
 const DAYS_OF_WEEK = [
   { code: 'MON', label: 'Monday', short: 'Mon', initial: 'M' },
@@ -52,6 +60,15 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
   const [editActiveDays, setEditActiveDays] = useState(['MON', 'TUE', 'WED', 'THU', 'FRI']);
   const [editPreset, setEditPreset] = useState('weekdays');
   const [savingPacing, setSavingPacing] = useState(false);
+  const [copiedCellKey, setCopiedCellKey] = useState('');
+  const [adCopyModalCustomer, setAdCopyModalCustomer] = useState(null);
+
+  const handleQuickCopy = (text, key) => {
+    if (!text) return;
+    navigator.clipboard?.writeText(text);
+    setCopiedCellKey(key);
+    setTimeout(() => setCopiedCellKey(''), 1800);
+  };
 
   // Campaign History Modal State
   const [historyModalCustomer, setHistoryModalCustomer] = useState(null);
@@ -312,7 +329,10 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
       return;
     }
 
-    const defaultCode = cust.marketingCode || activeCampaign?.marketingCode || activeCampaign?.externalCampaignId || '';
+    const defaultCode = normalizeDisplayAmmCode(
+      cust.marketingCode || activeCampaign?.marketingCode || activeCampaign?.externalCampaignId || ''
+    );
+    const previewAdCopy = buildClientAdCopyBundle(cust, defaultCode);
 
     const { value: enteredCode, isConfirmed } = await Swal.fire({
       title: `Start Marketing: ${cust.name}`,
@@ -329,17 +349,18 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
             <div style="margin-bottom: 4px;">Current Wallet Balance: <strong>₹${balance.toLocaleString('en-IN')}</strong></div>
             <div style="margin-bottom: 6px;">Balance After Today's Deduction: <strong style="color: #10b981;">₹${(balance - spend).toLocaleString('en-IN')}</strong></div>
           `}
-          <div style="margin-top: 8px; padding: 10px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; font-size: 0.82rem; color: #10b981;">
-            ✓ Marketing will turn <strong>LIVE (ON)</strong> on customer portal &amp; Meta Ads pipeline.
+          <div style="margin-top: 8px; padding: 10px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 8px; font-size: 0.8rem;">
+            <strong>Ad / WhatsApp Pre-fill Text to Paste:</strong><br/>
+            <code style="display:block; margin-top:4px; white-space:pre-wrap;">${previewAdCopy.whatsappGreeting}</code>
           </div>
           <div style="margin-top: 14px; margin-bottom: 4px; font-weight: 700; font-size: 0.86rem;">
-            Enter Marketing / Campaign Code (varchar):
+            Assigned #AMM Marketing Code:
           </div>
         </div>
       `,
       input: 'text',
       inputValue: defaultCode,
-      inputPlaceholder: 'Enter varchar code (e.g. META-ADS-8921, CMP-4401)',
+      inputPlaceholder: 'e.g. #AMM01',
       inputAttributes: {
         autocapitalize: 'off',
         autocorrect: 'off',
@@ -391,7 +412,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
             <div style="font-size: 0.90rem;">
               <div>${res.message || `₹${spend} per-day service active for ${cust.name}!`}</div>
               <div style="margin-top: 10px; padding: 8px 12px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; color: #10b981; font-size: 0.82rem;">
-                ✓ Code Configured &amp; Saved: <strong>Filled</strong>
+                ✓ Active Marketing Code: <strong>${res.marketingCode || finalCode}</strong>
               </div>
             </div>
           `,
@@ -404,22 +425,22 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     }
   };
 
-  // Quick Edit Marketing Code helper (updates code status between Filled / Not Filled without starting)
+  // Quick Edit Marketing Code helper
   const handleEditMarketingCode = async (cust) => {
-    const currentCode = cust.marketingCode || '';
+    const currentCode = normalizeDisplayAmmCode(cust.marketingCode || '');
     const { value: enteredCode, isConfirmed } = await Swal.fire({
       title: `Marketing Code: ${cust.name}`,
       html: `
         <div style="text-align: left; font-size: 0.86rem; margin-bottom: 10px; line-height: 1.5;">
-          Enter or update the varchar campaign / marketing tracking code for <strong>${cust.name}</strong>:
+          View or update the <strong>#AMMxx</strong> marketing &amp; chatbot routing code for <strong>${cust.name}</strong>:
           <div style="font-size: 0.78rem; opacity: 0.8; margin-top: 4px;">
-            Note: The table column will indicate <strong>Filled</strong> or <strong>Not Filled</strong> without exposing the code text.
+            Tip: Leave blank and click Save to auto-allocate the next sequential <code>#AMM</code> code.
           </div>
         </div>
       `,
       input: 'text',
       inputValue: currentCode,
-      inputPlaceholder: 'e.g. META-ADS-8921, CMP-4401',
+      inputPlaceholder: 'e.g. #AMM01',
       inputAttributes: {
         autocapitalize: 'off',
         autocorrect: 'off',
@@ -436,14 +457,15 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
     const finalCode = (enteredCode || '').trim().toUpperCase();
 
     try {
-      await marketingApi.updateCustomerMarketingCode(cust.id, finalCode);
+      const res = await marketingApi.updateCustomerMarketingCode(cust.id, finalCode);
+      const savedCode = res?.marketingCode || finalCode;
       setCustomers((prev) =>
         prev.map((item) =>
           item.id === cust.id
             ? {
                 ...item,
-                marketingCode: finalCode,
-                isCodeFilled: Boolean(finalCode),
+                marketingCode: savedCode,
+                isCodeFilled: Boolean(savedCode),
               }
             : item
         )
@@ -451,8 +473,8 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
 
       Swal.fire({
         icon: 'success',
-        title: finalCode ? 'Code Saved! ✓' : 'Code Cleared',
-        text: finalCode ? 'Marketing code status updated to Filled.' : 'Status updated to Not Filled.',
+        title: `Code Saved: ${savedCode}`,
+        text: `Ad text & chatbot routing updated to ${savedCode}.`,
         timer: 1500,
         showConfirmButton: false,
       });
@@ -579,12 +601,12 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           <table className="marketing-table">
             <thead>
               <tr>
-                <th style={{ width: '21%' }}>Customer / Business</th>
-                <th style={{ width: '11%' }}>Category</th>
-                <th style={{ width: '13%', textAlign: 'center' }}>Marketing Code</th>
-                <th style={{ width: '27%' }}>Marketing Pacing &amp; Schedule</th>
-                <th style={{ width: '13%' }}>Ad Wallet</th>
-                <th style={{ width: '15%' }}>Marketing Actions</th>
+                <th style={{ width: '18%' }}>Customer / Business</th>
+                <th style={{ width: '10%' }}>Category</th>
+                <th style={{ width: '25%' }}>Marketing Code &amp; Ad Copy</th>
+                <th style={{ width: '23%' }}>Marketing Pacing &amp; Schedule</th>
+                <th style={{ width: '11%' }}>Ad Wallet</th>
+                <th style={{ width: '13%' }}>Marketing Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -625,11 +647,17 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                   const custCampaigns = campaigns.filter((camp) => camp.customerId === c.id);
                   const activeCampaign = custCampaigns.find((camp) => camp.status === 'Running') || custCampaigns[0];
                   const isLive = Boolean(c.adCampaignActive || (activeCampaign && activeCampaign.status === 'Running'));
-                  const isCodeFilled = Boolean(c.marketingCode || (activeCampaign && (activeCampaign.marketingCode || activeCampaign.externalCampaignId)));
+                  const rawResolvedCode =
+                    c.marketingCode ||
+                    (activeCampaign && (activeCampaign.marketingCode || activeCampaign.externalCampaignId)) ||
+                    '';
+                  const resolvedCode = normalizeDisplayAmmCode(rawResolvedCode);
+                  const isCodeFilled = Boolean(resolvedCode);
+                  const adCopy = buildClientAdCopyBundle(c, resolvedCode);
                   const activeDays = c.activeDays && c.activeDays.length > 0 ? c.activeDays : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
                   const isTodayActive = activeDays.includes(todayItem.code);
                   const dailySpend = c.dailyAdSpend || 300;
-                  const isLowBalance = c.availableBalance < dailySpend || c.availableBalance <= 0;
+                  const isLowBalance = !c.isDeductedToday && (c.availableBalance < dailySpend || c.availableBalance <= 0);
                   const runwayDays = dailySpend > 0 ? Math.floor(c.availableBalance / dailySpend) : 0;
 
                   return (
@@ -662,75 +690,137 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                         <span className="mkt-pill mkt-pill-slate">{c.category}</span>
                       </td>
 
-                      {/* 3. Marketing Code Column (Shows Filled / Not Filled, NEVER exposes actual code) */}
-                      <td style={{ textAlign: 'center' }}>
-                        {isCodeFilled ? (
-                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleEditMarketingCode(c)}
-                              title="Code is assigned. Click to view or edit."
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                padding: 0,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              <span
-                                className="mkt-pill mkt-pill-green"
-                                style={{
-                                  fontSize: '0.74rem',
-                                  padding: '4px 10px',
-                                  fontWeight: 800,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  borderRadius: '9999px',
-                                }}
-                              >
-                                <Check size={12} strokeWidth={3} />
-                                <span>Filled</span>
-                              </span>
-                            </button>
-                            <span style={{ fontSize: '0.64rem', color: 'var(--adm-text-muted, #94a3b8)', fontWeight: 600 }}>
-                              Protected
-                            </span>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleEditMarketingCode(c)}
-                              title="No code assigned yet. Click to enter code."
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                padding: 0,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              <span
+                      {/* 3. Marketing Code (#AMM01+) & Direct Copyable Ad Text */}
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 210 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {isCodeFilled ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickCopy(resolvedCode, `code_${c.id}`)}
+                                  title="Click to copy #AMM marketing code"
+                                  style={{
+                                    background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    borderRadius: 7,
+                                    padding: '4px 10px',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 900,
+                                    fontFamily: 'monospace',
+                                    letterSpacing: '0.03em',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                  }}
+                                >
+                                  <span>{resolvedCode}</span>
+                                  {copiedCellKey === `code_${c.id}` ? <Check size={12} /> : <Copy size={12} />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditMarketingCode(c)}
+                                  title="Edit marketing code"
+                                  style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--adm-border, #cbd5e1)',
+                                    borderRadius: 6,
+                                    padding: '3px 6px',
+                                    cursor: 'pointer',
+                                    color: 'var(--adm-text-muted, #64748b)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                  }}
+                                >
+                                  <Edit3 size={12} />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleEditMarketingCode(c)}
                                 className="mkt-pill mkt-pill-rose"
                                 style={{
-                                  fontSize: '0.74rem',
-                                  padding: '4px 10px',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontSize: '0.73rem',
                                   fontWeight: 800,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  borderRadius: '9999px',
+                                  padding: '4px 10px',
                                 }}
                               >
-                                <span style={{ fontSize: '0.72rem', lineHeight: 1 }}>✕</span>
-                                <span>Not Filled</span>
-                              </span>
-                            </button>
-                            <span style={{ fontSize: '0.64rem', color: 'var(--adm-text-muted, #94a3b8)', fontWeight: 600 }}>
-                              Required on Start
-                            </span>
+                                + Generate #AMM Code
+                              </button>
+                            )}
                           </div>
-                        )}
+
+                          {/* Ready-to-copy Ad / WhatsApp Greeting Text directly below the code */}
+                          <div
+                            style={{
+                              background: 'var(--adm-bg-subtle, rgba(99, 102, 241, 0.07))',
+                              border: '1px solid var(--adm-border, rgba(148, 163, 184, 0.25))',
+                              borderRadius: 8,
+                              padding: '6px 8px',
+                              fontSize: '0.72rem',
+                              lineHeight: 1.38,
+                              color: 'var(--adm-text-body, #334155)',
+                            }}
+                          >
+                            <div style={{ fontSize: '0.64rem', fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', marginBottom: 2 }}>
+                              Ad / WhatsApp Text to Paste:
+                            </div>
+                            <div style={{ wordBreak: 'break-word', fontWeight: 600 }}>
+                              {adCopy.whatsappGreeting}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleQuickCopy(adCopy.whatsappGreeting, `wa_${c.id}`)}
+                              style={{
+                                background: copiedCellKey === `wa_${c.id}` ? '#059669' : 'rgba(16, 185, 129, 0.14)',
+                                color: copiedCellKey === `wa_${c.id}` ? '#ffffff' : '#10b981',
+                                border: '1px solid rgba(16, 185, 129, 0.35)',
+                                borderRadius: 6,
+                                padding: '3px 8px',
+                                fontSize: '0.69rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                              title="Copy WhatsApp Pre-filled Greeting Message for Ad"
+                            >
+                              {copiedCellKey === `wa_${c.id}` ? <Check size={11} /> : <Copy size={11} />}
+                              <span>{copiedCellKey === `wa_${c.id}` ? 'Copied!' : 'Copy Ad Text'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setAdCopyModalCustomer({ customer: c, code: resolvedCode })}
+                              style={{
+                                background: 'rgba(99, 102, 241, 0.12)',
+                                color: '#818cf8',
+                                border: '1px solid rgba(99, 102, 241, 0.32)',
+                                borderRadius: 6,
+                                padding: '3px 8px',
+                                fontSize: '0.69rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                              title="Open Primary Caption, Headline, WhatsApp Greeting & Campaign Name"
+                            >
+                              <Sparkles size={11} />
+                              <span>All Ad Places</span>
+                            </button>
+                          </div>
+                        </div>
                       </td>
 
                       {/* 4. Marketing Pacing & Scheduled Days (Synced with /app/lead#app/dashboard) */}
@@ -1211,19 +1301,58 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
 
                 <div className="mkt-form-group">
                   <label className="mkt-form-label">
-                    Campaign / Marketing Code (varchar)
+                    Assigned #AMM Marketing Code
                   </label>
                   <input
                     type="text"
                     className="mkt-form-input"
-                    placeholder="e.g. META-ADS-8921, CMP-4401"
+                    placeholder="e.g. #AMM01"
                     value={createMarketingCode}
                     onChange={(e) => setCreateMarketingCode(e.target.value.toUpperCase())}
                     style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.5px' }}
                   />
-                  <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: '4px' }}>
-                    Tracking varchar code. The table will mark status as <strong>Filled</strong> without exposing the code string.
-                  </div>
+                  {(() => {
+                    const selCust = customers.find((x) => x.id === selectedCustomerId);
+                    if (!selCust) return null;
+                    const copyPreview = buildClientAdCopyBundle(selCust, createMarketingCode || selCust.marketingCode);
+                    return (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          background: 'var(--adm-bg-subtle, rgba(99, 102, 241, 0.08))',
+                          border: '1px solid var(--adm-border, rgba(99, 102, 241, 0.25))',
+                          fontSize: '0.76rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <strong style={{ color: '#6366f1', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                            WhatsApp / Ad Text to Paste ({copyPreview.code}):
+                          </strong>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickCopy(copyPreview.whatsappGreeting, 'modal_copy')}
+                            style={{
+                              background: '#059669',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 6,
+                              padding: '2px 8px',
+                              fontSize: '0.7rem',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {copiedCellKey === 'modal_copy' ? '✓ Copied!' : 'Copy Ad Text'}
+                          </button>
+                        </div>
+                        <div style={{ color: 'var(--adm-text-primary, #0f172a)', fontWeight: 600 }}>
+                          {copyPreview.whatsappGreeting}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1387,6 +1516,11 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
           </div>
         </div>
       )}
+      <MarketingAdCopyModal
+        customer={adCopyModalCustomer?.customer || null}
+        marketingCode={adCopyModalCustomer?.code || ''}
+        onClose={() => setAdCopyModalCustomer(null)}
+      />
     </div>
   );
 }

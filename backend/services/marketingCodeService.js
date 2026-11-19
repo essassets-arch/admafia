@@ -128,21 +128,25 @@ export async function backfillMissingMarketingCodes() {
   let maxSeq = 0;
   const usedCodes = new Set();
 
-  // First pass: normalize any existing AMM codes (`AMM1` -> `#AMM01`) & find max sequence
+  // First pass: normalize any existing valid #AMM codes (`AMM1` -> `#AMM01`) & find max sequence
   let normalizedCount = 0;
   for (const c of realCustomers) {
     const raw = String(c.marketingCode || '').trim();
     if (!raw) continue;
-    const norm = normalizeMarketingCode(raw);
-    const seq = parseAmmSeqNumber(norm);
-    if (seq && seq > maxSeq) maxSeq = seq;
+    const seq = parseAmmSeqNumber(raw);
+    if (seq === null) continue; // Legacy non-#AMM strings will be upgraded to #AMMxx in pass 2
+    const norm = formatAmmCode(seq);
+    if (seq > maxSeq) maxSeq = seq;
     usedCodes.add(norm);
     if (norm !== raw) {
       const now = new Date();
       await Promise.all([
         Customer.updateOne({ _id: c._id }, { $set: { marketingCode: norm, updatedAt: now } }),
         Wallet.updateOne({ customerId: c._id }, { $set: { marketingCode: norm, updatedAt: now } }),
-        MarketingCampaign.updateMany({ customerId: c._id }, { $set: { marketingCode: norm, updatedAt: now } }),
+        MarketingCampaign.updateMany(
+          { customerId: c._id },
+          { $set: { marketingCode: norm, externalCampaignId: norm, updatedAt: now } }
+        ),
       ]);
       normalizedCount += 1;
     }
@@ -155,20 +159,17 @@ export async function backfillMissingMarketingCodes() {
   );
   counterFloorSynced = true;
 
-  // Second pass: assign sequential `#AMM01`, `#AMM02`... to customers without a code
+  // Second pass: assign sequential `#AMM01`, `#AMM02`... to customers missing a code OR holding legacy non-#AMM strings
   let assignedCount = 0;
   for (const c of realCustomers) {
     const raw = String(c.marketingCode || '').trim();
-    if (raw) {
-      // Ensure wallet & campaigns also carry the customer's code if missing
-      const norm = normalizeMarketingCode(raw);
+    const existingAmmSeq = parseAmmSeqNumber(raw);
+    if (existingAmmSeq !== null) {
+      const norm = formatAmmCode(existingAmmSeq);
       await Promise.all([
-        Wallet.updateOne(
-          { customerId: c._id, $or: [{ marketingCode: null }, { marketingCode: '' }] },
-          { $set: { marketingCode: norm } }
-        ),
+        Wallet.updateOne({ customerId: c._id }, { $set: { marketingCode: norm } }),
         MarketingCampaign.updateMany(
-          { customerId: c._id, $or: [{ marketingCode: null }, { marketingCode: '' }] },
+          { customerId: c._id },
           { $set: { marketingCode: norm, externalCampaignId: norm } }
         ),
       ]);

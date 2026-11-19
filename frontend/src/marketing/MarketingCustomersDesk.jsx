@@ -33,6 +33,11 @@ import {
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
 import { SmartTable } from '../components/SmartTabulator';
+import {
+  buildClientAdCopyBundle,
+  normalizeDisplayAmmCode,
+  MarketingAdCopyModal,
+} from '../utils/marketingAdCopy';
 
 const ALL_WEEK_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
@@ -61,6 +66,7 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
   const [walletTransactions, setWalletTransactions] = useState([]);
   const [loadingWalletTx, setLoadingWalletTx] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
+  const [adCopyCustomer, setAdCopyCustomer] = useState(null);
 
   const copyToClipboard = (text, fieldName) => {
     if (!text) return;
@@ -368,12 +374,78 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
               ) : (
                 customers.map((c) => {
                   const dailySpend = c.dailyAdSpend || 300;
-                  const isLowBal = c.availableBalance < dailySpend || c.availableBalance <= 0;
+                  const isLowBal = !c.isDeductedToday && (c.availableBalance < dailySpend || c.availableBalance <= 0);
+                  const dispCode = normalizeDisplayAmmCode(c.marketingCode || '');
+                  const adCopy = buildClientAdCopyBundle(c, dispCode);
                   return (
                   <tr key={c.id}>
                     <td>
-                      <div className="mkt-cell-primary">{c.name}</div>
-                      <div className="mkt-cell-sub">ID: {c.customerId || c.id}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {dispCode && (
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(dispCode, `code_${c.id}`)}
+                            title="Click to copy #AMM marketing code"
+                            style={{
+                              background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 6,
+                              padding: '2px 7px',
+                              fontSize: '0.71rem',
+                              fontWeight: 900,
+                              fontFamily: 'monospace',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {copiedField === `code_${c.id}` ? '✓ Copied' : dispCode}
+                          </button>
+                        )}
+                        <span className="mkt-cell-primary">{c.name}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(adCopy.whatsappGreeting, `wa_${c.id}`)}
+                          style={{
+                            background: copiedField === `wa_${c.id}` ? '#059669' : 'rgba(16, 185, 129, 0.13)',
+                            color: copiedField === `wa_${c.id}` ? '#fff' : '#10b981',
+                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                            borderRadius: 6,
+                            padding: '2px 7px',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          title={adCopy.whatsappGreeting}
+                        >
+                          {copiedField === `wa_${c.id}` ? <Check size={11} /> : <Copy size={11} />}
+                          <span>{copiedField === `wa_${c.id}` ? 'Copied!' : 'Copy Ad Text'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAdCopyCustomer(c)}
+                          style={{
+                            background: 'rgba(99, 102, 241, 0.12)',
+                            color: '#818cf8',
+                            border: '1px solid rgba(99, 102, 241, 0.3)',
+                            borderRadius: 6,
+                            padding: '2px 7px',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <Sparkles size={11} />
+                          <span>All Ad Places</span>
+                        </button>
+                      </div>
                       {isLowBal && (
                         <div style={{ marginTop: '3px' }}>
                           <span
@@ -1174,6 +1246,11 @@ export default function MarketingCustomersDesk({ onNavigateToDesk }) {
           </div>
         </div>
       )}
+      <MarketingAdCopyModal
+        customer={adCopyCustomer}
+        marketingCode={adCopyCustomer?.marketingCode || ''}
+        onClose={() => setAdCopyCustomer(null)}
+      />
     </div>
   );
 }

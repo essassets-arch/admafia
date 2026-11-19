@@ -10,11 +10,17 @@ import {
   Search,
   Image as ImageIcon,
   Check,
+  Copy,
+  Sparkles,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
 import { SmartTable } from '../components/SmartTabulator';
 import ChatbotAmmApiModal from '../components/ChatbotAmmApiModal';
+import {
+  buildClientAdCopyBundle,
+  MarketingAdCopyModal,
+} from '../utils/marketingAdCopy';
 
 const formatINR = (val, currency = 'INR') => {
   const num = Number(val || 0);
@@ -45,6 +51,8 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
   const [togglingCampId, setTogglingCampId] = useState(null);
   const [previewMedia, setPreviewMedia] = useState(null);
   const [isChatbotModalOpen, setIsChatbotModalOpen] = useState(false);
+  const [copiedId, setCopiedId] = useState('');
+  const [adCopyClient, setAdCopyClient] = useState(null);
 
   const loadSchedule = useCallback(
     async (silent = false) => {
@@ -587,6 +595,54 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                       <div style={{ fontSize: '0.74rem', color: '#059669', fontFamily: 'monospace', fontWeight: 700, marginTop: 2 }}>
                         +91 {c.phone} • Leads Sent: <strong>{c.leadsDeliveredOnDate}</strong>
                       </div>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const txt = buildClientAdCopyBundle(c, c.marketingCode).whatsappGreeting;
+                            navigator.clipboard?.writeText(txt);
+                            setCopiedId(`ad_${c.id}`);
+                            setTimeout(() => setCopiedId(''), 1800);
+                          }}
+                          style={{
+                            background: copiedId === `ad_${c.id}` ? '#059669' : 'rgba(16, 185, 129, 0.13)',
+                            color: copiedId === `ad_${c.id}` ? '#ffffff' : '#10b981',
+                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                            borderRadius: 6,
+                            padding: '2px 7px',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          title={buildClientAdCopyBundle(c, c.marketingCode).whatsappGreeting}
+                        >
+                          {copiedId === `ad_${c.id}` ? <Check size={11} /> : <Copy size={11} />}
+                          <span>{copiedId === `ad_${c.id}` ? 'Copied!' : 'Copy Ad Text'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAdCopyClient(c)}
+                          style={{
+                            background: 'rgba(99, 102, 241, 0.12)',
+                            color: '#818cf8',
+                            border: '1px solid rgba(99, 102, 241, 0.3)',
+                            borderRadius: 6,
+                            padding: '2px 7px',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <Sparkles size={11} />
+                          <span>All Ad Places</span>
+                        </button>
+                      </div>
                     </td>
 
                     {/* 2. Pacing & Wallet */}
@@ -868,6 +924,11 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
         fetchWebhookInfo={() => marketingApi.getChatbotWebhookInfo()}
         testLeadFn={(payload) => marketingApi.testChatbotLead(payload)}
         onLeadDispatched={() => loadSchedule(true)}
+      />
+      <MarketingAdCopyModal
+        customer={adCopyClient}
+        marketingCode={adCopyClient?.marketingCode || ''}
+        onClose={() => setAdCopyClient(null)}
       />
     </div>
   );

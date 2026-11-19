@@ -268,9 +268,15 @@ async function buildCustomerRows(customers) {
     const camps = campsBy.get(id) || [];
     const latest = camps[0] || null;
     const trimmedCode = c.marketingCode ? String(c.marketingCode).trim() : '';
+    const walletCode = w && w.marketingCode ? String(w.marketingCode).trim() : '';
     const campCode = camps.find((x) => x.marketingCode && String(x.marketingCode).trim());
     const campExt = camps.find((x) => x.externalCampaignId && String(x.externalCampaignId).trim());
-    const effective = trimmedCode || (campCode ? campCode.marketingCode : null) || (campExt ? campExt.externalCampaignId : null) || null;
+    const effective = normalizeMarketingCode(
+      trimmedCode ||
+        walletCode ||
+        (campCode ? campCode.marketingCode : '') ||
+        (campExt ? campExt.externalCampaignId : '')
+    ) || null;
     const walletCurrency = (w && w.currency) || c.currency || 'INR';
 
     return {
@@ -306,6 +312,7 @@ async function buildCustomerRows(customers) {
       active_days: w && w.activeDays ? w.activeDays : '',
       schedule_preset: (w && w.schedulePreset) || 'custom',
       last_deducted_at: w ? w.lastDeductedAt || null : null,
+      booked_dates: w && Array.isArray(w.bookedDates) ? w.bookedDates : [],
       total_leads_count: leadsBy.get(id) || 0,
       approved_posts_count: postsBy.get(`${id}|Approved`) || 0,
       draft_posts_count: postsBy.get(`${id}|Draft`) || 0,
@@ -359,12 +366,11 @@ function mapCustomerRow(r) {
     runwayDays: Math.floor(Number(r.available_balance || 0) / Math.max(Number(r.daily_ad_spend || 300), 1)),
     totalLeadsCount: Number(r.total_leads_count || 0),
     lastDeductedAt: r.last_deducted_at,
-    isDeductedToday: Boolean(
-      r.last_deducted_at &&
-      new Date(r.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    ),
-    isLowBalance: Number(r.available_balance || 0) < Number(r.daily_ad_spend || 300) || Number(r.available_balance || 0) <= 0,
+    bookedDates: Array.isArray(r.booked_dates) ? r.booked_dates : [],
+    isDeductedToday: isDeductedToday(r.last_deducted_at, new Date(), r.booked_dates),
+    isLowBalance:
+      !isDeductedToday(r.last_deducted_at, new Date(), r.booked_dates) &&
+      (Number(r.available_balance || 0) < Number(r.daily_ad_spend || 300) || Number(r.available_balance || 0) <= 0),
     approvedPostsCount: Number(r.approved_posts_count || 0),
     draftPostsCount: Number(r.draft_posts_count || 0),
     pendingPostsCount: Number(r.pending_posts_count || 0),
