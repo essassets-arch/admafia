@@ -566,8 +566,20 @@
   color: #f8fafc !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .timezone-meta-text {
+.portal-app-root[data-admin-theme="dark"] .timezone-meta-text,
+.portal-app-root[data-admin-theme="dark"] .week-timezone-badge,
+.portal-app-root[data-admin-theme="dark"] .pacing-unit-sub,
+.portal-app-root[data-admin-theme="dark"] .pacing-card-footer-line {
   color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .text-red-alert,
+.portal-app-root[data-admin-theme="dark"] .today-campaign-state.state-off {
+  color: #fda4af !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .today-campaign-state.state-live {
+  color: #34d399 !important;
 }
 
 .portal-app-root[data-admin-theme="dark"] .today-campaign-bottom-bar-exact,
@@ -587,57 +599,121 @@
   color: #a5b4fc !important;
 }
 
+/* 7-Day Calendar Cards — High-Contrast Dark Mode (Zero White-on-White Pills!) */
 .portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected {
-  background: #090f1d !important;
-  border-color: #1e293b !important;
-  color: #cbd5e1 !important;
+  background: #0b1324 !important;
+  border-color: #263449 !important;
+  color: #e2e8f0 !important;
+  opacity: 1 !important;
 }
 
 .portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected:hover {
-  background: #111827 !important;
-  border-color: #334155 !important;
+  background: #111c33 !important;
+  border-color: #4f46e5 !important;
 }
 
 .portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected .day-code-title {
-  color: #94a3b8 !important;
+  color: #f1f5f9 !important;
 }
 
+.portal-app-root[data-admin-theme="dark"] .day-calendar-date,
 .portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected .day-calendar-date {
-  color: #e2e8f0 !important;
+  background: rgba(148, 163, 184, 0.14) !important;
+  border: 1px solid rgba(148, 163, 184, 0.28) !important;
+  color: #f1f5f9 !important;
 }
 
 .portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected .day-sub-label {
-  color: #64748b !important;
-}
-
-.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected .day-price-badge {
-  background: #111827 !important;
-  border-color: #1e293b !important;
   color: #94a3b8 !important;
 }
 
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-unselected .day-price-badge {
+  background: #131e35 !important;
+  border: 1px solid #293850 !important;
+  color: #cbd5e1 !important;
+}
+
 .portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected {
-  background: rgba(16, 185, 129, 0.11) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
   border-color: #10b981 !important;
   color: #f8fafc !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-code-title {
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-code-title,
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-ad-booked .day-code-title {
   color: #34d399 !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-calendar-date {
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-calendar-date,
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-ad-booked .day-calendar-date {
+  background: rgba(16, 185, 129, 0.24) !important;
+  border: 1px solid rgba(52, 211, 153, 0.48) !important;
+  color: #ecfdf5 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-sub-label,
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-ad-booked .day-sub-label {
   color: #a7f3d0 !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-sub-label {
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-price-badge,
+.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-ad-booked .day-price-badge,
+.portal-app-root[data-admin-theme="dark"] .day-price-badge.booked,
+.portal-app-root[data-admin-theme="dark"] .day-price-badge.locked {
+  background: rgba(16, 185, 129, 0.22) !important;
+  border-color: rgba(52, 211, 153, 0.5) !important;
+  color: #ecfdf5 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .day-status-micro-text.booked,
+.portal-app-root[data-admin-theme="dark"] .day-status-micro-text.selected {
+  color: #34d399 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .day-status-micro-text.available {
+  color: #94a3b8 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .day-status-micro-text.tone-advance {
+  color: #a5b4fc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .day-status-micro-text.tone-topup {
+  color: #fbbf24 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .day-lock-icon.is-selectable {
+  background: rgba(99, 102, 241, 0.2) !important;
+  border-color: rgba(129, 140, 248, 0.55) !important;
+  color: #a5b4fc !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .day-booked-sub-pill,
+.portal-app-root[data-admin-theme="dark"] .day-lock-settled-pill {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: rgba(52, 211, 153, 0.45) !important;
   color: #6ee7b7 !important;
 }
 
-.portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-selected .day-price-badge {
-  background: rgba(16, 185, 129, 0.2) !important;
-  border-color: rgba(16, 185, 129, 0.4) !important;
-  color: #ecfdf5 !important;
+.portal-app-root[data-admin-theme="dark"] .pill-settled-today-locked {
+  background: rgba(245, 158, 11, 0.18) !important;
+  border-color: rgba(251, 191, 36, 0.4) !important;
+  color: #fde68a !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-locked-teaser-banner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, #111827 78%) !important;
+  border-color: rgba(245, 158, 11, 0.55) !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-locked-teaser-banner h3,
+.portal-app-root[data-admin-theme="dark"] .am-locked-teaser-title {
+  color: #fef3c7 !important;
+}
+
+.portal-app-root[data-admin-theme="dark"] .am-locked-teaser-banner p,
+.portal-app-root[data-admin-theme="dark"] .am-locked-teaser-sub {
+  color: #fde68a !important;
 }
 
 .portal-app-root[data-admin-theme="dark"] .seven-day-card-exact.is-ad-booked {

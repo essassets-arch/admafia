@@ -189,6 +189,7 @@ export default function LeadPipelineInbox({
       {/* 1B. Locked Waiting Enquiries Banner (Zero Phone Leakage Until Paid) */}
       {lockedHeldCount > 0 && (
         <div
+          className="am-locked-teaser-banner"
           role="region"
           aria-label="Locked waiting buyer enquiries"
           style={{
@@ -205,10 +206,10 @@ export default function LeadPipelineInbox({
           }}
         >
           <div style={{ flex: '1 1 280px' }}>
-            <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#78350f', marginBottom: '3px' }}>
+            <div className="am-locked-teaser-title" style={{ fontSize: '0.96rem', fontWeight: 800, color: '#78350f', marginBottom: '3px' }}>
               🔒 {lockedHeldCount} Verified Buyer {lockedHeldCount === 1 ? 'Enquiry' : 'Enquiries'} Held &amp; Waiting to Unlock!
             </div>
-            <div style={{ fontSize: '0.83rem', color: '#92400e' }}>
+            <div className="am-locked-teaser-sub" style={{ fontSize: '0.83rem', color: '#92400e' }}>
               {walletBalance >= effectiveDaily
                 ? `Pre-book your next delivery slot (${currencySymbol}${effectiveDaily}) to reveal all ${lockedHeldCount} mobile number${lockedHeldCount === 1 ? '' : 's'} immediately.`
                 : `Recharge ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} to pre-book tomorrow's slot and unlock all ${lockedHeldCount} mobile number${lockedHeldCount === 1 ? '' : 's'} right inside this table!`}

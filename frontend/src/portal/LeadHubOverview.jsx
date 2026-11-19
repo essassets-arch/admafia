@@ -621,6 +621,7 @@ export default function LeadHubOverview({
       {/* 0A. OPTION B LOCKED BUYER ENQUIRIES CONVERSION BANNER (Zero Phone Leakage Until Paid!) */}
       {lockedHeldCount > 0 && (
         <div
+          className="am-locked-teaser-banner"
           role="region"
           aria-label="Locked waiting buyer enquiries"
           style={{
@@ -1490,21 +1491,21 @@ export default function LeadHubOverview({
                       {d.isPast ? '✓ DELIVERED' : '🔒 PAID & BOOKED'}
                     </div>
                   ) : isPastUnbooked ? (
-                    <div className="day-status-micro-text available" style={{ color: '#94a3b8' }}>
+                    <div className="day-status-micro-text available">
                       ENDED
                     </div>
                   ) : isTodayUnbooked ? (
-                    <div className="day-status-micro-text available" style={{ color: '#64748b', fontWeight: 800 }}>
+                    <div className="day-status-micro-text available" style={{ fontWeight: 800 }}>
                       ⏳ BOOK TOMORROW
                     </div>
                   ) : isSelected ? (
                     <div className="day-status-micro-text selected">✓ SCHEDULED</div>
                   ) : canSelectWithWallet ? (
-                    <div className="day-status-micro-text available" style={{ color: '#4f46e5', fontWeight: 800 }}>
+                    <div className="day-status-micro-text tone-advance" style={{ color: '#4f46e5', fontWeight: 800 }}>
                       + BOOK IN ADVANCE
                     </div>
                   ) : (
-                    <div className="day-status-micro-text available" style={{ color: '#d97706', fontWeight: 800 }}>
+                    <div className="day-status-micro-text tone-topup" style={{ color: '#d97706', fontWeight: 800 }}>
                       🔒 TOP UP {currencySymbol}{dailySpend}
                     </div>
                   )}
@@ -1522,8 +1523,8 @@ export default function LeadHubOverview({
                         </svg>
                       </div>
                     ) : isPastUnbooked || isTodayUnbooked ? (
-                      <div className="day-lock-icon" style={{ opacity: 0.55 }} title={isTodayUnbooked ? 'Same-day closed — book Tomorrow onwards' : 'Past calendar day'}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8' }}>⏳</span>
+                      <div className="day-lock-icon" style={{ opacity: 0.65 }} title={isTodayUnbooked ? 'Same-day closed — book Tomorrow onwards' : 'Past calendar day'}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8' }}>{d.isPast ? '—' : '⏳'}</span>
                       </div>
                     ) : isSelected ? (
                       <div className="day-check-circle" title={`Click to unschedule ${d.label} (${d.dateFormatted})`}>
@@ -1533,18 +1534,18 @@ export default function LeadHubOverview({
                       </div>
                     ) : canSelectWithWallet ? (
                       <div
-                        className="day-lock-icon"
-                        style={{ borderColor: '#818cf8', background: '#eef2ff', color: '#4f46e5' }}
-                        title={`Click to schedule ${d.label} (${d.dateFormatted})`}
+                        className="day-lock-icon is-selectable"
+                        style={{ borderColor: '#818cf8', background: '#eef2ff', color: '#4f46e5', width: 22, height: 22, borderRadius: '50%', border: '1px solid #818cf8' }}
+                        title={`Click to pre-book ${d.label} (${d.dateFormatted})`}
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.6" strokeLinecap="round">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
                           <line x1="12" y1="5" x2="12" y2="19" />
                           <line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
                       </div>
                     ) : (
                       <div className="day-lock-icon" title={`Top up ${currencySymbol}${dailySpend} to unlock ${d.label}`}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.3">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2.3">
                           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                           <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>
@@ -1556,21 +1557,23 @@ export default function LeadHubOverview({
             })}
           </div>
 
-          {/* Today Status & Budget Action Box */}
+          {/* Schedule Status & Budget Action Box */}
           <div className="today-campaign-bottom-bar-exact">
             <div className="today-status-info-left">
-              <span className="today-day-prefix">Today ({currentTodayItem.label}):</span>
-              <span className={`today-campaign-state ${isMarketingLiveToday ? 'state-live' : 'state-off'}`}>
+              <span className="today-day-prefix">Schedule ({currentTodayItem.label}):</span>
+              <span className={`today-campaign-state ${isMarketingLiveToday || isTomorrowBooked ? 'state-live' : 'state-off'}`}>
                 <span className="bullet-dot">●</span>
                 {isMarketingLiveToday
                   ? (isTodayBooked
                     ? `Lead Delivery is LIVE (Today's ${currencySymbol}${dailySpend} Paid & Booked ✓)`
                     : 'Lead Delivery is LIVE (Active Schedule)')
                   : isTodayBooked
-                  ? `Lead Delivery is PAUSED by You — Today is Already Paid ✓ (Click Resume Above for ${currencySymbol}0)`
-                  : walletBalance < dailySpend
-                  ? `Lead Delivery is OFF (Top Up ${currencySymbol}${dailySpend} to Activate Today)`
-                  : 'Lead Delivery is OFF (Wallet Funded — Click Start to Activate Today)'}
+                    ? `Lead Delivery is PAUSED by You — Today is Already Paid ✓ (Click Resume Above for ${currencySymbol}0)`
+                    : isTomorrowBooked
+                      ? `Tomorrow (${tomorrowDisplayLabel}) is PAID & BOOKED ✓ — Strategy & Creative Prep Underway Today`
+                      : walletBalance < dailySpend
+                        ? `Advance Booking Open — Top Up ${currencySymbol}${dailySpend} to Pre-Book Tomorrow (${tomorrowDisplayLabel})`
+                        : `Wallet Funded — Select Tomorrow (${tomorrowDisplayLabel}) Above to Pre-Book Delivery`}
               </span>
               {isTodayBooked && (
                 <span className="pill-ad-booked-badge">
@@ -1578,7 +1581,7 @@ export default function LeadHubOverview({
                 </span>
               )}
               {fundedRunwayDays > 0 && !isTodayBooked && (
-                <span className="pill-ad-booked-badge" style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #10b981' }}>
+                <span className="pill-ad-booked-badge">
                   ✓ {fundedRunwayDays} {fundedRunwayDays === 1 ? 'Day' : 'Days'} Funded
                 </span>
               )}
@@ -1586,7 +1589,7 @@ export default function LeadHubOverview({
 
             <div className="today-budget-actions-right">
               <div className="today-ad-budget-text-wrap">
-                <span className="budget-sub-label">Today&apos;s Growth Budget:</span>
+                <span className="budget-sub-label">Daily Growth Budget:</span>
                 <strong className="budget-val-purple">{currencySymbol}{dailySpend}</strong>
                 <span className="budget-per-day">/day</span>
               </div>
