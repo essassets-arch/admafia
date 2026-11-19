@@ -12,6 +12,7 @@ import {
   Lead,
   MarketingCampaign,
   MarketingPost,
+  MarketingAuditEvent,
   SuperAdminAuditLog,
 } from '../models/index.js';
 import {
@@ -251,7 +252,8 @@ operationsCycleRouter.get(
         allLeadCounts,
         allHeldCounts,
         spendLogsOnDate,
-        debitTxsOnDate,
+        allDebitTxs,
+        campStartAudits,
       ] = await Promise.all([
         Customer.find({ status: { $ne: 'deleted' } }).lean(),
         Wallet.find({}).lean(),
@@ -276,9 +278,17 @@ operationsCycleRouter.get(
         DailyAdSpendLog.find({ dateIso: targetDateIso }).lean(),
         WalletTransaction.find({
           txType: 'Debit',
-          createdAt: { $gte: startUtc, $lte: endUtc },
+          status: { $not: /fail|declin|reject|cancel/i },
         })
-          .select('customerId amount')
+          .select('customerId amount referenceUtr createdAt')
+          .sort({ createdAt: -1 })
+          .lean(),
+        MarketingAuditEvent.find({
+          entityType: 'campaign',
+          action: /start|resum|creat/i,
+        })
+          .select('campaignId customerId action timestamp createdAt')
+          .sort({ createdAt: -1 })
           .lean(),
       ]);
 
@@ -288,9 +298,31 @@ operationsCycleRouter.get(
       const heldLeadsByCust = new Map(allHeldCounts.map((x) => [String(x._id), x.count]));
       const spendByCust = new Map(spendLogsOnDate.map((s) => [String(s.customerId), s]));
       const debitAmtByCust = new Map();
-      for (const tx of debitTxsOnDate) {
+      const paidDatesSetByCust = new Map();
+      for (const tx of allDebitTxs) {
         const cid = String(tx.customerId);
-        debitAmtByCust.set(cid, (debitAmtByCust.get(cid) || 0) + Number(tx.amount || 0));
+        if (tx.createdAt >= startUtc && tx.createdAt <= endUtc) {
+          debitAmtByCust.set(cid, (debitAmtByCust.get(cid) || 0) + Number(tx.amount || 0));
+        }
+        const bookMatch = String(tx.referenceUtr || '').match(/^BOOK-.*-(\d{4}-\d{2}-\d{2})-/);
+        const sIso = bookMatch ? bookMatch[1] : toIstIsoDate(tx.createdAt);
+        if (sIso) {
+          if (!paidDatesSetByCust.has(cid)) paidDatesSetByCust.set(cid, new Set());
+          paidDatesSetByCust.get(cid).add(sIso);
+        }
+      }
+
+      const startAuditByCampId = new Map();
+      const startAuditByCustId = new Map();
+      for (const au of campStartAudits) {
+        const ts = au.timestamp || au.createdAt;
+        if (!ts) continue;
+        if (au.campaignId && !startAuditByCampId.has(String(au.campaignId))) {
+          startAuditByCampId.set(String(au.campaignId), ts);
+        }
+        if (au.customerId && !startAuditByCustId.has(String(au.customerId))) {
+          startAuditByCustId.set(String(au.customerId), ts);
+        }
       }
 
       const dateLeadsByCust = new Map();
@@ -421,12 +453,97 @@ operationsCycleRouter.get(
         const billedAmountOnDate =
           debitAmtByCust.get(cid) || (isBookedOnDate ? dailyBudget : 0);
 
+        // Resolve authoritative campaign start timestamp (never polluted by `#AMM` code updatedAt!)
         const campaignStartedAt = runningCamp
-          ? runningCamp.startedAt || runningCamp.updatedAt || runningCamp.createdAt || null
+          ? runningCamp.startedAt ||
+            startAuditByCampId.get(String(runningCamp._id)) ||
+            startAuditByCustId.get(cid) ||
+            (!/spillover|auto-deduct/i.test(String(runningCamp.lastAction || ''))
+              ? runningCamp.lastActionAt
+              : null) ||
+            runningCamp.startDate ||
+            runningCamp.createdAt ||
+            null
           : null;
+
+        // Resolve "Running For Which Paid Day(s)?" (`runningForDateIso` & `runningForDayLabel`)
+        const allPaidDates = new Set([
+          ...Array.from(sched.bookedSet),
+          ...Array.from(paidDatesSetByCust.get(cid) || []),
+        ]);
+        if (w?.lastDeductedAt) {
+          const ldIso = toIstIsoDate(w.lastDeductedAt);
+          if (ldIso) allPaidDates.add(ldIso);
+        }
+        const sortedPaidLeToday = Array.from(allPaidDates)
+          .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= targetDateIso)
+          .sort();
+
+        const yesterdayIso = addDaysToIso(todayIso, -1);
+        const formatSlotDayBadge = (isoStr) => {
+          if (!isoStr) return '';
+          const meta = getDayMetaFromIso(isoStr, todayIso);
+          if (isoStr === todayIso) return `Today • ${meta.dayCode}, ${meta.shortDate}`;
+          if (isoStr === yesterdayIso) return `Yesterday • ${meta.dayCode}, ${meta.shortDate}`;
+          if (meta.isTomorrow) return `Tomorrow • ${meta.dayCode}, ${meta.shortDate}`;
+          return `${meta.dayCode}, ${meta.shortDate}`;
+        };
+
+        let runningForDateIso = isScheduledOnDate ? targetDateIso : '';
+        if (runningCamp) {
+          if (runningCamp.paidSlotDateIso && !isScheduledOnDate) {
+            runningForDateIso = runningCamp.paidSlotDateIso;
+          } else if (isScheduledOnDate) {
+            runningForDateIso = targetDateIso;
+          } else if (sortedPaidLeToday.length > 0) {
+            runningForDateIso = sortedPaidLeToday[sortedPaidLeToday.length - 1];
+          } else if (campaignStartedAt) {
+            runningForDateIso = toIstIsoDate(campaignStartedAt);
+          }
+        }
+
+        // Count consecutive paid days starting from the campaign's initial paid day
+        const startIstIso = runningCamp?.paidSlotDateIso || (campaignStartedAt ? toIstIsoDate(campaignStartedAt) : runningForDateIso);
+        let consecutivePaidDays = 1;
+        if (runningCamp && startIstIso) {
+          let cnt = 0;
+          for (let dOff = 0; dOff < 14; dOff++) {
+            const probeIso = addDaysToIso(startIstIso, dOff);
+            if (allPaidDates.has(probeIso) || sched.effectiveScheduledSet.has(probeIso)) {
+              cnt += 1;
+            } else {
+              break;
+            }
+          }
+          if (cnt >= 1) consecutivePaidDays = cnt;
+        }
+
+        const baseCycleHours = Number(runningCamp?.cycleHours || 24);
+        const campaignCycleHours =
+          baseCycleHours !== 24 ? baseCycleHours : Math.max(24, consecutivePaidDays * 24);
+        const campaignTargetEndAt =
+          runningCamp && campaignStartedAt
+            ? new Date(new Date(campaignStartedAt).getTime() + campaignCycleHours * 3600000).toISOString()
+            : null;
+
+        let runningForDayLabel = formatSlotDayBadge(runningForDateIso);
+        if (runningCamp && consecutivePaidDays > 1 && startIstIso) {
+          const endPaidIso = addDaysToIso(startIstIso, consecutivePaidDays - 1);
+          const sMeta = getDayMetaFromIso(startIstIso, todayIso);
+          const eMeta = getDayMetaFromIso(endPaidIso, todayIso);
+          runningForDayLabel = `${sMeta.shortDate} → ${eMeta.shortDate} (${consecutivePaidDays} Paid Days • ${campaignCycleHours}h)`;
+        }
+
         const campaignRunningMinutes = runningCamp ? diffMinutes(campaignStartedAt, realNow) : 0;
+        const cycleTotalMinutes = campaignCycleHours * 60;
+        const campaignRemainingMinutes = runningCamp
+          ? Math.max(0, cycleTotalMinutes - campaignRunningMinutes)
+          : 0;
+        const campaignOvertimeMinutes = runningCamp
+          ? Math.max(0, campaignRunningMinutes - cycleTotalMinutes)
+          : 0;
         const campaignRunningLabel = runningCamp ? formatDurationShort(campaignRunningMinutes) : null;
-        const isOver24Hours = Boolean(runningCamp && campaignRunningMinutes >= 1440);
+        const isOver24Hours = Boolean(runningCamp && campaignRunningMinutes >= cycleTotalMinutes);
 
         // Compute stage delays for this client
         const delayAlerts = [];
@@ -589,9 +706,17 @@ operationsCycleRouter.get(
           isInHouseRunning: isCampaignLive,
           isSpilloverUnpaidToday,
           campaignStartedAt,
+          campaignTargetEndAt,
+          campaignCycleHours,
           campaignRunningMinutes,
+          campaignRemainingMinutes,
+          campaignOvertimeMinutes,
           campaignRunningLabel,
           isOver24Hours,
+          runningForDateIso: runningForDateIso || null,
+          runningForDayLabel: runningForDayLabel || null,
+          paidSlotDateIso: runningCamp?.paidSlotDateIso || runningForDateIso || null,
+          consecutivePaidDays,
           marketingCode: resolvedMarketingCode || null,
           approvedPostsCount: approvedPosts.length,
           pendingGraphicsCount: pendingGraphicsPosts.length,

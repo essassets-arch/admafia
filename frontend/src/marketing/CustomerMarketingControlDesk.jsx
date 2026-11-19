@@ -23,6 +23,10 @@ import {
   normalizeDisplayAmmCode,
   MarketingAdCopyModal,
 } from '../utils/marketingAdCopy';
+import {
+  CampaignRunWindowCard,
+  promptEditCampaignTiming,
+} from '../utils/campaignTimerFormat';
 
 const DAYS_OF_WEEK = [
   { code: 'MON', label: 'Monday', short: 'Mon', initial: 'M' },
@@ -727,6 +731,36 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                             >
                               ⚠️ Customer Balance is Low
                             </span>
+                          )}
+                          {isInHouseRunning && (c.campaignStartedAt || activeCampaign?.startedAt || activeCampaign?.createdAt) && (
+                            <CampaignRunWindowCard
+                              compact
+                              startedAt={c.campaignStartedAt || activeCampaign?.startedAt || activeCampaign?.createdAt}
+                              paidSlotDateIso={
+                                c.paidSlotDateIso ||
+                                activeCampaign?.paidSlotDateIso ||
+                                (Array.isArray(c.bookedDates) && c.bookedDates.length > 0
+                                  ? c.bookedDates[c.bookedDates.length - 1]
+                                  : '')
+                              }
+                              cycleHours={c.campaignCycleHours || activeCampaign?.cycleHours || 24}
+                              isSpilloverUnpaidToday={isSpilloverUnpaidToday}
+                              onEditTiming={() =>
+                                promptEditCampaignTiming({
+                                  companyName: c.name,
+                                  campaignId: c.campaignId || activeCampaign?.id,
+                                  customerId: c.id,
+                                  currentStartedAt:
+                                    c.campaignStartedAt || activeCampaign?.startedAt || activeCampaign?.createdAt,
+                                  currentPaidSlotDateIso: c.paidSlotDateIso || activeCampaign?.paidSlotDateIso || '',
+                                  currentCycleHours: c.campaignCycleHours || activeCampaign?.cycleHours || 24,
+                                  onSave: async (vals) => {
+                                    await marketingApi.updateCampaignTiming(c.campaignId || activeCampaign?.id, vals);
+                                    fetchData(true);
+                                  },
+                                })
+                              }
+                            />
                           )}
                         </div>
                       </td>

@@ -25,6 +25,7 @@ import {
   buildCustomerLeadHref,
   navigateToCustomerLeadPage,
 } from './customerLeadNavigation';
+import { CampaignRunWindowCard } from '../utils/campaignTimerFormat';
 
 const formatINR = (val, currency = 'INR') => {
   const num = Number(val || 0);
@@ -629,6 +630,16 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
                             {c.pendingGraphicsCount > 0 ? ` • ${c.pendingGraphicsCount} w/ Graphics` : ''}
                             {c.pendingReviewCount > 0 ? ` • ${c.pendingReviewCount} in Review` : ''}
                           </div>
+                          {c.isCampaignLive && c.campaignStartedAt && (
+                            <CampaignRunWindowCard
+                              compact
+                              startedAt={c.campaignStartedAt}
+                              paidSlotDateIso={c.paidSlotDateIso || c.runningForDateIso}
+                              runningForDayLabel={c.runningForDayLabel}
+                              cycleHours={c.campaignCycleHours || 24}
+                              isSpilloverUnpaidToday={c.isSpilloverUnpaidToday}
+                            />
+                          )}
                         </div>
                       </div>
                     </td>

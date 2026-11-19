@@ -198,6 +198,12 @@ export const marketingApi = {
       body: JSON.stringify({ actor, reason }),
     }),
 
+  updateCampaignTiming: (id, payload = {}) =>
+    request(`/campaigns/${encodeURIComponent(id || 'null')}/timing`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+
   // Per-Day Service Pacing Runner
   processDailyPacing: () =>
     request('/process-daily-pacing', {

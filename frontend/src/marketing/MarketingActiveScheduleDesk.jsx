@@ -21,6 +21,10 @@ import {
   buildClientAdCopyBundle,
   MarketingAdCopyModal,
 } from '../utils/marketingAdCopy';
+import {
+  CampaignRunWindowCard,
+  promptEditCampaignTiming,
+} from '../utils/campaignTimerFormat';
 
 const formatINR = (val, currency = 'INR') => {
   const num = Number(val || 0);
@@ -841,19 +845,19 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                       </div>
                     </td>
 
-                    {/* 4. Campaign Status (In-House 24h Ad State vs User Paid State) */}
+                    {/* 4. Campaign Status (In-House 24h Ad State + Exact From -> To + Paid Day) */}
                     <td>
                       {c.isCampaignLive ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                           <span
                             className={`mkt-badge ${c.isOver24Hours && c.isSpilloverUnpaidToday ? 'mkt-badge-rose' : 'mkt-badge-emerald'}`}
                           >
-                            <CheckCircle2 size={12} /> IN-HOUSE LIVE {c.campaignRunningLabel ? `• ${c.campaignRunningLabel}` : ''}
+                            <CheckCircle2 size={12} /> IN-HOUSE LIVE {c.marketingCode ? `(${c.marketingCode})` : ''}
                           </span>
                           {c.isSpilloverUnpaidToday ? (
                             <span
                               style={{
-                                fontSize: '0.68rem',
+                                fontSize: '0.67rem',
                                 fontWeight: 800,
                                 padding: '2px 7px',
                                 borderRadius: 6,
@@ -864,9 +868,31 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                             >
                               {c.isOver24Hours
                                 ? '🚨 >24h Spillover — Stop Ad Now!'
-                                : '🟡 24h Spillover (User Unpaid)'}
+                                : '🟡 24h Spillover • User Unpaid Today'}
                             </span>
                           ) : null}
+
+                          <CampaignRunWindowCard
+                            startedAt={c.campaignStartedAt}
+                            paidSlotDateIso={c.paidSlotDateIso || c.runningForDateIso}
+                            runningForDayLabel={c.runningForDayLabel}
+                            cycleHours={c.campaignCycleHours || 24}
+                            isSpilloverUnpaidToday={c.isSpilloverUnpaidToday}
+                            onEditTiming={() =>
+                              promptEditCampaignTiming({
+                                companyName: c.companyName,
+                                campaignId: c.campaignId,
+                                customerId: c.id,
+                                currentStartedAt: c.campaignStartedAt,
+                                currentPaidSlotDateIso: c.paidSlotDateIso || c.runningForDateIso,
+                                currentCycleHours: c.campaignCycleHours || 24,
+                                onSave: async (vals) => {
+                                  await marketingApi.updateCampaignTiming(c.campaignId, vals);
+                                  await loadSchedule(true);
+                                },
+                              })
+                            }
+                          />
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>

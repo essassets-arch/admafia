@@ -290,58 +290,70 @@ async function buildCustomerRows(customers) {
     ) || null;
     const walletCurrency = (w && w.currency) || c.currency || 'INR';
 
-    return {
-      id,
-      username: c.username,
-      company_name: c.companyName,
-      contact_person: c.contactPerson,
-      phone: c.phone,
-      email: c.email,
-      personal_email: c.personalEmail,
-      category: c.category,
-      industry: c.industry,
-      website: c.website,
-      city: c.city,
-      state: c.state,
-      country: c.country,
-      status: c.status,
-      profile_status: c.profileStatus,
-      payment_status: c.paymentStatus,
-      kyc_percent: c.kycPercent,
-      verified: c.verified,
-      is_self_registered: c.isSelfRegistered,
-      registered_from: c.registeredFrom,
-      registered_at: c.registeredAt,
-      completed_at: c.completedAt,
-      updated_at: c.updatedAt,
-      available_balance: w ? w.availableBalance || 0 : 0,
-      daily_ad_spend: w && w.dailyAdSpend !== null && w.dailyAdSpend !== undefined
-        ? w.dailyAdSpend
-        : (walletCurrency === 'INR' ? 300 : 10),
-      total_paid: w ? w.totalLifetimePaid || 0 : 0,
-      ad_campaign_active: w ? Boolean(w.adCampaignActive) : false,
-      active_days: w && w.activeDays ? w.activeDays : '',
-      schedule_preset: (w && w.schedulePreset) || 'custom',
-      last_deducted_at: w ? w.lastDeductedAt || null : null,
-      booked_dates: w && Array.isArray(w.bookedDates) ? w.bookedDates : [],
-      total_leads_count: leadsBy.get(id) || 0,
-      held_leads_count: heldLeadsBy.get(id) || 0,
-      approved_posts_count: postsBy.get(`${id}|Approved`) || 0,
-      draft_posts_count: postsBy.get(`${id}|Draft`) || 0,
-      pending_posts_count: postsBy.get(`${id}|Pending Verification`) || 0,
-      ideas_count: ideasBy.get(id) || 0,
-      active_campaign_name: latest ? campaignName(latest) : null,
-      campaign_status: (camps.find((x) => x.status === 'Running') || latest)?.status || null,
-      campaign_started_at:
-        (camps.find((x) => x.status === 'Running') || latest)?.startedAt ||
-        (camps.find((x) => x.status === 'Running') || latest)?.lastActionAt ||
-        null,
-      external_platform_status: latest ? latest.externalPlatformStatus : null,
-      last_action: latest ? latest.lastAction : null,
-      last_actor: latest ? latest.lastActor : null,
-      marketing_code: c.marketingCode ?? null,
-      effective_marketing_code: effective,
-    };
+      const runningCamp = camps.find((x) => x.status === 'Running') || null;
+      const primaryCamp = runningCamp || latest || null;
+      const resolvedStartAt = primaryCamp
+        ? primaryCamp.startedAt ||
+          (!/spillover|auto-deduct/i.test(String(primaryCamp.lastAction || ''))
+            ? primaryCamp.lastActionAt
+            : null) ||
+          primaryCamp.startDate ||
+          primaryCamp.createdAt ||
+          null
+        : null;
+
+      return {
+        id,
+        username: c.username,
+        company_name: c.companyName,
+        contact_person: c.contactPerson,
+        phone: c.phone,
+        email: c.email,
+        personal_email: c.personalEmail,
+        category: c.category,
+        industry: c.industry,
+        website: c.website,
+        city: c.city,
+        state: c.state,
+        country: c.country,
+        status: c.status,
+        profile_status: c.profileStatus,
+        payment_status: c.paymentStatus,
+        kyc_percent: c.kycPercent,
+        verified: c.verified,
+        is_self_registered: c.isSelfRegistered,
+        registered_from: c.registeredFrom,
+        registered_at: c.registeredAt,
+        completed_at: c.completedAt,
+        updated_at: c.updatedAt,
+        available_balance: w ? w.availableBalance || 0 : 0,
+        daily_ad_spend: w && w.dailyAdSpend !== null && w.dailyAdSpend !== undefined
+          ? w.dailyAdSpend
+          : (walletCurrency === 'INR' ? 300 : 10),
+        total_paid: w ? w.totalLifetimePaid || 0 : 0,
+        ad_campaign_active: w ? Boolean(w.adCampaignActive) : false,
+        active_days: w && w.activeDays ? w.activeDays : '',
+        schedule_preset: (w && w.schedulePreset) || 'custom',
+        last_deducted_at: w ? w.lastDeductedAt || null : null,
+        booked_dates: w && Array.isArray(w.bookedDates) ? w.bookedDates : [],
+        total_leads_count: leadsBy.get(id) || 0,
+        held_leads_count: heldLeadsBy.get(id) || 0,
+        approved_posts_count: postsBy.get(`${id}|Approved`) || 0,
+        draft_posts_count: postsBy.get(`${id}|Draft`) || 0,
+        pending_posts_count: postsBy.get(`${id}|Pending Verification`) || 0,
+        ideas_count: ideasBy.get(id) || 0,
+        active_campaign_id: primaryCamp ? String(primaryCamp._id) : null,
+        active_campaign_name: primaryCamp ? campaignName(primaryCamp) : null,
+        campaign_status: primaryCamp?.status || null,
+        campaign_started_at: resolvedStartAt,
+        campaign_paid_slot_date_iso: primaryCamp?.paidSlotDateIso || null,
+        campaign_cycle_hours: Number(primaryCamp?.cycleHours || 24),
+        external_platform_status: primaryCamp ? primaryCamp.externalPlatformStatus : null,
+        last_action: primaryCamp ? primaryCamp.lastAction : null,
+        last_actor: primaryCamp ? primaryCamp.lastActor : null,
+        marketing_code: c.marketingCode ?? null,
+        effective_marketing_code: effective,
+      };
   });
 }
 
@@ -392,9 +404,12 @@ function mapCustomerRow(r) {
     draftPostsCount: Number(r.draft_posts_count || 0),
     pendingPostsCount: Number(r.pending_posts_count || 0),
     ideasCount: Number(r.ideas_count || 0),
+    campaignId: r.active_campaign_id || null,
     campaignName: r.active_campaign_name || 'No Active Campaign',
     campaignStatus: r.campaign_status || 'None',
     campaignStartedAt: r.campaign_started_at || null,
+    paidSlotDateIso: r.campaign_paid_slot_date_iso || null,
+    campaignCycleHours: Number(r.campaign_cycle_hours || 24),
     isInHouseRunning: r.campaign_status === 'Running',
     isSpilloverUnpaidToday:
       r.campaign_status === 'Running' &&
@@ -1788,7 +1803,9 @@ marketingRouter.post('/campaigns', async (req, res) => {
           platform,
           targetAudience,
           startDate: finalStart,
-          startedAt: status === 'Running' ? now : null,
+          startedAt: status === 'Running' ? finalStart : null,
+          paidSlotDateIso: status === 'Running' ? istDateString(finalStart) : null,
+          cycleHours: 24,
           endDate: endDate ? new Date(endDate) : null,
           dailyBudget: resolvedDailyBudget,
           totalBudget: Number(totalBudget || 0),
@@ -1992,6 +2009,9 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
         marketingCode: effectiveCode,
         externalCampaignId: effectiveCode,
         startedAt: camp.status === 'Running' && camp.startedAt ? camp.startedAt : now,
+        paidSlotDateIso:
+          camp.status === 'Running' && camp.paidSlotDateIso ? camp.paidSlotDateIso : todayIsoStr,
+        cycleHours: Number(camp.cycleHours || 24),
         stoppedAt: null,
         lastAction: 'Started Marketing',
         lastActor: actor,
@@ -2155,6 +2175,11 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
           marketingCode: effectiveCode,
           externalCampaignId: effectiveCode,
           startedAt: latestCamp.status === 'Running' && latestCamp.startedAt ? latestCamp.startedAt : now,
+          paidSlotDateIso:
+            latestCamp.status === 'Running' && latestCamp.paidSlotDateIso
+              ? latestCamp.paidSlotDateIso
+              : todayIsoStr,
+          cycleHours: Number(latestCamp.cycleHours || 24),
           stoppedAt: null,
           lastAction: 'Started Marketing',
           lastActor: actor,
@@ -2173,6 +2198,8 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
             dailyBudget: dailySpend,
             status: 'Running',
             startedAt: now,
+            paidSlotDateIso: todayIsoStr,
+            cycleHours: 24,
             externalPlatformStatus: extStatus,
             externalCampaignId: effectiveCode,
             marketingCode: effectiveCode,
@@ -2305,6 +2332,67 @@ marketingRouter.post('/campaigns/:id/stop', async (req, res) => {
   } catch (err) {
     console.error('[POST /api/marketing/campaigns/:id/stop]', err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// 13B. PATCH /api/marketing/campaigns/:id/timing (Set Exact Meta Ad Start Time & Paid Slot Day)
+// -----------------------------------------------------------------------------
+marketingRouter.patch('/campaigns/:id/timing', async (req, res) => {
+  try {
+    const campaignId = String(req.params.id || '').trim();
+    const {
+      startedAt,
+      paidSlotDateIso,
+      cycleHours,
+      customerId,
+      actor = 'Marketing Manager',
+    } = req.body || {};
+
+    let camp = campaignId && campaignId !== 'null' ? await MarketingCampaign.findById(campaignId).lean() : null;
+    if (!camp && customerId) {
+      camp = await MarketingCampaign.findOne({ customerId: String(customerId).trim() })
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .lean();
+    }
+    if (!camp) {
+      return res.status(404).json({ ok: false, error: 'Campaign not found.' });
+    }
+
+    const $set = { updatedAt: new Date() };
+    if (startedAt) {
+      const parsed = new Date(startedAt);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ ok: false, error: 'Invalid startedAt date/time.' });
+      }
+      $set.startedAt = parsed;
+      if (!paidSlotDateIso) {
+        $set.paidSlotDateIso = istDateString(parsed);
+      }
+    }
+    if (paidSlotDateIso && /^\d{4}-\d{2}-\d{2}$/.test(String(paidSlotDateIso).trim())) {
+      $set.paidSlotDateIso = String(paidSlotDateIso).trim();
+    }
+    if (cycleHours !== undefined && cycleHours !== null && cycleHours !== '') {
+      const ch = Math.max(1, Math.min(720, Math.round(Number(cycleHours))));
+      if (Number.isFinite(ch)) $set.cycleHours = ch;
+    }
+
+    await MarketingCampaign.updateOne({ _id: camp._id }, { $set });
+    await logAuditEvent(camp.customerId, 'campaign', camp._id, 'Updated Campaign Timing Window', actor, $set);
+
+    const updated = await MarketingCampaign.findById(camp._id).lean();
+    return res.json({
+      ok: true,
+      campaignId: String(camp._id),
+      startedAt: updated?.startedAt || null,
+      paidSlotDateIso: updated?.paidSlotDateIso || null,
+      cycleHours: Number(updated?.cycleHours || 24),
+      message: 'Campaign run window & paid slot day updated.',
+    });
+  } catch (err) {
+    console.error('[PATCH /api/marketing/campaigns/:id/timing]', err);
+    return res.status(500).json({ ok: false, error: err.message });
   }
 });
 

@@ -21,6 +21,8 @@ const MarketingCampaignSchema = new mongoose.Schema({
   startDate: { type: Date, default: Date.now },
   startedAt: { type: Date, default: null },
   stoppedAt: { type: Date, default: null },
+  paidSlotDateIso: { type: String, default: null },
+  cycleHours: { type: Number, default: 24 },
   endDate: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
