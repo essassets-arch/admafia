@@ -28,8 +28,15 @@ export function istDayStart(now = new Date()) {
   return new Date(`${istDateString(now)}T00:00:00+05:30`);
 }
 
-export function isDeductedToday(lastDeductedAt, now = new Date()) {
-  return Boolean(lastDeductedAt) && istDateString(lastDeductedAt) === istDateString(now);
+export function isDeductedToday(lastDeductedAt, now = new Date(), bookedDates = null) {
+  const todayIso = istDateString(now);
+  if (Boolean(lastDeductedAt) && istDateString(lastDeductedAt) === todayIso) {
+    return true;
+  }
+  if (Array.isArray(bookedDates)) {
+    return bookedDates.some((d) => String(d || '').trim() === todayIso);
+  }
+  return false;
 }
 
 export class HttpError extends Error {
@@ -64,16 +71,23 @@ export async function deductDailySpendAtomic(session, {
   now = new Date(),
 }) {
   const dayStart = istDayStart(now);
+  const todayIso = bookedDate || istDateString(now);
   const set = { adCampaignActive: true, lastDeductedAt: now, updatedAt: now };
   if (marketingCode) set.marketingCode = marketingCode;
-  const update = { $inc: { availableBalance: -spend, totalAdSpent: spend }, $set: set };
-  if (bookedDate) update.$addToSet = { bookedDates: bookedDate };
+  const update = {
+    $inc: { availableBalance: -spend, totalAdSpent: spend },
+    $set: set,
+    $addToSet: { bookedDates: todayIso },
+  };
 
   const updated = await Wallet.findOneAndUpdate(
     {
       _id: walletId,
       availableBalance: { $gte: spend },
-      $or: [{ lastDeductedAt: null }, { lastDeductedAt: { $lt: dayStart } }],
+      $and: [
+        { $or: [{ lastDeductedAt: null }, { lastDeductedAt: { $lt: dayStart } }] },
+        { bookedDates: { $ne: todayIso } },
+      ],
     },
     update,
     { new: true, session }
@@ -82,7 +96,9 @@ export async function deductDailySpendAtomic(session, {
   if (!updated) {
     const current = await Wallet.findById(walletId).session(session).lean();
     if (!current) return { status: 'missing' };
-    if (isDeductedToday(current.lastDeductedAt, now)) return { status: 'already', wallet: current };
+    if (isDeductedToday(current.lastDeductedAt, now, current.bookedDates)) {
+      return { status: 'already', wallet: current };
+    }
     return { status: 'insufficient', wallet: current };
   }
 

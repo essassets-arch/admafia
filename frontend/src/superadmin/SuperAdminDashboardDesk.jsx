@@ -37,16 +37,24 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
     recentTransactions: [],
     recentAuditActions: [],
   });
+  const [unitToday, setUnitToday] = useState(null);
 
   const loadDashboard = useCallback(async () => {
     try {
-      const res = await superadminApi.getDashboardSummary();
+      const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const [res, unitRes] = await Promise.all([
+        superadminApi.getDashboardSummary(),
+        superadminApi.getUnitFinance({ from: todayIso, to: todayIso }).catch(() => null),
+      ]);
       if (res && res.ok) {
         setData({
           summary: res.summary || {},
           recentTransactions: res.recentTransactions || [],
           recentAuditActions: res.recentAuditActions || [],
         });
+      }
+      if (unitRes && unitRes.ok) {
+        setUnitToday(unitRes.summary || null);
       }
     } catch (err) {
       console.error('[SuperAdminDashboardDesk] Summary load failed:', err);
@@ -211,6 +219,77 @@ export default function SuperAdminDashboardDesk({ onNavigateToDesk, onNavigate }
           );
         })}
       </div>
+
+      {/* 2B. Live Today's Profit, Marketing Spend & Over-Spend Radar */}
+      {unitToday && (
+        <div
+          className="sa-table-card"
+          onClick={() => nav && nav('unit_finance')}
+          style={{
+            padding: '16px 20px',
+            marginBottom: 22,
+            cursor: 'pointer',
+            borderLeft: `4px solid ${(unitToday.overSpentLossUsersCount || 0) > 0 ? '#ef4444' : '#10b981'}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 900, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              💹 Today&apos;s Live Unit Profit &amp; Marketing Spend Radar (Confidential)
+            </div>
+            <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginTop: 8 }}>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Client Billed Today</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--adm-text-primary, #0f172a)' }}>
+                  ₹{Number(unitToday.clientBilledRevenueInRange || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Actual Marketing Spend</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#ec4899' }}>
+                  ₹{Number(unitToday.actualPlatformSpendInRange || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Today&apos;s Net Profit</div>
+                <div
+                  style={{
+                    fontSize: '1.15rem',
+                    fontWeight: 900,
+                    color: Number(unitToday.netGrossProfit || 0) >= 0 ? '#10b981' : '#ef4444',
+                  }}
+                >
+                  {Number(unitToday.netGrossProfit || 0) >= 0 ? '+' : ''}₹
+                  {Number(unitToday.netGrossProfit || 0).toLocaleString('en-IN')} ({unitToday.netGrossMarginPct || 0}%)
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted, #64748b)' }}>Over-Spend / Loss Clients</div>
+                <div
+                  style={{
+                    fontSize: '1.15rem',
+                    fontWeight: 900,
+                    color: (unitToday.overSpentLossUsersCount || 0) > 0 ? '#ef4444' : '#10b981',
+                  }}
+                >
+                  {(unitToday.overSpentLossUsersCount || 0) > 0
+                    ? `🔴 ${unitToday.overSpentLossUsersCount} Loss (-₹${Number(unitToday.totalOverSpendLossAmount || 0).toLocaleString('en-IN')})`
+                    : '✓ 0 Over-Spent'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: '0.82rem', color: '#4f46e5' }}>
+            <span>Open Unit Profit &amp; #AMM Ledger</span>
+            <ArrowRight size={15} />
+          </div>
+        </div>
+      )}
 
       {/* 3. Operational Shortcuts */}
       <div

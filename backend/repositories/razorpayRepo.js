@@ -863,7 +863,11 @@ export async function deductWalletForDay({ cust, amount, activeDays, force, manu
       };
     };
 
-    if (isDeductedToday(wallet.lastDeductedAt, now) && !skipDailyGuard) {
+    const isPreBookedToday =
+      Array.isArray(wallet.bookedDates) &&
+      wallet.bookedDates.map((s) => String(s || '').trim()).includes(kolkataTodayStr);
+
+    if ((isDeductedToday(wallet.lastDeductedAt, now) || isPreBookedToday) && !skipDailyGuard) {
       return { result: await settleIdempotent(wallet) };
     }
 
@@ -875,10 +879,13 @@ export async function deductWalletForDay({ cust, amount, activeDays, force, manu
 
     if (Number(wallet.availableBalance || 0) < spendAmt) throw insufficient(wallet);
 
-    // Atomic conditional deduction: sufficient balance AND (unless forced) not yet settled for today's IST day
+    // Atomic conditional deduction: sufficient balance AND (unless forced) not yet settled or pre-booked for today's IST day
     const filter = { _id: wallet._id, availableBalance: { $gte: spendAmt } };
     if (!skipDailyGuard) {
-      filter.$or = [{ lastDeductedAt: null }, { lastDeductedAt: { $lt: istDayStart(now) } }];
+      filter.$and = [
+        { $or: [{ lastDeductedAt: null }, { lastDeductedAt: { $lt: istDayStart(now) } }] },
+        { bookedDates: { $ne: kolkataTodayStr } },
+      ];
     }
     const updated = await Wallet.findOneAndUpdate(
       filter,
@@ -899,7 +906,11 @@ export async function deductWalletForDay({ cust, amount, activeDays, force, manu
     if (!updated) {
       wallet = await Wallet.findById(wallet._id).session(session).lean();
       if (!wallet) throw new Error('Wallet not found');
-      if (isDeductedToday(wallet.lastDeductedAt, now) && !skipDailyGuard) {
+      if (
+        (isDeductedToday(wallet.lastDeductedAt, now) ||
+          (Array.isArray(wallet.bookedDates) && wallet.bookedDates.includes(kolkataTodayStr))) &&
+        !skipDailyGuard
+      ) {
         return { result: await settleIdempotent(wallet) };
       }
       throw insufficient(wallet);

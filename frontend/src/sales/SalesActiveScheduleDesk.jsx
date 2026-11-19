@@ -460,6 +460,21 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
                     {/* 1. Client & Territory */}
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {c.marketingCode && (
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 900,
+                              fontFamily: 'monospace',
+                              color: '#ffffff',
+                              background: '#4f46e5',
+                              padding: '1px 6px',
+                              borderRadius: 5,
+                            }}
+                          >
+                            {c.marketingCode}
+                          </span>
+                        )}
                         <strong style={{ fontSize: '0.94rem', color: 'var(--adm-text-primary, #0f172a)' }}>
                           {c.companyName}
                         </strong>

@@ -194,6 +194,29 @@ export const superadminApi = {
     }),
   getActiveDeliverySchedule: (params = {}) => request(`/ops/active-schedule${buildQuery(params)}`),
   getSlaBottlenecks: () => request('/ops/sla-bottlenecks'),
+  rolloverUnfulfilledDay: (data) =>
+    request('/superadmin/unit-finance/rollover-day', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getChatbotWebhookInfo: () => request('/ops/chatbot-webhook-info'),
+  rotateChatbotWebhookSecret: () =>
+    request('/ops/chatbot-webhook-rotate', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  testChatbotLead: (data) =>
+    request('/webhooks/chatbot/lead', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getPlaybookPdfUrl: () => {
+    let token = '';
+    try {
+      token = typeof window !== 'undefined' ? localStorage.getItem('admafia_admin_token') || '' : '';
+    } catch (e) {}
+    return `${BASE_URL}/superadmin/playbook-pdf${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
 };
 
 export default superadminApi;

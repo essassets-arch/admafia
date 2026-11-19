@@ -419,6 +419,54 @@ export async function dispatchOutboxNotification(event) {
       break;
     }
 
+    case 'CREATIVE_REQUESTED': {
+      await notifyStaffDepartments(['Graphics'], {
+        type: 'CREATIVE_REQUESTED',
+        title: '🎨 New Creative Brief Assigned',
+        body: `Marketing requested "${p.title || 'New Ad Creative'}" (${p.priority || 'Normal'} priority).`,
+        deepLink: '/graphics',
+        metadata: { postId: event.aggregateId, customerId: p.customerId || '' },
+      });
+      break;
+    }
+
+    case 'SCHEDULE_SLOTS_BOOKED': {
+      const datesText = Array.isArray(p.bookedDates) ? p.bookedDates.join(', ') : '';
+      const codeTag = p.marketingCode ? ` [${p.marketingCode}]` : '';
+      await notifyStaffDepartments(['Marketing', 'Sales'], {
+        type: 'SCHEDULE_SLOTS_BOOKED',
+        title: `📅 Client Pre-Booked Delivery${codeTag}`,
+        body: `${p.companyName || 'Client'} paid ₹${Number(p.totalDeducted || 0).toLocaleString('en-IN')} for ${datesText}. Prepare creative & start campaign on time!`,
+        deepLink: '/marketing/active-schedule',
+        metadata: { customerId: p.customerId || '', bookedDates: p.bookedDates || [] },
+      });
+      break;
+    }
+
+    case 'SCHEDULE_SLOT_UNBOOKED': {
+      const codeTag = p.marketingCode ? ` [${p.marketingCode}]` : '';
+      await notifyStaffDepartments(['Marketing', 'Sales'], {
+        type: 'SCHEDULE_SLOT_UNBOOKED',
+        title: `↩️ Future Delivery Slot Cancelled${codeTag}`,
+        body: `${p.companyName || 'Client'} cancelled future slot ${p.dateIso || ''} (₹${p.refundedAmount || 0} returned to wallet).`,
+        deepLink: '/marketing/active-schedule',
+        metadata: { customerId: p.customerId || '', dateIso: p.dateIso || '' },
+      });
+      break;
+    }
+
+    case 'PAID_CAMPAIGN_NOT_STARTED': {
+      const codeTag = p.marketingCode ? ` [${p.marketingCode}]` : '';
+      await notifyStaffDepartments(['Marketing'], {
+        type: 'PAID_CAMPAIGN_NOT_STARTED',
+        title: `🚨 URGENT: Paid Client Campaign OFF${codeTag}`,
+        body: `${p.companyName || 'Client'} PAID ₹${p.dailyBudget || 300} for Today (${p.dateIso || ''}), but Marketing campaign is NOT Running! Start immediately.`,
+        deepLink: '/marketing/active-schedule',
+        metadata: { customerId: p.customerId || '', dateIso: p.dateIso || '' },
+      });
+      break;
+    }
+
     default:
       break;
   }

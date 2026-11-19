@@ -78,7 +78,8 @@ export function strictCorsMiddleware(req, res, next) {
   // without granting cross-origin credential headers.
   if (
     reqPath.startsWith('/api/payments/razorpay/callback') ||
-    reqPath.startsWith('/api/payments/razorpay/webhook')
+    reqPath.startsWith('/api/payments/razorpay/webhook') ||
+    reqPath.startsWith('/api/webhooks/chatbot')
   ) {
     return next();
   }

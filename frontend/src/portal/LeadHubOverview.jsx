@@ -94,6 +94,7 @@ export default function LeadHubOverview({
   onOpenCompleteRegistration,
   onToggleCampaign,
   onUpdateCustomer,
+  onUnbookFutureDate,
   onUpdateLead,
   t,
 }) {
@@ -313,6 +314,23 @@ export default function LeadHubOverview({
     const isTargetBooked = dayObj ? isDayBooked(dayObj) : (code === currentTodayItem.code && isTodayBooked);
 
     if (isTargetBooked) {
+      if (dayObj?.isoDate && dayObj.isoDate > kolkataTodayIso && typeof onUnbookFutureDate === 'function') {
+        Swal.fire({
+          icon: 'question',
+          title: `Cancel Future Booking (${dayObj.dateFormatted})?`,
+          html: `You pre-booked <strong>${dayObj.label}, ${dayObj.dateFormatted}</strong> for <strong>${currencySymbol}${dailySpend}</strong>.<br/><br/>Since this day hasn't started yet, cancelling now returns <strong>${currencySymbol}${dailySpend}</strong> straight back to your Growth Wallet.`,
+          showCancelButton: true,
+          confirmButtonText: `Cancel Slot & Refund ${currencySymbol}${dailySpend}`,
+          confirmButtonColor: '#ef4444',
+          cancelButtonText: 'Keep Booked',
+        }).then((res) => {
+          if (res.isConfirmed) {
+            onUnbookFutureDate(dayObj.isoDate);
+          }
+        });
+        return;
+      }
+
       Swal.fire({
         icon: 'info',
         title: dayObj?.isPast ? 'Past Delivery Completed' : 'Today\'s Delivery Already Paid & Booked',

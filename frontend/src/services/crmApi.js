@@ -332,7 +332,18 @@ export const crmApi = {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
+    if (res?.customer && Array.isArray(res.transactions)) {
+      res.customer.__spotTransactions = res.transactions;
+      res.customer.__spotBookedDates = res.spotBookedDates || 0;
+    }
     return res.customer;
+  },
+
+  async unbookFutureDate(payload) {
+    return apiRequest('/wallets/unbook-date', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   /**

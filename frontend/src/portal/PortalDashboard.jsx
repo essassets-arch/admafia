@@ -1007,8 +1007,34 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
           .patchCustomer(targetId, updates)
           .then((savedCust) => {
             if (savedCust && typeof savedCust === 'object') {
+              const spotTxs = Array.isArray(savedCust.__spotTransactions) ? savedCust.__spotTransactions : [];
+              const spotCount = Number(savedCust.__spotBookedDates || 0);
+              const cleanSaved = { ...savedCust };
+              delete cleanSaved.__spotTransactions;
+              delete cleanSaved.__spotBookedDates;
+
+              if (typeof cleanSaved.walletBalance === 'number' || typeof cleanSaved.balance === 'number') {
+                setWalletBalance(Number(cleanSaved.walletBalance ?? cleanSaved.balance ?? 0));
+              }
+              if (spotTxs.length > 0) {
+                setTransactions((prev) => {
+                  const existingRefs = new Set(prev.map((t) => t.ref || t.id));
+                  const fresh = spotTxs.filter((t) => !existingRefs.has(t.ref || t.id));
+                  return [...fresh, ...prev];
+                });
+                Swal.fire({
+                  toast: true,
+                  position: 'top-end',
+                  icon: 'success',
+                  title: `${spotCount} Delivery Day${spotCount > 1 ? 's' : ''} Paid & Booked!`,
+                  text: `New Wallet Balance: ${currencySymbol}${Number(cleanSaved.walletBalance ?? cleanSaved.balance ?? 0).toLocaleString('en-IN')}`,
+                  showConfirmButton: false,
+                  timer: 2800,
+                });
+              }
+
               setCustomer((prev) => {
-                const merged = { ...prev, ...savedCust };
+                const merged = { ...prev, ...cleanSaved };
                 try {
                   localStorage.setItem('growthline_active_user', JSON.stringify(merged));
                 } catch (e) {}
@@ -1016,7 +1042,15 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
               });
             }
           })
-          .catch((err) => console.warn('Backend schedule/wallet patch note:', err.message));
+          .catch((err) => {
+            console.warn('Backend schedule/wallet patch note:', err.message);
+            Swal.fire({
+              icon: 'warning',
+              title: 'Could Not Book Selected Day',
+              text: err.message || 'Please check your Growth Wallet balance and retry.',
+              confirmButtonColor: '#4f46e5',
+            });
+          });
       } else if (hasProfileKeys) {
         crmApi
           .updateCustomerProfile(targetId, updates)
@@ -1113,6 +1147,52 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
       } catch (e) {}
       return updated;
     });
+  };
+
+  const handleUnbookFutureDate = async (dateIso) => {
+    const targetId = customer?.id || customer?.phone;
+    if (!targetId || !dateIso) return false;
+    try {
+      const res = await crmApi.unbookFutureDate({
+        customerId: customer?.id,
+        phone: customer?.phone,
+        dateIso,
+      });
+      if (res && res.ok) {
+        const nextBal = Number(res.walletBalance ?? walletBalance);
+        setWalletBalance(nextBal);
+        setCustomer((prev) => {
+          const updated = {
+            ...prev,
+            balance: nextBal,
+            walletBalance: nextBal,
+            bookedDates: Array.isArray(res.bookedDates) ? res.bookedDates : (prev.bookedDates || []).filter((d) => d !== dateIso),
+            scheduledDates: Array.isArray(res.scheduledDates) ? res.scheduledDates : (prev.scheduledDates || []).filter((d) => d !== dateIso),
+          };
+          try {
+            localStorage.setItem('growthline_active_user', JSON.stringify(updated));
+          } catch (e) {}
+          return updated;
+        });
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'success',
+          title: `${currencySymbol}${res.refundedAmount} Returned to Wallet!`,
+          text: `Future slot ${dateIso} cancelled.`,
+          showConfirmButton: false,
+          timer: 2600,
+        });
+        return true;
+      }
+    } catch (err) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Cannot Cancel Slot',
+        text: err.message || 'Unable to cancel this scheduled date.',
+      });
+    }
+    return false;
   };
 
   const pendingFollowupsCount = leads.filter((l) => (l.status === 'In Follow-up' || l.status === 'Callback') && l.status !== 'Dropped').length;
@@ -1923,6 +2003,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 setIsScheduleOpen(true);
               }}
               onOpenAddFunds={() => setIsAddFundsOpen(true)}
+              onUnbookFutureDate={handleUnbookFutureDate}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
               onOpenSetDailyLimit={() => setIsSetDailyLimitOpen(true)}
               onOpenConfigureDomain={() => setIsConfigureDomainOpen(true)}
@@ -1947,6 +2028,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 setIsScheduleOpen(true);
               }}
               onOpenAddFunds={() => setIsAddFundsOpen(true)}
+              onUnbookFutureDate={handleUnbookFutureDate}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
             />
           )}

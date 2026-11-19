@@ -95,6 +95,7 @@ export function buildCustomerViewRow(c, w, leadCount = 0) {
     schedule_preset: w?.schedulePreset || 'custom',
     last_deducted_at: w?.lastDeductedAt ?? null,
     booked_dates: joinList(w?.bookedDates),
+    marketing_code: c.marketingCode || w?.marketingCode || null,
     runway_days: Math.floor(balance / Math.max(dailyPacing, 1)),
     total_leads_dispatched: leadCount,
     sales_remarks: Array.isArray(c.salesRemarks) ? c.salesRemarks : [],

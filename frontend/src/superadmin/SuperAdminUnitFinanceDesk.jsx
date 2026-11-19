@@ -15,6 +15,7 @@ import {
 import Swal from 'sweetalert2';
 import superadminApi from '../services/superadminApi';
 import { SmartTable } from '../components/SmartTabulator';
+import ChatbotAmmApiModal from '../components/ChatbotAmmApiModal';
 
 const formatINR = (val, currency = 'INR') => {
   if (val === null || val === undefined || Number.isNaN(Number(val))) return '—';
@@ -57,6 +58,8 @@ export default function SuperAdminUnitFinanceDesk() {
   const [savingRowId, setSavingRowId] = useState(null);
   const [globalRatioPct, setGlobalRatioPct] = useState(50);
   const [savingRatio, setSavingRatio] = useState(false);
+  const [isChatbotModalOpen, setIsChatbotModalOpen] = useState(false);
+  const [rollingOverKey, setRollingOverKey] = useState('');
 
   const applyPresetRange = (preset) => {
     setPeriodPreset(preset);
@@ -187,10 +190,46 @@ export default function SuperAdminUnitFinanceDesk() {
     }
   };
 
+  const handleRolloverDay = async (item) => {
+    const confirm = await Swal.fire({
+      icon: 'warning',
+      title: `Rollover ₹${item.paidAmount || 300} to ${item.companyName}?`,
+      html: `Client <strong>${item.companyName} (${item.marketingCode || ''})</strong> paid for <strong>${item.dateIso}</strong>, with <strong>0 leads &amp; 0 confirmed ad spend</strong>.<br/><br/>This credits <strong>₹${item.paidAmount || 300}</strong> back to their Growth Wallet so they can schedule another day.`,
+      showCancelButton: true,
+      confirmButtonText: `Credit ₹${item.paidAmount || 300} Rollover`,
+      confirmButtonColor: '#059669',
+    });
+    if (!confirm.isConfirmed) return;
+    const key = `${item.customerId}_${item.dateIso}`;
+    setRollingOverKey(key);
+    try {
+      const res = await superadminApi.rolloverUnfulfilledDay({
+        customerId: item.customerId,
+        dateIso: item.dateIso,
+      });
+      if (res && res.ok) {
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'success',
+          title: res.message || 'Paid slot rolled over to client wallet!',
+          showConfirmButton: false,
+          timer: 2600,
+        });
+        await fetchAll(true);
+      }
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Rollover Failed', text: err.message });
+    } finally {
+      setRollingOverKey('');
+    }
+  };
+
   const usersList = (financeData?.users || []).filter((u) => {
     const q = search.trim().toLowerCase();
     const matchSearch =
       !q ||
+      (u.marketingCode || '').toLowerCase().includes(q) ||
       (u.companyName || '').toLowerCase().includes(q) ||
       (u.contactPerson || '').toLowerCase().includes(q) ||
       (u.username || '').toLowerCase().includes(q) ||
@@ -199,6 +238,9 @@ export default function SuperAdminUnitFinanceDesk() {
     if (!matchSearch) return false;
     if (userFilter === 'active') {
       return u.projectedOrSettledRevenue > 0 || u.isScheduledOnToDate || u.leadsDelivered > 0;
+    }
+    if (userFilter === 'overspent') {
+      return Boolean(u.isOverSpentLoss);
     }
     if (userFilter === 'liability') {
       return u.closingWalletLiabilityOnDate > 0;
@@ -242,6 +284,24 @@ export default function SuperAdminUnitFinanceDesk() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <a
+            href={superadminApi.getPlaybookPdfUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sa-btn-secondary"
+            style={{ textDecoration: 'none', fontWeight: 800, borderColor: '#059669', color: '#059669' }}
+            title="Download Confidential Master Operations & Anti-Confusion Playbook PDF"
+          >
+            📄 Master SOP PDF
+          </a>
+          <button
+            type="button"
+            onClick={() => setIsChatbotModalOpen(true)}
+            className="sa-btn-secondary"
+            style={{ fontWeight: 800, borderColor: '#6366f1', color: '#4f46e5' }}
+          >
+            🤖 Chatbot #AMM API
+          </button>
           <button
             type="button"
             onClick={() => setViewMode('finance')}
@@ -498,7 +558,97 @@ export default function SuperAdminUnitFinanceDesk() {
                 Our Real CPL: <strong>{formatINR(summary.avgOurRealCpl)}</strong> • Client/Lead: {formatINR(summary.avgClientPricePerLead)}
               </div>
             </div>
+
+            <div
+              className="sa-card"
+              style={{
+                padding: '16px 18px',
+                borderLeft: `4px solid ${(summary.overSpentLossUsersCount || 0) > 0 ? '#ef4444' : '#10b981'}`,
+              }}
+            >
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
+                Over-Spend / Loss Alert
+              </div>
+              <div
+                style={{
+                  fontSize: '1.6rem',
+                  fontWeight: 900,
+                  color: (summary.overSpentLossUsersCount || 0) > 0 ? '#ef4444' : '#10b981',
+                  marginTop: 5,
+                }}
+              >
+                {(summary.overSpentLossUsersCount || 0) > 0
+                  ? `-${formatINR(summary.totalOverSpendLossAmount || 0)}`
+                  : '₹0 Over-Spend'}
+              </div>
+              <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 4 }}>
+                {(summary.overSpentLossUsersCount || 0) > 0
+                  ? `🔴 ${summary.overSpentLossUsersCount} client(s) spent > billed`
+                  : '✓ Zero negative-margin accounts'}
+              </div>
+            </div>
           </div>
+
+          {/* Unfulfilled Paid Days Safeguard Banner */}
+          {(financeData?.unfulfilledPaidDays || []).length > 0 && (
+            <div
+              className="sa-card"
+              style={{
+                padding: '14px 18px',
+                marginBottom: 16,
+                border: '1.5px solid #f59e0b',
+                background: 'rgba(245, 158, 11, 0.08)',
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: '0.86rem', color: '#d97706', marginBottom: 8 }}>
+                ⚠️ Unfulfilled Paid Delivery Slots ({financeData.unfulfilledPaidDays.length}): Client paid for this date, but 0 leads &amp; 0 confirmed ad spend were recorded
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {financeData.unfulfilledPaidDays.slice(0, 6).map((item) => {
+                  const key = `${item.customerId}_${item.dateIso}`;
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 10,
+                        flexWrap: 'wrap',
+                        padding: '7px 10px',
+                        borderRadius: 8,
+                        background: 'var(--adm-bg-card, #ffffff)',
+                        border: '1px solid var(--adm-border, #e2e8f0)',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>
+                        <span style={{ fontFamily: 'monospace', color: '#4f46e5', fontWeight: 900, marginRight: 6 }}>
+                          {item.marketingCode || '#AMM'}
+                        </span>
+                        <strong>{item.companyName}</strong> — Paid <strong>{formatINR(item.paidAmount)}</strong> on{' '}
+                        <code>{item.dateIso}</code> (Campaign: {item.campaignStatus})
+                      </div>
+                      <button
+                        type="button"
+                        disabled={rollingOverKey === key}
+                        onClick={() => handleRolloverDay(item)}
+                        className="sa-btn-secondary"
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '0.74rem',
+                          fontWeight: 800,
+                          borderColor: '#059669',
+                          color: '#059669',
+                        }}
+                      >
+                        {rollingOverKey === key ? 'Rolling over...' : `🔄 Rollover ₹${item.paidAmount} to Wallet`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* 4. Filter Tabs & Search */}
           <div
@@ -519,6 +669,10 @@ export default function SuperAdminUnitFinanceDesk() {
                 {
                   id: 'active',
                   label: `Active / Billed in Period (${(financeData?.users || []).filter((u) => u.projectedOrSettledRevenue > 0 || u.isScheduledOnToDate).length})`,
+                },
+                {
+                  id: 'overspent',
+                  label: `🔴 Over-Spent / Loss (${(financeData?.users || []).filter((u) => u.isOverSpentLoss).length})`,
                 },
                 {
                   id: 'liability',
@@ -587,10 +741,34 @@ export default function SuperAdminUnitFinanceDesk() {
                     </tr>
                   ) : (
                     usersList.map((u) => (
-                      <tr key={u.id}>
+                      <tr
+                        key={u.id}
+                        style={
+                          u.isOverSpentLoss
+                            ? { background: 'rgba(239, 68, 68, 0.06)' }
+                            : undefined
+                        }
+                      >
                         <td>
-                          <div style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
-                            {u.companyName}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {u.marketingCode && (
+                              <span
+                                style={{
+                                  background: '#4f46e5',
+                                  color: '#fff',
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.69rem',
+                                  fontWeight: 900,
+                                  padding: '1px 6px',
+                                  borderRadius: 5,
+                                }}
+                              >
+                                {u.marketingCode}
+                              </span>
+                            )}
+                            <span style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>
+                              {u.companyName}
+                            </span>
                           </div>
                           <div style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                             {u.category || 'General'} • {u.city || 'India'} • +91 {u.phone}
@@ -727,11 +905,31 @@ export default function SuperAdminUnitFinanceDesk() {
                             {u.netProfit > 0 ? '+' : ''}
                             {formatINR(u.netProfit, u.currency)}
                           </div>
-                          {u.projectedOrSettledRevenue > 0 && (
+                          {u.isOverSpentLoss ? (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                marginTop: 3,
+                                background: 'rgba(239, 68, 68, 0.16)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                padding: '1px 6px',
+                                borderRadius: 6,
+                                fontSize: '0.67rem',
+                                fontWeight: 900,
+                              }}
+                            >
+                              🔴 OVER-SPENT ({u.marginPct}%)
+                            </span>
+                          ) : u.isOverTargetThinMargin ? (
+                            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#d97706', marginTop: 2 }}>
+                              ⚠️ Above {u.defaultSpendRatioPct}% Target ({u.marginPct}%)
+                            </div>
+                          ) : u.projectedOrSettledRevenue > 0 ? (
                             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: u.marginPct >= 0 ? '#10b981' : '#ef4444', marginTop: 2 }}>
                               {u.marginPct}% Margin
                             </div>
-                          )}
+                          ) : null}
                         </td>
 
                         <td>
@@ -926,6 +1124,14 @@ export default function SuperAdminUnitFinanceDesk() {
           </div>
         </div>
       )}
+      <ChatbotAmmApiModal
+        isOpen={isChatbotModalOpen}
+        onClose={() => setIsChatbotModalOpen(false)}
+        fetchWebhookInfo={() => superadminApi.getChatbotWebhookInfo()}
+        testLeadFn={(payload) => superadminApi.testChatbotLead(payload)}
+        rotateKeyFn={() => superadminApi.rotateChatbotWebhookSecret()}
+        onLeadDispatched={() => fetchAll(true)}
+      />
     </div>
   );
 }

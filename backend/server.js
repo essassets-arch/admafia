@@ -93,6 +93,11 @@ import {
   repairIncompleteCustomerProfiles,
 } from './repositories/bootstrapRepo.js';
 import { startOutboxWorker, recordOutboxEvent } from './services/outboxWorker.js';
+import {
+  allocateNextMarketingCode,
+  backfillMissingMarketingCodes,
+  normalizeMarketingCode,
+} from './services/marketingCodeService.js';
 import { getEvaluatedRecipients, getGroupEligibilityCounts, getCategoryEligibilityCounts } from './services/leadEligibility.js';
 import { marketingRouter, processDailyAdSpendPacing } from './routes/marketing.js';
 import { graphicsRouter } from './routes/graphics.js';
@@ -313,11 +318,20 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     runwayDays: Number(row.runway_days ?? Math.floor(balance / Math.max(dailyPacing, 1))),
     totalLeadsDispatched: Number(row.total_leads_dispatched ?? 0),
     lastDeductedAt: row.last_deducted_at || null,
-    isDeductedToday: Boolean(
-      row.last_deducted_at &&
-      new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-      new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    ),
+    marketingCode: normalizeMarketingCode(row.marketing_code || '') || null,
+    isDeductedToday: (() => {
+      const kToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const byTimestamp = Boolean(
+        row.last_deducted_at &&
+          new Date(row.last_deducted_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === kToday
+      );
+      if (byTimestamp) return true;
+      const bList = String(row.booked_dates || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return bList.includes(kToday);
+    })(),
     bookedDates: (() => {
       const kToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       const bSet = new Set(
@@ -1341,6 +1355,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     // Strict new Customer creation + wallet + verification queue + real-time Outbox event in ONE MongoDB transaction
     const effectiveCustId = await withMongoTransaction(async (session) => {
+      const assignedAmmCode = await allocateNextMarketingCode(session);
       await Customer.create(
         [{
           _id: custId,
@@ -1363,6 +1378,7 @@ app.post('/api/auth/register', async (req, res) => {
           verified: evalProf.isComplete,
           phoneVerified: true,
           phoneVerifiedAt: now,
+          marketingCode: assignedAmmCode,
           completedAt: evalProf.isComplete ? now : null,
         }],
         { session }
@@ -1383,6 +1399,7 @@ app.post('/api/auth/register', async (req, res) => {
             activeDays: [],
             schedulePreset: 'custom',
             bookedDates: [],
+            marketingCode: assignedAmmCode,
             lastDeductedAt: null,
             createdAt: now,
           },
@@ -2874,47 +2891,52 @@ const handleUpdateCustomerRecord = async (req, res) => {
       password: nextPassword,
     });
 
+    let spotBookedTransactions = [];
     if (
       updates.dailyAdSpend !== undefined ||
       updates.adCampaignActive !== undefined ||
       updates.balance !== undefined ||
       updates.activeDays !== undefined ||
+      updates.scheduledDates !== undefined ||
       updates.schedulePreset !== undefined
     ) {
       const w = await Wallet.findOne({ customerId: cust._id }).lean();
       if (w) {
         const walletCurrency = String(w.currency || 'INR').toUpperCase();
+        const currencySym = walletCurrency === 'USD' ? '$' : '₹';
         const minimumDailySpend = walletCurrency === 'INR' ? 300 : walletCurrency === 'USD' ? 10 : null;
         if (minimumDailySpend === null) return res.status(409).json({ ok: false, error: 'Unsupported wallet currency.' });
         const nextDaily = updates.dailyAdSpend !== undefined ? Math.max(minimumDailySpend, Number(updates.dailyAdSpend)) : Number(w.dailyAdSpend);
-        const nextActive = updates.adCampaignActive !== undefined ? Boolean(updates.adCampaignActive) : Boolean(w.adCampaignActive);
+        let nextActive = updates.adCampaignActive !== undefined ? Boolean(updates.adCampaignActive) : Boolean(w.adCampaignActive);
         // Balance override is STRICTLY restricted to Super Admin only
         const nextBal = isSuperAdminActor && updates.balance !== undefined ? Math.max(0, Number(updates.balance)) : undefined;
         if (!Number.isFinite(nextDaily) || (nextBal !== undefined && !Number.isFinite(nextBal))) {
           throw new Error('Invalid numeric value for wallet settings.');
         }
 
-        // Security / Financial Safety Rule: Enforce that booked days cannot be removed via direct API call
+        // Security / Financial Safety Rule: Enforce that booked days cannot be removed via direct PATCH
         const kolkataNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        const kTodayIso = kolkataNow.toLocaleDateString('en-CA');
         const todayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
-        const isDeductedToday = Boolean(
-          w.lastDeductedAt &&
-          new Date(w.lastDeductedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) ===
-          kolkataNow.toLocaleDateString('en-CA')
-        );
-
         const toList = (v) => (Array.isArray(v) ? v : String(v || '').split(',')).map((s) => String(s).trim()).filter(Boolean);
+
+        const bookedDatesSet = new Set(toList(w.bookedDates));
+        const isDeductedToday = Boolean(
+          bookedDatesSet.has(kTodayIso) ||
+            (w.lastDeductedAt &&
+              new Date(w.lastDeductedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === kTodayIso)
+        );
+        if (isDeductedToday) {
+          bookedDatesSet.add(kTodayIso);
+        }
+        const bookedDatesList = Array.from(bookedDatesSet);
+
         const storedDays = toList(w.activeDays).map((d) => d.toUpperCase());
         let finalDaysArray = updates.activeDays !== undefined
           ? (Array.isArray(updates.activeDays)
-            ? updates.activeDays.map(d => String(d).trim().toUpperCase()).filter(Boolean)
-            : String(updates.activeDays).split(',').map(d => d.trim().toUpperCase()).filter(Boolean))
+            ? updates.activeDays.map((d) => String(d).trim().toUpperCase()).filter(Boolean)
+            : String(updates.activeDays).split(',').map((d) => d.trim().toUpperCase()).filter(Boolean))
           : (storedDays.length > 0 ? storedDays : [todayCode]);
-
-        const bookedDatesList = toList(w.bookedDates);
-        if (isDeductedToday) {
-          bookedDatesList.push(kolkataNow.toLocaleDateString('en-CA'));
-        }
 
         const dayOfWeek = kolkataNow.getDay();
         const distToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -2927,7 +2949,7 @@ const handleUpdateCustomerRecord = async (req, res) => {
           const cur = new Date(monday);
           cur.setDate(monday.getDate() + i);
           const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
-          if (bookedDatesList.includes(iso)) {
+          if (bookedDatesSet.has(iso)) {
             const lockedCode = weekDayCodes[i];
             if (!finalDaysArray.includes(lockedCode)) {
               finalDaysArray.push(lockedCode);
@@ -2937,15 +2959,110 @@ const handleUpdateCustomerRecord = async (req, res) => {
 
         const nextPreset = updates.schedulePreset || w.schedulePreset || 'custom';
         let finalScheduledDates = undefined;
+        let newlyBookedDates = [];
+
         if (updates.scheduledDates !== undefined) {
           const incomingIso = toList(updates.scheduledDates).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s));
+          // Identify newly selected dates (>= Today IST) that are NOT yet paid/booked
+          if (updates.spotBook !== false && nextBal === undefined) {
+            newlyBookedDates = Array.from(new Set(incomingIso))
+              .filter((iso) => iso >= kTodayIso && !bookedDatesSet.has(iso))
+              .sort();
+          }
+
+          if (newlyBookedDates.length > 0) {
+            const requiredSpotAmount = newlyBookedDates.length * nextDaily;
+            await withMongoTransaction(async (session) => {
+              const freshWallet = await Wallet.findById(w._id).session(session).lean();
+              const curBal = Number(freshWallet?.availableBalance || 0);
+              if (curBal < requiredSpotAmount) {
+                const err = new Error(
+                  `Insufficient wallet balance (${currencySym}${curBal}) to book ${newlyBookedDates.length} scheduled day(s) (${currencySym}${requiredSpotAmount} required). Please top up wallet first.`
+                );
+                err.statusCode = 400;
+                throw err;
+              }
+
+              const now = new Date();
+              const includesToday = newlyBookedDates.includes(kTodayIso);
+              if (includesToday) nextActive = true;
+
+              const updatedWal = await Wallet.findOneAndUpdate(
+                { _id: w._id, availableBalance: { $gte: requiredSpotAmount } },
+                {
+                  $inc: { availableBalance: -requiredSpotAmount, totalAdSpent: requiredSpotAmount },
+                  $set: {
+                    dailyAdSpend: nextDaily,
+                    adCampaignActive: nextActive,
+                    ...(includesToday ? { lastDeductedAt: now } : {}),
+                    lastScheduleUpdatedAt: now,
+                    updatedAt: now,
+                  },
+                  $addToSet: {
+                    bookedDates: { $each: newlyBookedDates },
+                    scheduledDates: { $each: newlyBookedDates },
+                  },
+                },
+                { new: true, session }
+              ).lean();
+
+              if (!updatedWal) {
+                const err = new Error('Wallet balance changed concurrently. Please retry booking.');
+                err.statusCode = 409;
+                throw err;
+              }
+
+              let runningBal = curBal;
+              const txDocsToInsert = newlyBookedDates.map((dIso) => {
+                runningBal = Math.round((runningBal - nextDaily + Number.EPSILON) * 100) / 100;
+                return {
+                  _id: `tx_bk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                  customerId: cust._id,
+                  walletId: w._id,
+                  txType: 'Debit',
+                  amount: nextDaily,
+                  balanceAfter: Math.max(0, runningBal),
+                  referenceUtr: `BOOK-${cust._id}-${dIso}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+                  description:
+                    dIso === kTodayIso
+                      ? `Booked Today's Lead Delivery Slot (${dIso}) (-${currencySym}${nextDaily})`
+                      : `Pre-Booked Scheduled Lead Delivery Slot (${dIso}) (-${currencySym}${nextDaily})`,
+                  paymentMethod: 'Scheduled Slot Booking',
+                  status: 'Settled ✓',
+                  currency: walletCurrency,
+                  createdAt: now,
+                };
+              });
+
+              const createdTxs = await WalletTransaction.create(txDocsToInsert, { session });
+              spotBookedTransactions = createdTxs.map((doc) => mapWalletTxRow(walletTxToRow(doc.toObject())));
+
+              await recordOutboxEvent(session, {
+                aggregateType: 'wallet',
+                aggregateId: w._id,
+                eventType: 'SCHEDULE_SLOTS_BOOKED',
+                payload: {
+                  customerId: cust._id,
+                  companyName: nextCompany || cust.companyName || '',
+                  marketingCode: cust.marketingCode || w.marketingCode || '',
+                  bookedDates: newlyBookedDates,
+                  totalDeducted: requiredSpotAmount,
+                  dailyBudget: nextDaily,
+                  balanceAfter: Number(updatedWal.availableBalance || 0),
+                },
+              });
+            });
+
+            newlyBookedDates.forEach((dIso) => bookedDatesSet.add(dIso));
+          }
+
           const mergedIso = new Set(incomingIso);
-          // Never allow removing already-paid booked dates
-          for (const bIso of bookedDatesList) {
+          for (const bIso of bookedDatesSet) {
             if (/^\d{4}-\d{2}-\d{2}$/.test(bIso)) mergedIso.add(bIso);
           }
           finalScheduledDates = Array.from(mergedIso).sort();
         }
+
         await applyWalletSettings(cust._id, {
           dailyAdSpend: nextDaily,
           adCampaignActive: nextActive,
@@ -2970,9 +3087,15 @@ const handleUpdateCustomerRecord = async (req, res) => {
     res.json({
       ok: true,
       customer: mappedCustomer,
+      ...(spotBookedTransactions.length > 0
+        ? {
+            spotBookedDates: spotBookedTransactions.length,
+            transactions: spotBookedTransactions,
+          }
+        : {}),
     });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(err.statusCode || 500).json({ ok: false, error: err.message });
   }
 };
 
@@ -3150,6 +3273,7 @@ app.post('/api/sales/customers/register', requireStaff(['sales', 'super admin'])
       : [];
 
     const effectiveCustId = await withMongoTransaction(async (session) => {
+      const assignedAmmCode = await allocateNextMarketingCode(session);
       await Customer.create(
         [
           {
@@ -3174,6 +3298,7 @@ app.post('/api/sales/customers/register', requireStaff(['sales', 'super admin'])
             phoneVerified: true,
             phoneVerifiedAt: now,
             completedAt: evalProf.isComplete ? now : null,
+            marketingCode: assignedAmmCode,
             salesRemarks: initialRemarksArr,
             latestSalesRemark: cleanNote,
             latestSalesRemarkAt: cleanNote ? now : null,
@@ -3200,6 +3325,7 @@ app.post('/api/sales/customers/register', requireStaff(['sales', 'super admin'])
             activeDays: [],
             schedulePreset: 'custom',
             bookedDates: [],
+            marketingCode: assignedAmmCode,
             lastDeductedAt: null,
             createdAt: now,
           },
@@ -5391,6 +5517,17 @@ app.listen(PORT, () => {
           }
         })
         .catch((err) => console.warn('[Profile Repair Warning]', err.message));
+
+      // Auto-assign sequential #AMM01, #AMM02, #AMM03... marketing codes to all existing customers in registration order
+      backfillMissingMarketingCodes()
+        .then((ammRes) => {
+          if (ammRes.assignedCount > 0 || ammRes.normalizedCount > 0) {
+            console.log(
+              `[AMM Code Backfill] Assigned ${ammRes.assignedCount} new #AMM code(s) and normalized ${ammRes.normalizedCount} across ${ammRes.totalCustomers} client(s).`
+            );
+          }
+        })
+        .catch((err) => console.warn('[AMM Code Backfill Warning]', err.message));
 
       // Clean up dismissed test failed transactions & admin-requested test payment/ledger entries
       purgeLegacyTestLedgerRows()

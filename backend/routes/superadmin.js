@@ -28,6 +28,7 @@ import {
 } from '../models/index.js';
 import { withMongoTransaction, genId } from '../repositories/tx.js';
 import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion.js';
+import { allocateNextMarketingCode } from '../services/marketingCodeService.js';
 import {
   HttpError,
   ciContains,
@@ -2421,6 +2422,7 @@ superadminRouter.post('/businesses', async (req, res) => {
 
       await withMongoTransaction(async (session) => {
         const now = new Date();
+        const assignedAmmCode = await allocateNextMarketingCode(session);
 
         // 1. Create Customer Business
         await Customer.create(
@@ -2444,6 +2446,7 @@ superadminRouter.post('/businesses', async (req, res) => {
               completedAt: evalProf.isComplete ? now : null,
               isSelfRegistered: false,
               registeredFrom: 'Super Admin Control Center',
+              marketingCode: assignedAmmCode,
               registeredAt: now,
             },
           ],
@@ -2461,6 +2464,7 @@ superadminRouter.post('/businesses', async (req, res) => {
               totalLifetimePaid: parsedInitialBalance,
               totalAdSpent: 0,
               adCampaignActive: false,
+              marketingCode: assignedAmmCode,
               createdAt: now,
             },
           ],

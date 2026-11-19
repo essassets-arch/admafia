@@ -221,6 +221,14 @@ export const marketingApi = {
     }),
 
   getSlaBottlenecks: () => opsRequest('/ops/sla-bottlenecks'),
+
+  // Chatbot #AMM01 Webhook Integration & Live Test
+  getChatbotWebhookInfo: () => opsRequest('/ops/chatbot-webhook-info'),
+  testChatbotLead: (payload) =>
+    opsRequest('/webhooks/chatbot/lead', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
 
 export default marketingApi;

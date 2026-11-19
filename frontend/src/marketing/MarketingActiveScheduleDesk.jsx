@@ -14,6 +14,7 @@ import {
 import Swal from 'sweetalert2';
 import marketingApi from '../services/marketingApi';
 import { SmartTable } from '../components/SmartTabulator';
+import ChatbotAmmApiModal from '../components/ChatbotAmmApiModal';
 
 const formatINR = (val, currency = 'INR') => {
   const num = Number(val || 0);
@@ -43,6 +44,7 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
   const [savingSpendId, setSavingSpendId] = useState(null);
   const [togglingCampId, setTogglingCampId] = useState(null);
   const [previewMedia, setPreviewMedia] = useState(null);
+  const [isChatbotModalOpen, setIsChatbotModalOpen] = useState(false);
 
   const loadSchedule = useCallback(
     async (silent = false) => {
@@ -195,6 +197,7 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
     const q = search.trim().toLowerCase();
     const matchSearch =
       !q ||
+      (c.marketingCode || '').toLowerCase().includes(q) ||
       (c.companyName || '').toLowerCase().includes(q) ||
       (c.contactPerson || '').toLowerCase().includes(q) ||
       (c.username || '').toLowerCase().includes(q) ||
@@ -204,6 +207,7 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
     if (!matchSearch) return false;
     if (statusFilter === 'live') return c.isCampaignLive;
     if (statusFilter === 'off') return !c.isCampaignLive;
+    if (statusFilter === 'spend_pending') return Boolean(c.isSpendPreset);
     if (statusFilter === 'needs_creative') return (c.approvedPostsCount || 0) === 0;
     return true;
   });
@@ -219,11 +223,25 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
             {summary.isToday && <span className="mkt-badge mkt-badge-emerald">● LIVE TODAY</span>}
           </div>
           <p style={{ margin: '6px 0 0', color: 'var(--adm-text-muted, #64748b)', fontSize: '0.86rem' }}>
-            Clients scheduled to receive leads on {summary.dayLabel || selectedDate}. Verify live campaign status, inspect active Graphics creative, and log daily ad spend (pre-filled at 50% default).
+            Mandatory daily loop: Start every paid client&apos;s campaign (#AMM01+), run the Target Ad Budget shown, and confirm exact rupees spent at end of day.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="mkt-btn-primary"
+            onClick={() => setIsChatbotModalOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+            }}
+          >
+            <span>🤖 Chatbot #AMM API</span>
+          </button>
+
           <div
             style={{
               display: 'inline-flex',
@@ -264,6 +282,56 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
           </button>
         </div>
       </div>
+
+      {/* Urgent Stimulation Banner: Paid Clients Waiting for Campaign Start or Spend Entry */}
+      {(summary.campaignsDelayedCount > 0 || (summary.tomorrowScheduledCount || 0) > 0) && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: '12px 16px',
+            borderRadius: 12,
+            border: summary.campaignsDelayedCount > 0 ? '1.5px solid #ef4444' : '1px solid #6366f1',
+            background: summary.campaignsDelayedCount > 0 ? 'rgba(239, 68, 68, 0.09)' : 'rgba(99, 102, 241, 0.08)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {summary.campaignsDelayedCount > 0 && (
+              <span style={{ fontWeight: 900, color: '#ef4444', fontSize: '0.86rem' }}>
+                🚨 MANDATORY ACTION: {summary.campaignsDelayedCount} Paid/Scheduled Client{summary.campaignsDelayedCount > 1 ? 's' : ''} have Campaign OFF on {summary.isToday ? 'Today' : selectedDate}! Start immediately so paid slots are fulfilled.
+              </span>
+            )}
+            {(summary.tomorrowScheduledCount || 0) > 0 && (
+              <span
+                style={{
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  color: '#4f46e5',
+                  background: 'rgba(99, 102, 241, 0.14)',
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                }}
+              >
+                📅 {summary.tomorrowScheduledCount} Client{summary.tomorrowScheduledCount > 1 ? 's' : ''} Pre-Booked for Tomorrow ({formatINR(summary.tomorrowScheduledBudget || 0)}) — Prep Creatives Today
+              </span>
+            )}
+          </div>
+          {summary.campaignsDelayedCount > 0 && (
+            <button
+              type="button"
+              className="mkt-btn-primary"
+              onClick={() => setStatusFilter('off')}
+              style={{ background: '#ef4444', borderColor: '#dc2626', fontSize: '0.78rem', padding: '6px 12px' }}
+            >
+              Show OFF Campaigns ({summary.campaignsDelayedCount})
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 2. 7-Day Forecast Selector Strip */}
       {forecast7d.length > 0 && (
@@ -361,13 +429,18 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
 
         <div className="mkt-card" style={{ padding: '16px 18px' }}>
           <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--adm-text-muted, #64748b)', textTransform: 'uppercase' }}>
-            Total Ad Spend ({summary.isToday ? 'Today' : selectedDate})
+            Target vs Actual Ad Spend ({summary.isToday ? 'Today' : selectedDate})
           </div>
-          <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#6366f1', marginTop: 4 }}>
-            {formatINR(summary.totalActualAdSpendOnDate)}
+          <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#6366f1', marginTop: 4 }}>
+            {formatINR(summary.totalActualAdSpendOnDate)}{' '}
+            <span style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted, #64748b)', fontWeight: 700 }}>
+              / Target {formatINR(summary.totalTargetMarketingBudgetOnDate ?? Math.round((summary.totalScheduledBudget || 0) * 0.5))}
+            </span>
           </div>
-          <div style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
-            Auto-preset at 50% until updated per client
+          <div style={{ fontSize: '0.76rem', color: (summary.pendingSpendEntriesCount || 0) > 0 ? '#d97706' : '#059669', fontWeight: 700, marginTop: 2 }}>
+            {(summary.pendingSpendEntriesCount || 0) > 0
+              ? `⏳ ${summary.pendingSpendEntriesCount} client spend entr${summary.pendingSpendEntriesCount > 1 ? 'ies' : 'y'} awaiting confirmation`
+              : '✓ All active spend entries confirmed'}
           </div>
         </div>
 
@@ -409,6 +482,10 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
             { id: 'all', label: `All Scheduled (${rawClients.length})` },
             { id: 'live', label: `🟢 Running (${rawClients.filter((c) => c.isCampaignLive).length})` },
             { id: 'off', label: `🔴 Campaign OFF (${rawClients.filter((c) => !c.isCampaignLive).length})` },
+            {
+              id: 'spend_pending',
+              label: `⏳ Spend Pending (${rawClients.filter((c) => c.isSpendPreset).length})`,
+            },
             {
               id: 'needs_creative',
               label: `🎨 Needs Creative (${rawClients.filter((c) => (c.approvedPostsCount || 0) === 0).length})`,
@@ -481,7 +558,29 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                   <tr key={c.id}>
                     {/* 1. Client */}
                     <td>
-                      <div style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>{c.companyName}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {c.marketingCode && (
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard?.writeText(c.marketingCode)}
+                            title="Click to copy client #AMM marketing code"
+                            style={{
+                              background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 6,
+                              padding: '2px 7px',
+                              fontSize: '0.71rem',
+                              fontWeight: 900,
+                              fontFamily: 'monospace',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {c.marketingCode}
+                          </button>
+                        )}
+                        <span style={{ fontWeight: 800, color: 'var(--adm-text-primary, #0f172a)' }}>{c.companyName}</span>
+                      </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         {c.category || 'General'} • {[c.city, c.state].filter(Boolean).join(', ') || 'India'}
                       </div>
@@ -660,7 +759,21 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                         </button>
                       </div>
                       <div style={{ fontSize: '0.68rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3 }}>
-                        {c.isSpendPreset ? `50% Default Preset (₹${c.presetAdSpend})` : `Confirmed${c.spendUpdatedBy ? ` by ${c.spendUpdatedBy}` : ''}`}
+                        <span style={{ fontWeight: 800, color: '#4f46e5' }}>
+                          Target Run: ₹{c.targetMarketingBudget ?? c.presetAdSpend}
+                        </span>{' '}
+                        •{' '}
+                        {c.isSpendPreset ? (
+                          <span style={{ color: '#d97706', fontWeight: 800 }}>⏳ Spend Entry Pending</span>
+                        ) : Number(c.actualAdSpend || 0) > Number(c.dailyBudget || 300) ? (
+                          <span style={{ color: '#ef4444', fontWeight: 900 }}>
+                            🔴 Over Client Paid (+₹{Number(c.actualAdSpend) - Number(c.dailyBudget)})
+                          </span>
+                        ) : (
+                          <span style={{ color: '#059669', fontWeight: 800 }}>
+                            ✓ Confirmed{c.spendUpdatedBy ? ` by ${c.spendUpdatedBy}` : ''}
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -749,6 +862,13 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
           </div>
         </div>
       )}
+      <ChatbotAmmApiModal
+        isOpen={isChatbotModalOpen}
+        onClose={() => setIsChatbotModalOpen(false)}
+        fetchWebhookInfo={() => marketingApi.getChatbotWebhookInfo()}
+        testLeadFn={(payload) => marketingApi.testChatbotLead(payload)}
+        onLeadDispatched={() => loadSchedule(true)}
+      />
     </div>
   );
 }

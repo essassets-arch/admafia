@@ -112,6 +112,10 @@ async function dispatchEvent(event) {
     case 'ARTWORK_REVIEWED':
     case 'CAMPAIGN_STARTED':
     case 'NEW_CUSTOMER_REGISTERED':
+    case 'CREATIVE_REQUESTED':
+    case 'SCHEDULE_SLOTS_BOOKED':
+    case 'SCHEDULE_SLOT_UNBOOKED':
+    case 'PAID_CAMPAIGN_NOT_STARTED':
       await dispatchOutboxNotification(event);
       return;
 

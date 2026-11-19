@@ -24,6 +24,10 @@ import {
 import { validateMediaUploadMagicBytes } from '../middleware/securityMiddleware.js';
 import { storeMediaAsset } from '../services/storageProvider.js';
 import { recordOutboxEvent } from '../services/outboxWorker.js';
+import {
+  allocateNextMarketingCode,
+  normalizeMarketingCode,
+} from '../services/marketingCodeService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1697,10 +1701,44 @@ marketingRouter.post('/campaigns', async (req, res) => {
       }
       const currencySymbol = savedCurrency === 'INR' ? '₹' : '$';
 
-      if (balance < resolvedDailyBudget) {
+      const now = new Date();
+      const todayIsoStr = istDateString(now);
+      const isAlreadyDeductedOrBookedToday = isDeductedToday(wallet?.lastDeductedAt, now, wallet?.bookedDates);
+      const hasUpcomingPreBookedSlot =
+        Array.isArray(wallet?.bookedDates) &&
+        wallet.bookedDates.some((d) => String(d || '').trim() >= todayIsoStr);
+
+      if (status === 'Running' && !isAlreadyDeductedOrBookedToday && balance < resolvedDailyBudget) {
         throw new HttpError(
           400,
           `Insufficient Wallet Balance: Customer available balance (${currencySymbol}${balance.toLocaleString('en-US')}) is less than campaign daily budget requirement (${currencySymbol}${resolvedDailyBudget.toLocaleString('en-US')}). Please top up wallet first.`
+        );
+      }
+      if (status !== 'Running' && !isAlreadyDeductedOrBookedToday && !hasUpcomingPreBookedSlot && balance < resolvedDailyBudget) {
+        throw new HttpError(
+          400,
+          `Insufficient Wallet Balance: Customer available balance (${currencySymbol}${balance.toLocaleString('en-US')}) is less than campaign daily budget requirement (${currencySymbol}${resolvedDailyBudget.toLocaleString('en-US')}) and has 0 pre-booked dates.`
+        );
+      }
+
+      // Resolve or auto-allocate permanent #AMM01..#AMMxx code
+      const custDocForCode = await Customer.findById(customerId).session(session).lean();
+      let resolvedAmmCode = normalizeMarketingCode(
+        req.body?.marketingCode || custDocForCode?.marketingCode || wallet?.marketingCode || ''
+      );
+      if (!resolvedAmmCode) {
+        resolvedAmmCode = await allocateNextMarketingCode(session);
+      }
+      await Customer.updateOne(
+        { _id: customerId, $or: [{ marketingCode: null }, { marketingCode: '' }] },
+        { $set: { marketingCode: resolvedAmmCode, updatedAt: now } },
+        { session }
+      );
+      if (wallet) {
+        await Wallet.updateOne(
+          { _id: wallet._id, $or: [{ marketingCode: null }, { marketingCode: '' }] },
+          { $set: { marketingCode: resolvedAmmCode, updatedAt: now } },
+          { session }
         );
       }
 
@@ -1709,8 +1747,7 @@ marketingRouter.post('/campaigns', async (req, res) => {
       const externalStatus = hasMetaToken ? 'Pending Authorization' : 'Not Connected';
 
       const campaignId = genId('camp');
-      const finalStart = startDate ? new Date(startDate) : new Date();
-      const now = new Date();
+      const finalStart = startDate ? new Date(startDate) : now;
 
       await MarketingCampaign.create(
         [{
@@ -1729,6 +1766,8 @@ marketingRouter.post('/campaigns', async (req, res) => {
           scheduleSettings,
           status,
           externalPlatformStatus: externalStatus,
+          marketingCode: resolvedAmmCode,
+          externalCampaignId: resolvedAmmCode,
           createdBy: actor,
           currency: savedCurrency,
           lastAction: 'Created',
@@ -1740,7 +1779,7 @@ marketingRouter.post('/campaigns', async (req, res) => {
 
       let newBalanceAfterStart = balance;
       if (status === 'Running') {
-        const isAlreadyDeductedToday = isDeductedToday(wallet?.lastDeductedAt);
+        const isAlreadyDeductedToday = isAlreadyDeductedOrBookedToday;
 
         if (!isAlreadyDeductedToday) {
           const spendAmt = resolvedDailyBudget;
@@ -1851,8 +1890,21 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
       }
 
       const now = new Date();
-      // Per-day service check: Has this customer already been deducted for today's service?
-      let isAlreadyDeductedToday = isDeductedToday(wallet.lastDeductedAt, now);
+      const custForCode = await Customer.findById(camp.customerId).session(session).lean();
+      const effectiveCode =
+        normalizeMarketingCode(finalCode || camp.marketingCode || custForCode?.marketingCode || wallet.marketingCode) ||
+        (await allocateNextMarketingCode(session));
+
+      // Per-day service check: Has this customer already been deducted OR pre-booked for today's service?
+      let isAlreadyDeductedToday = isDeductedToday(wallet.lastDeductedAt, now, wallet.bookedDates);
+      const todayIsoStr = istDateString(now);
+      const hasFutureBookedOnly =
+        !isAlreadyDeductedToday &&
+        Array.isArray(wallet.bookedDates) &&
+        wallet.bookedDates.some((d) => String(d || '').trim() > todayIsoStr) &&
+        Array.isArray(wallet.scheduledDates) &&
+        wallet.scheduledDates.length > 0 &&
+        !wallet.scheduledDates.includes(todayIsoStr);
 
       let newBal = balance;
       let deductedAmount = 0;
@@ -1862,7 +1914,7 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
         `Cannot start campaign: Customer wallet balance (₹${bal}) is below required daily budget for per-day service (₹${dailySpend}/day). Please top up wallet first.`
       );
 
-      if (!isAlreadyDeductedToday) {
+      if (!isAlreadyDeductedToday && !hasFutureBookedOnly) {
         if (balance < dailySpend) throw insufficient(balance);
 
         // Cut / deduct price from wallet balance for today's per-day service (atomic conditional $inc + ledger row)
@@ -1872,7 +1924,7 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
           spend: dailySpend,
           description: `Daily Lead Delivery Service Pacing (-₹${dailySpend}/day)`,
           refPrefix: 'SYS-DAILY-MKT',
-          marketingCode: finalCode,
+          marketingCode: effectiveCode,
           now,
         });
         if (result.status === 'deducted') {
@@ -1889,16 +1941,17 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
         }
       }
 
-      if (isAlreadyDeductedToday) {
-        // Already deducted today: simply resume campaign without double charging
-        const set = { adCampaignActive: true, updatedAt: now };
-        if (finalCode) set.marketingCode = finalCode;
+      if (isAlreadyDeductedToday || hasFutureBookedOnly) {
+        // Already deducted/booked today (or pre-starting for a future booked slot): resume without charging today
+        const set = { adCampaignActive: true, marketingCode: effectiveCode, updatedAt: now };
         await Wallet.updateOne({ customerId: camp.customerId }, { $set: set }, { session });
       }
 
-      if (finalCode) {
-        await Customer.updateOne({ _id: camp.customerId }, { $set: { marketingCode: finalCode, updatedAt: now } }, { session });
-      }
+      await Customer.updateOne(
+        { _id: camp.customerId },
+        { $set: { marketingCode: effectiveCode, updatedAt: now } },
+        { session }
+      );
 
       // Check external platform status
       const extStatus = hasMetaAccessToken() ? 'Live' : 'Not Connected';
@@ -1906,24 +1959,22 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
       const campSet = {
         status: 'Running',
         externalPlatformStatus: extStatus,
+        marketingCode: effectiveCode,
+        externalCampaignId: effectiveCode,
         lastAction: 'Started Marketing',
         lastActor: actor,
         lastActionAt: now,
         updatedAt: now,
       };
-      if (finalCode) {
-        campSet.marketingCode = finalCode;
-        campSet.externalCampaignId = finalCode;
-      }
       await MarketingCampaign.updateOne({ _id: campaignId }, { $set: campSet }, { session });
 
-      return { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus };
+      return { dailySpend, isAlreadyDeductedToday: isAlreadyDeductedToday || hasFutureBookedOnly, deductedAmount, newBal, extStatus, effectiveCode };
     });
 
-    const { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus } = outcome;
+    const { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus, effectiveCode } = outcome;
 
-    await logAuditEvent(camp.customerId, 'campaign', campaignId, `Started Marketing Campaign with Code [${finalCode || 'N/A'}] (Per-Day Service: ₹${dailySpend}/d)`, actor, {
-      marketingCode: finalCode,
+    await logAuditEvent(camp.customerId, 'campaign', campaignId, `Started Marketing Campaign with Code [${effectiveCode}] (Per-Day Service: ₹${dailySpend}/d)`, actor, {
+      marketingCode: effectiveCode,
       dailyBudget: dailySpend,
       deductedAmount,
       isAlreadyDeductedToday,
@@ -1934,8 +1985,8 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
     res.json({
       ok: true,
       status: 'Running',
-      marketingCode: finalCode || camp.marketingCode || camp.externalCampaignId || '',
-      isCodeFilled: Boolean(finalCode || camp.marketingCode || camp.externalCampaignId),
+      marketingCode: effectiveCode,
+      isCodeFilled: Boolean(effectiveCode),
       deductedAmount,
       isAlreadyDeductedToday,
       newBalance: newBal,
@@ -2000,8 +2051,20 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
       }
 
       const now = new Date();
-      // Per-day service check: Has this customer already been deducted for today's service?
-      let isAlreadyDeductedToday = isDeductedToday(wallet.lastDeductedAt, now);
+      const effectiveCode =
+        normalizeMarketingCode(finalCode || cust.marketingCode || wallet.marketingCode) ||
+        (await allocateNextMarketingCode(session));
+
+      // Per-day service check: Has this customer already been deducted OR pre-booked for today's service?
+      let isAlreadyDeductedToday = isDeductedToday(wallet.lastDeductedAt, now, wallet.bookedDates);
+      const todayIsoStr = istDateString(now);
+      const hasFutureBookedOnly =
+        !isAlreadyDeductedToday &&
+        Array.isArray(wallet.bookedDates) &&
+        wallet.bookedDates.some((d) => String(d || '').trim() > todayIsoStr) &&
+        Array.isArray(wallet.scheduledDates) &&
+        wallet.scheduledDates.length > 0 &&
+        !wallet.scheduledDates.includes(todayIsoStr);
 
       let newBal = balance;
       let deductedAmount = 0;
@@ -2011,7 +2074,7 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
         `Cannot start marketing: Customer wallet balance (₹${bal}) is below required daily budget for per-day service (₹${dailySpend}/day). Please top up wallet first.`
       );
 
-      if (!isAlreadyDeductedToday) {
+      if (!isAlreadyDeductedToday && !hasFutureBookedOnly) {
         if (balance < dailySpend) throw insufficient(balance);
 
         const result = await deductDailySpendAtomic(session, {
@@ -2020,7 +2083,7 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
           spend: dailySpend,
           description: `Daily Lead Delivery Service Pacing (-₹${dailySpend}/day)`,
           refPrefix: 'SYS-DAILY-MKT',
-          marketingCode: finalCode,
+          marketingCode: effectiveCode,
           now,
         });
         if (result.status === 'deducted') {
@@ -2036,16 +2099,13 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
         }
       }
 
-      if (isAlreadyDeductedToday) {
-        const set = { adCampaignActive: true, updatedAt: now };
-        if (finalCode) set.marketingCode = finalCode;
+      if (isAlreadyDeductedToday || hasFutureBookedOnly) {
+        const set = { adCampaignActive: true, marketingCode: effectiveCode, updatedAt: now };
         await Wallet.updateOne({ customerId: custId }, { $set: set }, { session });
       }
 
       // Save code to customer record
-      if (finalCode) {
-        await Customer.updateOne({ _id: custId }, { $set: { marketingCode: finalCode, updatedAt: now } }, { session });
-      }
+      await Customer.updateOne({ _id: custId }, { $set: { marketingCode: effectiveCode, updatedAt: now } }, { session });
 
       // Find or create marketing campaign for this customer
       const latestCamp = await MarketingCampaign.findOne({ customerId: custId }).sort({ createdAt: -1 }).session(session).lean();
@@ -2056,29 +2116,27 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
         const campSet = {
           status: 'Running',
           externalPlatformStatus: extStatus,
+          marketingCode: effectiveCode,
+          externalCampaignId: effectiveCode,
           lastAction: 'Started Marketing',
           lastActor: actor,
           lastActionAt: now,
           updatedAt: now,
         };
-        if (finalCode) {
-          campSet.marketingCode = finalCode;
-          campSet.externalCampaignId = finalCode;
-        }
         await MarketingCampaign.updateOne({ _id: latestCamp._id }, { $set: campSet }, { session });
       } else {
         await MarketingCampaign.create(
           [{
             _id: genId('camp'),
             customerId: custId,
-            campaignName: `${cust.companyName || 'Client'} - Meta Inbound Ads`,
+            campaignName: `${cust.companyName || 'Client'} - Inbound Lead Campaign`,
             objective: 'Lead Generation',
             platform: 'Meta Ads (Facebook & Instagram)',
             dailyBudget: dailySpend,
             status: 'Running',
             externalPlatformStatus: extStatus,
-            externalCampaignId: finalCode,
-            marketingCode: finalCode,
+            externalCampaignId: effectiveCode,
+            marketingCode: effectiveCode,
             createdBy: actor,
             currency: currency,
             lastAction: 'Started Marketing',
@@ -2089,13 +2147,13 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
         );
       }
 
-      return { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus };
+      return { dailySpend, isAlreadyDeductedToday: isAlreadyDeductedToday || hasFutureBookedOnly, deductedAmount, newBal, extStatus, effectiveCode };
     });
 
-    const { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus } = outcome;
+    const { dailySpend, isAlreadyDeductedToday, deductedAmount, newBal, extStatus, effectiveCode } = outcome;
 
-    await logAuditEvent(custId, 'campaign', custId, `Started Marketing with Code [${finalCode || 'N/A'}] (Per-Day Service: ₹${dailySpend}/d)`, actor, {
-      marketingCode: finalCode,
+    await logAuditEvent(custId, 'campaign', custId, `Started Marketing with Code [${effectiveCode}] (Per-Day Service: ₹${dailySpend}/d)`, actor, {
+      marketingCode: effectiveCode,
       dailyBudget: dailySpend,
       deductedAmount,
       isAlreadyDeductedToday,
@@ -2106,8 +2164,8 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
     res.json({
       ok: true,
       status: 'Running',
-      marketingCode: finalCode,
-      isCodeFilled: Boolean(finalCode),
+      marketingCode: effectiveCode,
+      isCodeFilled: Boolean(effectiveCode),
       deductedAmount,
       isAlreadyDeductedToday,
       newBalance: newBal,
@@ -2128,16 +2186,18 @@ marketingRouter.patch('/customers/:id/code', async (req, res) => {
   try {
     const custId = req.params.id;
     const { code = '', marketingCode = '' } = req.body || {};
-    const finalCode = String(code || marketingCode || '').trim().toUpperCase();
+    let finalCode = normalizeMarketingCode(code || marketingCode || '');
+    if (!finalCode) {
+      finalCode = await allocateNextMarketingCode(null);
+    }
     const now = new Date();
 
-    await Customer.updateOne({ _id: custId }, { $set: { marketingCode: finalCode || null, updatedAt: now } });
+    await Customer.updateOne({ _id: custId }, { $set: { marketingCode: finalCode, updatedAt: now } });
 
-    const campSet = { marketingCode: finalCode || null, updatedAt: now };
-    if (finalCode) campSet.externalCampaignId = finalCode;
+    const campSet = { marketingCode: finalCode, externalCampaignId: finalCode, updatedAt: now };
     await MarketingCampaign.updateMany({ customerId: custId }, { $set: campSet });
 
-    await Wallet.updateOne({ customerId: custId }, { $set: { marketingCode: finalCode || null, updatedAt: now } });
+    await Wallet.updateOne({ customerId: custId }, { $set: { marketingCode: finalCode, updatedAt: now } });
 
     res.json({
       ok: true,
@@ -2279,21 +2339,77 @@ export async function processDailyAdSpendPacing() {
     for (const rc of runningCamps) if (!runningCampBy.has(rc.customerId)) runningCampBy.set(rc.customerId, rc._id);
 
     const wallets = await Wallet.find({
-      $or: [{ adCampaignActive: true }, { customerId: { $in: Array.from(runningCampBy.keys()) } }],
+      $or: [
+        { adCampaignActive: true },
+        { bookedDates: todayDateStr },
+        { customerId: { $in: Array.from(runningCampBy.keys()) } },
+      ],
     }).lean();
 
     const custDocs = wallets.length
-      ? await Customer.find({ _id: { $in: wallets.map((w) => w.customerId) } }, { companyName: 1 }).lean()
+      ? await Customer.find(
+          { _id: { $in: wallets.map((w) => w.customerId) } },
+          { companyName: 1, marketingCode: 1, status: 1 }
+        ).lean()
       : [];
     const custBy = new Map(custDocs.map((c) => [String(c._id), c]));
 
     let processedCount = 0;
     let autoPausedCount = 0;
+    let preBookedActivatedCount = 0;
     const details = [];
 
     for (const w of wallets) {
       const cust = custBy.get(w.customerId);
-      if (!cust) continue; // INNER JOIN customers
+      if (!cust || cust.status === 'suspended' || cust.status === 'deleted') continue;
+
+      const bookedList = Array.isArray(w.bookedDates)
+        ? w.bookedDates.map((d) => String(d || '').trim())
+        : [];
+      const scheduledList = Array.isArray(w.scheduledDates)
+        ? w.scheduledDates.map((d) => String(d || '').trim()).filter(Boolean)
+        : [];
+      const isPreBookedToday = bookedList.includes(todayDateStr);
+      const runningCampId = runningCampBy.get(w.customerId);
+      const companyName = cust.companyName;
+
+      // CASE A: Today was ALREADY pre-booked & paid on the spot by the customer!
+      // -> Activate delivery flag at ₹0 extra deduction, and stimulate Marketing if campaign is still OFF!
+      if (isPreBookedToday) {
+        if (!w.adCampaignActive) {
+          await Wallet.updateOne(
+            { _id: w._id },
+            { $set: { adCampaignActive: true, updatedAt: new Date() } }
+          );
+          preBookedActivatedCount++;
+        }
+        if (!runningCampId) {
+          await recordOutboxEvent(null, {
+            aggregateType: 'campaign',
+            aggregateId: w.customerId,
+            eventType: 'PAID_CAMPAIGN_NOT_STARTED',
+            payload: {
+              customerId: w.customerId,
+              companyName,
+              marketingCode: cust.marketingCode || w.marketingCode || '',
+              dateIso: todayDateStr,
+              dailyBudget: Number(w.dailyAdSpend || 300),
+            },
+          }).catch(() => {});
+        }
+        details.push({
+          customerId: w.customerId,
+          name: companyName,
+          action: runningCampId ? 'prebooked_running' : 'prebooked_awaiting_marketing_start',
+          amount: 0,
+        });
+        continue;
+      }
+
+      // CASE B: Explicit ISO schedule exists and Today is NOT scheduled -> do NOT deduct Today!
+      if (scheduledList.length > 0 && !scheduledList.includes(todayDateStr)) {
+        continue;
+      }
 
       const activeDays = resolveActiveDays(w.activeDays || '');
 
@@ -2303,15 +2419,19 @@ export async function processDailyAdSpendPacing() {
       }
 
       // 2. Was today's per-day service already deducted earlier today?
-      const alreadyDeducted = w.lastDeductedAt && istDateString(w.lastDeductedAt) === todayDateStr;
+      const alreadyDeducted = isDeductedToday(w.lastDeductedAt, new Date(), bookedList);
       if (alreadyDeducted) {
         continue; // Already settled for today
       }
 
+      // 3. CRITICAL MONEY LOOPHOLE GUARD:
+      // Never auto-deduct a recurring wallet at midnight if Marketing has NOT started a Running campaign!
+      if (!runningCampId) {
+        continue;
+      }
+
       const balance = Number(w.availableBalance || 0);
       const spend = Number(w.dailyAdSpend || 300);
-      const companyName = cust.companyName;
-      const runningCampId = runningCampBy.get(w.customerId);
 
       let result = { status: 'insufficient', wallet: w };
       // 3. Check customer balance
