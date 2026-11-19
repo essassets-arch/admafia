@@ -28,6 +28,7 @@ import {
   allocateNextMarketingCode,
   normalizeMarketingCode,
 } from '../services/marketingCodeService.js';
+import { autoReleaseHeldLeadsForCustomer } from '../repositories/leadsAndOpsRepo.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -242,7 +243,16 @@ async function buildCustomerRows(customers) {
 
   const [wallets, leadAgg, postAgg, ideaAgg, campaigns] = await Promise.all([
     Wallet.find({ customerId: { $in: ids } }).lean(),
-    Lead.aggregate([{ $match: { customerId: { $in: ids } } }, { $group: { _id: '$customerId', n: { $sum: 1 } } }]),
+    Lead.aggregate([
+      { $match: { customerId: { $in: ids } } },
+      {
+        $group: {
+          _id: '$customerId',
+          delivered: { $sum: { $cond: [{ $eq: ['$deliveryStatus', 'held'] }, 0, 1] } },
+          held: { $sum: { $cond: [{ $eq: ['$deliveryStatus', 'held'] }, 1, 0] } },
+        },
+      },
+    ]),
     MarketingPost.aggregate([
       { $match: { customerId: { $in: ids }, status: { $in: ['Approved', 'Draft', 'Pending Verification'] } } },
       { $group: { _id: { c: '$customerId', s: '$status' }, n: { $sum: 1 } } },
@@ -252,7 +262,8 @@ async function buildCustomerRows(customers) {
   ]);
 
   const walletBy = new Map(wallets.map((w) => [w.customerId, w]));
-  const leadsBy = new Map(leadAgg.map((x) => [x._id, x.n]));
+  const leadsBy = new Map(leadAgg.map((x) => [x._id, x.delivered || 0]));
+  const heldLeadsBy = new Map(leadAgg.map((x) => [x._id, x.held || 0]));
   const ideasBy = new Map(ideaAgg.map((x) => [x._id, x.n]));
   const postsBy = new Map();
   for (const x of postAgg) postsBy.set(`${x._id.c}|${x._id.s}`, x.n);
@@ -314,12 +325,17 @@ async function buildCustomerRows(customers) {
       last_deducted_at: w ? w.lastDeductedAt || null : null,
       booked_dates: w && Array.isArray(w.bookedDates) ? w.bookedDates : [],
       total_leads_count: leadsBy.get(id) || 0,
+      held_leads_count: heldLeadsBy.get(id) || 0,
       approved_posts_count: postsBy.get(`${id}|Approved`) || 0,
       draft_posts_count: postsBy.get(`${id}|Draft`) || 0,
       pending_posts_count: postsBy.get(`${id}|Pending Verification`) || 0,
       ideas_count: ideasBy.get(id) || 0,
       active_campaign_name: latest ? campaignName(latest) : null,
-      campaign_status: latest ? latest.status : null,
+      campaign_status: (camps.find((x) => x.status === 'Running') || latest)?.status || null,
+      campaign_started_at:
+        (camps.find((x) => x.status === 'Running') || latest)?.startedAt ||
+        (camps.find((x) => x.status === 'Running') || latest)?.lastActionAt ||
+        null,
       external_platform_status: latest ? latest.externalPlatformStatus : null,
       last_action: latest ? latest.lastAction : null,
       last_actor: latest ? latest.lastActor : null,
@@ -365,6 +381,7 @@ function mapCustomerRow(r) {
     schedulePreset: r.schedule_preset || 'custom',
     runwayDays: Math.floor(Number(r.available_balance || 0) / Math.max(Number(r.daily_ad_spend || 300), 1)),
     totalLeadsCount: Number(r.total_leads_count || 0),
+    heldLeadsCount: Number(r.held_leads_count || 0),
     lastDeductedAt: r.last_deducted_at,
     bookedDates: Array.isArray(r.booked_dates) ? r.booked_dates : [],
     isDeductedToday: isDeductedToday(r.last_deducted_at, new Date(), r.booked_dates),
@@ -377,6 +394,12 @@ function mapCustomerRow(r) {
     ideasCount: Number(r.ideas_count || 0),
     campaignName: r.active_campaign_name || 'No Active Campaign',
     campaignStatus: r.campaign_status || 'None',
+    campaignStartedAt: r.campaign_started_at || null,
+    isInHouseRunning: r.campaign_status === 'Running',
+    isSpilloverUnpaidToday:
+      r.campaign_status === 'Running' &&
+      !Boolean(r.ad_campaign_active) &&
+      !isDeductedToday(r.last_deducted_at, new Date(), r.booked_dates),
     externalPlatformStatus: r.external_platform_status || 'Not Connected',
     lastAction: r.last_action || 'N/A',
     lastActor: r.last_actor || 'N/A',
@@ -1765,6 +1788,7 @@ marketingRouter.post('/campaigns', async (req, res) => {
           platform,
           targetAudience,
           startDate: finalStart,
+          startedAt: status === 'Running' ? now : null,
           endDate: endDate ? new Date(endDate) : null,
           dailyBudget: resolvedDailyBudget,
           totalBudget: Number(totalBudget || 0),
@@ -1967,12 +1991,18 @@ marketingRouter.post('/campaigns/:id/start', async (req, res) => {
         externalPlatformStatus: extStatus,
         marketingCode: effectiveCode,
         externalCampaignId: effectiveCode,
+        startedAt: camp.status === 'Running' && camp.startedAt ? camp.startedAt : now,
+        stoppedAt: null,
         lastAction: 'Started Marketing',
         lastActor: actor,
         lastActionAt: now,
         updatedAt: now,
       };
       await MarketingCampaign.updateOne({ _id: campaignId }, { $set: campSet }, { session });
+
+      if (isAlreadyDeductedToday || deductedAmount > 0) {
+        await autoReleaseHeldLeadsForCustomer(camp.customerId, { session, trigger: 'campaign_started' });
+      }
 
       return { dailySpend, isAlreadyDeductedToday: isAlreadyDeductedToday || hasFutureBookedOnly, deductedAmount, newBal, extStatus, effectiveCode };
     });
@@ -2124,6 +2154,8 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
           externalPlatformStatus: extStatus,
           marketingCode: effectiveCode,
           externalCampaignId: effectiveCode,
+          startedAt: latestCamp.status === 'Running' && latestCamp.startedAt ? latestCamp.startedAt : now,
+          stoppedAt: null,
           lastAction: 'Started Marketing',
           lastActor: actor,
           lastActionAt: now,
@@ -2140,6 +2172,7 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
             platform: 'Meta Ads (Facebook & Instagram)',
             dailyBudget: dailySpend,
             status: 'Running',
+            startedAt: now,
             externalPlatformStatus: extStatus,
             externalCampaignId: effectiveCode,
             marketingCode: effectiveCode,
@@ -2151,6 +2184,10 @@ marketingRouter.post('/customers/:id/start-marketing', async (req, res) => {
           }],
           { session }
         );
+      }
+
+      if (isAlreadyDeductedToday || deductedAmount > 0) {
+        await autoReleaseHeldLeadsForCustomer(custId, { session, trigger: 'marketing_started' });
       }
 
       return { dailySpend, isAlreadyDeductedToday: isAlreadyDeductedToday || hasFutureBookedOnly, deductedAmount, newBal, extStatus, effectiveCode };
@@ -2238,8 +2275,9 @@ marketingRouter.post('/campaigns/:id/stop', async (req, res) => {
       {
         $set: {
           status: 'Stopped',
+          stoppedAt: now,
           externalPlatformStatus: extStatus,
-          lastAction: 'Stopped Marketing',
+          lastAction: 'Stopped In-House Marketing',
           lastActor: actor,
           lastActionAt: now,
           updatedAt: now,
@@ -2412,8 +2450,12 @@ export async function processDailyAdSpendPacing() {
         continue;
       }
 
-      // CASE B: Explicit ISO schedule exists and Today is NOT scheduled -> do NOT deduct Today!
+      // CASE B: Explicit ISO schedule exists and Today is NOT scheduled -> Turn USER side OFF,
+      // while leaving `MarketingCampaign.status = 'Running'` intact if an In-House 24h ad is still running!
       if (scheduledList.length > 0 && !scheduledList.includes(todayDateStr)) {
+        if (w.adCampaignActive) {
+          await Wallet.updateOne({ _id: w._id }, { $set: { adCampaignActive: false, updatedAt: new Date() } });
+        }
         continue;
       }
 
@@ -2421,7 +2463,10 @@ export async function processDailyAdSpendPacing() {
 
       // 1. Is today an active day in the customer's weekly schedule?
       if (!activeDays.includes(todayDayCode)) {
-        continue; // Scheduled day off
+        if (w.adCampaignActive) {
+          await Wallet.updateOne({ _id: w._id }, { $set: { adCampaignActive: false, updatedAt: new Date() } });
+        }
+        continue; // Scheduled day off on User Side
       }
 
       // 2. Was today's per-day service already deducted earlier today?
@@ -2456,6 +2501,7 @@ export async function processDailyAdSpendPacing() {
 
       if (result.status === 'deducted') {
         const newBal = result.wallet.availableBalance;
+        await autoReleaseHeldLeadsForCustomer(w.customerId, { trigger: 'daily_pacing_deducted' });
         await logAuditEvent(w.customerId, 'wallet', w._id, `Per-Day Service Deducted: ₹${spend}`, 'System Daily Pacing Engine', {
           day: todayDayCode,
           deducted: spend,
@@ -2467,7 +2513,10 @@ export async function processDailyAdSpendPacing() {
       } else if (result.status === 'already' || result.status === 'missing') {
         continue; // settled concurrently by another run
       } else {
-        // 4. Low/exhausted balance: Auto-pause campaign and set marketing to OFF!
+        // 4. Low/exhausted customer wallet balance on Day 2:
+        //    -> Turn USER DELIVERY SIDE OFF (`adCampaignActive: false`) so client sees Paused/Unpaid.
+        //    -> DO NOT force `MarketingCampaign.status = 'Stopped'`! Real Meta ads run 24h+ optimization cycles
+        //       and must remain visible in Marketing as "In-House Ad Running • User Side OFF" until Marketing stops them!
         const now = new Date();
         await Wallet.updateOne({ customerId: w.customerId }, { $set: { adCampaignActive: false, updatedAt: now } });
 
@@ -2475,9 +2524,7 @@ export async function processDailyAdSpendPacing() {
           { customerId: w.customerId, status: 'Running' },
           {
             $set: {
-              status: 'Stopped',
-              externalPlatformStatus: 'Paused',
-              lastAction: 'Auto-Paused: Low Balance',
+              lastAction: '24h Spillover Running (User Wallet Unpaid Today)',
               lastActor: 'System Daily Pacing Engine',
               lastActionAt: now,
               updatedAt: now,
@@ -2486,14 +2533,14 @@ export async function processDailyAdSpendPacing() {
         );
 
         const lowBalance = Number(result.wallet?.availableBalance ?? balance);
-        await logAuditEvent(w.customerId, 'campaign', runningCampId || w.customerId, 'Auto-Paused Marketing: Low Balance', 'System Daily Pacing Engine', {
+        await logAuditEvent(w.customerId, 'campaign', runningCampId || w.customerId, 'User Delivery Paused (Low Balance) — In-House Ad Kept Visible', 'System Daily Pacing Engine', {
           balance: lowBalance,
           requiredSpend: spend,
-          reason: 'Customer balance too low for per-day service',
+          reason: 'User wallet unpaid today; in-house campaign kept visible until stopped by Marketing',
         });
 
         autoPausedCount++;
-        details.push({ customerId: w.customerId, name: companyName, action: 'auto_paused_low_balance', balance: lowBalance, required: spend });
+        details.push({ customerId: w.customerId, name: companyName, action: 'user_off_inhouse_running', balance: lowBalance, required: spend });
       }
     }
 

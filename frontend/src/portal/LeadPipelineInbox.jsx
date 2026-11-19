@@ -80,6 +80,7 @@ export default function LeadPipelineInbox({
   onUpdateLead,
   onOpenScheduleFollowUp,
   onOpenAddFunds,
+  onToggleCampaign,
   onOpenAddLead,
   onOpenCompleteRegistration,
 }) {
@@ -167,6 +168,10 @@ export default function LeadPipelineInbox({
     downloadLeadsCsv(csvRows, stageFilter === 'dropped' ? 'dropped-leads' : stageFilter === 'followup' ? 'followup-leads' : 'my-leads');
   };
 
+  const lockedHeldCount = Number(customer?.lockedHeldLeadsCount ?? customer?.heldLeadsCount ?? 0);
+  const effectiveDaily = Number(dailyAdSpend || customer?.dailyAdSpend || 300);
+  const topupShortfallForUnlock = Math.max(effectiveDaily, Math.ceil(effectiveDaily - walletBalance));
+
   return (
     <div className="portal-lead-feed-page pipeline-page-wrap">
       {/* 1. Breadcrumbs */}
@@ -180,6 +185,62 @@ export default function LeadPipelineInbox({
           <span className="pulse-emerald-dot"></span> Live Pipeline Active
         </div>
       </div>
+
+      {/* 1B. Locked Waiting Enquiries Banner (Zero Phone Leakage Until Paid) */}
+      {lockedHeldCount > 0 && (
+        <div
+          role="region"
+          aria-label="Locked waiting buyer enquiries"
+          style={{
+            background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 55%, #fde68a 100%)',
+            border: '2px solid #f59e0b',
+            borderRadius: '14px',
+            padding: '14px 18px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div style={{ flex: '1 1 280px' }}>
+            <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#78350f', marginBottom: '3px' }}>
+              🔒 {lockedHeldCount} Verified Buyer {lockedHeldCount === 1 ? 'Enquiry' : 'Enquiries'} Held &amp; Waiting to Unlock!
+            </div>
+            <div style={{ fontSize: '0.83rem', color: '#92400e' }}>
+              {walletBalance >= effectiveDaily
+                ? `Activate today's ${currencySymbol}${effectiveDaily} delivery slot to reveal all ${lockedHeldCount} mobile number${lockedHeldCount === 1 ? '' : 's'} immediately.`
+                : `Recharge ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} to unlock all ${lockedHeldCount} mobile number${lockedHeldCount === 1 ? '' : 's'} right inside this table!`}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (walletBalance >= effectiveDaily && onToggleCampaign) {
+                onToggleCampaign(true);
+              } else if (onOpenAddFunds) {
+                onOpenAddFunds();
+              }
+            }}
+            style={{
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '10px 16px',
+              fontSize: '0.84rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {walletBalance >= effectiveDaily
+              ? `🔓 Activate Today (${currencySymbol}${effectiveDaily}) & Unlock →`
+              : `⚡ Recharge ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} & Unlock →`}
+          </button>
+        </div>
+      )}
 
       {/* 2. Header Bar with Count & Top-Right Action Cluster */}
       <div className="lead-pipeline-header-cluster">

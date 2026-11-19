@@ -21,6 +21,7 @@ import {
   requireCustomerSelfOrStaff,
 } from '../middleware/authMiddleware.js';
 import { withMongoTransaction, genId } from '../repositories/tx.js';
+import { releaseSpecificHeldLeads } from '../repositories/leadsAndOpsRepo.js';
 import { recordOutboxEvent } from '../services/outboxWorker.js';
 import {
   normalizeMarketingCode,
@@ -241,33 +242,50 @@ operationsCycleRouter.get(
       const isAfter2PmIst = kolkataNow.getHours() >= 14;
       const realNow = new Date();
 
-      const [rawCustomers, wallets, campaigns, posts, leadsOnDate, allLeadCounts, spendLogsOnDate, debitTxsOnDate] =
-        await Promise.all([
-          Customer.find({ status: { $ne: 'deleted' } }).lean(),
-          Wallet.find({}).lean(),
-          MarketingCampaign.find({}).sort({ updatedAt: -1 }).lean(),
-          MarketingPost.find({ isDeleted: { $ne: true } }).sort({ updatedAt: -1 }).lean(),
-          Lead.find({
-            $or: [
-              { assignedAt: { $gte: startUtc, $lte: endUtc } },
-              { createdAt: { $gte: startUtc, $lte: endUtc } },
-            ],
-          })
-            .select('customerId assignedAt createdAt')
-            .lean(),
-          Lead.aggregate([{ $group: { _id: '$customerId', count: { $sum: 1 } } }]),
-          DailyAdSpendLog.find({ dateIso: targetDateIso }).lean(),
-          WalletTransaction.find({
-            txType: 'Debit',
-            createdAt: { $gte: startUtc, $lte: endUtc },
-          })
-            .select('customerId amount')
-            .lean(),
-        ]);
+      const [
+        rawCustomers,
+        wallets,
+        campaigns,
+        posts,
+        leadsOnDate,
+        allLeadCounts,
+        allHeldCounts,
+        spendLogsOnDate,
+        debitTxsOnDate,
+      ] = await Promise.all([
+        Customer.find({ status: { $ne: 'deleted' } }).lean(),
+        Wallet.find({}).lean(),
+        MarketingCampaign.find({}).sort({ updatedAt: -1 }).lean(),
+        MarketingPost.find({ isDeleted: { $ne: true } }).sort({ updatedAt: -1 }).lean(),
+        Lead.find({
+          $or: [
+            { assignedAt: { $gte: startUtc, $lte: endUtc } },
+            { createdAt: { $gte: startUtc, $lte: endUtc } },
+          ],
+        })
+          .select('customerId assignedAt createdAt deliveryStatus')
+          .lean(),
+        Lead.aggregate([
+          { $match: { deliveryStatus: { $ne: 'held' } } },
+          { $group: { _id: '$customerId', count: { $sum: 1 } } },
+        ]),
+        Lead.aggregate([
+          { $match: { deliveryStatus: 'held' } },
+          { $group: { _id: '$customerId', count: { $sum: 1 } } },
+        ]),
+        DailyAdSpendLog.find({ dateIso: targetDateIso }).lean(),
+        WalletTransaction.find({
+          txType: 'Debit',
+          createdAt: { $gte: startUtc, $lte: endUtc },
+        })
+          .select('customerId amount')
+          .lean(),
+      ]);
 
       const customers = rawCustomers.filter((c) => !isInternalTestAccount(c));
       const walletByCust = new Map(wallets.map((w) => [String(w.customerId), w]));
       const totalLeadsByCust = new Map(allLeadCounts.map((x) => [String(x._id), x.count]));
+      const heldLeadsByCust = new Map(allHeldCounts.map((x) => [String(x._id), x.count]));
       const spendByCust = new Map(spendLogsOnDate.map((s) => [String(s.customerId), s]));
       const debitAmtByCust = new Map();
       for (const tx of debitTxsOnDate) {
@@ -276,9 +294,14 @@ operationsCycleRouter.get(
       }
 
       const dateLeadsByCust = new Map();
+      const dateHeldLeadsByCust = new Map();
       const lastLeadAtByCust = new Map();
       for (const l of leadsOnDate) {
         const cid = String(l.customerId);
+        if (l.deliveryStatus === 'held') {
+          dateHeldLeadsByCust.set(cid, (dateHeldLeadsByCust.get(cid) || 0) + 1);
+          continue;
+        }
         dateLeadsByCust.set(cid, (dateLeadsByCust.get(cid) || 0) + 1);
         const ts = l.assignedAt || l.createdAt;
         const prev = lastLeadAtByCust.get(cid);
@@ -340,6 +363,8 @@ operationsCycleRouter.get(
       let totalBookedSettledBudget = 0;
       let campaignsRunningCount = 0;
       let campaignsDelayedCount = 0;
+      let spilloverRunningCount = 0;
+      let totalHeldLeadsCount = 0;
       let totalLeadsDeliveredOnDate = 0;
       let zeroLeadActiveClientsCount = 0;
       let totalActualAdSpendOnDate = 0;
@@ -355,11 +380,26 @@ operationsCycleRouter.get(
         const isBookedOnDate = sched.bookedSet.has(targetDateIso) || (debitAmtByCust.get(cid) || 0) > 0;
         const isScheduledOnDate = isBookedOnDate || sched.effectiveScheduledSet.has(targetDateIso);
 
-        if (!includeAll && !isScheduledOnDate) continue;
-
         const custCamps = campsByCust.get(cid) || [];
         const runningCamp = custCamps.find((x) => x.status === 'Running') || null;
         const primaryCamp = runningCamp || custCamps[0] || null;
+        const isCampaignLive = Boolean(runningCamp);
+        const heldLeadsCount = heldLeadsByCust.get(cid) || 0;
+        const heldLeadsOnDate = dateHeldLeadsByCust.get(cid) || 0;
+
+        // 24h Cross-Day In-House Ad Spillover:
+        // If yesterday's Meta campaign is STILL running today while User Side is Unpaid Today (`!isScheduledOnDate`),
+        // keep this row visible on Today's Active Schedule so Marketing knows to stop it at 24h & Sales can collect ₹300!
+        const isSpilloverUnpaidToday = Boolean(
+          targetDateIso === todayIso && isCampaignLive && !isScheduledOnDate
+        );
+        const hasHeldLeadsWaitingToday = Boolean(
+          targetDateIso === todayIso && heldLeadsCount > 0 && !isScheduledOnDate
+        );
+
+        if (!includeAll && !isScheduledOnDate && !isSpilloverUnpaidToday && !hasHeldLeadsWaitingToday) {
+          continue;
+        }
 
         const custPosts = postsByCust.get(cid) || [];
         const approvedPosts = custPosts.filter(
@@ -377,13 +417,38 @@ operationsCycleRouter.get(
           null;
 
         const leadsSentToday = dateLeadsByCust.get(cid) || 0;
-        const isCampaignLive = Boolean(runningCamp);
         const dailyBudget = sched.dailyBudget;
         const billedAmountOnDate =
           debitAmtByCust.get(cid) || (isBookedOnDate ? dailyBudget : 0);
 
+        const campaignStartedAt = runningCamp
+          ? runningCamp.startedAt || runningCamp.updatedAt || runningCamp.createdAt || null
+          : null;
+        const campaignRunningMinutes = runningCamp ? diffMinutes(campaignStartedAt, realNow) : 0;
+        const campaignRunningLabel = runningCamp ? formatDurationShort(campaignRunningMinutes) : null;
+        const isOver24Hours = Boolean(runningCamp && campaignRunningMinutes >= 1440);
+
         // Compute stage delays for this client
         const delayAlerts = [];
+        if (isSpilloverUnpaidToday) {
+          spilloverRunningCount += 1;
+          delayAlerts.push({
+            code: 'SPILLOVER_AD_RUNNING_USER_OFF',
+            department: 'Marketing / Sales',
+            severity: isOver24Hours ? 'critical' : 'warning',
+            label: isOver24Hours
+              ? `In-House Ad >24h (${campaignRunningLabel}) • User OFF (Unpaid)`
+              : `24h Spillover Ad Live (${campaignRunningLabel}) • User OFF`,
+          });
+        }
+        if (targetDateIso === todayIso && heldLeadsCount > 0 && !isScheduledOnDate) {
+          delayAlerts.push({
+            code: 'HELD_LEADS_AWAITING_PAYMENT',
+            department: 'Sales',
+            severity: 'warning',
+            label: `${heldLeadsCount} Lead${heldLeadsCount === 1 ? '' : 's'} Held in Line-Up (Collect ₹${dailyBudget})`,
+          });
+        }
         if (targetDateIso === todayIso && isScheduledOnDate && !isCampaignLive) {
           delayAlerts.push({
             code: 'CAMPAIGN_OFF_TODAY',
@@ -432,7 +497,7 @@ operationsCycleRouter.get(
             break;
           }
         }
-        if (targetDateIso === todayIso && (isBookedOnDate || isCampaignLive) && leadsSentToday === 0) {
+        if (targetDateIso === todayIso && isScheduledOnDate && (isBookedOnDate || isCampaignLive) && leadsSentToday === 0) {
           delayAlerts.push({
             code: 'ZERO_LEADS_TODAY',
             department: 'Sales',
@@ -449,6 +514,7 @@ operationsCycleRouter.get(
           });
         }
 
+        totalHeldLeadsCount += heldLeadsCount;
         if (isScheduledOnDate) {
           totalScheduledBudget += dailyBudget;
           if (isBookedOnDate) totalBookedSettledBudget += dailyBudget;
@@ -478,6 +544,10 @@ operationsCycleRouter.get(
           if (effectiveActualSpend > dailyBudget) {
             overSpentLossClientsCount += 1;
           }
+        } else if (spendDoc && effectiveActualSpend > 0) {
+          // Capture Day-2 24h spillover platform spend logged by Marketing even when User Side is OFF today
+          totalActualAdSpendOnDate += effectiveActualSpend;
+          overSpentLossClientsCount += 1;
         }
 
         const resolvedMarketingCode = normalizeMarketingCode(
@@ -506,15 +576,22 @@ operationsCycleRouter.get(
           runwayDays: sched.fundedRunwayDays,
           isScheduledOnDate,
           isBookedOnDate,
+          userSidePaidToday: isScheduledOnDate,
           adCampaignActive: Boolean(w?.adCampaignActive),
           scheduledDates: Array.from(sched.effectiveScheduledSet).sort(),
           bookedDates: Array.from(sched.bookedSet).sort(),
           lastScheduleUpdatedAt: w?.lastScheduleUpdatedAt || null,
-          // Campaign & Creative closed-loop state
+          // Campaign & Creative closed-loop state + 24h rolling timer
           campaignId: primaryCamp ? String(primaryCamp._id) : null,
           campaignName: primaryCamp ? (primaryCamp.campaignName || primaryCamp.name || '') : null,
           campaignStatus: runningCamp ? 'Running' : primaryCamp ? primaryCamp.status : 'Not Created',
           isCampaignLive,
+          isInHouseRunning: isCampaignLive,
+          isSpilloverUnpaidToday,
+          campaignStartedAt,
+          campaignRunningMinutes,
+          campaignRunningLabel,
+          isOver24Hours,
           marketingCode: resolvedMarketingCode || null,
           approvedPostsCount: approvedPosts.length,
           pendingGraphicsCount: pendingGraphicsPosts.length,
@@ -524,8 +601,10 @@ operationsCycleRouter.get(
           activeCreativeUrl: activePost ? resolveEffectiveMediaUrl(activePost) : '',
           activeCreativeMediaType: activePost ? activePost.mediaType || 'image' : 'image',
           activeCreativeStatus: activePost ? activePost.status : 'No Creative',
-          // Lead fulfillment
+          // Lead fulfillment + Line-Up Archive Vault
           leadsDeliveredOnDate: leadsSentToday,
+          heldLeadsCount,
+          heldLeadsOnDate,
           totalLeadsLifetime: totalLeadsByCust.get(cid) || 0,
           lastLeadSentAt: lastLeadAtByCust.get(cid) || null,
           // Bottleneck / Delay alerts
@@ -559,7 +638,11 @@ operationsCycleRouter.get(
 
         // Super Admin ONLY: Net Margin & Profit
         if (isSuperAdmin) {
-          const earnedBase = isBookedOnDate ? billedAmountOnDate || dailyBudget : dailyBudget;
+          const earnedBase = isBookedOnDate
+            ? billedAmountOnDate || dailyBudget
+            : isScheduledOnDate
+              ? dailyBudget
+              : 0;
           rowObj.clientBilledOnDate = billedAmountOnDate;
           rowObj.netProfitOnDate = earnedBase - effectiveActualSpend;
           rowObj.isOverSpentLoss = earnedBase - effectiveActualSpend < 0;
@@ -570,13 +653,16 @@ operationsCycleRouter.get(
         rows.push(rowObj);
       }
 
-      // Sort: Critical delays first, then Paid/Booked on date, then highest budget
+      // Sort: Critical delays first, then Paid/Booked on date, then 24h Spillover running, then highest budget
       rows.sort((a, b) => {
         const aCrit = a.delayAlerts.some((d) => d.severity === 'critical') ? 1 : 0;
         const bCrit = b.delayAlerts.some((d) => d.severity === 'critical') ? 1 : 0;
         if (bCrit !== aCrit) return bCrit - aCrit;
         if (Number(b.isBookedOnDate) !== Number(a.isBookedOnDate)) {
           return Number(b.isBookedOnDate) - Number(a.isBookedOnDate);
+        }
+        if (Number(b.isSpilloverUnpaidToday) !== Number(a.isSpilloverUnpaidToday)) {
+          return Number(b.isSpilloverUnpaidToday) - Number(a.isSpilloverUnpaidToday);
         }
         return b.dailyBudget - a.dailyBudget;
       });
@@ -589,6 +675,8 @@ operationsCycleRouter.get(
         isTomorrow: targetMeta.isTomorrow,
         isDayAfter: targetMeta.isDayAfter,
         scheduledClientsCount: rows.filter((r) => r.isScheduledOnDate).length,
+        spilloverRunningCount,
+        totalHeldLeadsCount,
         tomorrowScheduledCount: forecast7d[1]?.scheduledClientsCount || 0,
         tomorrowScheduledBudget: forecast7d[1]?.totalScheduledBudget || 0,
         totalScheduledBudget,
@@ -783,6 +871,7 @@ operationsCycleRouter.get('/superadmin/unit-finance', requireSuperAdmin, async (
           dateIso: { $gte: effectiveFromIso, $lte: effectiveToIso },
         }).lean(),
         Lead.find({
+          deliveryStatus: { $ne: 'held' },
           $or: [
             { assignedAt: { $gte: startUtc, $lte: endUtc } },
             { createdAt: { $gte: startUtc, $lte: endUtc } },
@@ -938,11 +1027,15 @@ operationsCycleRouter.get('/superadmin/unit-finance', requireSuperAdmin, async (
 
       for (const dIso of visitedDates) {
         const sl = spendByCustAndDate.get(`${cid}|${dIso}`);
-        const dayBilled =
-          billedDateMap.get(dIso) ||
-          (sched.bookedSet.has(dIso) ? sched.dailyBudget : 0) ||
-          projectedScheduledBilled ||
-          sched.dailyBudget;
+        const isPaidOrProjectedDay =
+          (billedDateMap.get(dIso) || 0) > 0 ||
+          sched.bookedSet.has(dIso) ||
+          (dIso === effectiveToIso && projectedScheduledBilled > 0);
+        const dayBilled = isPaidOrProjectedDay
+          ? billedDateMap.get(dIso) ||
+            (sched.bookedSet.has(dIso) ? sched.dailyBudget : 0) ||
+            projectedScheduledBilled
+          : 0;
         userEarnedServiceBasis += dayBilled;
         const dayTarget = Math.round((dayBilled * ratioPct) / 100);
         userTargetBudget += dayTarget;
@@ -1152,6 +1245,7 @@ operationsCycleRouter.get(
         MarketingPost.find({ isDeleted: { $ne: true } }).sort({ createdAt: -1 }).lean(),
         MarketingCampaign.find({}).sort({ updatedAt: -1 }).lean(),
         Lead.find({
+          deliveryStatus: { $ne: 'held' },
           $or: [
             { assignedAt: { $gte: startUtc, $lte: endUtc } },
             { createdAt: { $gte: startUtc, $lte: endUtc } },
@@ -1785,12 +1879,27 @@ operationsCycleRouter.post('/webhooks/chatbot/lead', attachOptionalAuth, async (
       });
     }
 
-    // 3. Deduplicate against existing leads already assigned to this `#AMM` client
+    // 3. Deduplicate against existing leads already assigned (or held in Line-Up) for this `#AMM` client
     const existingDocs = await Lead.find(
       { customerId: cust._id, phone: { $in: cleanBuyerPhones } },
       { phone: 1, _id: 1 }
     ).lean();
     const existingPhoneSet = new Set(existingDocs.map((d) => String(d.phone)));
+
+    // 4. Determine whether Client Paid Today (`User Side = ON` vs `OFF` 24h spillover):
+    //    If unpaid Today (or `holdInArchive: true` passed), park lead into `held` (`Line-Up / Archive`)
+    //    so zero unpaid clients walk away with free leads!
+    const walletDoc = await Wallet.findOne({ customerId: cust._id }).lean();
+    const todayIso = toIstIsoDate(getKolkataNow());
+    const sched = computeCustomerEffectiveDates(walletDoc, todayIso);
+    const isUserPaidToday =
+      sched.bookedSet.has(todayIso) || sched.effectiveScheduledSet.has(todayIso);
+    const isHeld = Boolean(body.holdInArchive) || !isUserPaidToday;
+    const heldReasonText = isHeld
+      ? !isUserPaidToday
+        ? '24h Ad Spillover — Client Unpaid Today (Auto-Held in Line-Up)'
+        : 'Queued in Line-Up Archive'
+      : '';
 
     const now = new Date();
     const createdLeads = [];
@@ -1832,9 +1941,13 @@ operationsCycleRouter.post('/webhooks/chatbot/lead', attachOptionalAuth, async (
         source: `Automated Intake (${matchedCode})`,
         priority: 'Urgent',
         status: 'new',
+        deliveryStatus: isHeld ? 'held' : 'delivered',
+        heldReason: heldReasonText,
+        capturedAt: now,
+        releasedAt: isHeld ? null : now,
         isHot: true,
         isRead: false,
-        notes: `Auto-routed via Chatbot API [${matchedCode}]`,
+        notes: `Auto-routed via Chatbot API [${matchedCode}]${isHeld ? ' (Held in Line-Up until paid)' : ''}`,
         assignedAt: now,
         updatedAt: now,
       });
@@ -1844,18 +1957,35 @@ operationsCycleRouter.post('/webhooks/chatbot/lead', attachOptionalAuth, async (
         phone: buyerDigits,
         displayPhone,
         name: cleanName,
+        deliveryStatus: isHeld ? 'held' : 'delivered',
       });
 
+      if (!isHeld) {
+        await recordOutboxEvent(null, {
+          aggregateType: 'lead',
+          aggregateId: leadId,
+          eventType: 'LEAD_DISPATCHED',
+          payload: {
+            leadId,
+            customerId: cust._id,
+            buyerName: displayPhone,
+            city: cleanCity,
+            category: cust.category || 'Business Enquiry',
+            marketingCode: matchedCode,
+          },
+        }).catch(() => {});
+      }
+    }
+
+    if (isHeld && createdLeads.length > 0) {
       await recordOutboxEvent(null, {
         aggregateType: 'lead',
-        aggregateId: leadId,
-        eventType: 'LEAD_DISPATCHED',
+        aggregateId: cust._id,
+        eventType: 'LEAD_HELD_FOR_PAYMENT',
         payload: {
-          leadId,
           customerId: cust._id,
-          buyerName: displayPhone,
-          city: cleanCity,
-          category: cust.category || 'Business Enquiry',
+          companyName: cust.companyName || cust.contactPerson || '',
+          heldCount: createdLeads.length,
           marketingCode: matchedCode,
         },
       }).catch(() => {});
@@ -1866,12 +1996,16 @@ operationsCycleRouter.post('/webhooks/chatbot/lead', attachOptionalAuth, async (
       marketingCode: matchedCode,
       customerId: cust._id,
       companyName: cust.companyName || cust.contactPerson || '',
+      deliveryStatus: isHeld ? 'held' : 'delivered',
+      isUserPaidToday,
       addedCount: createdLeads.length,
       skippedDuplicates,
       leads: createdLeads,
       message:
         createdLeads.length > 0
-          ? `Delivered ${createdLeads.length} lead(s) directly to ${cust.companyName} (${matchedCode}).`
+          ? isHeld
+            ? `Parked ${createdLeads.length} lead(s) safely in Line-Up Archive for ${cust.companyName} (${matchedCode}) — unlocks automatically once client pays Today.`
+            : `Delivered ${createdLeads.length} lead(s) directly to ${cust.companyName} (${matchedCode}).`
           : `Lead already exists on ${cust.companyName} (${matchedCode}) — duplicate skipped safely.`,
     });
   } catch (err) {
@@ -1879,6 +2013,37 @@ operationsCycleRouter.post('/webhooks/chatbot/lead', attachOptionalAuth, async (
     return res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// =============================================================================
+// 7B. POST /api/leads/release-held (Staff 1-Click Manual Release from Line-Up)
+// =============================================================================
+operationsCycleRouter.post(
+  '/leads/release-held',
+  requireStaff(['sales', 'super admin', 'marketing']),
+  async (req, res) => {
+    try {
+      const { customerId = '', leadIds = [] } = req.body || {};
+      if (!customerId && (!Array.isArray(leadIds) || leadIds.length === 0)) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Provide `customerId` (to release all held leads for that client) or `leadIds` array.',
+        });
+      }
+      const out = await releaseSpecificHeldLeads({ customerId, leadIds });
+      return res.json({
+        ok: true,
+        releasedCount: out.releasedCount,
+        message:
+          out.releasedCount > 0
+            ? `Released ${out.releasedCount} held lead(s) into client's live My Leads inbox.`
+            : 'No held leads were waiting to be released.',
+      });
+    } catch (err) {
+      console.error('[POST /api/leads/release-held]', err);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  }
+);
 
 // =============================================================================
 // 8. GET /api/superadmin/playbook-pdf (Strictly Super Admin Confidential SOP PDF)

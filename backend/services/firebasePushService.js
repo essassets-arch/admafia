@@ -467,6 +467,46 @@ export async function dispatchOutboxNotification(event) {
       break;
     }
 
+    case 'LEAD_HELD_FOR_PAYMENT': {
+      const customerId = p.customerId || event.aggregateId;
+      if (customerId) {
+        await createAndPushNotification({
+          recipientType: 'customer',
+          recipientId: customerId,
+          type: 'LEAD_HELD_FOR_PAYMENT',
+          title: '🔒 New Buyer Enquiry Waiting to Unlock!',
+          body: 'A verified buyer enquiry arrived for your business while delivery is paused/unpaid. Activate Today (₹300) to unlock mobile details instantly!',
+          deepLink: '/app/lead#app/dashboard',
+          metadata: { held: true },
+        });
+      }
+      await notifyStaffDepartments(['Sales'], {
+        type: 'LEAD_HELD_FOR_PAYMENT',
+        title: `📦 Lead Queued in Line-Up (${p.companyName || 'Client'})`,
+        body: `Enquiry held in Line-Up Archive for ${p.companyName || customerId}. Follow up to collect ₹300 & unlock!`,
+        deepLink: '/sales#leads',
+        metadata: { customerId },
+      });
+      break;
+    }
+
+    case 'HELD_LEADS_UNLOCKED': {
+      const customerId = p.customerId || event.aggregateId;
+      const cnt = Number(p.releasedCount || 1);
+      if (customerId) {
+        await createAndPushNotification({
+          recipientType: 'customer',
+          recipientId: customerId,
+          type: 'HELD_LEADS_UNLOCKED',
+          title: `🔓 ${cnt} Waiting Buyer Lead${cnt > 1 ? 's' : ''} Unlocked!`,
+          body: `All ${cnt} queued buyer mobile number${cnt > 1 ? 's are' : ' is'} now live in your My Leads inbox.`,
+          deepLink: '/app/lead#app/lead',
+          metadata: { releasedCount: cnt },
+        });
+      }
+      break;
+    }
+
     default:
       break;
   }

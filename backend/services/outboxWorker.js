@@ -116,6 +116,8 @@ async function dispatchEvent(event) {
     case 'SCHEDULE_SLOTS_BOOKED':
     case 'SCHEDULE_SLOT_UNBOOKED':
     case 'PAID_CAMPAIGN_NOT_STARTED':
+    case 'LEAD_HELD_FOR_PAYMENT':
+    case 'HELD_LEADS_UNLOCKED':
       await dispatchOutboxNotification(event);
       return;
 

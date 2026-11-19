@@ -50,7 +50,7 @@ const num = (v, d = 0) => (v === undefined || v === null || Number.isNaN(Number(
 // ---------------------------------------------------------------------------
 // Customers (vw_sales_customer_accounts equivalent)
 // ---------------------------------------------------------------------------
-export function buildCustomerViewRow(c, w, leadCount = 0) {
+export function buildCustomerViewRow(c, w, leadCount = 0, heldLeadCount = 0) {
   if (!c) return null;
   const currency = w?.currency || c.currency || 'INR';
   const dailyPacing = num(w?.dailyAdSpend, currency === 'INR' ? 300 : 10);
@@ -98,6 +98,7 @@ export function buildCustomerViewRow(c, w, leadCount = 0) {
     marketing_code: c.marketingCode || w?.marketingCode || null,
     runway_days: Math.floor(balance / Math.max(dailyPacing, 1)),
     total_leads_dispatched: leadCount,
+    held_leads_count: heldLeadCount,
     sales_remarks: Array.isArray(c.salesRemarks) ? c.salesRemarks : [],
     latest_sales_remark: c.latestSalesRemark || '',
     latest_sales_remark_at: c.latestSalesRemarkAt ?? null,
@@ -121,12 +122,30 @@ async function buildViewRowsFor(customers, loadAll = false) {
     Wallet.find(idFilter).lean(),
     Lead.aggregate([
       ...(loadAll ? [] : [{ $match: { customerId: { $in: ids } } }]),
-      { $group: { _id: '$customerId', n: { $sum: 1 } } },
+      {
+        $group: {
+          _id: '$customerId',
+          deliveredCount: {
+            $sum: { $cond: [{ $eq: ['$deliveryStatus', 'held'] }, 0, 1] },
+          },
+          heldCount: {
+            $sum: { $cond: [{ $eq: ['$deliveryStatus', 'held'] }, 1, 0] },
+          },
+        },
+      },
     ]),
   ]);
   const walletByCust = new Map(wallets.map((w) => [w.customerId, w]));
-  const leadCountByCust = new Map(leadCounts.map((l) => [l._id, l.n]));
-  return customers.map((c) => buildCustomerViewRow(c, walletByCust.get(c._id), leadCountByCust.get(c._id) || 0));
+  const leadCountByCust = new Map(leadCounts.map((l) => [l._id, l.deliveredCount || 0]));
+  const heldCountByCust = new Map(leadCounts.map((l) => [l._id, l.heldCount || 0]));
+  return customers.map((c) =>
+    buildCustomerViewRow(
+      c,
+      walletByCust.get(c._id),
+      leadCountByCust.get(c._id) || 0,
+      heldCountByCust.get(c._id) || 0
+    )
+  );
 }
 
 /** Single customer view row by exact customer id (or null). */
@@ -134,11 +153,12 @@ export async function getCustomerViewRowById(customerId, { session } = {}) {
   if (!customerId) return null;
   const c = await Customer.findById(String(customerId)).session(session || null).lean();
   if (!c) return null;
-  const [w, leadCount] = await Promise.all([
+  const [w, deliveredCount, heldCount] = await Promise.all([
     Wallet.findOne({ customerId: c._id }).session(session || null).lean(),
-    Lead.countDocuments({ customerId: c._id }).session(session || null),
+    Lead.countDocuments({ customerId: c._id, deliveryStatus: { $ne: 'held' } }).session(session || null),
+    Lead.countDocuments({ customerId: c._id, deliveryStatus: 'held' }).session(session || null),
   ]);
-  return buildCustomerViewRow(c, w, leadCount);
+  return buildCustomerViewRow(c, w, deliveredCount, heldCount);
 }
 
 /** Customer filter for `id = $1 OR phone = $2 OR LOWER(username) = LOWER($1)` lookups. */
@@ -181,6 +201,10 @@ export function leadToRow(l, cust) {
     source: l.source,
     priority: l.priority,
     status: l.status,
+    delivery_status: l.deliveryStatus || 'delivered',
+    held_reason: l.heldReason || '',
+    captured_at: l.capturedAt || l.assignedAt || l.createdAt || null,
+    released_at: l.releasedAt || null,
     is_hot: l.isHot ?? true,
     is_read: Boolean(l.isRead),
     notes: l.notes,

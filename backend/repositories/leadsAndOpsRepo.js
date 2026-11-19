@@ -33,10 +33,19 @@ const scalar = (v) => (typeof v === 'string' ? v : typeof v === 'number' && Numb
 // ---------------------------------------------------------------------------
 // Leads (/api/leads)
 // ---------------------------------------------------------------------------
-export async function listLeadRows({ customerId, phone, username } = {}) {
+export async function listLeadRows({ customerId, phone, username, excludeHeld = false, deliveryStatus = '' } = {}) {
   const cid = scalar(customerId).trim();
   const cleanPhone = scalar(phone).replace(/\D/g, '').slice(-10);
   const uname = scalar(username).trim();
+  const statusStage = scalar(deliveryStatus).trim().toLowerCase();
+
+  const deliveryFilter = excludeHeld
+    ? { deliveryStatus: { $ne: 'held' } }
+    : statusStage === 'held'
+      ? { deliveryStatus: 'held' }
+      : statusStage === 'delivered'
+        ? { deliveryStatus: { $ne: 'held' } }
+        : {};
 
   if (cid || cleanPhone || uname) {
     const custOr = [];
@@ -53,7 +62,7 @@ export async function listLeadRows({ customerId, phone, username } = {}) {
     if (uname) leadOr.push({ customerUsername: ciExact(uname) });
 
     const leads = leadOr.length
-      ? await Lead.find({ $or: leadOr }).sort({ assignedAt: -1 }).lean()
+      ? await Lead.find({ $and: [{ $or: leadOr }, deliveryFilter] }).sort({ assignedAt: -1 }).lean()
       : [];
     const extraCustIds = Array.from(new Set(leads.map((l) => l.customerId).filter(Boolean)));
     const customers = extraCustIds.length
@@ -63,7 +72,7 @@ export async function listLeadRows({ customerId, phone, username } = {}) {
   }
 
   const [leads, customers] = await Promise.all([
-    Lead.find({}).sort({ assignedAt: -1 }).lean(),
+    Lead.find(deliveryFilter).sort({ assignedAt: -1 }).lean(),
     Customer.find({}).lean(),
   ]);
   return leadsToRows(leads, customers);
@@ -86,6 +95,9 @@ export async function createDirectLeadRow(body = {}) {
     source = 'Direct Intake',
     priority = 'Normal',
     notes = '',
+    holdInArchive = false,
+    deliveryStatus = '',
+    heldReason = '',
   } = body;
 
   const targetCompany = scalar(company || assignedCompany).trim();
@@ -106,6 +118,8 @@ export async function createDirectLeadRow(body = {}) {
     return { notFound: true, targetCompany };
   }
 
+  const isHeld =
+    Boolean(holdInArchive) || String(deliveryStatus || '').trim().toLowerCase() === 'held';
   const buyerDigits = scalar(phone || name).replace(/\D/g, '').slice(-10);
   const leadId = scalar(body.id).trim() || `lead_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const displayPhone = `+91 ${buyerDigits}`;
@@ -129,6 +143,10 @@ export async function createDirectLeadRow(body = {}) {
     source: scalar(source) || 'Direct Intake',
     priority: scalar(priority) || 'Normal',
     status: 'new',
+    deliveryStatus: isHeld ? 'held' : 'delivered',
+    heldReason: isHeld ? (scalar(heldReason).trim() || 'Queued in Line-Up Archive') : '',
+    capturedAt: now,
+    releasedAt: isHeld ? null : now,
     isHot: true,
     isRead: false,
     notes: scalar(notes).trim(),
@@ -136,20 +154,35 @@ export async function createDirectLeadRow(body = {}) {
     updatedAt: now,
   });
 
-  await recordOutboxEvent(null, {
-    aggregateType: 'lead',
-    aggregateId: leadId,
-    eventType: 'LEAD_DISPATCHED',
-    payload: {
-      leadId,
-      customerId: cust._id,
-      buyerName: displayPhone,
-      city: scalar(city) || cust.city || '',
-      category: cust.category || 'Other',
-    },
-  }).catch(() => {});
+  if (isHeld) {
+    // Option B Conversion Teaser: Notify client a locked enquiry is waiting WITHOUT exposing buyer phone!
+    await recordOutboxEvent(null, {
+      aggregateType: 'lead',
+      aggregateId: leadId,
+      eventType: 'LEAD_HELD_FOR_PAYMENT',
+      payload: {
+        leadId,
+        customerId: cust._id,
+        companyName: cust.companyName || '',
+        city: scalar(city) || cust.city || '',
+      },
+    }).catch(() => {});
+  } else {
+    await recordOutboxEvent(null, {
+      aggregateType: 'lead',
+      aggregateId: leadId,
+      eventType: 'LEAD_DISPATCHED',
+      payload: {
+        leadId,
+        customerId: cust._id,
+        buyerName: displayPhone,
+        city: scalar(city) || cust.city || '',
+        category: cust.category || 'Other',
+      },
+    }).catch(() => {});
+  }
 
-  return { row: leadToRow(created.toObject(), cust) };
+  return { row: leadToRow(created.toObject(), cust), isHeld };
 }
 
 export async function createBulkDirectLeadsRows(body = {}) {
@@ -160,6 +193,9 @@ export async function createBulkDirectLeadsRows(body = {}) {
     company,
     assignedCompany,
     phones = [],
+    holdInArchive = false,
+    deliveryStatus = '',
+    heldReason = '',
   } = body;
 
   const targetCompany = scalar(company || assignedCompany).trim();
@@ -212,6 +248,8 @@ export async function createBulkDirectLeadsRows(body = {}) {
     })
   );
 
+  const isHeld =
+    Boolean(holdInArchive) || String(deliveryStatus || '').trim().toLowerCase() === 'held';
   const skippedDuplicates = [];
   const createdRows = [];
   const now = new Date();
@@ -242,6 +280,10 @@ export async function createBulkDirectLeadsRows(body = {}) {
       source: 'Direct Intake',
       priority: 'Normal',
       status: 'new',
+      deliveryStatus: isHeld ? 'held' : 'delivered',
+      heldReason: isHeld ? (scalar(heldReason).trim() || 'Queued in Line-Up Archive') : '',
+      capturedAt: now,
+      releasedAt: isHeld ? null : now,
       isHot: true,
       isRead: false,
       notes: '',
@@ -249,16 +291,31 @@ export async function createBulkDirectLeadsRows(body = {}) {
       updatedAt: now,
     });
     createdRows.push(leadToRow(doc.toObject(), cust));
+    if (!isHeld) {
+      recordOutboxEvent(null, {
+        aggregateType: 'lead',
+        aggregateId: leadId,
+        eventType: 'LEAD_DISPATCHED',
+        payload: {
+          leadId,
+          customerId: cust._id,
+          buyerName: displayPhone,
+          city: cust.city || '',
+          category: cust.category || 'Other',
+        },
+      }).catch(() => {});
+    }
+  }
+
+  if (isHeld && createdRows.length > 0) {
     recordOutboxEvent(null, {
       aggregateType: 'lead',
-      aggregateId: leadId,
-      eventType: 'LEAD_DISPATCHED',
+      aggregateId: cust._id,
+      eventType: 'LEAD_HELD_FOR_PAYMENT',
       payload: {
-        leadId,
         customerId: cust._id,
-        buyerName: displayPhone,
-        city: cust.city || '',
-        category: cust.category || 'Other',
+        companyName: cust.companyName || '',
+        heldCount: createdRows.length,
       },
     }).catch(() => {});
   }
@@ -267,6 +324,265 @@ export async function createBulkDirectLeadsRows(body = {}) {
     rows: createdRows,
     skippedDuplicates,
     invalidNumbers,
+    isHeld,
+  };
+}
+
+/**
+ * Option B Auto-Release Engine:
+ * Atomically unlocks all `deliveryStatus: 'held'` leads for a customer when they pay / activate Today!
+ */
+export async function autoReleaseHeldLeadsForCustomer(
+  customerId,
+  { session = null, trigger = 'payment_unlocked' } = {}
+) {
+  const cid = scalar(customerId).trim();
+  if (!cid) return { releasedCount: 0, releasedLeads: [] };
+
+  const heldDocs = await Lead.find({ customerId: cid, deliveryStatus: 'held' })
+    .sort({ capturedAt: 1, assignedAt: 1 })
+    .session(session || null)
+    .lean();
+
+  if (heldDocs.length === 0) {
+    return { releasedCount: 0, releasedLeads: [] };
+  }
+
+  const now = new Date();
+  const heldIds = heldDocs.map((d) => d._id);
+  await Lead.updateMany(
+    { _id: { $in: heldIds }, deliveryStatus: 'held' },
+    {
+      $set: {
+        deliveryStatus: 'delivered',
+        releasedAt: now,
+        assignedAt: now,
+        status: 'new',
+        isRead: false,
+        updatedAt: now,
+      },
+    },
+    ...(session ? [{ session }] : [])
+  );
+
+  const cust = await Customer.findById(cid).session(session || null).lean();
+  await recordOutboxEvent(session || null, {
+    aggregateType: 'lead',
+    aggregateId: cid,
+    eventType: 'HELD_LEADS_UNLOCKED',
+    payload: {
+      customerId: cid,
+      companyName: cust?.companyName || '',
+      releasedCount: heldIds.length,
+      trigger,
+    },
+  }).catch(() => {});
+
+  const refreshedDocs = await Lead.find({ _id: { $in: heldIds } })
+    .sort({ assignedAt: -1 })
+    .session(session || null)
+    .lean();
+
+  return {
+    releasedCount: heldIds.length,
+    releasedLeads: refreshedDocs.map((doc) => leadToRow(doc, cust)),
+  };
+}
+
+/**
+ * Option B Auto-Unlock + Anti-Free-Lead Settlement Engine:
+ * Whenever a customer with waiting `deliveryStatus: 'held'` leads pays or activates Today:
+ * - If Today (IST) is already booked/paid, unlocks all held leads immediately at ₹0 extra.
+ * - If Today (IST) is unpaid and `availableBalance >= dailyAdSpend`, atomically books/deducts Today's slot
+ *   AND unlocks all held leads in one transaction so nobody can recharge ₹300, grab Today's held leads for free,
+ *   and keep the ₹300 unspent.
+ * - If `heldCount === 0`, returns immediately without touching wallet balance (preserving future-date top-ups).
+ */
+export async function settleTodayAndUnlockHeldLeadsIfFunded(
+  customerId,
+  { trigger = 'wallet_payment' } = {}
+) {
+  const cid = scalar(customerId).trim();
+  if (!cid) return { unlockedCount: 0, settledToday: false, deductedToday: 0 };
+
+  const heldCount = await Lead.countDocuments({ customerId: cid, deliveryStatus: 'held' });
+  if (heldCount <= 0) {
+    return { unlockedCount: 0, settledToday: false, deductedToday: 0 };
+  }
+
+  return withMongoTransaction(async (session) => {
+    const wallet = await Wallet.findOne({ customerId: cid }).session(session).lean();
+    if (!wallet) {
+      return { unlockedCount: 0, settledToday: false, deductedToday: 0 };
+    }
+
+    const now = new Date();
+    const kTodayIso = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const kolkataNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const todayDayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][kolkataNow.getDay()];
+
+    const bookedSet = new Set(
+      (Array.isArray(wallet.bookedDates) ? wallet.bookedDates : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+    );
+    const lastDedIso = wallet.lastDeductedAt
+      ? new Date(wallet.lastDeductedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      : '';
+    const isAlreadyPaidToday = bookedSet.has(kTodayIso) || lastDedIso === kTodayIso;
+
+    if (isAlreadyPaidToday) {
+      await Wallet.updateOne(
+        { _id: wallet._id },
+        {
+          $set: { adCampaignActive: true, updatedAt: now },
+          $addToSet: { bookedDates: kTodayIso, scheduledDates: kTodayIso, activeDays: todayDayCode },
+        },
+        { session }
+      );
+      const rel = await autoReleaseHeldLeadsForCustomer(cid, { session, trigger });
+      return {
+        unlockedCount: rel.releasedCount,
+        settledToday: true,
+        deductedToday: 0,
+        walletBalance: Number(wallet.availableBalance || 0),
+      };
+    }
+
+    const walletCurrency = String(wallet.currency || 'INR').toUpperCase();
+    const currencySym = walletCurrency === 'USD' ? '$' : '₹';
+    const dailyBudget = Math.max(
+      1,
+      Number(wallet.dailyAdSpend || (walletCurrency === 'USD' ? 10 : 300))
+    );
+    const curBal = Number(wallet.availableBalance || 0);
+
+    if (curBal < dailyBudget) {
+      return {
+        unlockedCount: 0,
+        settledToday: false,
+        deductedToday: 0,
+        walletBalance: curBal,
+      };
+    }
+
+    const updatedWal = await Wallet.findOneAndUpdate(
+      { _id: wallet._id, availableBalance: { $gte: dailyBudget }, bookedDates: { $ne: kTodayIso } },
+      {
+        $inc: { availableBalance: -dailyBudget, totalAdSpent: dailyBudget },
+        $set: {
+          adCampaignActive: true,
+          lastDeductedAt: now,
+          lastScheduleUpdatedAt: now,
+          updatedAt: now,
+        },
+        $addToSet: {
+          bookedDates: kTodayIso,
+          scheduledDates: kTodayIso,
+          activeDays: todayDayCode,
+        },
+      },
+      { new: true, session }
+    ).lean();
+
+    if (!updatedWal) {
+      // Concurrent request already settled Today — release held leads idempotently
+      const rel = await autoReleaseHeldLeadsForCustomer(cid, { session, trigger });
+      return {
+        unlockedCount: rel.releasedCount,
+        settledToday: true,
+        deductedToday: 0,
+      };
+    }
+
+    const balanceAfter = Math.max(0, Math.round((Number(updatedWal.availableBalance || 0) + Number.EPSILON) * 100) / 100);
+    await WalletTransaction.create(
+      [
+        {
+          _id: `tx_unl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          customerId: cid,
+          walletId: wallet._id,
+          txType: 'Debit',
+          amount: dailyBudget,
+          balanceAfter,
+          referenceUtr: `BOOK-${cid}-${kTodayIso}-UNLOCK-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+          description: `Unlocked Waiting Buyer Enquiries & Activated Today's Delivery (${kTodayIso}) (-${currencySym}${dailyBudget})`,
+          paymentMethod: 'Lead Delivery Activation',
+          status: 'Settled ✓',
+          currency: walletCurrency,
+          createdAt: now,
+        },
+      ],
+      { session }
+    );
+
+    const rel = await autoReleaseHeldLeadsForCustomer(cid, { session, trigger });
+    return {
+      unlockedCount: rel.releasedCount,
+      settledToday: true,
+      deductedToday: dailyBudget,
+      walletBalance: balanceAfter,
+    };
+  });
+}
+
+/**
+ * Staff manual 1-click release of specific (or all) held Line-Up leads for a customer.
+ */
+export async function releaseSpecificHeldLeads({ customerId = '', leadIds = [] } = {}) {
+  const cid = scalar(customerId).trim();
+  const cleanIds = Array.isArray(leadIds)
+    ? leadIds.map((x) => scalar(x).trim()).filter(Boolean)
+    : [];
+
+  const filter = { deliveryStatus: 'held' };
+  if (cid) filter.customerId = cid;
+  if (cleanIds.length > 0) filter._id = { $in: cleanIds };
+
+  const heldDocs = await Lead.find(filter).lean();
+  if (heldDocs.length === 0) {
+    return { releasedCount: 0, rows: [] };
+  }
+
+  const now = new Date();
+  const targetIds = heldDocs.map((d) => d._id);
+  await Lead.updateMany(
+    { _id: { $in: targetIds } },
+    {
+      $set: {
+        deliveryStatus: 'delivered',
+        releasedAt: now,
+        assignedAt: now,
+        status: 'new',
+        isRead: false,
+        updatedAt: now,
+      },
+    }
+  );
+
+  const uniqueCustIds = Array.from(new Set(heldDocs.map((d) => d.customerId).filter(Boolean)));
+  const customers = await Customer.find({ _id: { $in: uniqueCustIds } }).lean();
+  const custMap = new Map(customers.map((c) => [String(c._id), c]));
+
+  for (const ucid of uniqueCustIds) {
+    const cCount = heldDocs.filter((d) => String(d.customerId) === ucid).length;
+    recordOutboxEvent(null, {
+      aggregateType: 'lead',
+      aggregateId: ucid,
+      eventType: 'HELD_LEADS_UNLOCKED',
+      payload: {
+        customerId: ucid,
+        companyName: custMap.get(ucid)?.companyName || '',
+        releasedCount: cCount,
+        trigger: 'sales_manual_release',
+      },
+    }).catch(() => {});
+  }
+
+  const refreshed = await Lead.find({ _id: { $in: targetIds } }).sort({ assignedAt: -1 }).lean();
+  return {
+    releasedCount: targetIds.length,
+    rows: refreshed.map((doc) => leadToRow(doc, custMap.get(String(doc.customerId)))),
   };
 }
 

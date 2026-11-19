@@ -49,6 +49,7 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'campaign_live' | 'campaign_off' | 'zero_leads'
   const [remarkCust, setRemarkCust] = useState(null);
   const [previewMedia, setPreviewMedia] = useState(null);
+  const [releasingCustId, setReleasingCustId] = useState('');
 
   const loadSchedule = useCallback(
     async (silent = false) => {
@@ -100,10 +101,24 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
       (c.latestSalesRemark || '').toLowerCase().includes(q);
     if (!matchSearch) return false;
     if (statusFilter === 'campaign_live') return c.isCampaignLive;
-    if (statusFilter === 'campaign_off') return !c.isCampaignLive;
-    if (statusFilter === 'zero_leads') return (c.leadsDeliveredOnDate || 0) === 0;
+    if (statusFilter === 'spillover') return Boolean(c.isSpilloverUnpaidToday);
+    if (statusFilter === 'held_leads') return Number(c.heldLeadsCount || 0) > 0;
+    if (statusFilter === 'campaign_off') return !c.isCampaignLive && c.isScheduledOnDate;
+    if (statusFilter === 'zero_leads') return (c.leadsDeliveredOnDate || 0) === 0 && c.isScheduledOnDate;
     return true;
   });
+
+  const handleReleaseAllForClient = async (client) => {
+    setReleasingCustId(client.id);
+    try {
+      await crmApi.releaseHeldLeads({ customerId: client.id });
+      await loadSchedule(true);
+    } catch (err) {
+      console.error('[SalesActiveScheduleDesk] Release error:', err);
+    } finally {
+      setReleasingCustId('');
+    }
+  };
 
   const handleRemarkUpdated = (updatedCust) => {
     if (!updatedCust) return;
@@ -379,28 +394,42 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
             className={`desk-tab ${statusFilter === 'all' ? 'active' : ''}`}
             onClick={() => setStatusFilter('all')}
           >
-            All Scheduled ({rawClients.length})
+            All Active ({rawClients.length})
           </button>
           <button
             type="button"
             className={`desk-tab ${statusFilter === 'campaign_live' ? 'active' : ''}`}
             onClick={() => setStatusFilter('campaign_live')}
           >
-            🟢 Campaign Live ({rawClients.filter((c) => c.isCampaignLive).length})
+            🟢 In-House Live ({rawClients.filter((c) => c.isCampaignLive).length})
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${statusFilter === 'spillover' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('spillover')}
+          >
+            🟡 24h Spillover / Unpaid ({rawClients.filter((c) => c.isSpilloverUnpaidToday).length})
+          </button>
+          <button
+            type="button"
+            className={`desk-tab ${statusFilter === 'held_leads' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('held_leads')}
+          >
+            📦 Held in Line-Up ({rawClients.filter((c) => Number(c.heldLeadsCount || 0) > 0).length})
           </button>
           <button
             type="button"
             className={`desk-tab ${statusFilter === 'campaign_off' ? 'active' : ''}`}
             onClick={() => setStatusFilter('campaign_off')}
           >
-            🔴 Campaign OFF ({rawClients.filter((c) => !c.isCampaignLive).length})
+            🔴 Paid Today — Campaign OFF ({rawClients.filter((c) => !c.isCampaignLive && c.isScheduledOnDate).length})
           </button>
           <button
             type="button"
             className={`desk-tab ${statusFilter === 'zero_leads' ? 'active' : ''}`}
             onClick={() => setStatusFilter('zero_leads')}
           >
-            ⚡ 0 Leads Sent ({rawClients.filter((c) => (c.leadsDeliveredOnDate || 0) === 0).length})
+            ⚡ 0 Leads Sent ({rawClients.filter((c) => (c.leadsDeliveredOnDate || 0) === 0 && c.isScheduledOnDate).length})
           </button>
         </div>
 
@@ -512,9 +541,13 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
                           <span className="desk-pill pill-emerald" style={{ fontSize: '0.68rem', fontWeight: 800 }}>
                             ✓ Paid &amp; Settled
                           </span>
-                        ) : (
+                        ) : c.isScheduledOnDate ? (
                           <span className="desk-pill pill-indigo" style={{ fontSize: '0.68rem', fontWeight: 800 }}>
                             ● Wallet Funded
+                          </span>
+                        ) : (
+                          <span className="desk-pill pill-rose" style={{ fontSize: '0.68rem', fontWeight: 800 }}>
+                            🔴 User Side OFF (Unpaid Today)
                           </span>
                         )}
                       </div>
@@ -579,8 +612,12 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
 
                         <div style={{ minWidth: 0 }}>
                           {c.isCampaignLive ? (
-                            <span className="desk-pill pill-emerald" style={{ fontWeight: 800, fontSize: '0.72rem' }}>
-                              🟢 Campaign LIVE {c.marketingCode ? `[${c.marketingCode}]` : ''}
+                            <span
+                              className={`desk-pill ${c.isSpilloverUnpaidToday ? 'pill-amber' : 'pill-emerald'}`}
+                              style={{ fontWeight: 800, fontSize: '0.72rem' }}
+                            >
+                              {c.isSpilloverUnpaidToday ? '🟡 24h Spillover LIVE' : '🟢 Campaign LIVE'}{' '}
+                              {c.campaignRunningLabel ? `(${c.campaignRunningLabel})` : ''}
                             </span>
                           ) : (
                             <span className="desk-pill pill-rose" style={{ fontWeight: 800, fontSize: '0.72rem' }}>
@@ -596,7 +633,7 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
                       </div>
                     </td>
 
-                    {/* 4. Leads Delivered */}
+                    {/* 4. Leads Delivered & Held in Line-Up */}
                     <td>
                       <div
                         style={{
@@ -607,6 +644,16 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
                       >
                         {c.leadsDeliveredOnDate} {c.leadsDeliveredOnDate === 1 ? 'Lead' : 'Leads'}
                       </div>
+                      {Number(c.heldLeadsCount || 0) > 0 && (
+                        <div style={{ marginTop: 3 }}>
+                          <span
+                            className="desk-pill pill-amber"
+                            style={{ fontSize: '0.68rem', fontWeight: 900, background: '#fef3c7', color: '#92400e', border: '1px solid #f59e0b' }}
+                          >
+                            📦 {c.heldLeadsCount} Held in Line-Up
+                          </span>
+                        </div>
+                      )}
                       <div style={{ fontSize: '0.73rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 2 }}>
                         Lifetime Total: <strong>{c.totalLeadsLifetime}</strong>
                       </div>
@@ -636,6 +683,27 @@ export default function SalesActiveScheduleDesk({ customers = [], setCustomers }
                     {/* 6. Direct Actions */}
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {Number(c.heldLeadsCount || 0) > 0 && (
+                          <button
+                            type="button"
+                            disabled={releasingCustId === c.id}
+                            onClick={() => handleReleaseAllForClient(c)}
+                            className="desk-action-btn"
+                            style={{
+                              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                              borderColor: '#4f46e5',
+                              color: '#ffffff',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              cursor: 'pointer',
+                            }}
+                            title="Manually release held Line-Up leads to client inbox"
+                          >
+                            <Rocket size={12} /> {releasingCustId === c.id ? '...' : `Release (${c.heldLeadsCount})`}
+                          </button>
+                        )}
                         <a
                           href={buildCustomerLeadHref(c, 'add', 'active-schedule')}
                           onClick={(e) => navigateToCustomerLeadPage(c, 'add', 'active-schedule', e)}

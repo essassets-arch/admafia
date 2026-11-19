@@ -561,8 +561,92 @@ export default function LeadHubOverview({
     }
   };
 
+  const lockedHeldCount = Number(customer?.lockedHeldLeadsCount ?? customer?.heldLeadsCount ?? 0);
+  const topupShortfallForUnlock = Math.max(dailySpend, Math.ceil(dailySpend - walletBalance));
+
   return (
     <div className="portal-overview-view">
+      {/* 0A. OPTION B LOCKED BUYER ENQUIRIES CONVERSION BANNER (Zero Phone Leakage Until Paid!) */}
+      {lockedHeldCount > 0 && (
+        <div
+          role="region"
+          aria-label="Locked waiting buyer enquiries"
+          style={{
+            background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 55%, #fde68a 100%)',
+            border: '2px solid #f59e0b',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            marginBottom: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '14px',
+            boxShadow: '0 10px 26px rgba(217, 119, 6, 0.16)',
+          }}
+        >
+          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: '#b45309',
+                  color: '#ffffff',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                }}
+              >
+                🔒 {lockedHeldCount} Waiting Buyer {lockedHeldCount === 1 ? 'Enquiry' : 'Enquiries'} Locked
+              </span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#92400e' }}>
+                Instant Auto-Unlock Enabled
+              </span>
+            </div>
+            <h3 style={{ margin: '0 0 4px', fontSize: '1.04rem', fontWeight: 800, color: '#78350f', lineHeight: 1.3 }}>
+              {lockedHeldCount} Verified Buyer {lockedHeldCount === 1 ? 'Mobile Number Is' : 'Mobile Numbers Are'} Waiting in Your Queue!
+            </h3>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#92400e', lineHeight: 1.45 }}>
+              {walletBalance >= dailySpend
+                ? `Activate today's ${currencySymbol}${dailySpend} delivery slot to unlock all ${lockedHeldCount} buyer contact${lockedHeldCount === 1 ? '' : 's'} into My Leads immediately.`
+                : `Top up ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} in your Growth Wallet to settle today's delivery and unlock all ${lockedHeldCount} buyer contact${lockedHeldCount === 1 ? '' : 's'} instantly.`}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (walletBalance >= dailySpend && onToggleCampaign) {
+                onToggleCampaign(true);
+              } else if (onOpenAddFunds) {
+                onOpenAddFunds();
+              }
+            }}
+            style={{
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '12px 20px',
+              fontSize: '0.88rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 6px 18px rgba(79, 70, 229, 0.32)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {walletBalance >= dailySpend
+              ? `🔓 Activate Today (${currencySymbol}${dailySpend}) & Unlock ${lockedHeldCount} →`
+              : `⚡ Recharge ${currencySymbol}${topupShortfallForUnlock.toLocaleString('en-IN')} & Unlock ${lockedHeldCount} →`}
+          </button>
+        </div>
+      )}
+
       {/* 0. INTERACTIVE INLINE QUICK-COMPLETE PROFILE CARD (encourages 100% completion in 10 seconds) */}
       {!profEval.isComplete && (
         <form

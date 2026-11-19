@@ -420,6 +420,29 @@ function QuickBulkLeadDispatchModal({
     );
   }, [customers, selectedCustomerKey]);
 
+  const isSelectedPaidToday = useMemo(() => {
+    if (!selectedCustomer) return true;
+    const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    if (selectedCustomer.isDeductedToday || selectedCustomer.adCampaignActive) return true;
+    if (Array.isArray(selectedCustomer.bookedDates) && selectedCustomer.bookedDates.includes(todayIso)) {
+      return true;
+    }
+    const bal = Number(selectedCustomer.balance ?? selectedCustomer.walletBalance ?? 0);
+    const daily = Number(selectedCustomer.dailyAdSpend ?? selectedCustomer.dailyPacing ?? 300);
+    return bal >= daily;
+  }, [selectedCustomer]);
+
+  const [dispatchMode, setDispatchMode] = useState('send'); // 'send' | 'hold'
+  const lastModeCustKeyRef = useRef('');
+
+  useEffect(() => {
+    if (!isOpen || !selectedCustomerKey) return;
+    if (lastModeCustKeyRef.current !== String(selectedCustomerKey)) {
+      lastModeCustKeyRef.current = String(selectedCustomerKey);
+      setDispatchMode(isSelectedPaidToday ? 'send' : 'hold');
+    }
+  }, [isOpen, selectedCustomerKey, isSelectedPaidToday]);
+
   const existingPhonesForSelected = useMemo(() => {
     const s = new Set();
     if (!selectedCustomer) return s;
@@ -478,6 +501,7 @@ function QuickBulkLeadDispatchModal({
       selectedCustomer.companyName || selectedCustomer.name || `@${selectedCustomer.username || 'client'}`;
 
     setIsSubmitting(true);
+    const holdInArchive = dispatchMode === 'hold';
     try {
       const res = await crmApi.createBulkLeads({
         customerId: selectedCustomer.id,
@@ -485,6 +509,12 @@ function QuickBulkLeadDispatchModal({
         customerUsername: selectedCustomer.username || '',
         company: finalCompany,
         phones: parsed.validNumbers,
+        holdInArchive,
+        heldReason: holdInArchive
+          ? !isSelectedPaidToday
+            ? 'Client Unpaid Today — Held in Line-Up Archive'
+            : 'Advance Lead Queued in Line-Up Archive'
+          : '',
       });
 
       const createdList = (Array.isArray(res?.leads) ? res.leads : []).map((item) => {
@@ -534,6 +564,7 @@ function QuickBulkLeadDispatchModal({
         onDispatched({
           leads: createdList,
           addedCount,
+          isHeld: holdInArchive || Boolean(res?.isHeld),
           skippedDuplicates,
           company: finalCompany,
           phone: createdList[0]?.phone || parsed.validNumbers[0] || '',
@@ -711,6 +742,84 @@ function QuickBulkLeadDispatchModal({
                   })
                 )}
               </select>
+
+              {/* Client Payment Status + 2-Stage Delivery Mode Toggle (Line-Up Archive vs Live Send) */}
+              {selectedCustomer && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    background: isSelectedPaidToday
+                      ? 'rgba(16, 185, 129, 0.08)'
+                      : 'rgba(245, 158, 11, 0.12)',
+                    border: `1px solid ${isSelectedPaidToday ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.45)'}`,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <span
+                      style={{
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                        color: isSelectedPaidToday ? '#059669' : '#b45309',
+                      }}
+                    >
+                      {isSelectedPaidToday
+                        ? `🟢 Paid / Funded Today (Bal: ₹${Number(selectedCustomer.balance ?? selectedCustomer.walletBalance ?? 0).toLocaleString('en-IN')})`
+                        : `🔴 Unpaid Today (Bal: ₹${Number(selectedCustomer.balance ?? selectedCustomer.walletBalance ?? 0).toLocaleString('en-IN')}) — Hold Recommended!`}
+                    </span>
+                    {Number(selectedCustomer.heldLeadsCount || 0) > 0 && (
+                      <span style={{ fontSize: '0.71rem', fontWeight: 800, color: '#b45309' }}>
+                        📦 {selectedCustomer.heldLeadsCount} already in Line-Up
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setDispatchMode('hold')}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        fontSize: '0.76rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        border: dispatchMode === 'hold' ? '2px solid #d97706' : '1px solid var(--adm-border-strong, #cbd5e1)',
+                        background: dispatchMode === 'hold' ? '#fef3c7' : 'var(--adm-bg-card, #ffffff)',
+                        color: dispatchMode === 'hold' ? '#92400e' : 'var(--adm-text-body, #475569)',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <div>📦 Hold in Line-Up Archive</div>
+                      <div style={{ fontSize: '0.66rem', fontWeight: 600, opacity: 0.85, marginTop: 2 }}>
+                        Hidden from client • Auto-unlocks when paid
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDispatchMode('send')}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        fontSize: '0.76rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        border: dispatchMode === 'send' ? '2px solid #059669' : '1px solid var(--adm-border-strong, #cbd5e1)',
+                        background: dispatchMode === 'send' ? '#ecfdf5' : 'var(--adm-bg-card, #ffffff)',
+                        color: dispatchMode === 'send' ? '#065f46' : 'var(--adm-text-body, #475569)',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <div>🚀 Send Live to User Now</div>
+                      <div style={{ fontSize: '0.66rem', fontWeight: 600, opacity: 0.85, marginTop: 2 }}>
+                        Appears immediately in client My Leads
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 2. Phone-Only (+ Bulk Multi-Number Paste) Input */}
@@ -870,9 +979,11 @@ function QuickBulkLeadDispatchModal({
               disabled={!canSubmit}
               style={{
                 background: canSubmit
-                  ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+                  ? dispatchMode === 'hold'
+                    ? 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)'
+                    : 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
                   : '#94a3b8',
-                borderColor: canSubmit ? '#059669' : '#94a3b8',
+                borderColor: canSubmit ? (dispatchMode === 'hold' ? '#d97706' : '#059669') : '#94a3b8',
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
                 padding: '10px 22px',
                 fontWeight: 800,
@@ -883,10 +994,16 @@ function QuickBulkLeadDispatchModal({
             >
               <Send size={15} />
               {isSubmitting
-                ? 'Sending...'
-                : parsed.validNumbers.length > 1
-                  ? `+ Send ${parsed.validNumbers.length} Leads Now`
-                  : '+ Send Lead(s) Now'}
+                ? dispatchMode === 'hold'
+                  ? 'Saving to Line-Up...'
+                  : 'Sending...'
+                : dispatchMode === 'hold'
+                  ? parsed.validNumbers.length > 1
+                    ? `📦 Hold ${parsed.validNumbers.length} Leads in Line-Up`
+                    : '📦 Hold Lead in Line-Up'
+                  : parsed.validNumbers.length > 1
+                    ? `+ Send ${parsed.validNumbers.length} Leads Now`
+                    : '+ Send Lead(s) Now'}
             </button>
           </div>
         </form>
@@ -2602,13 +2719,39 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
   }, [leads, selectedCustomerId, selectedCustomerObj]);
 
   // Dynamic KPI counts for selected scope
-  const totalLeadsCount = customerLeads.length;
-  const readCount = customerLeads.filter(isLeadRead).length;
-  const unreadCount = customerLeads.filter((l) => !isLeadRead(l)).length;
+  const isLeadHeld = (l) => Boolean(l.isHeld || l.deliveryStatus === 'held' || l.delivery_status === 'held');
+  const heldCount = customerLeads.filter(isLeadHeld).length;
+  const deliveredLeads = customerLeads.filter((l) => !isLeadHeld(l));
+  const totalLeadsCount = deliveredLeads.length;
+  const readCount = deliveredLeads.filter(isLeadRead).length;
+  const unreadCount = deliveredLeads.filter((l) => !isLeadRead(l)).length;
   const readRatePct = totalLeadsCount > 0 ? Math.round((readCount / totalLeadsCount) * 100) : 0;
-  const urgentCount = customerLeads.filter((l) => l.priority === 'Urgent').length;
-  const newCount = customerLeads.filter((l) => l.status === 'new').length;
-  const qualifiedCount = customerLeads.filter((l) => l.status === 'qualified').length;
+  const urgentCount = deliveredLeads.filter((l) => l.priority === 'Urgent').length;
+  const newCount = deliveredLeads.filter((l) => l.status === 'new').length;
+  const qualifiedCount = deliveredLeads.filter((l) => l.status === 'qualified').length;
+  const [releasingKey, setReleasingKey] = useState('');
+
+  const handleReleaseHeld = async ({ leadIds = [], customerId = '', label = '' } = {}) => {
+    const key = leadIds.length === 1 ? leadIds[0] : `all_${customerId || 'global'}`;
+    setReleasingKey(key);
+    try {
+      const res = await crmApi.releaseHeldLeads({ customerId, leadIds });
+      fetchAuthoritativeDeskData();
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: `Released ${res.releasedCount || leadIds.length || 1} Lead(s) Live!`,
+        text: label ? `Delivered to ${label}` : 'Visible in client My Leads inbox now.',
+        showConfirmButton: false,
+        timer: 2400,
+      });
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Release Failed', text: err.message });
+    } finally {
+      setReleasingKey('');
+    }
+  };
 
   // Toggle read status directly from sales desk and synchronize with PostgreSQL
   const handleToggleLeadRead = async (lead) => {
@@ -2664,6 +2807,9 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
         if (!matchSearch) return false;
       }
 
+      if (filter === 'held') return isLeadHeld(l);
+      if (filter === 'all') return true;
+      if (isLeadHeld(l)) return false;
       if (filter === 'urgent') return l.priority === 'Urgent';
       if (filter === 'new') return l.status === 'new';
       if (filter === 'qualified') return l.status === 'qualified';
@@ -3516,8 +3662,42 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
       <div className="desk-filter-bar" style={{ marginBottom: 14 }}>
         <div className="desk-tabs">
           <button type="button" className={`desk-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
-            All Leads ({totalLeadsCount})
+            All ({customerLeads.length})
           </button>
+          <button
+            type="button"
+            className={`desk-tab ${filter === 'held' ? 'active' : ''}`}
+            onClick={() => setFilter('held')}
+            style={
+              filter === 'held'
+                ? { background: '#d97706', borderColor: '#d97706', color: '#ffffff', fontWeight: 800 }
+                : { color: '#b45309', borderColor: '#fde68a', background: heldCount > 0 ? '#fffbeb' : undefined, fontWeight: 800 }
+            }
+          >
+            📦 Line-Up / Archive ({heldCount})
+          </button>
+          {heldCount > 0 && (
+            <button
+              type="button"
+              disabled={Boolean(releasingKey)}
+              onClick={() =>
+                handleReleaseHeld({
+                  customerId: selectedCustomerObj?.id || '',
+                  leadIds: selectedCustomerObj ? [] : customerLeads.filter(isLeadHeld).map((x) => x.id),
+                  label: selectedCustomerObj?.companyName || selectedCustomerObj?.name || 'Active Clients',
+                })
+              }
+              className="desk-tab"
+              style={{
+                background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                borderColor: '#4f46e5',
+                color: '#ffffff',
+                fontWeight: 800,
+              }}
+            >
+              🚀 Release All Held ({heldCount})
+            </button>
+          )}
           <button
             type="button"
             className={`desk-tab ${filter === 'read' ? 'active' : ''}`}
@@ -3934,10 +4114,18 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                         )}
                       </td>
 
-                      {/* 4. Client Read Status */}
+                      {/* 4. Client Read / Line-Up Archive Status */}
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          {isRead ? (
+                          {isLeadHeld(lead) ? (
+                            <span
+                              className="desk-pill pill-amber"
+                              style={{ fontWeight: 900, background: '#fef3c7', color: '#92400e', border: '1px solid #f59e0b' }}
+                              title={lead.heldReason || 'Hidden from client until payment or manual release'}
+                            >
+                              📦 HELD IN LINE-UP
+                            </span>
+                          ) : isRead ? (
                             <span className="desk-pill pill-emerald" style={{ fontWeight: 800 }}>
                               ✓ Marked as Read
                             </span>
@@ -3946,7 +4134,7 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                               ⏳ Unread by Client
                             </span>
                           )}
-                          {lead.priority === 'Urgent' && (
+                          {lead.priority === 'Urgent' && !isLeadHeld(lead) && (
                             <span className="desk-pill pill-rose" style={{ fontSize: '0.68rem', fontWeight: 800 }}>
                               Urgent SLA
                             </span>
@@ -3963,9 +4151,38 @@ export function LeadManagementDesk({ customers: propsCustomers = [] } = {}) {
                         </span>
                       </td>
 
-                      {/* 6. Actions (Direct User Lead Assignment + Assigned Leads History + Buyer Contact) */}
+                      {/* 6. Actions (Release Held + Direct User Lead Assignment + Assigned Leads History + Buyer Contact) */}
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          {isLeadHeld(lead) && (
+                            <button
+                              type="button"
+                              disabled={releasingKey === lead.id}
+                              onClick={() =>
+                                handleReleaseHeld({
+                                  leadIds: [lead.id],
+                                  customerId: lead.customerId || matchedCust?.id || '',
+                                  label: customerName,
+                                })
+                              }
+                              className="desk-action-btn"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '6px 11px',
+                                fontSize: '0.76rem',
+                                fontWeight: 800,
+                                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                                color: '#ffffff',
+                                borderColor: '#4f46e5',
+                                cursor: 'pointer',
+                              }}
+                              title="Release this held lead immediately into the client's My Leads inbox"
+                            >
+                              <Send size={12} /> {releasingKey === lead.id ? 'Releasing...' : 'Release Now'}
+                            </button>
+                          )}
                           <a
                             href={buildCustomerLeadHref(matchedCust, 'add', 'leads')}
                             onClick={(e) => navigateToCustomerLeadPage(matchedCust, 'add', 'leads', e)}

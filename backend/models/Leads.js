@@ -51,6 +51,16 @@ const LeadSchema = new mongoose.Schema({
     index: true
   },
   isRead: { type: Boolean, default: false, index: true },
+  // 'delivered' = visible in Customer Portal | 'held' = parked in In-House Line-Up / Archive until paid or released
+  deliveryStatus: {
+    type: String,
+    enum: ['delivered', 'held'],
+    default: 'delivered',
+    index: true,
+  },
+  heldReason: { type: String, default: '' },
+  capturedAt: { type: Date, default: Date.now },
+  releasedAt: { type: Date, default: null },
   assignedAt: { type: Date, default: Date.now, index: true },
   lastContactedAt: { type: Date, default: null },
   notes: { type: String, default: '' },
@@ -78,6 +88,7 @@ const LeadSchema = new mongoose.Schema({
 
 LeadSchema.index({ customerId: 1, masterLeadId: 1 });
 LeadSchema.index({ customerId: 1, status: 1 });
+LeadSchema.index({ customerId: 1, deliveryStatus: 1, assignedAt: -1 });
 LeadSchema.index({ customerId: 1, assignedAt: -1 });
 LeadSchema.index({ category: 1, city: 1, assignedAt: -1 });
 

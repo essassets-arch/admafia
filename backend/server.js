@@ -128,6 +128,7 @@ import {
   listLeadRows,
   createDirectLeadRow,
   createBulkDirectLeadsRows,
+  settleTodayAndUnlockHeldLeadsIfFunded,
   updateLeadAndSyncAssignment,
   listPaymentRecordRows,
   deletePaymentOrTestEntries,
@@ -317,6 +318,8 @@ function mapCustomerRow(row, passwordPlain = '•••••••••••�
     totalAdSpent: Number(row.total_ad_spent ?? 0),
     runwayDays: Number(row.runway_days ?? Math.floor(balance / Math.max(dailyPacing, 1))),
     totalLeadsDispatched: Number(row.total_leads_dispatched ?? 0),
+    heldLeadsCount: Number(row.held_leads_count ?? 0),
+    lockedHeldLeadsCount: Number(row.held_leads_count ?? 0),
     lastDeductedAt: row.last_deducted_at || null,
     marketingCode: normalizeMarketingCode(row.marketing_code || '') || null,
     isDeductedToday: (() => {
@@ -469,6 +472,11 @@ function mapLeadRow(row) {
         : row.source,
     priority: row.priority || 'Urgent',
     status: row.status || 'new',
+    deliveryStatus: row.delivery_status || 'delivered',
+    isHeld: (row.delivery_status || 'delivered') === 'held',
+    heldReason: row.held_reason || '',
+    capturedAtRaw: row.captured_at || row.created_at || null,
+    releasedAtRaw: row.released_at || null,
     isHot: Boolean(row.is_hot),
     read: Boolean(row.is_read),
     unmasked: true,
@@ -1014,14 +1022,18 @@ app.get('/api/me/workspace', requireAuth, async (req, res) => {
 
     const leadFilter = [{ customerId: customer.id }];
     if (customer.phone) leadFilter.push({ customerPhone: customer.phone });
+    const isStaffViewer = req.auth?.actorType === 'staff';
+    const workspaceLeadQuery = isStaffViewer
+      ? { $or: leadFilter }
+      : { $and: [{ $or: leadFilter }, { deliveryStatus: { $ne: 'held' } }] };
 
     const [leadDocs, leadsTotal, txDocs, transactionsTotal, invDocs] = await Promise.all([
-      Lead.find({ $or: leadFilter })
+      Lead.find(workspaceLeadQuery)
         .sort({ assignedAt: -1 })
         .skip((leadsPage - 1) * leadsLimit)
         .limit(leadsLimit)
         .lean(),
-      Lead.countDocuments({ $or: leadFilter }),
+      Lead.countDocuments(workspaceLeadQuery),
       WalletTransaction.find({ customerId: customer.id })
         .sort({ createdAt: -1 })
         .skip((txPage - 1) * txLimit)
@@ -1619,8 +1631,12 @@ app.post('/api/auth/login', loginBruteForceLimiter, async (req, res) => {
       ? issueStaffSession(res, { ...authUser, customerId: targetCustomerId })
       : issueCustomerSession(res, customer);
 
+    const loginLeadQuery = authUser
+      ? { customerId: targetCustomerId }
+      : { customerId: targetCustomerId, deliveryStatus: { $ne: 'held' } };
+
     const [leadDocs, txDocs, invDocs] = await Promise.all([
-      Lead.find({ customerId: targetCustomerId }).sort({ assignedAt: -1 }).limit(100).lean(),
+      Lead.find(loginLeadQuery).sort({ assignedAt: -1 }).limit(100).lean(),
       WalletTransaction.find({ customerId: targetCustomerId }).sort({ createdAt: -1 }).limit(100).lean(),
       TaxInvoice.find({ customerId: targetCustomerId }).sort({ createdAt: -1 }).limit(100).lean(),
     ]);
@@ -1908,8 +1924,12 @@ app.get('/api/customers/:identifier', requireCustomerSelfOrStaff((req) => req.pa
     }
     const leadFilter = [{ customerId: customer.id }];
     if (customer.phone) leadFilter.push({ customerPhone: customer.phone });
+    const custWsLeadQuery =
+      req.auth?.actorType === 'staff'
+        ? { $or: leadFilter }
+        : { $and: [{ $or: leadFilter }, { deliveryStatus: { $ne: 'held' } }] };
     const [leadDocs, txDocs, invDocs] = await Promise.all([
-      Lead.find({ $or: leadFilter }).sort({ assignedAt: -1 }).limit(200).lean(),
+      Lead.find(custWsLeadQuery).sort({ assignedAt: -1 }).limit(200).lean(),
       WalletTransaction.find({ customerId: customer.id }).sort({ createdAt: -1 }).limit(200).lean(),
       TaxInvoice.find({ customerId: customer.id }).sort({ createdAt: -1 }).limit(100).lean(),
     ]);
@@ -2048,9 +2068,18 @@ app.post('/api/sales/wallet/topup', requireStaff(['sales', 'super admin']), asyn
       },
     });
 
+    // 8B. Option B Auto-Unlock: If client had held Line-Up leads waiting, settle Today & unlock instantly!
+    const unlockOut = await settleTodayAndUnlockHeldLeadsIfFunded(targetCustId, {
+      trigger: 'sales_wallet_topup',
+    }).catch((e) => {
+      console.warn('[Sales Topup Held Lead Unlock Warning]', e.message);
+      return { unlockedCount: 0 };
+    });
+
     // 9. Fetch updated customer row (replaces vw_sales_customer_accounts)
     const viewRow = await getCustomerViewRowById(targetCustId);
     const updatedCustomer = viewRow ? mapCustomerRow(viewRow) : null;
+    const effectiveFinalBalance = updatedCustomer ? updatedCustomer.walletBalance : recordedNewBalance;
 
     res.json({
       ok: true,
@@ -2058,12 +2087,13 @@ app.post('/api/sales/wallet/topup', requireStaff(['sales', 'super admin']), asyn
       companyName: customer.companyName,
       amount: creditAmount,
       previousBalance: recordedOldBalance,
-      newBalance: recordedNewBalance,
-      walletBalance: recordedNewBalance,
+      newBalance: effectiveFinalBalance,
+      walletBalance: effectiveFinalBalance,
+      unlockedHeldLeadsCount: unlockOut.unlockedCount || 0,
       referenceUtr: cleanUtr,
       customer: updatedCustomer,
       paymentRecord: { receiptNo },
-      message: `${isUsd ? '$' : '₹'}${creditAmount.toLocaleString()} successfully credited to ${customer.companyName}'s wallet by ${salesPersonName}.`,
+      message: `${isUsd ? '$' : '₹'}${creditAmount.toLocaleString()} successfully credited to ${customer.companyName}'s wallet by ${salesPersonName}.${unlockOut.unlockedCount > 0 ? ` (${unlockOut.unlockedCount} held lead(s) auto-unlocked!)` : ''}`,
     });
   } catch (err) {
     console.error('[POST /api/sales/wallet/topup]', err);
@@ -3071,6 +3101,12 @@ const handleUpdateCustomerRecord = async (req, res) => {
           schedulePreset: String(nextPreset),
           balance: nextBal,
         });
+
+        if (newlyBookedDates.includes(kTodayIso) || nextActive === true) {
+          await settleTodayAndUnlockHeldLeadsIfFunded(cust._id, {
+            trigger: 'schedule_booked_today',
+          }).catch(() => {});
+        }
       }
     }
 
@@ -3971,15 +4007,25 @@ export async function creditCustomerWallet({
     currency,
   });
 
+  const unlockOut = await settleTodayAndUnlockHeldLeadsIfFunded(out.customerId, {
+    trigger: 'razorpay_topup',
+  }).catch((e) => {
+    console.warn('[Razorpay Topup Held Lead Unlock Warning]', e.message);
+    return { unlockedCount: 0 };
+  });
+
   const viewRow = await getCustomerViewRowById(out.customerId);
+  const mappedCust = viewRow ? mapCustomerRow(viewRow) : null;
+  const effectiveBal = mappedCust ? mappedCust.walletBalance : out.walletBalance;
 
   if (out.alreadyCredited) {
     return {
       ok: true,
       alreadyCredited: true,
       customerId: out.customerId,
-      walletBalance: out.walletBalance,
-      customer: viewRow ? mapCustomerRow(viewRow) : null,
+      walletBalance: effectiveBal,
+      unlockedHeldLeadsCount: unlockOut.unlockedCount || 0,
+      customer: mappedCust,
       transaction: out.transaction ? mapWalletTxRow(walletTxToRow(out.transaction)) : null,
       message: 'Payment already credited idempotently.',
     };
@@ -3989,12 +4035,13 @@ export async function creditCustomerWallet({
     ok: true,
     alreadyCredited: false,
     customerId: out.customerId,
-    walletBalance: out.walletBalance,
-    customer: viewRow ? mapCustomerRow(viewRow) : null,
+    walletBalance: effectiveBal,
+    unlockedHeldLeadsCount: unlockOut.unlockedCount || 0,
+    customer: mappedCust,
     transaction: out.transaction ? mapWalletTxRow(walletTxToRow(out.transaction)) : null,
     paymentRecord: out.paymentRecord ? mapPaymentRecordRow(paymentToRow(out.paymentRecord)) : null,
     invoice: out.invoice ? mapInvoiceRow(invoiceToRow(out.invoice)) : null,
-    message: `₹${cleanAmount.toLocaleString('en-IN')} successfully credited to wallet.`,
+    message: `₹${cleanAmount.toLocaleString('en-IN')} successfully credited to wallet.${unlockOut.unlockedCount > 0 ? ` ${unlockOut.unlockedCount} waiting buyer lead(s) unlocked!` : ''}`,
   };
 }
 
@@ -4797,10 +4844,15 @@ app.post(
       manual,
     });
 
+    const unlockOut = await settleTodayAndUnlockHeldLeadsIfFunded(cust._id, {
+      trigger: 'wallet_deduct_today',
+    }).catch(() => ({ unlockedCount: 0 }));
+
     const viewRow = await getCustomerViewRowById(cust._id);
     res.json({
       ok: true,
       ...outcome.result,
+      unlockedHeldLeadsCount: unlockOut.unlockedCount || 0,
       ...(outcome.txDoc ? { transaction: mapWalletTxRow(walletTxToRow(outcome.txDoc)) } : {}),
       customer: viewRow ? mapCustomerRow(viewRow) : null,
     });
@@ -4815,10 +4867,10 @@ app.post(
 // =============================================================================
 app.get('/api/leads', requireAuth, async (req, res) => {
   try {
-    // Enforce strict tenant isolation when queried by a customer
+    // Enforce strict tenant isolation + hide held Line-Up leads when queried by a customer
     const scopedQuery =
       req.auth.actorType === 'customer'
-        ? { ...req.query, customerId: req.auth.customerId || req.auth.sub }
+        ? { ...req.query, customerId: req.auth.customerId || req.auth.sub, excludeHeld: true }
         : req.query || {};
     const rows = await listLeadRows(scopedQuery);
     res.json({ ok: true, leads: rows.map(mapLeadRow) });
@@ -4856,6 +4908,8 @@ app.post('/api/leads', requireAuth, async (req, res) => {
         leads: mapped,
         lead: mapped[0] || null,
         addedCount: mapped.length,
+        isHeld: Boolean(bulkOut.isHeld),
+        deliveryStatus: bulkOut.isHeld ? 'held' : 'delivered',
         skippedDuplicates: bulkOut.skippedDuplicates || [],
         invalidNumbers: bulkOut.invalidNumbers || [],
       });
@@ -4878,7 +4932,12 @@ app.post('/api/leads', requireAuth, async (req, res) => {
       });
     }
 
-    res.status(201).json({ ok: true, lead: mapLeadRow(out.row) });
+    res.status(201).json({
+      ok: true,
+      lead: mapLeadRow(out.row),
+      isHeld: Boolean(out.isHeld),
+      deliveryStatus: out.isHeld ? 'held' : 'delivered',
+    });
   } catch (err) {
     console.error('[POST /api/leads]', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -4888,12 +4947,20 @@ app.post('/api/leads', requireAuth, async (req, res) => {
 app.patch('/api/leads/:id', requireAuth, async (req, res) => {
   try {
     if (req.auth.actorType === 'customer') {
-      const targetLead = await Lead.findById(req.params.id).select('customerId customerPhone').lean();
+      const targetLead = await Lead.findById(req.params.id)
+        .select('customerId customerPhone deliveryStatus')
+        .lean();
       if (targetLead) {
         const selfId = String(req.auth.customerId || req.auth.sub);
         const selfPhone = String(req.auth.phone || '').slice(-10);
         if (targetLead.customerId !== selfId && (!selfPhone || targetLead.customerPhone !== selfPhone)) {
           return res.status(403).json({ ok: false, error: 'Access denied: lead belongs to another workspace.' });
+        }
+        if (targetLead.deliveryStatus === 'held') {
+          return res.status(403).json({
+            ok: false,
+            error: 'This enquiry is locked until Today’s wallet delivery budget is settled.',
+          });
         }
       }
     }

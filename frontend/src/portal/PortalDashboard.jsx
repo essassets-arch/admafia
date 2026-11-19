@@ -818,6 +818,20 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
 
       return updated;
     });
+
+    // Re-hydrate workspace from MongoDB so any waiting held leads unlocked by this payment appear immediately!
+    crmApi
+      .getMyWorkspace()
+      .then((ws) => {
+        if (!ws || !ws.ok) return;
+        if (ws.customer) {
+          setWalletBalance(Number(ws.customer.walletBalance ?? ws.customer.balance ?? 0));
+          setCustomer((prev) => ({ ...prev, ...ws.customer }));
+        }
+        if (Array.isArray(ws.leads)) setLeads(ws.leads);
+        if (Array.isArray(ws.transactions)) setTransactions(ws.transactions);
+      })
+      .catch(() => {});
   };
 
   // Automatic Mobile Return / Tab-Reload / Focus Razorpay Order Reconciler
@@ -977,6 +991,20 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
         return updated;
       });
 
+      // Refresh workspace so any held leads unlocked by activating Today appear in My Leads immediately
+      crmApi
+        .getMyWorkspace()
+        .then((ws) => {
+          if (!ws || !ws.ok) return;
+          if (ws.customer) {
+            setWalletBalance(Number(ws.customer.walletBalance ?? ws.customer.balance ?? newBal));
+            setCustomer((prev) => ({ ...prev, ...ws.customer }));
+          }
+          if (Array.isArray(ws.leads)) setLeads(ws.leads);
+          if (Array.isArray(ws.transactions)) setTransactions(ws.transactions);
+        })
+        .catch(() => {});
+
       return { success: true, message: `Successfully deducted ${currencySymbol}${spend} daily pacing for today!` };
     }
     return { success: false, message: `Insufficient balance! Wallet has ${currencySymbol}${walletBalance.toFixed(0)}, needs ${currencySymbol}${spend}.` };
@@ -1040,6 +1068,18 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 } catch (e) {}
                 return merged;
               });
+
+              crmApi
+                .getMyWorkspace()
+                .then((ws) => {
+                  if (!ws || !ws.ok) return;
+                  if (Array.isArray(ws.leads)) setLeads(ws.leads);
+                  if (Array.isArray(ws.transactions)) setTransactions(ws.transactions);
+                  if (ws.customer) {
+                    setCustomer((prev) => ({ ...prev, ...ws.customer }));
+                  }
+                })
+                .catch(() => {});
             }
           })
           .catch((err) => {
@@ -2028,6 +2068,7 @@ export default function PortalDashboard({ onSignOut, onBackToWebsite, initialTab
                 setIsScheduleOpen(true);
               }}
               onOpenAddFunds={() => setIsAddFundsOpen(true)}
+              onToggleCampaign={handleToggleCampaign}
               onUnbookFutureDate={handleUnbookFutureDate}
               onOpenCompleteRegistration={handleOpenRegistrationFlow}
             />

@@ -646,7 +646,14 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                 return displayedCustomers.map((c) => {
                   const custCampaigns = campaigns.filter((camp) => camp.customerId === c.id);
                   const activeCampaign = custCampaigns.find((camp) => camp.status === 'Running') || custCampaigns[0];
-                  const isLive = Boolean(c.adCampaignActive || (activeCampaign && activeCampaign.status === 'Running'));
+                  const isInHouseRunning = Boolean(
+                    c.isInHouseRunning || (activeCampaign && activeCampaign.status === 'Running')
+                  );
+                  const isUserPaidToday = Boolean(c.isDeductedToday || c.adCampaignActive);
+                  const isSpilloverUnpaidToday = Boolean(
+                    c.isSpilloverUnpaidToday || (isInHouseRunning && !isUserPaidToday)
+                  );
+                  const isLive = Boolean(isInHouseRunning || isUserPaidToday);
                   const rawResolvedCode =
                     c.marketingCode ||
                     (activeCampaign && (activeCampaign.marketingCode || activeCampaign.externalCampaignId)) ||
@@ -662,19 +669,58 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
 
                   return (
                     <tr key={c.id}>
-                      {/* 1. Customer Info & Live Marketing Status */}
+                      {/* 1. Customer Info & Live Marketing Status (In-House Ad vs User Side) */}
                       <td>
                         <div className="mkt-cell-primary">{c.name}</div>
                         <div className="mkt-cell-sub">{c.contactPerson} • +91 {c.phone}</div>
                         <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                          <span
-                            className={`mkt-pill ${isLive ? 'mkt-pill-green' : 'mkt-pill-slate'}`}
-                            style={{ fontSize: '0.74rem', padding: '3px 8px', fontWeight: 800 }}
-                          >
-                            {isLive && <span className="marketing-live-dot" />}
-                            {isLive ? 'MARKETING IS LIVE' : 'MARKETING IS OFF'}
-                          </span>
-                          {isLowBalance && (
+                          {isSpilloverUnpaidToday ? (
+                            <>
+                              <span
+                                className="mkt-pill"
+                                style={{
+                                  fontSize: '0.71rem',
+                                  padding: '3px 8px',
+                                  fontWeight: 800,
+                                  background: 'rgba(245, 158, 11, 0.16)',
+                                  color: '#b45309',
+                                  border: '1px solid rgba(245, 158, 11, 0.45)',
+                                }}
+                              >
+                                🟡 IN-HOUSE AD LIVE (24h Spillover)
+                              </span>
+                              <span
+                                className="mkt-pill mkt-pill-rose"
+                                style={{ fontSize: '0.68rem', padding: '2px 7px', fontWeight: 800 }}
+                              >
+                                🔴 USER SIDE: OFF (Unpaid Today)
+                              </span>
+                            </>
+                          ) : (
+                            <span
+                              className={`mkt-pill ${isLive ? 'mkt-pill-green' : 'mkt-pill-slate'}`}
+                              style={{ fontSize: '0.74rem', padding: '3px 8px', fontWeight: 800 }}
+                            >
+                              {isLive && <span className="marketing-live-dot" />}
+                              {isLive ? 'MARKETING IS LIVE' : 'MARKETING IS OFF'}
+                            </span>
+                          )}
+                          {Number(c.heldLeadsCount || 0) > 0 && (
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                padding: '2px 7px',
+                                borderRadius: 6,
+                                fontWeight: 800,
+                                background: 'rgba(245, 158, 11, 0.14)',
+                                color: '#b45309',
+                                border: '1px solid rgba(245, 158, 11, 0.4)',
+                              }}
+                            >
+                              📦 {c.heldLeadsCount} Lead{c.heldLeadsCount === 1 ? '' : 's'} Held in Line-Up
+                            </span>
+                          )}
+                          {isLowBalance && !isSpilloverUnpaidToday && (
                             <span
                               className="mkt-pill mkt-pill-rose"
                               style={{ fontSize: '0.68rem', padding: '2px 7px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
@@ -885,6 +931,8 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                           Weekly: <strong>₹{(activeDays.length * dailySpend).toLocaleString('en-IN')}</strong> • Today ({todayItem.label}):{' '}
                           {c.isDeductedToday ? (
                             <strong style={{ color: '#059669' }}>● Settled for Today (₹{dailySpend}) ✓</strong>
+                          ) : isSpilloverUnpaidToday ? (
+                            <strong style={{ color: '#d97706' }}>● 24h Ad Spillover (User Unpaid Today)</strong>
                           ) : isLive && isTodayActive ? (
                             <strong style={{ color: '#0ea5e9' }}>● Active (₹{dailySpend}/day Service)</strong>
                           ) : isLive ? (
@@ -949,7 +997,7 @@ export default function CustomerMarketingControlDesk({ onNavigateToDesk }) {
                               }}
                             >
                               <Square size={13} fill="currentColor" />
-                              <span>Stop Marketing</span>
+                              <span>{isSpilloverUnpaidToday ? 'Stop In-House Ad' : 'Stop Marketing'}</span>
                             </button>
                           ) : (
                             <div>

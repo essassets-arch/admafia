@@ -19,6 +19,8 @@ const MarketingCampaignSchema = new mongoose.Schema({
   },
   activeDays: [{ type: String }],
   startDate: { type: Date, default: Date.now },
+  startedAt: { type: Date, default: null },
+  stoppedAt: { type: Date, default: null },
   endDate: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },

@@ -169,6 +169,9 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
   // Sleek Phone-Only (+ Bulk Multi-Number Paste) Lead Dispatch State
   const [phonesInput, setPhonesInput] = useState('');
   const [multiLineMode, setMultiLineMode] = useState(false);
+  const [dispatchMode, setDispatchMode] = useState('send'); // 'send' | 'hold'
+  const [releasingId, setReleasingId] = useState('');
+  const lastModeCustIdRef = useRef('');
 
   // Assigned Leads History Filter State
   const [historyFilter, setHistoryFilter] = useState('all');
@@ -201,6 +204,26 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
     if (found) return found;
     return null;
   }, [allCustomers, urlState.customerKey]);
+
+  const isTargetPaidToday = useMemo(() => {
+    if (!targetCustomer) return true;
+    const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    if (targetCustomer.isDeductedToday || targetCustomer.adCampaignActive) return true;
+    if (Array.isArray(targetCustomer.bookedDates) && targetCustomer.bookedDates.includes(todayIso)) {
+      return true;
+    }
+    const bal = Number(targetCustomer.balance ?? targetCustomer.walletBalance ?? 0);
+    const daily = Number(targetCustomer.dailyAdSpend ?? targetCustomer.dailyPacing ?? 300);
+    return bal >= daily;
+  }, [targetCustomer]);
+
+  useEffect(() => {
+    const cid = String(targetCustomer?.id || urlState.customerKey || '');
+    if (cid && lastModeCustIdRef.current !== cid) {
+      lastModeCustIdRef.current = cid;
+      setDispatchMode(isTargetPaidToday ? 'send' : 'hold');
+    }
+  }, [targetCustomer?.id, urlState.customerKey, isTargetPaidToday]);
 
   // Auto-focus buyer phone input when opening in "add" mode
   useEffect(() => {
@@ -338,6 +361,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
     const companyDisplay =
       targetCustomer.companyName || targetCustomer.name || `@${targetCustomer.username || 'client'}`;
 
+    const holdInArchive = dispatchMode === 'hold';
     try {
       const res = await crmApi.createBulkLeads({
         customerId: targetCustomer.id,
@@ -345,6 +369,12 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
         customerUsername: targetCustomer.username || '',
         company: companyDisplay,
         phones: parsedPhones.validNumbers,
+        holdInArchive,
+        heldReason: holdInArchive
+          ? !isTargetPaidToday
+            ? 'Client Unpaid Today — Held in Line-Up Archive'
+            : 'Advance Lead Queued in Line-Up Archive'
+          : '',
       });
 
       const createdList = Array.isArray(res?.leads) ? res.leads.map(normalizeLeadItem) : [];
@@ -383,6 +413,7 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
 
       setSuccessBanner({
         addedCount,
+        isHeld: holdInArchive || Boolean(res?.isHeld),
         phones: createdList.map((l) => l.phone),
         skippedDuplicates,
         invalidCount: parsedPhones.invalidTokens.length + serverInvalid.length,
@@ -436,28 +467,50 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
   };
 
   // Computed KPIs for this customer's assigned leads
-  const totalAssigned = assignedLeads.length;
-  const readCount = assignedLeads.filter((l) => Boolean(l.read || l.is_read || l.status === 'read')).length;
+  const isLeadHeld = (l) => Boolean(l.isHeld || l.deliveryStatus === 'held' || l.delivery_status === 'held');
+  const heldLeadsList = assignedLeads.filter(isLeadHeld);
+  const heldCount = heldLeadsList.length;
+  const deliveredLeadsList = assignedLeads.filter((l) => !isLeadHeld(l));
+  const totalAssigned = deliveredLeadsList.length;
+  const readCount = deliveredLeadsList.filter((l) => Boolean(l.read || l.is_read || l.status === 'read')).length;
   const unreadCount = totalAssigned - readCount;
   const readRatePct = totalAssigned > 0 ? Math.round((readCount / totalAssigned) * 100) : 0;
-  const engagedCount = assignedLeads.filter((l) =>
+  const engagedCount = deliveredLeadsList.filter((l) =>
     ['interested', 'in follow-up', 'callback', 'converted', 'won', 'qualified'].includes(
       String(l.status || '').toLowerCase()
     )
   ).length;
 
+  const handleReleaseHeldLeads = async (leadIds = []) => {
+    const key = leadIds.length === 1 ? leadIds[0] : 'all_held';
+    setReleasingId(key);
+    try {
+      await crmApi.releaseHeldLeads({
+        customerId: targetCustomer?.id || '',
+        leadIds,
+      });
+      await fetchCustomerLeads(false);
+    } catch (err) {
+      setSubmitError(err?.message || 'Could not release held leads.');
+    } finally {
+      setReleasingId('');
+    }
+  };
+
   const filteredHistory = useMemo(() => {
     return assignedLeads.filter((l) => {
+      const held = isLeadHeld(l);
       const isRead = Boolean(l.read || l.is_read || l.status === 'read');
       const st = String(l.status || 'new').toLowerCase();
 
-      if (historyFilter === 'read' && !isRead) return false;
-      if (historyFilter === 'unread' && isRead) return false;
-      if (
-        historyFilter === 'engaged' &&
-        !['interested', 'in follow-up', 'callback', 'converted', 'won', 'qualified'].includes(st)
-      ) {
-        return false;
+      if (historyFilter === 'held') return held;
+      if (historyFilter === 'read') return !held && isRead;
+      if (historyFilter === 'unread') return !held && !isRead;
+      if (historyFilter === 'engaged') {
+        return (
+          !held &&
+          ['interested', 'in follow-up', 'callback', 'converted', 'won', 'qualified'].includes(st)
+        );
       }
 
       const q = historySearch.trim().toLowerCase();
@@ -578,23 +631,33 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                       )}
                     </td>
 
-                    {/* 2. Read / Unread Status */}
+                    {/* 2. Read / Unread / Line-Up Archive Status */}
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleLeadRead(lead)}
-                          title="Click to toggle read / unread status"
-                          className={`desk-pill ${isRead ? 'pill-emerald' : 'pill-amber'}`}
-                          style={{
-                            fontWeight: 800,
-                            border: 'none',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {isRead ? '✓ Marked as Read' : '⏳ Unread by Client'}
-                        </button>
-                        {showPipelineStage && (
+                        {isLeadHeld(lead) ? (
+                          <span
+                            className="desk-pill pill-amber"
+                            style={{ fontWeight: 900, background: '#fef3c7', color: '#92400e', border: '1px solid #f59e0b' }}
+                            title={lead.heldReason || 'Hidden from client until payment or manual release'}
+                          >
+                            📦 HELD IN LINE-UP (Hidden)
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleLeadRead(lead)}
+                            title="Click to toggle read / unread status"
+                            className={`desk-pill ${isRead ? 'pill-emerald' : 'pill-amber'}`}
+                            style={{
+                              fontWeight: 800,
+                              border: 'none',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {isRead ? '✓ Marked as Read' : '⏳ Unread by Client'}
+                          </button>
+                        )}
+                        {showPipelineStage && !isLeadHeld(lead) && (
                           <span className={`desk-pill ${stagePillClass}`} style={{ fontSize: '0.72rem', fontWeight: 800 }}>
                             {stageRaw}
                           </span>
@@ -611,9 +674,31 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                       </span>
                     </td>
 
-                    {/* 4. Call / WhatsApp Actions */}
+                    {/* 4. Release / Call / WhatsApp Actions */}
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        {isLeadHeld(lead) && (
+                          <button
+                            type="button"
+                            disabled={releasingId === lead.id}
+                            onClick={() => handleReleaseHeldLeads([lead.id])}
+                            className="desk-action-btn"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              padding: '6px 11px',
+                              fontSize: '0.77rem',
+                              fontWeight: 800,
+                              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                              color: '#ffffff',
+                              borderColor: '#4f46e5',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Send size={13} /> {releasingId === lead.id ? 'Releasing...' : 'Release Now'}
+                          </button>
+                        )}
                         <a
                           href={callHref}
                           className="desk-action-btn"
@@ -1190,6 +1275,88 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
             )}
 
             <form onSubmit={handleAssignLead}>
+              {/* 2-Stage Delivery Mode Toggle: Hold in Line-Up Archive vs Send Live Now */}
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  background: isTargetPaidToday ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.12)',
+                  border: `1px solid ${isTargetPaidToday ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.45)'}`,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: isTargetPaidToday ? '#059669' : '#b45309' }}>
+                    {isTargetPaidToday
+                      ? `🟢 ${companyTitle} is Paid / Funded Today (Wallet: ₹${walletBalance.toLocaleString('en-IN')})`
+                      : `🔴 ${companyTitle} is Unpaid Today (Wallet: ₹${walletBalance.toLocaleString('en-IN')}) — Hold in Line-Up Recommended`}
+                  </span>
+                  {heldCount > 0 && (
+                    <button
+                      type="button"
+                      disabled={releasingId === 'all_held'}
+                      onClick={() => handleReleaseHeldLeads([])}
+                      style={{
+                        background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '4px 10px',
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {releasingId === 'all_held' ? 'Releasing...' : `🚀 Release All ${heldCount} Held Lead(s) Now`}
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setDispatchMode('hold')}
+                    style={{
+                      padding: '9px 12px',
+                      borderRadius: 9,
+                      fontSize: '0.8rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      border: dispatchMode === 'hold' ? '2px solid #d97706' : '1px solid var(--adm-border-strong, #cbd5e1)',
+                      background: dispatchMode === 'hold' ? '#fef3c7' : 'var(--adm-bg-card, #ffffff)',
+                      color: dispatchMode === 'hold' ? '#92400e' : 'var(--adm-text-body, #475569)',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div>📦 Save to Line-Up / Archive (Hold)</div>
+                    <div style={{ fontSize: '0.69rem', fontWeight: 600, opacity: 0.85, marginTop: 2 }}>
+                      100% hidden from client until they pay ₹300 (or you click Release)
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDispatchMode('send')}
+                    style={{
+                      padding: '9px 12px',
+                      borderRadius: 9,
+                      fontSize: '0.8rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      border: dispatchMode === 'send' ? '2px solid #059669' : '1px solid var(--adm-border-strong, #cbd5e1)',
+                      background: dispatchMode === 'send' ? '#ecfdf5' : 'var(--adm-bg-card, #ffffff)',
+                      color: dispatchMode === 'send' ? '#065f46' : 'var(--adm-text-body, #475569)',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div>🚀 Send Live to User Now</div>
+                    <div style={{ fontSize: '0.69rem', fontWeight: 600, opacity: 0.85, marginTop: 2 }}>
+                      Delivered straight into client&apos;s My Leads inbox + push notification
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <div
                   style={{
@@ -1383,9 +1550,11 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                     className="sales-btn-primary"
                     style={{
                       background: canDispatch
-                        ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+                        ? dispatchMode === 'hold'
+                          ? 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)'
+                          : 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
                         : '#94a3b8',
-                      borderColor: canDispatch ? '#059669' : '#94a3b8',
+                      borderColor: canDispatch ? (dispatchMode === 'hold' ? '#d97706' : '#059669') : '#94a3b8',
                       cursor: canDispatch ? 'pointer' : 'not-allowed',
                       padding: '11px 24px',
                       fontWeight: 800,
@@ -1396,10 +1565,16 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                   >
                     <Send size={15} />
                     {isSubmitting
-                      ? 'Sending Lead(s)...'
-                      : parsedPhones.validNumbers.length > 1
-                        ? `+ Send ${parsedPhones.validNumbers.length} Leads Now`
-                        : '+ Send Lead(s) Now'}
+                      ? dispatchMode === 'hold'
+                        ? 'Saving to Line-Up...'
+                        : 'Sending Lead(s)...'
+                      : dispatchMode === 'hold'
+                        ? parsedPhones.validNumbers.length > 1
+                          ? `📦 Hold ${parsedPhones.validNumbers.length} Leads in Line-Up`
+                          : '📦 Hold Lead in Line-Up'
+                        : parsedPhones.validNumbers.length > 1
+                          ? `+ Send ${parsedPhones.validNumbers.length} Leads Now`
+                          : '+ Send Lead(s) Now'}
                   </button>
                 </div>
               </div>
@@ -1488,8 +1663,36 @@ export default function CustomerLeadWorkspacePage({ customers: propsCustomers = 
                 className={`desk-tab ${historyFilter === 'all' ? 'active' : ''}`}
                 onClick={() => setHistoryFilter('all')}
               >
-                All Assigned ({totalAssigned})
+                All ({assignedLeads.length})
               </button>
+              <button
+                type="button"
+                className={`desk-tab ${historyFilter === 'held' ? 'active' : ''}`}
+                onClick={() => setHistoryFilter('held')}
+                style={
+                  historyFilter === 'held'
+                    ? { background: '#d97706', borderColor: '#d97706', color: '#ffffff', fontWeight: 800 }
+                    : { color: '#b45309', borderColor: '#fde68a', background: heldCount > 0 ? '#fffbeb' : undefined, fontWeight: 800 }
+                }
+              >
+                📦 Line-Up / Archive ({heldCount})
+              </button>
+              {heldCount > 0 && (
+                <button
+                  type="button"
+                  disabled={releasingId === 'all_held'}
+                  onClick={() => handleReleaseHeldLeads([])}
+                  className="desk-tab"
+                  style={{
+                    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                    borderColor: '#4f46e5',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                  }}
+                >
+                  🚀 Release All Held ({heldCount})
+                </button>
+              )}
               <button
                 type="button"
                 className={`desk-tab ${historyFilter === 'read' ? 'active' : ''}`}

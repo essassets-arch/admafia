@@ -214,8 +214,10 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
       (c.city || '').toLowerCase().includes(q);
     if (!matchSearch) return false;
     if (statusFilter === 'live') return c.isCampaignLive;
-    if (statusFilter === 'off') return !c.isCampaignLive;
-    if (statusFilter === 'spend_pending') return Boolean(c.isSpendPreset);
+    if (statusFilter === 'spillover') return Boolean(c.isSpilloverUnpaidToday);
+    if (statusFilter === 'held_leads') return Number(c.heldLeadsCount || 0) > 0;
+    if (statusFilter === 'off') return !c.isCampaignLive && c.isScheduledOnDate;
+    if (statusFilter === 'spend_pending') return Boolean(c.isSpendPreset) && c.isScheduledOnDate;
     if (statusFilter === 'needs_creative') return (c.approvedPostsCount || 0) === 0;
     return true;
   });
@@ -291,15 +293,27 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
         </div>
       </div>
 
-      {/* Urgent Stimulation Banner: Paid Clients Waiting for Campaign Start or Spend Entry */}
-      {(summary.campaignsDelayedCount > 0 || (summary.tomorrowScheduledCount || 0) > 0) && (
+      {/* Urgent Stimulation Banner: Paid Clients Waiting for Campaign Start, 24h Spillover Ads, or Tomorrow Prep */}
+      {(summary.campaignsDelayedCount > 0 ||
+        (summary.spilloverRunningCount || 0) > 0 ||
+        (summary.tomorrowScheduledCount || 0) > 0) && (
         <div
           style={{
             marginBottom: 16,
             padding: '12px 16px',
             borderRadius: 12,
-            border: summary.campaignsDelayedCount > 0 ? '1.5px solid #ef4444' : '1px solid #6366f1',
-            background: summary.campaignsDelayedCount > 0 ? 'rgba(239, 68, 68, 0.09)' : 'rgba(99, 102, 241, 0.08)',
+            border:
+              summary.campaignsDelayedCount > 0
+                ? '1.5px solid #ef4444'
+                : (summary.spilloverRunningCount || 0) > 0
+                  ? '1.5px solid #f59e0b'
+                  : '1px solid #6366f1',
+            background:
+              summary.campaignsDelayedCount > 0
+                ? 'rgba(239, 68, 68, 0.09)'
+                : (summary.spilloverRunningCount || 0) > 0
+                  ? 'rgba(245, 158, 11, 0.10)'
+                  : 'rgba(99, 102, 241, 0.08)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -311,6 +325,21 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
             {summary.campaignsDelayedCount > 0 && (
               <span style={{ fontWeight: 900, color: '#ef4444', fontSize: '0.86rem' }}>
                 🚨 MANDATORY ACTION: {summary.campaignsDelayedCount} Paid/Scheduled Client{summary.campaignsDelayedCount > 1 ? 's' : ''} have Campaign OFF on {summary.isToday ? 'Today' : selectedDate}! Start immediately so paid slots are fulfilled.
+              </span>
+            )}
+            {(summary.spilloverRunningCount || 0) > 0 && (
+              <span
+                style={{
+                  fontWeight: 800,
+                  fontSize: '0.8rem',
+                  color: '#b45309',
+                  background: 'rgba(245, 158, 11, 0.18)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  padding: '4px 11px',
+                  borderRadius: 999,
+                }}
+              >
+                🟡 {summary.spilloverRunningCount} In-House Ad{summary.spilloverRunningCount > 1 ? 's' : ''} Running from Yesterday (24h Cycle) • User Side OFF (Unpaid Today)
               </span>
             )}
             {(summary.tomorrowScheduledCount || 0) > 0 && (
@@ -328,16 +357,28 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
               </span>
             )}
           </div>
-          {summary.campaignsDelayedCount > 0 && (
-            <button
-              type="button"
-              className="mkt-btn-primary"
-              onClick={() => setStatusFilter('off')}
-              style={{ background: '#ef4444', borderColor: '#dc2626', fontSize: '0.78rem', padding: '6px 12px' }}
-            >
-              Show OFF Campaigns ({summary.campaignsDelayedCount})
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {(summary.spilloverRunningCount || 0) > 0 && (
+              <button
+                type="button"
+                className="mkt-btn-primary"
+                onClick={() => setStatusFilter('spillover')}
+                style={{ background: '#d97706', borderColor: '#b45309', fontSize: '0.78rem', padding: '6px 12px' }}
+              >
+                Show 24h Spillover ({summary.spilloverRunningCount})
+              </button>
+            )}
+            {summary.campaignsDelayedCount > 0 && (
+              <button
+                type="button"
+                className="mkt-btn-primary"
+                onClick={() => setStatusFilter('off')}
+                style={{ background: '#ef4444', borderColor: '#dc2626', fontSize: '0.78rem', padding: '6px 12px' }}
+              >
+                Show OFF Campaigns ({summary.campaignsDelayedCount})
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -487,12 +528,20 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
       >
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {[
-            { id: 'all', label: `All Scheduled (${rawClients.length})` },
-            { id: 'live', label: `🟢 Running (${rawClients.filter((c) => c.isCampaignLive).length})` },
-            { id: 'off', label: `🔴 Campaign OFF (${rawClients.filter((c) => !c.isCampaignLive).length})` },
+            { id: 'all', label: `All Active (${rawClients.length})` },
+            { id: 'live', label: `🟢 In-House Running (${rawClients.filter((c) => c.isCampaignLive).length})` },
+            {
+              id: 'spillover',
+              label: `🟡 24h Spillover / User OFF (${rawClients.filter((c) => c.isSpilloverUnpaidToday).length})`,
+            },
+            {
+              id: 'held_leads',
+              label: `📦 Held in Line-Up (${rawClients.filter((c) => Number(c.heldLeadsCount || 0) > 0).length})`,
+            },
+            { id: 'off', label: `🔴 Paid Today — Campaign OFF (${rawClients.filter((c) => !c.isCampaignLive && c.isScheduledOnDate).length})` },
             {
               id: 'spend_pending',
-              label: `⏳ Spend Pending (${rawClients.filter((c) => c.isSpendPreset).length})`,
+              label: `⏳ Spend Pending (${rawClients.filter((c) => c.isSpendPreset && c.isScheduledOnDate).length})`,
             },
             {
               id: 'needs_creative',
@@ -593,7 +642,23 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                         {c.category || 'General'} • {[c.city, c.state].filter(Boolean).join(', ') || 'India'}
                       </div>
                       <div style={{ fontSize: '0.74rem', color: '#059669', fontFamily: 'monospace', fontWeight: 700, marginTop: 2 }}>
-                        +91 {c.phone} • Leads Sent: <strong>{c.leadsDeliveredOnDate}</strong>
+                        +91 {c.phone} • Delivered: <strong>{c.leadsDeliveredOnDate}</strong>
+                        {Number(c.heldLeadsCount || 0) > 0 && (
+                          <span
+                            style={{
+                              marginLeft: 6,
+                              background: 'rgba(245, 158, 11, 0.18)',
+                              color: '#b45309',
+                              border: '1px solid rgba(245, 158, 11, 0.45)',
+                              borderRadius: 6,
+                              padding: '1px 6px',
+                              fontSize: '0.68rem',
+                              fontWeight: 900,
+                            }}
+                          >
+                            📦 {c.heldLeadsCount} Held in Line-Up
+                          </span>
+                        )}
                       </div>
                       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
                         <button
@@ -652,7 +717,40 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                       </div>
                       <div style={{ fontSize: '0.73rem', color: 'var(--adm-text-muted, #64748b)', marginTop: 3 }}>
                         Wallet: <strong>{formatINR(c.walletBalance, c.currency)}</strong>{' '}
-                        {c.isBookedOnDate ? '• Paid ✓' : '• Funded'}
+                        {c.isBookedOnDate ? '• Paid ✓' : c.isScheduledOnDate ? '• Funded' : '• ₹0 Today'}
+                      </div>
+                      <div style={{ marginTop: 5 }}>
+                        {c.isScheduledOnDate ? (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              fontSize: '0.66rem',
+                              fontWeight: 800,
+                              padding: '2px 7px',
+                              borderRadius: 999,
+                              background: 'rgba(16, 185, 129, 0.14)',
+                              color: '#059669',
+                              border: '1px solid rgba(16, 185, 129, 0.35)',
+                            }}
+                          >
+                            🟢 User Side: ON (Paid)
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              fontSize: '0.66rem',
+                              fontWeight: 800,
+                              padding: '2px 7px',
+                              borderRadius: 999,
+                              background: 'rgba(239, 68, 68, 0.12)',
+                              color: '#dc2626',
+                              border: '1px solid rgba(239, 68, 68, 0.35)',
+                            }}
+                          >
+                            🔴 User Side: OFF (Unpaid)
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -743,19 +841,43 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                       </div>
                     </td>
 
-                    {/* 4. Campaign Status */}
+                    {/* 4. Campaign Status (In-House 24h Ad State vs User Paid State) */}
                     <td>
                       {c.isCampaignLive ? (
-                        <div>
-                          <span className="mkt-badge mkt-badge-emerald">
-                            <CheckCircle2 size={12} /> RUNNING {c.marketingCode ? `(${c.marketingCode})` : ''}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
+                          <span
+                            className={`mkt-badge ${c.isOver24Hours && c.isSpilloverUnpaidToday ? 'mkt-badge-rose' : 'mkt-badge-emerald'}`}
+                          >
+                            <CheckCircle2 size={12} /> IN-HOUSE LIVE {c.campaignRunningLabel ? `• ${c.campaignRunningLabel}` : ''}
                           </span>
+                          {c.isSpilloverUnpaidToday ? (
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                padding: '2px 7px',
+                                borderRadius: 6,
+                                background: c.isOver24Hours ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.16)',
+                                color: c.isOver24Hours ? '#dc2626' : '#b45309',
+                                border: `1px solid ${c.isOver24Hours ? 'rgba(239, 68, 68, 0.4)' : 'rgba(245, 158, 11, 0.45)'}`,
+                              }}
+                            >
+                              {c.isOver24Hours
+                                ? '🚨 >24h Spillover — Stop Ad Now!'
+                                : '🟡 24h Spillover (User Unpaid)'}
+                            </span>
+                          ) : null}
                         </div>
                       ) : (
-                        <div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
                           <span className="mkt-badge mkt-badge-rose">
                             <AlertTriangle size={12} /> {c.campaignStatus === 'Not Created' ? 'NOT STARTED' : c.campaignStatus.toUpperCase()}
                           </span>
+                          {Number(c.heldLeadsCount || 0) > 0 && !c.isScheduledOnDate && (
+                            <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#b45309' }}>
+                              📦 {c.heldLeadsCount} Lead{c.heldLeadsCount === 1 ? '' : 's'} Held for Payment
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -851,7 +973,13 @@ export default function MarketingActiveScheduleDesk({ onNavigateToDesk }) {
                           }}
                         >
                           {c.isCampaignLive ? <Square size={12} /> : <Play size={12} />}
-                          <span>{c.isCampaignLive ? 'Pause' : 'Start Campaign'}</span>
+                          <span>
+                            {c.isCampaignLive
+                              ? c.isSpilloverUnpaidToday
+                                ? 'Stop In-House Ad'
+                                : 'Pause'
+                              : 'Start Campaign'}
+                          </span>
                         </button>
 
                         <button

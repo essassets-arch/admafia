@@ -29,6 +29,7 @@ import {
 import { withMongoTransaction, genId } from '../repositories/tx.js';
 import { evaluateCustomerProfileCompletion } from '../utils/profileCompletion.js';
 import { allocateNextMarketingCode } from '../services/marketingCodeService.js';
+import { settleTodayAndUnlockHeldLeadsIfFunded } from '../repositories/leadsAndOpsRepo.js';
 import {
   HttpError,
   ciContains,
@@ -1714,18 +1715,28 @@ superadminRouter.patch('/topups/:id/approve', async (req, res) => {
       })
     );
 
+    const unlockApprove = await settleTodayAndUnlockHeldLeadsIfFunded(topup.customerId, {
+      trigger: 'superadmin_topup_approved',
+    }).catch(() => ({ unlockedCount: 0 }));
+
     await logSuperAdminAudit({
       actorId: adminId,
       actorName: adminName,
       actionType: 'TOPUP_APPROVED',
       targetType: 'topup',
       targetId: id,
-      details: { customerId: topup.customerId, amount: topupAmount, referenceUtr: cleanUtr },
+      details: {
+        customerId: topup.customerId,
+        amount: topupAmount,
+        referenceUtr: cleanUtr,
+        unlockedHeldLeadsCount: unlockApprove.unlockedCount || 0,
+      },
     });
 
     res.json({
       ok: true,
-      message: `Top-up of ₹${topupAmount.toFixed(2)} approved and credited to wallet.`,
+      unlockedHeldLeadsCount: unlockApprove.unlockedCount || 0,
+      message: `Top-up of ₹${topupAmount.toFixed(2)} approved and credited to wallet.${unlockApprove.unlockedCount > 0 ? ` (${unlockApprove.unlockedCount} held lead(s) auto-unlocked!)` : ''}`,
     });
   } catch (err) {
     console.error('[PATCH /api/superadmin/topups/:id/approve]', err);
@@ -1857,6 +1868,10 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
       })
     );
 
+    const unlockManual = await settleTodayAndUnlockHeldLeadsIfFunded(customerId, {
+      trigger: 'superadmin_manual_credit',
+    }).catch(() => ({ unlockedCount: 0 }));
+
     await logSuperAdminAudit({
       actorId: adminId,
       actorName: adminName,
@@ -1868,6 +1883,7 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
         amount: creditAmount,
         previousBalance: recordedOldBalance,
         newBalance: recordedNewBalance,
+        unlockedHeldLeadsCount: unlockManual.unlockedCount || 0,
         referenceUtr: cleanUtr,
         description: description.trim(),
       },
@@ -1880,8 +1896,9 @@ superadminRouter.post('/topups/manual-credit', async (req, res) => {
       amount: creditAmount,
       previousBalance: recordedOldBalance,
       newBalance: recordedNewBalance,
+      unlockedHeldLeadsCount: unlockManual.unlockedCount || 0,
       referenceUtr: cleanUtr,
-      message: `Top-up of ₹${creditAmount.toFixed(2)} applied successfully to ${customer.companyName}'s wallet.`,
+      message: `Top-up of ₹${creditAmount.toFixed(2)} applied successfully to ${customer.companyName}'s wallet.${unlockManual.unlockedCount > 0 ? ` (${unlockManual.unlockedCount} held lead(s) auto-unlocked!)` : ''}`,
     });
   } catch (err) {
     console.error('[POST /api/superadmin/topups/manual-credit]', err);

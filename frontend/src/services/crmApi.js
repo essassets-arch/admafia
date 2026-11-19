@@ -398,6 +398,16 @@ export const crmApi = {
   },
 
   /**
+   * Release held Line-Up / Archive leads (`POST /api/leads/release-held` — Staff-Only)
+   */
+  async releaseHeldLeads({ customerId = '', leadIds = [] } = {}) {
+    return apiRequest('/leads/release-held', {
+      method: 'POST',
+      body: JSON.stringify({ customerId, leadIds }),
+    });
+  },
+
+  /**
    * Permanently delete customer from MongoDB (/api/customers/:identifier)
    */
   async deleteCustomer(idOrPhone) {
